@@ -1,9 +1,9 @@
 [project]
-name = "rs_server_prefect_flows"
+name = "rs_workflows"
 version = "0.0.0" # see: https://github.com/mtkennerly/poetry-dynamic-versioning
 
 [tool.poetry]
-name = "rs_server_prefect_flows"
+name = "rs_workflows"
 version = "0.0.0"
 description = ""
 authors = ["Your Name <you@example.com>"]

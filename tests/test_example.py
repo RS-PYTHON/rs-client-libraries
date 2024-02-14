@@ -1,4 +1,4 @@
-from rs_server_prefect_flows.example import ( 
+from rs_workflows.example import ( 
     hello_world,
 )
 
