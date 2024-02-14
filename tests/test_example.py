@@ -1,4 +1,4 @@
-from prefect_flows.example import ( 
+from rs_server_prefect_flows.example import ( 
     hello_world,
 )
 

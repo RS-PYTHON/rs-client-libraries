@@ -10,7 +10,7 @@ authors = ["Your Name <you@example.com>"]
 readme = "README.adoc"
 
 packages = [
-    { include = "prefect_flows" },    
+    { include = "rs_server_prefect_flows" },    
 ]
 
 # This root project is not used in release production.
