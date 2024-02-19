@@ -35,7 +35,7 @@ jobs:
         uses: ./.github/actions/publish-wheel
         with:
           package_directory: rs_workflows
-  
+
 
   #########################
   # Publish Docker images #
@@ -56,7 +56,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.rs-workflows-whl.outputs.package_name }}
-          path: ./whl      
+          path: ./whl
 
       - id: publish-docker
         uses: ./.github/actions/publish-docker

@@ -10,4 +10,3 @@ runs:
       run: |
         poetry run sphinx-apidoc -o docs/rs_workflows/generated/common rs_workflows/
       shell: bash
-
