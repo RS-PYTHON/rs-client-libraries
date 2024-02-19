@@ -1,6 +1,7 @@
 """Docstring here"""
 from prefect import flow, task
 
+
 @task
 def print_hello(name: str):
     """Example task to be used in a prefect flow
@@ -17,6 +18,7 @@ def print_hello(name: str):
         None
     """
     print(f"Hello {name}!")
+
 
 @flow(name="Hello RS-Server flow ")
 def hello_world(name="COPERNICUS", tasks_number=2):
@@ -36,4 +38,4 @@ def hello_world(name="COPERNICUS", tasks_number=2):
         None
     """
     for idx in range(0, tasks_number):
-       print_hello(name + "_" + str(idx))
+        print_hello(name + "_" + str(idx))

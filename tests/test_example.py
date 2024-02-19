@@ -1,11 +1,8 @@
-"""Docstring here"""
-from prefect import Flow, Task
-from unittest.mock import patch
+"""Unit tests for example prefect flow"""
 import pytest
-from rs_workflows.example import (
-    print_hello, 
-    hello_world
-)
+
+from rs_workflows.example import hello_world, print_hello
+
 
 @pytest.mark.unit
 def test_print_hello(capsys):
@@ -20,13 +17,13 @@ def test_print_hello(capsys):
         AssertionError: If the printed message does not match the expected output.
 
     Returns:
-        None: This test does not return any value.    
+        None: This test does not return any value.
     """
 
     print_hello.fn("Test")
     captured = capsys.readouterr()
-    print("captured = {}".format(captured))
     assert captured.out == "Hello Test!\n"
+
 
 @pytest.mark.unit
 def test_hello_world(capsys):
@@ -45,6 +42,4 @@ def test_hello_world(capsys):
     """
     hello_world(name="Test", tasks_number=2)
     captured = capsys.readouterr()
-    print("captured = {}".format(captured))
     assert captured.out == "Hello Test_0!\nHello Test_1!\n"
-        

@@ -1,36 +1,35 @@
+"""Unit tests for common (cadip/adgs) prefect flow"""
 import json
 import os.path as osp
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
 # import yaml
 import pytest
 import responses
+
 from rs_workflows.common import (
     EDownloadStatus,
-    check_status,
-    ingest_files,
-    get_station_files_list,
-    create_endpoint,
-    PrefectTaskConfig,
     PrefectFlowConfig,
+    PrefectTaskConfig,
+    check_status,
+    create_endpoint,
     download_flow,
+    get_station_files_list,
+    ingest_files,
 )
+
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 
 endpoints = {
-    "CADIP":
-    {
+    "CADIP": {
         "search": "/cadip/CADIP/cadu/search",
         "download": "/cadip/CADIP/cadu",
-        "status": "/cadip/CADIP/cadu/status"
+        "status": "/cadip/CADIP/cadu/status",
     },
-    "ADGS":
-    {
-        "search": "/adgs/aux/search",
-        "download": "/adgs/aux",
-        "status": "/adgs/aux/status"
-    }
+    "ADGS": {"search": "/adgs/aux/search", "download": "/adgs/aux", "status": "/adgs/aux/status"},
 }
+
 
 @pytest.mark.unit
 @responses.activate
@@ -58,8 +57,7 @@ def test_valid_check_status(filename, station):
         None: This test does not return any value.
     """
     endpoint = "http://127.0.0.1:5000" + endpoints[station]["status"]
-    json_response = {"name":filename,
-                     "status": EDownloadStatus.NOT_STARTED}
+    json_response = {"name": filename, "status": EDownloadStatus.NOT_STARTED}
 
     responses.add(
         responses.GET,
@@ -114,7 +112,7 @@ def test_invalid_check_status(filename, station):
         None: This test does not return any value.
     """
     endpoint = "http://127.0.0.1:5000" + endpoints[station]["status"]
-    json_response = {"detail":"Not Found"}
+    json_response = {"detail": "Not Found"}
     responses.add(
         responses.GET,
         endpoint + f"?name={filename}",
@@ -123,11 +121,15 @@ def test_invalid_check_status(filename, station):
     )
     assert check_status(endpoint, filename) == EDownloadStatus.FAILED
 
+
 @pytest.mark.unit
 @responses.activate
 @pytest.mark.parametrize(
     "station",
-    [ "CADIP", "ADGS",],
+    [
+        "CADIP",
+        "ADGS",
+    ],
 )
 def test_ok_ingest_files(station):
     """Unit test for the ingest_files function in case of successful files ingestion.
@@ -155,12 +157,8 @@ def test_ok_ingest_files(station):
     for i in range(0, len(files_stac[station]["features"])):
         # mock the status endpoint
         fn = files_stac[station]["features"][i]["id"]
-        endpoint = "http://127.0.0.1:5000" + \
-            endpoints[station]["status"] + \
-            f"?name={fn}"
-        json_response = {"name":fn,
-                        "status": EDownloadStatus.DONE
-                        }
+        endpoint = "http://127.0.0.1:5000" + endpoints[station]["status"] + f"?name={fn}"
+        json_response = {"name": fn, "status": EDownloadStatus.DONE}
         responses.add(
             responses.GET,
             endpoint,
@@ -169,11 +167,13 @@ def test_ok_ingest_files(station):
         )
         # mock the download endpoint
 
-        endpoint = "http://127.0.0.1:5000" + \
-            endpoints[station]["download"] + \
-            f'?name={fn}&' + \
-            f"local={local_path_for_dwn}&" + \
-            f"obs={obs}"
+        endpoint = (
+            "http://127.0.0.1:5000"
+            + endpoints[station]["download"]
+            + f"?name={fn}&"
+            + f"local={local_path_for_dwn}&"
+            + f"obs={obs}"
+        )
         json_response = {"started": "true"}
         responses.add(
             responses.GET,
@@ -182,23 +182,29 @@ def test_ok_ingest_files(station):
             status=200,
         )
 
-    task_config = PrefectTaskConfig("testUser",
-                    "http://127.0.0.1:5000",
-                    station,
-                    "s1",
-                    files_stac[station]["features"],
-                    local_path_for_dwn,
-                    obs,
-                    0, 1
-                    )
+    task_config = PrefectTaskConfig(
+        "testUser",
+        "http://127.0.0.1:5000",
+        station,
+        "s1",
+        local_path_for_dwn,
+        obs,
+        files_stac[station]["features"],
+        0,
+        1,
+    )
     ret_files = ingest_files.fn(task_config)
     assert len(ret_files) == 0
+
 
 @pytest.mark.unit
 @responses.activate
 @pytest.mark.parametrize(
     "station",
-    [ "CADIP", "ADGS",],
+    [
+        "CADIP",
+        "ADGS",
+    ],
 )
 def test_nok_ingest_files(station):
     """Unit test for the ingest_files function in case of failed file ingestion.
@@ -225,11 +231,13 @@ def test_nok_ingest_files(station):
     # mock the status endpoint
     for i in range(0, len(files_stac[station]["features"])):
         fn = files_stac[station]["features"][i]["id"]
-        endpoint = "http://127.0.0.1:5000" + \
-            endpoints[station]["download"] + \
-            f'?name={fn}&' + \
-            f"local={local_path_for_dwn}&" + \
-            f"obs={obs}"
+        endpoint = (
+            "http://127.0.0.1:5000"
+            + endpoints[station]["download"]
+            + f"?name={fn}&"
+            + f"local={local_path_for_dwn}&"
+            + f"obs={obs}"
+        )
         json_response = {"started": "false"}
         responses.add(
             responses.GET,
@@ -237,23 +245,29 @@ def test_nok_ingest_files(station):
             json=json_response,
             status=503,
         )
-    task_config = PrefectTaskConfig("testUser",
-                "http://127.0.0.1:5000",
-                station,
-                "s1",
-                files_stac[station]["features"],
-                local_path_for_dwn,
-                obs,
-                0, 1
-                )
+    task_config = PrefectTaskConfig(
+        "testUser",
+        "http://127.0.0.1:5000",
+        station,
+        "s1",
+        local_path_for_dwn,
+        obs,
+        files_stac[station]["features"],
+        0,
+        1,
+    )
     ret_files = ingest_files.fn(task_config)
     assert len(ret_files) == 2
+
 
 @pytest.mark.unit
 @responses.activate
 @pytest.mark.parametrize(
     "station",
-    [ "CADIP", "ADGS",],
+    [
+        "CADIP",
+        "ADGS",
+    ],
 )
 def test_get_station_files_list(station):
     """Unit test for the get_station_files_list function.
@@ -276,8 +290,7 @@ def test_get_station_files_list(station):
         files_stac = json.loads(files_stac_f.read())
 
     # mock the search endpoint
-    endpoint = "http://127.0.0.1:5000" + \
-        endpoints[station]["search"]
+    endpoint = "http://127.0.0.1:5000" + endpoints[station]["search"]
 
     json_response = files_stac[station]
     responses.add(
@@ -287,18 +300,23 @@ def test_get_station_files_list(station):
         status=200,
     )
 
-    search_response = get_station_files_list(endpoint.rstrip("search"),
-                                             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
-                                             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"))
-
+    search_response = get_station_files_list(
+        endpoint.rstrip("/search"),
+        datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
+        datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+    )
 
     assert len(search_response) == 2
+
 
 @pytest.mark.unit
 @responses.activate
 @pytest.mark.parametrize(
     "station",
-    [ "CADIP", "ADGS",],
+    [
+        "CADIP",
+        "ADGS",
+    ],
 )
 def test_err_ret_get_station_files_list(station):
     """Unit test for the get_station_files_list function in case of error response.
@@ -324,20 +342,21 @@ def test_err_ret_get_station_files_list(station):
         files_stac = json.loads(files_stac_f.read())
 
     # mock the search endpoint
-    endpoint = "http://127.0.0.1:5000" + \
-        endpoints[station]["search"]
+    endpoint = "http://127.0.0.1:5000" + endpoints[station]["search"]
 
     # register a mock with an error answer
     responses.add(
         responses.GET,
         endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z",
-        json={"detail":"Operational error"},
+        json={"detail": "Operational error"},
         status=400,
     )
 
-    search_response = get_station_files_list(endpoint.rstrip("search"),
-                                             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
-                                             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"))
+    search_response = get_station_files_list(
+        endpoint.rstrip("/search"),
+        datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
+        datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+    )
     assert len(search_response) == 0
 
     # register a mock with a bad format answer
@@ -347,21 +366,27 @@ def test_err_ret_get_station_files_list(station):
     responses.add(
         responses.GET,
         endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z",
-        json={"detail":"Operational error"},
+        json={"detail": "Operational error"},
         status=200,
     )
 
     with pytest.raises(RuntimeError) as runtime_exception:
-        search_response = get_station_files_list(endpoint.rstrip("search"),
-                                             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
-                                             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"))
-    assert  "Wrong format of search endpoint answer" in str(runtime_exception.value)
+        search_response = get_station_files_list(
+            endpoint.rstrip("/search"),
+            datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
+            datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+        )
+    assert "Wrong format of search endpoint answer" in str(runtime_exception.value)
+
 
 @pytest.mark.unit
 @responses.activate
 @pytest.mark.parametrize(
     "station",
-    [ "CADIP", "ADGS",],
+    [
+        "CADIP",
+        "ADGS",
+    ],
 )
 def test_wrong_url_get_station_files_list(station):
     """Unit test for the get_station_files_list function in case of wrong endpoint URL.
@@ -384,8 +409,7 @@ def test_wrong_url_get_station_files_list(station):
         files_stac = json.loads(files_stac_f.read())
 
     # mock the search endpoint
-    endpoint = "http://127.0.0.1:5000" + \
-        endpoints[station]["search"]
+    endpoint = "http://127.0.0.1:5000" + endpoints[station]["search"]
 
     json_response = files_stac[station]
     responses.add(
@@ -397,16 +421,19 @@ def test_wrong_url_get_station_files_list(station):
 
     # use a wrong endpoint
     with pytest.raises(RuntimeError) as runtime_exception:
-        get_station_files_list("http://127.0.0.1:5000/search",
-                                             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
-                                             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"))
+        get_station_files_list(
+            "http://127.0.0.1:5000/search",
+            datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
+            datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+        )
     assert "Could not connect to the search endpoint" in str(runtime_exception.value)
+
 
 @pytest.mark.unit
 @responses.activate
 @pytest.mark.parametrize(
     "station",
-    [ "CADIP", "ADGS", "UNKNOWN"],
+    ["CADIP", "ADGS", "UNKNOWN"],
 )
 def test_create_endpoint(station):
     """Unit test for the create_endpoint function.
@@ -430,13 +457,20 @@ def test_create_endpoint(station):
             create_endpoint("http://127.0.0.1:5000", station)
         assert "Unknown station !" in str(runtime_exception.value)
     else:
-        assert create_endpoint("http://127.0.0.1:5000", station) == "http://127.0.0.1:5000" + endpoints[station]["download"]
+        assert (
+            create_endpoint("http://127.0.0.1:5000", station)
+            == "http://127.0.0.1:5000" + endpoints[station]["download"]
+        )
+
 
 @pytest.mark.unit
 @responses.activate
 @pytest.mark.parametrize(
     "station",
-    [ "CADIP", "ADGS",],
+    [
+        "CADIP",
+        "ADGS",
+    ],
 )
 def test_download_flow(station):
     """Unit test for the download_flow function.
@@ -461,8 +495,7 @@ def test_download_flow(station):
     obs = "s3://test/tmp"
 
     # mock the search endpoint
-    endpoint = "http://127.0.0.1:5000" + \
-        endpoints[station]["search"]
+    endpoint = "http://127.0.0.1:5000" + endpoints[station]["search"]
 
     json_response = files_stac[station]
     responses.add(
@@ -475,12 +508,8 @@ def test_download_flow(station):
     for i in range(0, len(files_stac[station]["features"])):
         # mock the status endpoint
         fn = files_stac[station]["features"][i]["id"]
-        endpoint = "http://127.0.0.1:5000" + \
-            endpoints[station]["status"] + \
-            f"?name={fn}"
-        json_response = {"name":fn,
-                        "status": EDownloadStatus.DONE
-                        }
+        endpoint = "http://127.0.0.1:5000" + endpoints[station]["status"] + f"?name={fn}"
+        json_response = {"name": fn, "status": EDownloadStatus.DONE}
         responses.add(
             responses.GET,
             endpoint,
@@ -488,11 +517,13 @@ def test_download_flow(station):
             status=200,
         )
         # mock the download endpoint
-        endpoint = "http://127.0.0.1:5000" + \
-            endpoints[station]["download"] + \
-            f'?name={fn}&' + \
-            f"local={local_path_for_dwn}&" + \
-            f"obs={obs}"
+        endpoint = (
+            "http://127.0.0.1:5000"
+            + endpoints[station]["download"]
+            + f"?name={fn}&"
+            + f"local={local_path_for_dwn}&"
+            + f"obs={obs}"
+        )
         json_response = {"started": "true"}
         responses.add(
             responses.GET,
@@ -501,17 +532,15 @@ def test_download_flow(station):
             status=200,
         )
 
-    flow_config = PrefectFlowConfig("testUser",
-                    "http://127.0.0.1:5000",
-                    station,
-                    "s1",
-                    0,
-                    local_path_for_dwn,
-                    obs,
-                    datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
-                    datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ")
-                    )
+    flow_config = PrefectFlowConfig(
+        "testUser",
+        "http://127.0.0.1:5000",
+        station,
+        "s1",
+        local_path_for_dwn,
+        obs,
+        0,
+        datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
+        datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+    )
     assert download_flow(flow_config) is True
-
-
-
