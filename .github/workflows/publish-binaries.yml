@@ -64,5 +64,5 @@ jobs:
           dockerfile: ./rs_workflows/.github/Dockerfile
           build_context_path: ./whl
           image_suffix: -rs_workflows
-          version_name: ${{ needs.services-adgs-whl.outputs.version_name }}
+          version_name: ${{ needs.rs-workflows-whl.outputs.version_name }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
