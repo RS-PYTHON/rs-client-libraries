@@ -15,9 +15,9 @@ from rs_workflows.common import (
     check_status,
     create_endpoint,
     download_flow,
+    get_general_logger,
     get_station_files_list,
     ingest_files,
-    get_general_logger,
 )
 
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
@@ -193,7 +193,6 @@ def test_ok_ingest_files(station):
         local_path_for_dwn,
         obs,
         files_stac[station]["features"],
-        0,
         1,
     )
     ret_files = ingest_files.fn(task_config)
@@ -256,7 +255,6 @@ def test_nok_ingest_files(station):
         local_path_for_dwn,
         obs,
         files_stac[station]["features"],
-        0,
         1,
     )
     ret_files = ingest_files.fn(task_config)

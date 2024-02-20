@@ -9,7 +9,6 @@ import numpy as np
 import requests
 from prefect import exceptions, flow, get_run_logger, task
 from prefect_dask.task_runners import DaskTaskRunner
-import pprint
 
 CADIP = "CADIP"
 ADGS = "ADGS"
@@ -81,7 +80,7 @@ def check_status(endpoint, filename, logger):
             and "name" in eval_response.keys()
             and filename == eval_response["name"]
             and "status" in eval_response.keys()
-            ):
+        ):
             return EDownloadStatus(eval_response["status"])
 
     except requests.exceptions.RequestException as e:
@@ -143,7 +142,7 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
     S3 path, and additional parameters like index and maximum retries.
 
     Attributes:
-        task_files_stac (list[dict]): List of files with stac info to be processed by the task.        
+        task_files_stac (list[dict]): List of files with stac info to be processed by the task.
         max_retries (int): Maximum number of retries for the task.
     """
 
@@ -155,7 +154,7 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         mission,
         tmp_download_path,
         s3_path,
-        task_files_stac,        
+        task_files_stac,
         max_retries: int = 3,
     ):
         """
@@ -166,13 +165,9 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         self.task_files_stac: list[dict] = task_files_stac
         self.max_retries: int = max_retries
 
-def generate_task_name():
-    date = datetime.datetime.now(datetime.timezone.utc)
-    return f"{date:%A}-task"
 
 @task
-def ingest_files(config: PrefectTaskConfig, 
-                 task_run_name=generate_task_name):
+def ingest_files(config: PrefectTaskConfig):
     """Prefect task function to ingest files.
 
     This prefect task function access the RS-Server endpoints that start the download of files and
@@ -192,7 +187,7 @@ def ingest_files(config: PrefectTaskConfig,
         logger = get_run_logger()
         logger.setLevel(SET_PREFECT_LOGGING_LEVEL)
     except exceptions.MissingContextError:
-        logger = get_general_logger(f"task_dwn_{task_run_name}")
+        logger = get_general_logger("task_dwn")
         logger.info("Could not get the prefect logger due to missing context")
 
     # some protections for the optional args
@@ -200,16 +195,14 @@ def ingest_files(config: PrefectTaskConfig,
         config.s3_path = ""
     if config.tmp_download_path is None:
         config.tmp_download_path = ""
-    logger.debug("Files to be downloaded:")    
-    pp = pprint.PrettyPrinter(indent=4)    
-    for f in config.task_files_stac:
-        pp.pprint(f)
-        pp
-    sys.stdout.flush()        
+    # logger.debug("Files to be downloaded:")
+    # pp = pprint.PrettyPrinter(indent=4)
+    # for f in config.task_files_stac:
+    #    pp.pprint(f)
+    # sys.stdout.flush()
 
+    # get the endpoint
     endpoint = create_endpoint(config.url, config.station)
-    # create the status endpoint for a later usage
-    status_endpoint = endpoint + "/status"
     # list with failed files
     downloaded_files_indices = []
     failed_failes = config.task_files_stac.copy()
@@ -222,10 +215,9 @@ def ingest_files(config: PrefectTaskConfig,
             payload["obs"] = config.s3_path
         try:
             response = requests.get(endpoint, params=payload, timeout=ENDPOINT_TIMEOUT)
-            #logger.debug("response = %s", response)
             if not response.ok:
                 logger.error(
-                    "The download endpoint returned error for file %s...\n",                    
+                    "The download endpoint returned error for file %s...\n",
                     file_stac["id"],
                 )
                 continue
@@ -234,18 +226,18 @@ def ingest_files(config: PrefectTaskConfig,
             continue
         
         # monitor the status of the file until it is completely downloaded before initiating the next download request
-        status = check_status(status_endpoint, file_stac["id"], logger)        
+        status = check_status(endpoint + "/status", file_stac["id"], logger)
         # just for the demo the timeout is hardcoded, it should be otherwise defined somewhere in the configuration
-        timeout = DOWNLOAD_FILE_TIMEOUT  # 3 minutes        
-        while status in [EDownloadStatus.NOT_STARTED, EDownloadStatus.IN_PROGRESS] and timeout > 0:            
+        timeout = DOWNLOAD_FILE_TIMEOUT  # 3 minutes
+        while status in [EDownloadStatus.NOT_STARTED, EDownloadStatus.IN_PROGRESS] and timeout > 0:
             logger.info(
-                "The download progress for file %s is %s",                
+                "The download progress for file %s is %s",
                 file_stac["id"],
                 status.name,
             )
             time.sleep(1)
-            timeout -= 1            
-            status = check_status(status_endpoint, file_stac["id"], logger)            
+            timeout -= 1
+            status = check_status(endpoint + "/status", file_stac["id"], logger)
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...\n", file_stac["id"])
             # TODO: call the STAC endpoint to insert it into the catalog !!
@@ -254,7 +246,7 @@ def ingest_files(config: PrefectTaskConfig,
             downloaded_files_indices.append(i)
         else:
             logger.error(
-                "Error in downloading the file %s (status %s). Timeout was %s from %s\n",                
+                "Error in downloading the file %s (status %s). Timeout was %s from %s\n",
                 file_stac["id"],
                 status.name,
                 timeout,
@@ -262,7 +254,7 @@ def ingest_files(config: PrefectTaskConfig,
             )
     # remove all the well ingested files
     # return only those that failed
-    for idx in sorted(downloaded_files_indices, reverse=True):        
+    for idx in sorted(downloaded_files_indices, reverse=True):
         del failed_failes[idx]
 
     return failed_failes
@@ -282,8 +274,8 @@ def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datet
 
     Returns:
         files (list): A list of files (in stac format) available at the endpoint within the specified time range.
-    
-    Raises: 
+
+    Raises:
         - RuntimeError if the endpoint can't be reached
 
     Notes:
@@ -303,21 +295,21 @@ def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datet
     }
     try:
         response = requests.get(endpoint + "/search", params=payload, timeout=ENDPOINT_TIMEOUT)
-    except requests.exceptions.RequestException as e:    
+    except requests.exceptions.RequestException as e:
         raise RuntimeError("Could not connect to the search endpoint") from e
-    
+
     files = []
     try:
         if response.ok:
             for file_info in response.json()["features"]:
                 files.append(file_info)
-    except KeyError as e:        
+    except KeyError as e:
         raise RuntimeError("Wrong format of search endpoint answer") from e
 
     return files
 
 
-def create_endpoint(url, station):
+def create_endpoint(url, station):    
     """Create a rs-server endpoint URL based on the provided base URL and station type.
 
     This function constructs and returns a specific endpoint URL based on the provided
@@ -344,13 +336,12 @@ def create_endpoint(url, station):
 
     """
     # url = http://127.0.0.1:8000
-    match station:
-        case "ADGS":
-            return url.rstrip("/") + "/adgs/aux"
-        case "CADIP":
-            return url.rstrip("/") + "/cadip/CADIP/cadu"
-        case _:            
-            raise RuntimeError("Unknown station !")
+    if station == ADGS:
+        return url.rstrip("/") + "/adgs/aux"
+    elif station == CADIP:
+        return url.rstrip("/") + "/cadip/CADIP/cadu"
+    else:
+        raise RuntimeError("Unknown station !")
 
 
 class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-methods
@@ -421,14 +412,14 @@ def download_flow(config: PrefectFlowConfig):
         try:
             tasks_files_stac = [
                 x.tolist() for x in [*np.array_split(files_stac, min(config.max_workers, len(files_stac)))]
-            ]            
+            ]
         except ValueError:
             logger.warning("No task will be started, the requested number of tasks is 0 !")
             tasks_files_stac = []
         logger.info("List with files found in station")
         for f in files_stac:
             logger.info("      %s", f["id"])
-                    
+
         for files_stac in tasks_files_stac:
             ingest_files.submit(
                 PrefectTaskConfig(
@@ -438,10 +429,10 @@ def download_flow(config: PrefectFlowConfig):
                     config.mission,
                     config.tmp_download_path,
                     config.s3_path,
-                    files_stac,            
+                    files_stac,
                 ),
             )
-            
+
     except RuntimeError as e:
         logger.error("Exception caught: %s", e)
         return False
