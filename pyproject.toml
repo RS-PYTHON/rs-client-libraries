@@ -41,6 +41,8 @@ pylint = "^3.0.3"
 pytest-docker = "^2.0.1"
 sphinx = "^7.2.6"
 sphinx-rtd-theme = "^2.0.0"
+flake8 = "^6.1.0"
+flake8-pyproject = "^1.2.3"
 
 [tool.poetry-dynamic-versioning] # needs: poetry self add "poetry-dynamic-versioning[plugin]"
 enable = true
