@@ -1,0 +1,12 @@
+name: build-python-api
+description: "Build the python API reference guide using Sphinx."
+
+runs:
+  using: "composite"
+  steps:
+    - uses: ./.github/actions/poetry-install
+
+    - name: Generate rst files from docstring for common prefect workflows
+      run: |
+        poetry run sphinx-apidoc -o docs/rs_workflows/generated/common rs_workflows/
+      shell: bash

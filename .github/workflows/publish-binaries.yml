@@ -1,0 +1,74 @@
+name: Publish wheels and Docker images
+
+# TODO: is it possible to run this workflow only if the check-code-quality workflow has completed successfully ?
+# I've tried workflow_run but see:
+# https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_run
+# Note: This event will only trigger a workflow run if the workflow file is on the default branch.
+
+# Run workflow only for new git tags (including hierarchical tags like v1.0/beta), or manually
+on:
+  push:
+    tags:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      docker_tag:
+        description: Tag the docker images as e.g. 'latest' or 'feat-rspy123'
+        required: false
+        default: latest
+
+env:
+  PYTHON_VERSION: 3.11
+  DOCKER_REGISTRY: ghcr.io
+
+jobs:
+
+  ##################
+  # Publish wheels #
+  ##################
+
+  rs-workflows-whl:
+    runs-on: ubuntu-latest
+    name: "'rs_workflows' wheel"
+    outputs:
+      version_name: ${{ steps.publish-wheel.outputs.version_name }}
+      package_name: ${{ steps.publish-wheel.outputs.package_name }}
+    continue-on-error: true # TODO remove when the right python repo will be set
+    steps:
+      - uses: actions/checkout@v4
+      - id: publish-wheel
+        uses: ./.github/actions/publish-wheel
+        with:
+          package_directory: . # rs_workflows
+
+
+  #########################
+  # Publish Docker images #
+  #########################
+
+  rs-workflows-img:
+    runs-on: ubuntu-latest
+    name: "'rs_workflows' Docker image"
+    needs: [rs-workflows-whl]
+    permissions: write-all
+    outputs:
+      docker_image: ${{ steps.publish-docker.outputs.docker_image}}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download .whl files into ./whl/
+      - name: Download .whl dependencies
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.rs-workflows-whl.outputs.package_name }}
+          path: ./whl
+
+      - id: publish-docker
+        uses: ./.github/actions/publish-docker
+        with:
+          dockerfile: ./rs_workflows/.github/Dockerfile
+          build_context_path: ./whl
+          image_suffix: -rs_workflows
+          version_name: ${{ needs.rs-workflows-whl.outputs.version_name }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          docker_tag: ${{ github.event.inputs.docker_tag }}
