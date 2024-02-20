@@ -154,7 +154,7 @@ def test_ok_ingest_files(station):
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())
-    local_path_for_dwn = f"/tmp/{station}"
+    local_path_for_dwn = f"./temporary/{station}"
     obs = "s3://test/tmp"
 
     for i in range(0, len(files_stac[station]["features"])):
@@ -227,7 +227,7 @@ def test_nok_ingest_files(station):
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())
-    local_path_for_dwn = f"/tmp/{station}"
+    local_path_for_dwn = f"./temporary/{station}"
     obs = "s3://test/tmp"
 
     # mock the status endpoint
@@ -492,7 +492,7 @@ def test_download_flow(station):
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())
-    local_path_for_dwn = f"/tmp/{station}"
+    local_path_for_dwn = f"./temporary/{station}"
     obs = "s3://test/tmp"
 
     # mock the search endpoint
