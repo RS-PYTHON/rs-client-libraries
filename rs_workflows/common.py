@@ -224,7 +224,7 @@ def ingest_files(config: PrefectTaskConfig):
         except requests.exceptions.RequestException as e:
             logger.error("Request exception caught: %s", e)
             continue
-        
+
         # monitor the status of the file until it is completely downloaded before initiating the next download request
         status = check_status(endpoint + "/status", file_stac["id"], logger)
         # just for the demo the timeout is hardcoded, it should be otherwise defined somewhere in the configuration
@@ -309,7 +309,7 @@ def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datet
     return files
 
 
-def create_endpoint(url, station):    
+def create_endpoint(url, station):
     """Create a rs-server endpoint URL based on the provided base URL and station type.
 
     This function constructs and returns a specific endpoint URL based on the provided
@@ -338,10 +338,9 @@ def create_endpoint(url, station):
     # url = http://127.0.0.1:8000
     if station == ADGS:
         return url.rstrip("/") + "/adgs/aux"
-    elif station == CADIP:
+    if station == CADIP:
         return url.rstrip("/") + "/cadip/CADIP/cadu"
-    else:
-        raise RuntimeError("Unknown station !")
+    raise RuntimeError("Unknown station !")
 
 
 class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-methods
