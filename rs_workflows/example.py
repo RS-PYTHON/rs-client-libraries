@@ -1,4 +1,4 @@
-"""Docstring here"""
+"""A prefect flow example for rs-server-libraries"""
 from prefect import flow, task
 
 
