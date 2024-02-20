@@ -1,0 +1,37 @@
+name: Generate documentation
+
+# TODO: when to generate the doc ?
+# For now, only for new git tags (including hierarchical tags like v1.0/beta), or manually
+on:
+    push:
+      tags:
+        - '**'
+    workflow_dispatch:
+
+env:
+  PYTHON_VERSION: 3.11
+
+jobs:
+  generate-technical-documentation:
+    name: Generate technical documentation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      # The order of these steps is important
+      # The technical documentation has to be first
+      # because some fake documentation are then replaced
+      # by the following steps for link purpose.
+      - uses:  ./.github/actions/build-technical-doc
+      - uses:  ./.github/actions/build-python-api
+
+      - name: Deploy docs to ghpages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./dist/doc/output
+
+      - run: >
+          echo "Documentation published to: https://rs-python.github.io/rs-server-libraries" >> $GITHUB_STEP_SUMMARY
