@@ -11,6 +11,11 @@ on:
     tags:
       - '**'
   workflow_dispatch:
+    inputs:
+      docker_tag:
+        description: Tag the docker images as e.g. 'latest' or 'feat-rspy123'
+        required: false
+        default: latest
 
 env:
   PYTHON_VERSION: 3.11
@@ -34,7 +39,7 @@ jobs:
       - id: publish-wheel
         uses: ./.github/actions/publish-wheel
         with:
-          package_directory: rs_workflows
+          package_directory: . # rs_workflows
 
 
   #########################
@@ -66,3 +71,4 @@ jobs:
           image_suffix: -rs_workflows
           version_name: ${{ needs.rs-workflows-whl.outputs.version_name }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          docker_tag: ${{ github.event.inputs.docker_tag }}

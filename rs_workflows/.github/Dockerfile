@@ -1,41 +1,18 @@
 
-# Build stage for multi stage build.
-FROM python:3.11-slim-bookworm as builder
+#
+# Create a docker image with no services that is just used to store .whl package files
+#
 
-# Install dependencies
-RUN apt update && apt install -y libpq-dev gcc
-
-# Update pip version
-RUN pip install --no-cache-dir --upgrade pip
+FROM python:3.11-slim-bookworm
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
-# We copy them into a /tmp directory that we can clean at the end.
-RUN mkdir -p /tmp/whl
-ADD ./*.whl /tmp/whl
-
-# Install the wheel packages in the right order (dependencies first).
-# This also installs all the sub-dependencies e.g. fastapi ect ...
-RUN cd /tmp/whl && pip install --no-cache-dir rs_workflows-*.whl
-
-# Final stage. Don't use alpine, it's too different from the build stage.
-FROM python:3.11-slim-bookworm
-
-# Install dependencies necessary for execution (e.g. libpq) not compilation (gcc)
-RUN \
-    apt update && \
-    apt install -y libpq-dev && \
-    rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
-
-# Copy the python installation from the build stage
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-
-# Clean everything
-RUN rm -rf /tmp/whl /root/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/*
+RUN mkdir -p /dist/whl
+ADD ./*.whl /dist/whl
 
 # Add a default user
 RUN useradd -m user
 USER user
 WORKDIR /home/user
 
-ENTRYPOINT [ "/bin/bash" ]
+ENTRYPOINT [ "/bin/bash", "-c", "echo -e \".whl pacakges are stored under:\n$(realpath /dist/whl/*.whl)\"" ]
