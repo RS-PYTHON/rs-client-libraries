@@ -17,6 +17,7 @@ from rs_workflows.common import (
     download_flow,
     get_station_files_list,
     ingest_files,
+    get_general_logger,
 )
 
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
@@ -65,7 +66,8 @@ def test_valid_check_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert check_status(endpoint, filename) == EDownloadStatus.NOT_STARTED
+    logger = get_general_logger("tests")
+    assert check_status(endpoint, filename, logger) == EDownloadStatus.NOT_STARTED
 
     json_response["status"] = EDownloadStatus.IN_PROGRESS
     responses.add(
@@ -74,7 +76,7 @@ def test_valid_check_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert check_status(endpoint, filename) == EDownloadStatus.IN_PROGRESS
+    assert check_status(endpoint, filename, logger) == EDownloadStatus.IN_PROGRESS
 
     json_response["status"] = EDownloadStatus.DONE
     responses.add(
@@ -83,7 +85,7 @@ def test_valid_check_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert check_status(endpoint, filename) == EDownloadStatus.DONE
+    assert check_status(endpoint, filename, logger) == EDownloadStatus.DONE
 
 
 @pytest.mark.unit
@@ -119,7 +121,8 @@ def test_invalid_check_status(filename, station):
         json=json_response,
         status=404,
     )
-    assert check_status(endpoint, filename) == EDownloadStatus.FAILED
+    logger = get_general_logger("tests")
+    assert check_status(endpoint, filename, logger) == EDownloadStatus.FAILED
 
 
 @pytest.mark.unit
