@@ -1,0 +1,116 @@
+{
+    "ADGS":
+    {
+        "type": "FeatureCollection",
+        "numberMatched": 2,
+        "numberReturned": 2,
+        "features": [
+            {
+                "stac_version": "1.0.0",
+                "stac_extensions": [
+                "https://stac-extensions.github.io/file/v2.1.0/schema.json"
+                ],
+                "type": "Feature",
+                "id": "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ",
+                "geometry": null,
+                "properties": {
+                    "datetime": "2019-02-17T12:00:00.000Z",
+                    "start_datetime": "2019-02-17T09:00:00.000Z",
+                    "end_datetime": "2019-01-17T15:00:00.000Z",
+                    "adgs:id": "c2136f16-b482-11ee-a8fe-fa163e7968e5"
+                },
+                "links": [
+                ],
+                "assets": {
+                "file": {
+                    "file:size": 8326253
+                }
+                }
+            },
+            {
+                "stac_version": "1.0.0",
+                "stac_extensions": [
+                "https://stac-extensions.github.io/file/v2.1.0/schema.json"
+                ],
+                "type": "Feature",
+                "id": "S1__AUX_WND_V20190117T120000_G20190117T063216.SAFE.zip",
+                "geometry": null,
+                "properties": {
+                    "datetime": "2019-01-17T10:25:00.066Z",
+                    "start_datetime": "2019-01-17T08:25:00.066Z",
+                    "end_datetime": "2019-01-17T12:25:00.066Z",
+                    "adgs:id": "e8df1369-8a7e-4a7f-a85b-1c7eac217659"
+                },
+                "links": [
+                ],
+                "assets": {
+                "file": {
+                    "file:size": 12456234
+                }
+                }
+            }
+        ]
+    },
+
+    "CADIP":
+    {
+        "type": "FeatureCollection",
+        "numberMatched": 2,
+        "numberReturned": 2,
+        "features": [
+            {
+                "stac_version": "1.0.0",
+                "stac_extensions": [
+                  "https://stac-extensions.github.io/file/v2.1.0/schema.json"
+                ],
+                "type": "Feature",
+                "id": "DCS_04_S1A_20231126151600051390_ch2_DSDB_00001.raw",
+                "geometry": null,
+                "properties": {
+                    "datetime": "2023-11-26T15:16:43.76Z",
+                    "eviction_datetime": "2023-12-03T15:16:00Z",
+                    "cadip:id": "28d8fd8e-bd3b-4925-ab21-37553350827e",
+                    "cadip:retransfer": false,
+                    "cadip:final_block": false,
+                    "cadip:block_number": 1,
+                    "cadip:channel": 2,
+                    "cadip:session_id": "S1A_20231126151600051390"
+                },
+                "links": [
+                ],
+                "assets": {
+                  "file": {
+                    "file:size": 314571600
+                  }
+                }
+            },
+            {
+                "stac_version": "1.0.0",
+                "stac_extensions": [
+                  "https://stac-extensions.github.io/file/v2.1.0/schema.json"
+                ],
+                "type": "Feature",
+                "id": "DCS_04_S1A_20231126151600051390_ch1_DSDB_00026.raw",
+                "geometry": null,
+                "properties": {
+                    "datetime": "2023-11-26T15:20:16.801Z",
+                    "eviction_datetime": "2023-12-03T15:20:00Z",
+                    "cadip:id": "9cd6976b-8015-45d0-ab5d-8bdf36f4ee87",
+                    "cadip:retransfer": false,
+                    "cadip:final_block": false,
+                    "cadip:block_number": 26,
+                    "cadip:channel": 1,
+                    "cadip:session_id": "S1A_20231126151600051390"
+                },
+                "links": [
+                ],
+                "assets": {
+                  "file": {
+                    "file:size": 314571600
+                  }
+                }
+            }
+        ]
+    }
+
+}

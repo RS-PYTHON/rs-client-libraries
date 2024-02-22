@@ -1,14 +1,45 @@
-"""Example for running a prefect flow example"""
+"""Unit tests for example prefect flow"""
 import pytest
 
-from rs_workflows.example import hello_world
+from rs_workflows.example import hello_world, print_hello
 
 
 @pytest.mark.unit
-def test_hello_world():
-    """Main function
+def test_print_hello(capsys):
+    """Unit test for the print_hello prefect task function.
 
-    This script executes the hello_world prefect flow
-    from the rs_workflows.example module when the script is run directly as the main program.
+    This test validates the behavior of the print_hello function when printing a greeting message.
+
+    Args:
+        capsys: Pytest fixture for capturing stdout and stderr.
+
+    Raises:
+        AssertionError: If the printed message does not match the expected output.
+
+    Returns:
+        None: This test does not return any value.
     """
-    hello_world()
+
+    print_hello.fn("Test")
+    captured = capsys.readouterr()
+    assert captured.out == "Hello Test!\n"
+
+
+@pytest.mark.unit
+def test_hello_world(capsys):
+    """Unit test for the hello_world prefect flow function.
+
+    This test validates the behavior of the hello_world function when printing multiple greeting messages.
+
+    Args:
+        capsys: Pytest fixture for capturing stdout and stderr.
+
+    Raises:
+        AssertionError: If the printed messages do not match the expected output.
+
+    Returns:
+        None: This test does not return any value.
+    """
+    hello_world(name="Test", tasks_number=2)
+    captured = capsys.readouterr()
+    assert captured.out == "Hello Test_0!\nHello Test_1!\n"

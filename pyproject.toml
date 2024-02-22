@@ -43,6 +43,7 @@ sphinx = "^7.2.6"
 sphinx-rtd-theme = "^2.0.0"
 flake8 = "^6.1.0"
 flake8-pyproject = "^1.2.3"
+responses = "^0.25.0"
 
 [tool.poetry-dynamic-versioning] # needs: poetry self add "poetry-dynamic-versioning[plugin]"
 enable = true
