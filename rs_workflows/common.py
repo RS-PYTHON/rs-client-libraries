@@ -1,10 +1,11 @@
 """Docstring will be here."""
 import enum
 import logging
+
+# import pprint
 import sys
 import time
 from datetime import datetime
-import pprint
 
 import numpy as np
 import requests
@@ -17,6 +18,7 @@ ADGS = "ADGS"
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
 ENDPOINT_TIMEOUT = 2  # in seconds
+REQUEST_TIMEOUT = 5  # in seconds
 
 
 class EDownloadStatus(str, enum.Enum):
@@ -90,43 +92,44 @@ def check_status(endpoint, filename, logger):
     return EDownloadStatus.FAILED
 
 
-def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict, obs: str, logger):
-    # TODO ! Implement this when the catalog POST endpoint will be ready
-    """
-    Each time a chunk is downloaded, publish it on catalog (with STAC
-    metadata returned in the first step + the file downloaded in S3 bucket)
-    RS-Server /catalog/rs-ops/collections/sx_chunk/items/{chunkid}
-    """
-    #catalog_endpoint = url + f"/catalog/{user}/collections/{mission}/items/"
-    # add href
-    #stac_file_info["assets"]["file"].update({"href": "s3://temp-bucket/S1SIWOCN_20220412T054447_0024_S139_T717.zarr.zip"})
-    #fn = stac_file_info["id"]
-    stac_file_info["collection"] = mission
-    stac_file_info["assets"]["file"]["href"] = f"{obs}{stac_file_info['id']}"
-    stac_file_info["geometry"] = {
-                "type": "Polygon",
-                "coordinates": [
-                    [
-                        [180, -90],
-                        [180, 90],
-                        [-180, 90],
-                        [-180, -90],
-                        [180, -90],
-                    ],
-                ],
-            }
-    
-    "POLYGON((180 -90, 180 90, -180 90, -180 -90, 180 -90))"
-    # TODO: ADD A FAKE !!! GEOMETRY POLYGON
-    #"href": "s3://temp-bucket/S1SIWOCN_20220412T054447_0024_S139_T717.zarr.zip",
-    pp = pprint.PrettyPrinter(indent=4)
-    pp.pprint(stac_file_info)
+def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict, obs: str):
+    """Update the STAC catalog with file information.
 
-    "http://127.0.0.1:8083"
-    catalog_endpoint = url.rstrip("/") + f"/catalog/{user}/collections/{mission}/items/"
-    logger.info(f"Endpoint to be used to insert the item info  within the catalog: {catalog_endpoint}")
-    response = requests.post(catalog_endpoint, json=stac_file_info)
-    logger.debug = ("response = {} ".format(response))
+    Args:
+        url (str): The URL of the catalog.
+        user (str): The user identifier.
+        mission (str): The mission identifier.
+        stac_file_info (dict): Information in stac format about the downloaded file.
+        obs (str): The S3 bucket location where the file has been saved.
+        logger: The logger object for logging.
+
+    Returns:
+        bool: True if the file information is successfully updated in the catalog, False otherwise.
+    """
+    # add mission
+    stac_file_info["collection"] = mission
+    # add bucket location where the file has been saved
+    stac_file_info["assets"]["file"]["href"] = f"{obs}{stac_file_info['id']}"
+    # add a fake geometry polygon (the whole globe)
+    stac_file_info["geometry"] = {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [180, -90],
+                [180, 90],
+                [-180, 90],
+                [-180, -90],
+                [180, -90],
+            ],
+        ],
+    }
+    # pp = pprint.PrettyPrinter(indent=4)
+    # pp.pprint(stac_file_info)
+
+    catalog_endpoint = url.rstrip("/") + f"/catalog/{user}/collections/{mission}_aux/items/"
+    response = requests.post(catalog_endpoint, json=stac_file_info, timeout=REQUEST_TIMEOUT)
+    if response.status_code != 200:
+        return False
     return True
 
 
@@ -221,12 +224,13 @@ def ingest_files(config: PrefectTaskConfig):
     except exceptions.MissingContextError:
         logger = get_general_logger("task_dwn")
         logger.info("Could not get the prefect logger due to missing context")
-
+    # dictionary to be used for payload request
+    payload = {}
     # some protections for the optional args
-    if config.s3_path is None:
-        config.s3_path = ""
-    if config.tmp_download_path is None:
-        config.tmp_download_path = ""
+    if config.s3_path is not None and len(config.s3_path) > 0:
+        payload["obs"] = config.s3_path
+    if config.tmp_download_path is not None and len(config.tmp_download_path) > 0:
+        payload["local"] = config.tmp_download_path
     # logger.debug("Files to be downloaded:")
     # pp = pprint.PrettyPrinter(indent=4)
     # for f in config.task_files_stac:
@@ -240,11 +244,8 @@ def ingest_files(config: PrefectTaskConfig):
     failed_failes = config.task_files_stac.copy()
     # Call the download endpoint for each requested file
     for i, file_stac in enumerate(config.task_files_stac):
-        payload = {"name": file_stac["id"]}
-        if len(config.tmp_download_path) > 0:
-            payload["local"] = config.tmp_download_path
-        if len(config.s3_path) > 0:
-            payload["obs"] = config.s3_path
+        # update the filename to be ingested
+        payload["name"] = file_stac["id"]
         try:
             response = requests.get(endpoint, params=payload, timeout=ENDPOINT_TIMEOUT)
             if not response.ok:
@@ -273,9 +274,11 @@ def ingest_files(config: PrefectTaskConfig):
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...\n", file_stac["id"])
             # TODO: call the STAC endpoint to insert it into the catalog !!
-            update_stac_catalog(config.url_catalog, config.user, config.mission, file_stac, config.s3_path, logger)
-            # save the index of the well ingested file
-            downloaded_files_indices.append(i)
+            if update_stac_catalog(config.url_catalog, config.user, config.mission, file_stac, config.s3_path):
+                # save the index of the well ingested file
+                downloaded_files_indices.append(i)
+            else:
+                logger.error(f"Could not publish file: {file_stac['id']}")
         else:
             logger.error(
                 "Error in downloading the file %s (status %s). Timeout was %s from %s\n",
@@ -291,32 +294,49 @@ def ingest_files(config: PrefectTaskConfig):
 
     return failed_failes
 
-def get_unpublished_files(url_catalog, user, mission, files_stac, logger):
-    """Check what files are already published"""
-    #/catalog/search?collections=sx_aux&ids=<id>&filter="owner=rs-ops"
+
+def filter_unpublished_files(url_catalog, user, mission, files_stac, logger):
+    """Check for unpublished files in the catalog.
+
+    Args:
+        url_catalog (str): The URL of the catalog.
+        user (str): The user identifier.
+        mission (str): The mission identifier.
+        files_stac (list): List of files to be checked for publication.
+        logger: The logger object for logging.
+
+    Returns:
+        list: List of files that are not yet published in the catalog.
+    """
+
     ids = []
     for fs in files_stac:
         ids.append(fs["id"])
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
-    response_params = {"collection": f"{mission}_aux", 
-              "ids": ",".join(ids), 
-              "filter": f"owner_id='{user}'"
-              }
-    logger.info("get_unpublished_files !!")
-    response = requests.get(catalog_endpoint, params=response_params)
-    logger.info("response = {} ".format(response))
+    request_params = {"collection": f"{mission}_aux", "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
+    logger.debug(f"request_params = {request_params}")
+    response = requests.get(catalog_endpoint, params=request_params, timeout=REQUEST_TIMEOUT)
+    logger.debug(f"Search in catalog endpoint response.url = {response.url}")
+    # try do ingest everything anyway
     if response.status_code != 200:
-        return files_stac
-    eval_response = response.json()
-    logger.debug("eval_response = {} ".format(eval_response))
+        return
+    try:
+        eval_response = response.json()
+    except requests.exceptions.JSONDecodeError:
+        # content is empty, try to ingest everything anyway
+        return
+
+    # no file in the catalog
     if eval_response["features"] is None:
-        return files_stac
+        return
+
+    logger.debug(f"Files found in the catalog ({len(eval_response['features'])}): {eval_response['features']} ")
     for feature in eval_response["features"]:
         for fs in files_stac:
             if feature["id"] == fs["id"]:
                 files_stac.remove(fs)
                 break
-    return files_stac
+
 
 def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datetime):
     """Retrieve a list of files from the specified endpoint within the given time range.
@@ -465,7 +485,7 @@ def download_flow(config: PrefectFlowConfig):
         # get the list with files from the search endpoint
         files_stac = get_station_files_list(endpoint, config.start_datetime, config.stop_datetime)
         # filter those that are already existing
-        files_stac = get_unpublished_files(config.url_catalog, config.user, config.mission, files_stac, logger)
+        filter_unpublished_files(config.url_catalog, config.user, config.mission, files_stac, logger)
         # distribute the filenames evenly in a number of lists equal with
         # the minimum between number of runners and files to be downloaded
         try:
@@ -493,7 +513,7 @@ def download_flow(config: PrefectFlowConfig):
                 ),
             )
 
-    except RuntimeError as e:
+    except (RuntimeError, TypeError) as e:
         logger.error("Exception caught: %s", e)
         return False
 

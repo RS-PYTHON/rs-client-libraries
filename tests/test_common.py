@@ -1,6 +1,7 @@
 """Unit tests for common (cadip/adgs) prefect flow"""
 import json
 import os.path as osp
+import urllib
 from datetime import datetime
 from pathlib import Path
 
@@ -185,8 +186,16 @@ def test_ok_ingest_files(station):
             status=200,
         )
 
+    # mock the publish to catalog endpoint
+    endpoint = "http://127.0.0.1:5000/catalog/testUser/collections/s1_aux/items/"
+    responses.add(
+        responses.POST,
+        endpoint,
+        status=200,
+    )
     task_config = PrefectTaskConfig(
         "testUser",
+        "http://127.0.0.1:5000",
         "http://127.0.0.1:5000",
         station,
         "s1",
@@ -247,8 +256,16 @@ def test_nok_ingest_files(station):
             json=json_response,
             status=503,
         )
+    # mock the publish to catalog endpoint
+    endpoint = "http://127.0.0.1:5000/catalog/testUser/collections/s1_aux/items/"
+    responses.add(
+        responses.POST,
+        endpoint,
+        status=200,
+    )
     task_config = PrefectTaskConfig(
         "testUser",
+        "http://127.0.0.1:5000",
         "http://127.0.0.1:5000",
         station,
         "s1",
@@ -506,9 +523,26 @@ def test_download_flow(station):
         status=200,
     )
 
+    # mock the catalog search endpoint
+    endpoint = "http://127.0.0.1:5000/catalog/search?"
+    # get filenames
+    file_ids = []
     for i in range(0, len(files_stac[station]["features"])):
+        file_ids.append(files_stac[station]["features"][i]["id"])
+    request_params = {"collection": "s1_aux", "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
+
+    endpoint = endpoint + urllib.parse.urlencode(request_params)
+
+    responses.add(
+        responses.GET,
+        endpoint,
+        status=200,
+    )
+
+    # for i in range(0, len(files_stac[station]["features"])):
+    for fn in file_ids:
         # mock the status endpoint
-        fn = files_stac[station]["features"][i]["id"]
+        # fn = files_stac[station]["features"][i]["id"]
         endpoint = "http://127.0.0.1:5000" + endpoints[station]["status"] + f"?name={fn}"
         json_response = {"name": fn, "status": EDownloadStatus.DONE}
         responses.add(
@@ -535,6 +569,7 @@ def test_download_flow(station):
 
     flow_config = PrefectFlowConfig(
         "testUser",
+        "http://127.0.0.1:5000",
         "http://127.0.0.1:5000",
         station,
         "s1",
