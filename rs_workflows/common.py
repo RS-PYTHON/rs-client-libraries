@@ -130,7 +130,7 @@ def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict,
     catalog_endpoint = url.rstrip("/") + f"/catalog/{user}/collections/{mission}_aux/items/"
     response = requests.post(catalog_endpoint, json=stac_file_info, timeout=REQUEST_TIMEOUT)
     print(response.content)
-    if response.status_code != 200:        
+    if response.status_code != 200:
         return False
     return True
 
@@ -376,8 +376,8 @@ def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datet
     try:
         response = requests.get(endpoint + "/search", params=payload, timeout=SEARCH_ENDPOINT_TIMEOUT)
     except requests.exceptions.RequestException as e:
-        print(f"EXCEPTION ON SEARCH : {e}")        
-        raise RuntimeError("Could not get the response from the station search endpoint") from e    
+        print(f"EXCEPTION ON SEARCH : {e}")
+        raise RuntimeError("Could not get the response from the station search endpoint") from e
 
     files = []
     try:
@@ -484,10 +484,9 @@ def download_flow(config: PrefectFlowConfig):
 
     try:
         endpoint = create_endpoint(config.url, config.station)
-        
+
         # get the list with files from the search endpoint
         files_stac = get_station_files_list(endpoint, config.start_datetime, config.stop_datetime)
-        logger.debug("files_stac after search: {}".format(files_stac))
         # filter those that are already existing
         filter_unpublished_files(config.url_catalog, config.user, config.mission, files_stac, logger)
         # distribute the filenames evenly in a number of lists equal with
