@@ -107,7 +107,7 @@ def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict,
         bool: True if the file information is successfully updated in the catalog, False otherwise.
     """
     # add mission
-    stac_file_info["collection"] = mission
+    stac_file_info["collection"] = f"{mission}_aux"
     # add bucket location where the file has been saved
     stac_file_info["assets"]["file"]["href"] = f"{obs}{stac_file_info['id']}"
     # add a fake geometry polygon (the whole globe)
@@ -127,8 +127,9 @@ def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict,
     # pp.pprint(stac_file_info)
 
     catalog_endpoint = url.rstrip("/") + f"/catalog/{user}/collections/{mission}_aux/items/"
-    response = requests.post(catalog_endpoint, json=stac_file_info, timeout=REQUEST_TIMEOUT)
+    response = requests.post(catalog_endpoint, json=stac_file_info, timeout=REQUEST_TIMEOUT)    
     if response.status_code != 200:
+        print(response.content)
         return False
     return True
 
@@ -481,7 +482,7 @@ def download_flow(config: PrefectFlowConfig):
 
     try:
         endpoint = create_endpoint(config.url, config.station)
-
+        
         # get the list with files from the search endpoint
         files_stac = get_station_files_list(endpoint, config.start_datetime, config.stop_datetime)
         # filter those that are already existing
