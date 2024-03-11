@@ -18,6 +18,7 @@ ADGS = "ADGS"
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
 ENDPOINT_TIMEOUT = 2  # in seconds
+SEARCH_ENDPOINT_TIMEOUT = 5  # in seconds
 REQUEST_TIMEOUT = 5  # in seconds
 
 
@@ -374,15 +375,10 @@ def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datet
         + stop_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     try:
-        endpoint_print = endpoint + "/search"
-        print(f" endpoint_print = {endpoint_print} | payload = {payload}")
-        response = requests.get(endpoint + "/search", params=payload, timeout= + 10)
+        response = requests.get(endpoint + "/search", params=payload, timeout=SEARCH_ENDPOINT_TIMEOUT)
     except requests.exceptions.RequestException as e:
-        print("EXCEPTION ON SEARCH ! ")
-        print(e)
-        raise RuntimeError("Could not connect to the search endpoint") from e
-    except Exception as e:
-        print(f"General exception: {e}")
+        print(f"EXCEPTION ON SEARCH : {e}")        
+        raise RuntimeError("Could not get the response from the station search endpoint") from e    
 
     files = []
     try:
@@ -504,7 +500,7 @@ def download_flow(config: PrefectFlowConfig):
         except ValueError:
             logger.warning("No task will be started, the requested number of tasks is 0 !")
             tasks_files_stac = []
-        logger.info("List with files found in station")
+        logger.info("List with files to be downloaded (after filtering against the catalog)")
         for f in files_stac:
             logger.info("      %s", f["id"])
 
