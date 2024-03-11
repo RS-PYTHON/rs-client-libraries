@@ -374,7 +374,9 @@ def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datet
         + stop_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     try:
-        response = requests.get(endpoint + "/search", params=payload, timeout=ENDPOINT_TIMEOUT)
+        endpoint_print = endpoint + "/search"
+        print(f" endpoint_print = {endpoint_print} | payload = {payload}")
+        response = requests.get(endpoint + "/search", params=payload, timeout= + 10)
     except requests.exceptions.RequestException as e:
         print("EXCEPTION ON SEARCH ! ")
         print(e)
