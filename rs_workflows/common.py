@@ -376,7 +376,11 @@ def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datet
     try:
         response = requests.get(endpoint + "/search", params=payload, timeout=ENDPOINT_TIMEOUT)
     except requests.exceptions.RequestException as e:
+        print("EXCEPTION ON SEARCH ! ")
+        print(e)
         raise RuntimeError("Could not connect to the search endpoint") from e
+    except Exception as e:
+        print(f"General exception: {e}")
 
     files = []
     try:
@@ -486,6 +490,7 @@ def download_flow(config: PrefectFlowConfig):
         
         # get the list with files from the search endpoint
         files_stac = get_station_files_list(endpoint, config.start_datetime, config.stop_datetime)
+        logger.debug("files_stac after search: {}".format(files_stac))
         # filter those that are already existing
         filter_unpublished_files(config.url_catalog, config.user, config.mission, files_stac, logger)
         # distribute the filenames evenly in a number of lists equal with
