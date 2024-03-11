@@ -127,7 +127,8 @@ def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict,
     # pp.pprint(stac_file_info)
 
     catalog_endpoint = url.rstrip("/") + f"/catalog/{user}/collections/{mission}_aux/items/"
-    response = requests.post(catalog_endpoint, json=stac_file_info, timeout=REQUEST_TIMEOUT)    
+    response = requests.post(catalog_endpoint, json=stac_file_info, timeout=REQUEST_TIMEOUT)
+    print(response.content)
     if response.status_code != 200:
         print(response.content)
         return False
