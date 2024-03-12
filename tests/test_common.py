@@ -16,9 +16,11 @@ from rs_workflows.common import (
     check_status,
     create_endpoint,
     download_flow,
+    filter_unpublished_files,
     get_general_logger,
     get_station_files_list,
     ingest_files,
+    update_stac_catalog,
 )
 
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
@@ -124,6 +126,162 @@ def test_invalid_check_status(filename, station):
     )
     logger = get_general_logger("tests")
     assert check_status(endpoint, filename, logger) == EDownloadStatus.FAILED
+
+
+@pytest.mark.unit
+@responses.activate
+@pytest.mark.parametrize(
+    "response_is_valid, station",
+    [
+        (True, "ADGS"),
+        (False, "ADGS"),
+        (True, "CADIP"),
+        (False, "CADIP"),
+    ],
+)
+def test_update_stac_catalog(response_is_valid, station):
+    """Test the update_stac_catalog function.
+
+    It uses responses library to mock HTTP responses and
+    parametrize to test different scenarios with varying response validity and station.
+    Args:
+        response_is_valid (bool): Flag indicating whether the response should be valid.
+        station (str): The station for which to test the function.
+
+    Raises:
+        AssertionError: If the response from update_stac_catalog does not match the expected validity.
+
+    Returns:
+        None
+    """
+
+    files_stac_path = RESOURCES / "files_stac.json"
+    with open(files_stac_path, encoding="utf-8") as files_stac_f:
+        files_stac = json.loads(files_stac_f.read())
+
+    # set the response status
+    response_status = 200 if response_is_valid else 400
+    # mock the publish to catalog endpoint
+    endpoint = "http://127.0.0.1:5000/catalog/testUser/collections/s1_aux/items/"
+    responses.add(
+        responses.POST,
+        endpoint,
+        status=response_status,
+    )
+
+    for file_s in files_stac[station]["features"]:
+        resp = update_stac_catalog("http://127.0.0.1:5000", "testUser", "s1", file_s, "s3://tmp_bucket/tmp")
+        assert resp == response_is_valid
+
+
+@pytest.mark.unit
+@responses.activate
+@pytest.mark.parametrize(
+    "station, mock_files_in_catalog",
+    [
+        ("ADGS", {"numberReturned": 0, "features": []}),
+        (
+            "ADGS",
+            {
+                "numberReturned": 1,
+                "features": [
+                    {
+                        "id": "S1__AUX_WND_V20190117T120000_G20190117T063216.SAFE.zip",
+                    },
+                ],
+            },
+        ),
+        (
+            "ADGS",
+            {
+                "numberReturned": 2,
+                "features": [
+                    {
+                        "id": "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ",
+                    },
+                    {
+                        "id": "S1__AUX_WND_V20190117T120000_G20190117T063216.SAFE.zip",
+                    },
+                ],
+            },
+        ),
+        ("CADIP", {"numberReturned": 0, "features": []}),
+        (
+            "CADIP",
+            {
+                "numberReturned": 1,
+                "features": [
+                    {
+                        "id": "DCS_04_S1A_20231126151600051390_ch1_DSDB_00026.raw",
+                    },
+                ],
+            },
+        ),
+        (
+            "CADIP",
+            {
+                "numberReturned": 2,
+                "features": [
+                    {
+                        "id": "DCS_04_S1A_20231126151600051390_ch2_DSDB_00001.raw",
+                    },
+                    {
+                        "id": "DCS_04_S1A_20231126151600051390_ch1_DSDB_00026.raw",
+                    },
+                ],
+            },
+        ),
+    ],
+)
+def test_filter_unpublished_files(station, mock_files_in_catalog):
+    """Test the filter_unpublished_files function.
+
+    Args:
+        station (str): The station for which to test the function.
+        mock_files_in_catalog (dict): Mocked response containing files from the catalog.
+
+    Raises:
+        AssertionError: If the length of filtered files_stac does not match the expected length after filtering.
+        AssertionError: If any of the file IDs from the mock response is found in the filtered files_stac.
+
+    Returns:
+        None
+    """
+    files_stac_path = RESOURCES / "files_stac.json"
+    with open(files_stac_path, encoding="utf-8") as files_stac_f:
+        files_stac = json.loads(files_stac_f.read())[station]["features"]
+
+    initial_len = len(files_stac)
+
+    # get ids from the expected response
+    file_ids = []
+    for fs in files_stac:
+        file_ids.append(fs["id"])
+
+    request_params = {"collection": "s1_aux", "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
+
+    # mock the publish to catalog endpoint
+    endpoint = "http://127.0.0.1:5000/catalog/search?" + urllib.parse.urlencode(request_params)
+
+    responses.add(
+        responses.GET,
+        endpoint,
+        json=mock_files_in_catalog,
+        status=200,
+    )
+    logger = get_general_logger("tests")
+
+    filter_unpublished_files("http://127.0.0.1:5000", "testUser", "s1", files_stac, logger)
+
+    logger.debug(f"AFTER filtering ! FS = {files_stac} || ex = {mock_files_in_catalog}")
+
+    assert len(files_stac) == initial_len - mock_files_in_catalog["numberReturned"]
+    file_ids = []
+    for fs in files_stac:
+        file_ids.append(fs["id"])
+
+    for fn in mock_files_in_catalog["features"]:
+        assert fn["id"] not in file_ids
 
 
 @pytest.mark.unit
@@ -444,7 +602,7 @@ def test_wrong_url_get_station_files_list(station):
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
         )
-    assert "Could not connect to the search endpoint" in str(runtime_exception.value)
+    assert "Could not get the response from the station search endpoint" in str(runtime_exception.value)
 
 
 @pytest.mark.unit
@@ -527,8 +685,8 @@ def test_download_flow(station):
     endpoint = "http://127.0.0.1:5000/catalog/search?"
     # get filenames
     file_ids = []
-    for i in range(0, len(files_stac[station]["features"])):
-        file_ids.append(files_stac[station]["features"][i]["id"])
+    for fs in files_stac[station]["features"]:
+        file_ids.append(fs["id"])
     request_params = {"collection": "s1_aux", "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
 
     endpoint = endpoint + urllib.parse.urlencode(request_params)

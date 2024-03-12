@@ -312,13 +312,14 @@ def filter_unpublished_files(url_catalog, user, mission, files_stac, logger):
     """
 
     ids = []
+    logger.debug(f"Type files_stac = {type(files_stac)}")
     for fs in files_stac:
         ids.append(fs["id"])
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
     request_params = {"collection": f"{mission}_aux", "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
-    logger.debug(f"request_params = {request_params}")
+    # logger.debug(f"request_params = {request_params}")
     response = requests.get(catalog_endpoint, params=request_params, timeout=REQUEST_TIMEOUT)
-    logger.debug(f"Search in catalog endpoint response.url = {response.url}")
+    # logger.debug(f"Search in catalog endpoint response.url = {response.url}")
     # try do ingest everything anyway
     if response.status_code != 200:
         return
