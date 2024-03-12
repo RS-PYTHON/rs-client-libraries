@@ -272,10 +272,10 @@ def ingest_files(config: PrefectTaskConfig):
             timeout -= 1
             status = check_status(endpoint + "/status", file_stac["id"], logger)
         if status == EDownloadStatus.DONE:
-            logger.info("File %s has been properly downloaded...\n", file_stac["id"])
+            logger.info("File %s has been properly downloaded...", file_stac["id"])
             # TODO: call the STAC endpoint to insert it into the catalog !!
             if update_stac_catalog(config.url_catalog, config.user, config.mission, file_stac, config.s3_path):
-                logger.info(f"File well published: {file_stac['id']}")
+                logger.info(f"File well published: {file_stac['id']}\n")
                 # save the index of the well ingested file
                 downloaded_files_indices.append(i)
             else:
@@ -310,8 +310,7 @@ def filter_unpublished_files(url_catalog, user, mission, files_stac, logger):
         list: List of files that are not yet published in the catalog.
     """
 
-    ids = []
-    logger.debug(f"Type files_stac = {type(files_stac)}")
+    ids = []    
     for fs in files_stac:
         ids.append(fs["id"])
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
