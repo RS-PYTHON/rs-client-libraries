@@ -18,7 +18,7 @@ ADGS = "ADGS"
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
 ENDPOINT_TIMEOUT = 2  # in seconds
-SEARCH_ENDPOINT_TIMEOUT = 5  # in seconds
+SEARCH_ENDPOINT_TIMEOUT = 60  # in seconds
 REQUEST_TIMEOUT = 5  # in seconds
 
 
@@ -110,7 +110,7 @@ def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict,
     # add mission
     stac_file_info["collection"] = f"{mission}_aux"
     # add bucket location where the file has been saved
-    stac_file_info["assets"]["file"]["href"] = f"{obs}/{stac_file_info['id']}"
+    stac_file_info["assets"]["file"]["href"] = f"{obs.rstrip('/')}/{stac_file_info['id']}"
     # add a fake geometry polygon (the whole globe)
     stac_file_info["geometry"] = {
         "type": "Polygon",
@@ -129,10 +129,8 @@ def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict,
 
     catalog_endpoint = url.rstrip("/") + f"/catalog/{user}/collections/{mission}_aux/items/"
     response = requests.post(catalog_endpoint, json=stac_file_info, timeout=REQUEST_TIMEOUT)
-    print(response.content)
-    if response.status_code != 200:
-        return False
-    return True
+
+    return response.status_code == 200
 
 
 class PrefectCommonConfig:  # pylint: disable=too-few-public-methods
@@ -277,6 +275,7 @@ def ingest_files(config: PrefectTaskConfig):
             logger.info("File %s has been properly downloaded...\n", file_stac["id"])
             # TODO: call the STAC endpoint to insert it into the catalog !!
             if update_stac_catalog(config.url_catalog, config.user, config.mission, file_stac, config.s3_path):
+                logger.info(f"File well published: {file_stac['id']}")
                 # save the index of the well ingested file
                 downloaded_files_indices.append(i)
             else:
