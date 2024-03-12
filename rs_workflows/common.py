@@ -110,7 +110,7 @@ def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict,
     # add mission
     stac_file_info["collection"] = f"{mission}_aux"
     # add bucket location where the file has been saved
-    stac_file_info["assets"]["file"]["href"] = f"{obs}{stac_file_info['id']}"
+    stac_file_info["assets"]["file"]["href"] = f"{obs}/{stac_file_info['id']}"
     # add a fake geometry polygon (the whole globe)
     stac_file_info["geometry"] = {
         "type": "Polygon",
