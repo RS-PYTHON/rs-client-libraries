@@ -1,6 +1,8 @@
 """Docstring will be here."""
 import enum
 import logging
+
+# import pprint
 import sys
 import time
 from datetime import datetime
@@ -16,6 +18,8 @@ ADGS = "ADGS"
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
 ENDPOINT_TIMEOUT = 2  # in seconds
+SEARCH_ENDPOINT_TIMEOUT = 60  # in seconds
+REQUEST_TIMEOUT = 5  # in seconds
 
 
 class EDownloadStatus(str, enum.Enum):
@@ -89,17 +93,44 @@ def check_status(endpoint, filename, logger):
     return EDownloadStatus.FAILED
 
 
-def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict, logger):
-    # TODO ! Implement this when the catalog PUT endpoint will be ready
+def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict, obs: str):
+    """Update the STAC catalog with file information.
+
+    Args:
+        url (str): The URL of the catalog.
+        user (str): The user identifier.
+        mission (str): The mission identifier.
+        stac_file_info (dict): Information in stac format about the downloaded file.
+        obs (str): The S3 bucket location where the file has been saved.
+        logger: The logger object for logging.
+
+    Returns:
+        bool: True if the file information is successfully updated in the catalog, False otherwise.
     """
-    Each time a chunk is downloaded, publish it on catalog (with STAC
-    metadata returned in the first step + the file downloaded in S3 bucket)
-    RS-Server /catalog/rs-ops/collections/sx_chunk/items/{chunkid}
-    """
-    catalog_endpoint = url + f"/catalog/{user}/collections/{mission}/items/{stac_file_info}"
-    logger.info(f"Endpoint to be used to insert the item info  within the catalog: {catalog_endpoint}")
-    # response = requests.put(catalog_endpoint, params=stac_file_info)
-    return True
+    # add mission
+    stac_file_info["collection"] = f"{mission}_aux"
+    # add bucket location where the file has been saved
+    stac_file_info["assets"]["file"]["href"] = f"{obs.rstrip('/')}/{stac_file_info['id']}"
+    # add a fake geometry polygon (the whole globe)
+    stac_file_info["geometry"] = {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [180, -90],
+                [180, 90],
+                [-180, 90],
+                [-180, -90],
+                [180, -90],
+            ],
+        ],
+    }
+    # pp = pprint.PrettyPrinter(indent=4)
+    # pp.pprint(stac_file_info)
+
+    catalog_endpoint = url.rstrip("/") + f"/catalog/{user}/collections/{mission}_aux/items/"
+    response = requests.post(catalog_endpoint, json=stac_file_info, timeout=REQUEST_TIMEOUT)
+
+    return response.status_code == 200
 
 
 class PrefectCommonConfig:  # pylint: disable=too-few-public-methods
@@ -108,7 +139,8 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods
 
     Attributes:
         user (str): The user associated with the configuration.
-        url (str): The URL for the station.
+        url (str): The URL for the endpoints that handle the station (search, download, status).
+        url_catalog (str): The URL for the endpoints that handle the catalog (search, publish).
         station (str): The station identifier.
         mission (str): The mission identifier.
         tmp_download_path (str): The temporary download path.
@@ -119,6 +151,7 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods
         self,
         user,
         url,
+        url_catalog,
         station,
         mission,
         tmp_download_path,
@@ -126,6 +159,7 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods
     ):
         self.user: str = user
         self.url: str = url
+        self.url_catalog: str = url_catalog
         self.station: str = station
         self.mission: str = mission
         self.tmp_download_path: str = tmp_download_path
@@ -150,6 +184,7 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         self,
         user,
         url,
+        url_catalog,
         station,
         mission,
         tmp_download_path,
@@ -161,7 +196,7 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         Initialize the PrefectTaskConfig object with provided parameters.
         """
 
-        super().__init__(user, url, station, mission, tmp_download_path, s3_path)
+        super().__init__(user, url, url_catalog, station, mission, tmp_download_path, s3_path)
         self.task_files_stac: list[dict] = task_files_stac
         self.max_retries: int = max_retries
 
@@ -189,12 +224,13 @@ def ingest_files(config: PrefectTaskConfig):
     except exceptions.MissingContextError:
         logger = get_general_logger("task_dwn")
         logger.info("Could not get the prefect logger due to missing context")
-
+    # dictionary to be used for payload request
+    payload = {}
     # some protections for the optional args
-    if config.s3_path is None:
-        config.s3_path = ""
-    if config.tmp_download_path is None:
-        config.tmp_download_path = ""
+    if config.s3_path is not None and len(config.s3_path) > 0:
+        payload["obs"] = config.s3_path
+    if config.tmp_download_path is not None and len(config.tmp_download_path) > 0:
+        payload["local"] = config.tmp_download_path
     # logger.debug("Files to be downloaded:")
     # pp = pprint.PrettyPrinter(indent=4)
     # for f in config.task_files_stac:
@@ -208,11 +244,8 @@ def ingest_files(config: PrefectTaskConfig):
     failed_failes = config.task_files_stac.copy()
     # Call the download endpoint for each requested file
     for i, file_stac in enumerate(config.task_files_stac):
-        payload = {"name": file_stac["id"]}
-        if len(config.tmp_download_path) > 0:
-            payload["local"] = config.tmp_download_path
-        if len(config.s3_path) > 0:
-            payload["obs"] = config.s3_path
+        # update the filename to be ingested
+        payload["name"] = file_stac["id"]
         try:
             response = requests.get(endpoint, params=payload, timeout=ENDPOINT_TIMEOUT)
             if not response.ok:
@@ -239,11 +272,14 @@ def ingest_files(config: PrefectTaskConfig):
             timeout -= 1
             status = check_status(endpoint + "/status", file_stac["id"], logger)
         if status == EDownloadStatus.DONE:
-            logger.info("File %s has been properly downloaded...\n", file_stac["id"])
+            logger.info("File %s has been properly downloaded...", file_stac["id"])
             # TODO: call the STAC endpoint to insert it into the catalog !!
-            update_stac_catalog(config.url, config.user, config.mission, file_stac, logger)
-            # add the index of the well ingested file to be lated removed from the list
-            downloaded_files_indices.append(i)
+            if update_stac_catalog(config.url_catalog, config.user, config.mission, file_stac, config.s3_path):
+                logger.info(f"File well published: {file_stac['id']}\n")
+                # save the index of the well ingested file
+                downloaded_files_indices.append(i)
+            else:
+                logger.error(f"Could not publish file: {file_stac['id']}")
         else:
             logger.error(
                 "Error in downloading the file %s (status %s). Timeout was %s from %s\n",
@@ -258,6 +294,49 @@ def ingest_files(config: PrefectTaskConfig):
         del failed_failes[idx]
 
     return failed_failes
+
+
+def filter_unpublished_files(url_catalog, user, mission, files_stac, logger):
+    """Check for unpublished files in the catalog.
+
+    Args:
+        url_catalog (str): The URL of the catalog.
+        user (str): The user identifier.
+        mission (str): The mission identifier.
+        files_stac (list): List of files to be checked for publication.
+        logger: The logger object for logging.
+
+    Returns:
+        list: List of files that are not yet published in the catalog.
+    """
+
+    ids = []    
+    for fs in files_stac:
+        ids.append(fs["id"])
+    catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
+    request_params = {"collection": f"{mission}_aux", "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
+    # logger.debug(f"request_params = {request_params}")
+    response = requests.get(catalog_endpoint, params=request_params, timeout=REQUEST_TIMEOUT)
+    # logger.debug(f"Search in catalog endpoint response.url = {response.url}")
+    # try do ingest everything anyway
+    if response.status_code != 200:
+        return
+    try:
+        eval_response = response.json()
+    except requests.exceptions.JSONDecodeError:
+        # content is empty, try to ingest everything anyway
+        return
+
+    # no file in the catalog
+    if eval_response["features"] is None:
+        return
+
+    logger.debug(f"Files found in the catalog ({len(eval_response['features'])}): {eval_response['features']} ")
+    for feature in eval_response["features"]:
+        for fs in files_stac:
+            if feature["id"] == fs["id"]:
+                files_stac.remove(fs)
+                break
 
 
 def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datetime):
@@ -294,9 +373,10 @@ def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datet
         + stop_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     try:
-        response = requests.get(endpoint + "/search", params=payload, timeout=ENDPOINT_TIMEOUT)
+        response = requests.get(endpoint + "/search", params=payload, timeout=SEARCH_ENDPOINT_TIMEOUT)
     except requests.exceptions.RequestException as e:
-        raise RuntimeError("Could not connect to the search endpoint") from e
+        print(f"EXCEPTION ON SEARCH : {e}")
+        raise RuntimeError("Could not get the response from the station search endpoint") from e
 
     files = []
     try:
@@ -359,6 +439,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         self,
         user,
         url,
+        url_catalog,
         station,
         mission,
         tmp_download_path,
@@ -370,7 +451,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         """
         Initialize the PrefectFlowConfig object with provided parameters.
         """
-        super().__init__(user, url, station, mission, tmp_download_path, s3_path)
+        super().__init__(user, url, url_catalog, station, mission, tmp_download_path, s3_path)
         self.max_workers: int = max_workers
         self.start_datetime: datetime = start_datetime
         self.stop_datetime: datetime = stop_datetime
@@ -405,7 +486,8 @@ def download_flow(config: PrefectFlowConfig):
 
         # get the list with files from the search endpoint
         files_stac = get_station_files_list(endpoint, config.start_datetime, config.stop_datetime)
-
+        # filter those that are already existing
+        filter_unpublished_files(config.url_catalog, config.user, config.mission, files_stac, logger)
         # distribute the filenames evenly in a number of lists equal with
         # the minimum between number of runners and files to be downloaded
         try:
@@ -415,7 +497,7 @@ def download_flow(config: PrefectFlowConfig):
         except ValueError:
             logger.warning("No task will be started, the requested number of tasks is 0 !")
             tasks_files_stac = []
-        logger.info("List with files found in station")
+        logger.info("List with files to be downloaded (after filtering against the catalog)")
         for f in files_stac:
             logger.info("      %s", f["id"])
 
@@ -424,6 +506,7 @@ def download_flow(config: PrefectFlowConfig):
                 PrefectTaskConfig(
                     config.user,
                     config.url,
+                    config.url_catalog,
                     config.station,
                     config.mission,
                     config.tmp_download_path,
@@ -432,7 +515,7 @@ def download_flow(config: PrefectFlowConfig):
                 ),
             )
 
-    except RuntimeError as e:
+    except (RuntimeError, TypeError) as e:
         logger.error("Exception caught: %s", e)
         return False
 
