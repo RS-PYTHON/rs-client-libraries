@@ -310,7 +310,7 @@ def filter_unpublished_files(url_catalog, user, mission, files_stac, logger):
         list: List of files that are not yet published in the catalog.
     """
 
-    ids = []    
+    ids = []
     for fs in files_stac:
         ids.append(fs["id"])
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
