@@ -12,7 +12,7 @@ import requests
 from prefect import exceptions, flow, get_run_logger, task
 from prefect_dask.task_runners import DaskTaskRunner
 
-CADIP = "CADIP"
+CADIP = ["CADIP", "INS", "MPS", "MTI", "NSG", "SGS"]
 ADGS = "ADGS"
 
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
@@ -415,11 +415,10 @@ def create_endpoint(url, station):
         - If an unsupported station type is provided, a RuntimeError is raised.
 
     """
-    # url = http://127.0.0.1:8000
     if station == ADGS:
         return url.rstrip("/") + "/adgs/aux"
-    if station == CADIP:
-        return url.rstrip("/") + "/cadip/CADIP/cadu"
+    if station in CADIP:
+        return url.rstrip("/") + f"/cadip/{station}/cadu"
     raise RuntimeError("Unknown station !")
 
 
