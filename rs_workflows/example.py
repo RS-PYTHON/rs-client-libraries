@@ -1,4 +1,4 @@
-"""Prefect flow example for rs-server-libararies"""
+"""Prefect flow example for rs-client-libraries"""
 from prefect import flow, task
 
 

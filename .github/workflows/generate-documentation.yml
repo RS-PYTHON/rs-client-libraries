@@ -34,4 +34,4 @@ jobs:
           publish_dir: ./dist/doc/output
 
       - run: >
-          echo "Documentation published to: https://rs-python.github.io/rs-server-libraries" >> $GITHUB_STEP_SUMMARY
+          echo "Documentation published to: https://rs-python.github.io/rs-client-libraries" >> $GITHUB_STEP_SUMMARY

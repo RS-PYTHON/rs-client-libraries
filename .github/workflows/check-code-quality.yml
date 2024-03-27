@@ -8,7 +8,7 @@ on:
 
 env:
   PYTHON_VERSION: 3.11
-  SONAR_PROJECT_KEY: RS-PYTHON_rs-server-libraries_AY5BRtidvquboa54OdgA
+  SONAR_PROJECT_KEY: RS-PYTHON_rs-client-libraries_AY5BRtidvquboa54OdgA
 
 jobs:
 

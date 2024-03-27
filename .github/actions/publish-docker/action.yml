@@ -35,7 +35,7 @@ runs:
     - run: echo "docker_version_name=$(echo ${{ inputs.version_name }} | tr + .)" >> $GITHUB_ENV
       shell: bash
 
-    # Full Docker image name:tag as ghcr.io/RS-PYTHON/rs-server-libraries<suffix>:<version> in lowercase
+    # Full Docker image name:tag as ghcr.io/RS-PYTHON/rs-client-libraries<suffix>:<version> in lowercase
     - id: docker_image
       run: |
         docker_image=${{ env.DOCKER_REGISTRY }}/${{ github.repository }}${{ inputs.image_suffix }}:${{ env.docker_version_name }}
