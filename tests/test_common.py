@@ -162,7 +162,7 @@ def test_update_stac_catalog(response_is_valid, station):
     # set the response status
     response_status = 200 if response_is_valid else 400
     # mock the publish to catalog endpoint
-    endpoint = "http://127.0.0.1:5000/catalog/testUser/collections/s1_aux/items/"
+    endpoint = "http://127.0.0.1:5000/catalog/collections/testUser:s1_aux/items/"
     responses.add(
         responses.POST,
         endpoint,
@@ -345,7 +345,7 @@ def test_ok_ingest_files(station):
         )
 
     # mock the publish to catalog endpoint
-    endpoint = "http://127.0.0.1:5000/catalog/testUser/collections/s1_aux/items/"
+    endpoint = "http://127.0.0.1:5000/catalog/collections/testUser:s1_aux/items/"
     responses.add(
         responses.POST,
         endpoint,
@@ -415,7 +415,7 @@ def test_nok_ingest_files(station):
             status=503,
         )
     # mock the publish to catalog endpoint
-    endpoint = "http://127.0.0.1:5000/catalog/testUser/collections/s1_aux/items/"
+    endpoint = "http://127.0.0.1:5000/catalog/collections/testUser:s1_aux/items/"
     responses.add(
         responses.POST,
         endpoint,
