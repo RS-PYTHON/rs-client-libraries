@@ -485,6 +485,11 @@ def download_flow(config: PrefectFlowConfig):
 
         # get the list with files from the search endpoint
         files_stac = get_station_files_list(endpoint, config.start_datetime, config.stop_datetime)
+        # check if the list with files returned from the station is not empty
+        if len(files_stac) == 0:
+            logger.warning(f"The station {config.station} did not return any \
+element for time interval {config.start_datetime} - {config.stop_datetime}")
+            return True
         # filter those that are already existing
         filter_unpublished_files(config.url_catalog, config.user, config.mission, files_stac, logger)
         # distribute the filenames evenly in a number of lists equal with
