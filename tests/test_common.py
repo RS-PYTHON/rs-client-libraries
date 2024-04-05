@@ -171,7 +171,13 @@ def test_update_stac_catalog(response_is_valid, station):
 
     for file_s in files_stac[station]["features"]:
         resp = update_stac_catalog(
-            {}, "http://127.0.0.1:5000", "testUser", "s1", file_s, "s3://tmp_bucket/tmp", get_general_logger("tests"),
+            {},
+            "http://127.0.0.1:5000",
+            "testUser",
+            "s1",
+            file_s,
+            "s3://tmp_bucket/tmp",
+            get_general_logger("tests"),
         )
         assert resp == response_is_valid
 
