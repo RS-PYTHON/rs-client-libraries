@@ -17,9 +17,9 @@ ADGS = "ADGS"
 
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
-ENDPOINT_TIMEOUT = 10  # in seconds
+ENDPOINT_TIMEOUT = 2  # in seconds
 SEARCH_ENDPOINT_TIMEOUT = 60  # in seconds
-REQUEST_TIMEOUT = 5  # in seconds
+CATALOG_REQUEST_TIMEOUT = 20  # in seconds
 
 RSPY_APIKEY = "RSPY_APIKEY"
 
@@ -105,8 +105,8 @@ def check_status(apikey_headers, endpoint, filename, logger):
         ):
             return EDownloadStatus(eval_response["status"])
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Exception when calling for status endpoint: {e}")
+    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+        logger.exception(f"Status endpoint exception: {e}")
 
     return EDownloadStatus.FAILED
 
@@ -118,6 +118,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     mission: str,
     stac_file_info: dict,
     obs: str,
+    logger,
 ):
     """Update the STAC catalog with file information.
 
@@ -154,8 +155,21 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     # pp.pprint(stac_file_info)
 
     catalog_endpoint = url.rstrip("/") + f"/catalog/collections/{user}:{mission}_aux/items/"
-    response = requests.post(catalog_endpoint, json=stac_file_info, timeout=REQUEST_TIMEOUT, **apikey_headers)
-
+    try:
+        response = requests.post(
+            catalog_endpoint,
+            json=stac_file_info,
+            timeout=CATALOG_REQUEST_TIMEOUT,
+            **apikey_headers,
+        )
+    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+        logger.exception("Request exception caught: %s", e)
+        return False
+    try:
+        if not response.ok:
+            logger.error(f"The catalog update endpoint: {response.json()}")
+    except requests.exceptions.JSONDecodeError:
+        logger.exception(f"Could not get the json body from response: {response}")
     return response.status_code == 200
 
 
@@ -280,17 +294,18 @@ def ingest_files(config: PrefectTaskConfig):
         # update the filename to be ingested
         payload["name"] = file_stac["id"]
         try:
-            # start_p = datetime.now()
+            logger.debug(f"Calling  {endpoint} with payload {payload}")
+            start_p = datetime.now()
             response = requests.get(endpoint, params=payload, timeout=ENDPOINT_TIMEOUT, **apikey_headers)
-            # logger.debug(f"Download start endpoint returned in {(datetime.now() - start_p)}")
+            logger.debug(f"Download start endpoint returned in {(datetime.now() - start_p)}")
             if not response.ok:
                 logger.error(
                     "The download endpoint returned error for file %s...\n",
                     file_stac["id"],
                 )
                 continue
-        except requests.exceptions.RequestException as e:
-            logger.error("Request exception caught: %s", e)
+        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+            logger.exception("Request exception caught: %s", e)
             continue
 
         # monitor the status of the file until it is completely downloaded before initiating the next download request
@@ -316,6 +331,7 @@ def ingest_files(config: PrefectTaskConfig):
                 config.mission,
                 file_stac,
                 config.s3_path,
+                logger,
             ):
                 logger.info(f"File well published: {file_stac['id']}\n")
                 # save the index of the well ingested file
@@ -365,8 +381,17 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
         ids.append(str(fs["id"]))
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
     request_params = {"collection": f"{mission}_aux", "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
-
-    response = requests.get(catalog_endpoint, params=request_params, timeout=REQUEST_TIMEOUT, **apikey_headers)
+    try:
+        response = requests.get(
+            catalog_endpoint,
+            params=request_params,
+            timeout=CATALOG_REQUEST_TIMEOUT,
+            **apikey_headers,
+        )
+    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+        logger.exception("Request exception caught: %s", e)
+        # try to ingest everything anyway
+        return
 
     # try to ingest everything anyway
     if response.status_code != 200:
@@ -381,7 +406,7 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     if eval_response["features"] is None:
         return
 
-    logger.debug(f"Files found in the catalog ({len(eval_response['features'])}): {eval_response['features']} ")
+    # logger.debug(f"Files found in the catalog ({len(eval_response['features'])}): {eval_response['features']} ")
     for feature in eval_response["features"]:
         for fs in files_stac:
             if feature["id"] == fs["id"]:
@@ -425,8 +450,8 @@ def get_station_files_list(apikey_headers: dict, endpoint: str, start_date: date
     }
     try:
         response = requests.get(endpoint + "/search", params=payload, timeout=SEARCH_ENDPOINT_TIMEOUT, **apikey_headers)
-    except requests.exceptions.RequestException as e:
-        logger.error(f"EXCEPTION ON SEARCH : {e}")
+    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+        logger.exception(f"Could not get the response from the station search endpoint: {e}")
         raise RuntimeError("Could not get the response from the station search endpoint") from e
 
     files = []
@@ -564,6 +589,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
             files_stac,
             logger,
         )
+
         # distribute the filenames evenly in a number of lists equal with
         # the minimum between number of runners and files to be downloaded
         try:
