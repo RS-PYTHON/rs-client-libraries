@@ -63,11 +63,8 @@ def create_apikey_headers(apikey):
     Args:
         apikey_headers (dict): A dictionary with the apikey
     """
-    apikey_headers = {}
-    if apikey:
-        apikey_headers = {"headers": {"x-api-key": apikey}}
 
-    return apikey_headers
+    return {"headers": {"x-api-key": apikey}} if apikey else {}
 
 
 def check_status(apikey_headers, endpoint, filename, logger):
