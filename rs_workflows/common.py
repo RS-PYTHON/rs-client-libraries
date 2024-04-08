@@ -294,10 +294,10 @@ def ingest_files(config: PrefectTaskConfig):
         # update the filename to be ingested
         payload["name"] = file_stac["id"]
         try:
-            #logger.debug(f"Calling  {endpoint} with payload {payload}")
-            #start_p = datetime.now()
+            # logger.debug(f"Calling  {endpoint} with payload {payload}")
+            # start_p = datetime.now()
             response = requests.get(endpoint, params=payload, timeout=ENDPOINT_TIMEOUT, **apikey_headers)
-            #logger.debug(f"Download start endpoint returned in {(datetime.now() - start_p)}")
+            # logger.debug(f"Download start endpoint returned in {(datetime.now() - start_p)}")
             if not response.ok:
                 logger.error(
                     "The download endpoint returned error for file %s...\n",
