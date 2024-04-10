@@ -19,7 +19,9 @@ DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
 ENDPOINT_TIMEOUT = 2  # in seconds
 SEARCH_ENDPOINT_TIMEOUT = 60  # in seconds
-REQUEST_TIMEOUT = 5  # in seconds
+CATALOG_REQUEST_TIMEOUT = 20  # in seconds
+
+RSPY_APIKEY = "RSPY_APIKEY"
 
 
 class EDownloadStatus(str, enum.Enum):
@@ -54,7 +56,18 @@ def get_general_logger(logger_name):
     return logger
 
 
-def check_status(endpoint, filename, logger):
+def create_apikey_headers(apikey):
+    """Create the apikey
+
+    This function creates the apikey headers used when calling the endpoints. This may be empty
+    Args:
+        apikey_headers (dict): A dictionary with the apikey
+    """
+
+    return {"headers": {"x-api-key": apikey}} if apikey else {}
+
+
+def check_status(apikey_headers, endpoint, filename, logger):
     """Check the status of a file download from the specified rs-server endpoint.
 
     This function sends a GET request to the rs-server endpoint with the filename as a query parameter
@@ -63,6 +76,7 @@ def check_status(endpoint, filename, logger):
     response is not successful or does not contain the 'status' key, the function returns a FAILED status.
 
     Args:
+        apikey_headers (dict): The apikey used for request (may be empty)
         endpoint (str): The rs-server endpoint URL to query for the file status.
         filename (str): The name of the file for which to check the status.
 
@@ -76,6 +90,7 @@ def check_status(endpoint, filename, logger):
             endpoint,
             params={"name": filename},
             timeout=ENDPOINT_TIMEOUT,
+            **apikey_headers,
         )
 
         eval_response = response.json()
@@ -87,16 +102,25 @@ def check_status(endpoint, filename, logger):
         ):
             return EDownloadStatus(eval_response["status"])
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Exception when calling for status endpoint: {e}")
+    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+        logger.exception(f"Status endpoint exception: {e}")
 
     return EDownloadStatus.FAILED
 
 
-def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict, obs: str):
+def update_stac_catalog(  # pylint: disable=too-many-arguments
+    apikey_headers: dict,
+    url: str,
+    user: str,
+    mission: str,
+    stac_file_info: dict,
+    obs: str,
+    logger,
+):
     """Update the STAC catalog with file information.
 
     Args:
+        apikey_headers (dict): The apikey used for request (may be empty)
         url (str): The URL of the catalog.
         user (str): The user identifier.
         mission (str): The mission identifier.
@@ -128,12 +152,25 @@ def update_stac_catalog(url: str, user: str, mission: str, stac_file_info: dict,
     # pp.pprint(stac_file_info)
 
     catalog_endpoint = url.rstrip("/") + f"/catalog/collections/{user}:{mission}_aux/items/"
-    response = requests.post(catalog_endpoint, json=stac_file_info, timeout=REQUEST_TIMEOUT)
-
+    try:
+        response = requests.post(
+            catalog_endpoint,
+            json=stac_file_info,
+            timeout=CATALOG_REQUEST_TIMEOUT,
+            **apikey_headers,
+        )
+    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+        logger.exception("Request exception caught: %s", e)
+        return False
+    try:
+        if not response.ok:
+            logger.error(f"The catalog update endpoint: {response.json()}")
+    except requests.exceptions.JSONDecodeError:
+        logger.exception(f"Could not get the json body from response: {response}")
     return response.status_code == 200
 
 
-class PrefectCommonConfig:  # pylint: disable=too-few-public-methods
+class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes
     """Common configuration to Prefect tasks and flows.
     Base class for configuration to prefect tasks and flows that ingest files from different stations (cadip, adgs...)
 
@@ -145,6 +182,7 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods
         mission (str): The mission identifier.
         tmp_download_path (str): The temporary download path.
         s3_path (str): The S3 path for storing downloaded files.
+        apikey (str): The api key used when calling the RS Server endpoints
     """
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -156,6 +194,7 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods
         mission,
         tmp_download_path,
         s3_path,
+        apikey,
     ):
         self.user: str = user
         self.url: str = url
@@ -164,6 +203,7 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods
         self.mission: str = mission
         self.tmp_download_path: str = tmp_download_path
         self.s3_path: str = s3_path
+        self.apikey: str = apikey
 
 
 class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-methods
@@ -189,6 +229,7 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         mission,
         tmp_download_path,
         s3_path,
+        apikey,
         task_files_stac,
         max_retries: int = 3,
     ):
@@ -196,7 +237,7 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         Initialize the PrefectTaskConfig object with provided parameters.
         """
 
-        super().__init__(user, url, url_catalog, station, mission, tmp_download_path, s3_path)
+        super().__init__(user, url, url_catalog, station, mission, tmp_download_path, s3_path, apikey)
         self.task_files_stac: list[dict] = task_files_stac
         self.max_retries: int = max_retries
 
@@ -224,6 +265,7 @@ def ingest_files(config: PrefectTaskConfig):
     except exceptions.MissingContextError:
         logger = get_general_logger("task_dwn")
         logger.info("Could not get the prefect logger due to missing context")
+
     # dictionary to be used for payload request
     payload = {}
     # some protections for the optional args
@@ -239,6 +281,8 @@ def ingest_files(config: PrefectTaskConfig):
 
     # get the endpoint
     endpoint = create_endpoint(config.url, config.station)
+    # create the apikey_headers
+    apikey_headers = create_apikey_headers(config.apikey)
     # list with failed files
     downloaded_files_indices = []
     failed_failes = config.task_files_stac.copy()
@@ -247,19 +291,22 @@ def ingest_files(config: PrefectTaskConfig):
         # update the filename to be ingested
         payload["name"] = file_stac["id"]
         try:
-            response = requests.get(endpoint, params=payload, timeout=ENDPOINT_TIMEOUT)
+            # logger.debug(f"Calling  {endpoint} with payload {payload}")
+            # start_p = datetime.now()
+            response = requests.get(endpoint, params=payload, timeout=ENDPOINT_TIMEOUT, **apikey_headers)
+            # logger.debug(f"Download start endpoint returned in {(datetime.now() - start_p)}")
             if not response.ok:
                 logger.error(
                     "The download endpoint returned error for file %s...\n",
                     file_stac["id"],
                 )
                 continue
-        except requests.exceptions.RequestException as e:
-            logger.error("Request exception caught: %s", e)
+        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+            logger.exception("Request exception caught: %s", e)
             continue
 
         # monitor the status of the file until it is completely downloaded before initiating the next download request
-        status = check_status(endpoint + "/status", file_stac["id"], logger)
+        status = check_status(apikey_headers, endpoint + "/status", file_stac["id"], logger)
         # just for the demo the timeout is hardcoded, it should be otherwise defined somewhere in the configuration
         timeout = DOWNLOAD_FILE_TIMEOUT  # 3 minutes
         while status in [EDownloadStatus.NOT_STARTED, EDownloadStatus.IN_PROGRESS] and timeout > 0:
@@ -270,11 +317,19 @@ def ingest_files(config: PrefectTaskConfig):
             )
             time.sleep(1)
             timeout -= 1
-            status = check_status(endpoint + "/status", file_stac["id"], logger)
+            status = check_status(apikey_headers, endpoint + "/status", file_stac["id"], logger)
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...", file_stac["id"])
             # TODO: call the STAC endpoint to insert it into the catalog !!
-            if update_stac_catalog(config.url_catalog, config.user, config.mission, file_stac, config.s3_path):
+            if update_stac_catalog(
+                apikey_headers,
+                config.url_catalog,
+                config.user,
+                config.mission,
+                file_stac,
+                config.s3_path,
+                logger,
+            ):
                 logger.info(f"File well published: {file_stac['id']}\n")
                 # save the index of the well ingested file
                 downloaded_files_indices.append(i)
@@ -296,10 +351,18 @@ def ingest_files(config: PrefectTaskConfig):
     return failed_failes
 
 
-def filter_unpublished_files(url_catalog, user, mission, files_stac, logger):
+def filter_unpublished_files(  # pylint: disable=too-many-arguments
+    apikey_headers: dict,
+    url_catalog: str,
+    user: str,
+    mission: str,
+    files_stac: list,
+    logger,
+):
     """Check for unpublished files in the catalog.
 
     Args:
+        apikey_headers (dict): The apikey used for request (may be empty)
         url_catalog (str): The URL of the catalog.
         user (str): The user identifier.
         mission (str): The mission identifier.
@@ -312,13 +375,22 @@ def filter_unpublished_files(url_catalog, user, mission, files_stac, logger):
 
     ids = []
     for fs in files_stac:
-        ids.append(fs["id"])
+        ids.append(str(fs["id"]))
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
     request_params = {"collection": f"{mission}_aux", "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
-    # logger.debug(f"request_params = {request_params}")
-    response = requests.get(catalog_endpoint, params=request_params, timeout=REQUEST_TIMEOUT)
-    # logger.debug(f"Search in catalog endpoint response.url = {response.url}")
-    # try do ingest everything anyway
+    try:
+        response = requests.get(
+            catalog_endpoint,
+            params=request_params,
+            timeout=CATALOG_REQUEST_TIMEOUT,
+            **apikey_headers,
+        )
+    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+        logger.exception("Request exception caught: %s", e)
+        # try to ingest everything anyway
+        return
+
+    # try to ingest everything anyway
     if response.status_code != 200:
         return
     try:
@@ -331,7 +403,7 @@ def filter_unpublished_files(url_catalog, user, mission, files_stac, logger):
     if eval_response["features"] is None:
         return
 
-    logger.debug(f"Files found in the catalog ({len(eval_response['features'])}): {eval_response['features']} ")
+    # logger.debug(f"Files found in the catalog ({len(eval_response['features'])}): {eval_response['features']} ")
     for feature in eval_response["features"]:
         for fs in files_stac:
             if feature["id"] == fs["id"]:
@@ -339,7 +411,7 @@ def filter_unpublished_files(url_catalog, user, mission, files_stac, logger):
                 break
 
 
-def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datetime):
+def get_station_files_list(apikey_headers: dict, endpoint: str, start_date: datetime, stop_date: datetime, logger):
     """Retrieve a list of files from the specified endpoint within the given time range.
 
     This function queries the specified endpoint to retrieve a list of files available in the
@@ -347,6 +419,7 @@ def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datet
     to 'stop_date' (inclusive).
 
     Args:
+        apikey_headers (dict): The apikey used for request (may be empty)
         endpoint (str): The URL endpoint to query for file information.
         start_date (datetime): The start date/time of the time range.
         stop_date (datetime, optional): The stop date/time of the time range.
@@ -373,9 +446,9 @@ def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datet
         + stop_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     try:
-        response = requests.get(endpoint + "/search", params=payload, timeout=SEARCH_ENDPOINT_TIMEOUT)
-    except requests.exceptions.RequestException as e:
-        print(f"EXCEPTION ON SEARCH : {e}")
+        response = requests.get(endpoint + "/search", params=payload, timeout=SEARCH_ENDPOINT_TIMEOUT, **apikey_headers)
+    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+        logger.exception(f"Could not get the response from the station search endpoint: {e}")
         raise RuntimeError("Could not get the response from the station search endpoint") from e
 
     files = []
@@ -383,6 +456,8 @@ def get_station_files_list(endpoint: str, start_date: datetime, stop_date: datet
         if response.ok:
             for file_info in response.json()["features"]:
                 files.append(file_info)
+        else:
+            logger.error(f"Error: {response.status_code} : {response.json()}")
     except KeyError as e:
         raise RuntimeError("Wrong format of search endpoint answer") from e
 
@@ -443,6 +518,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         mission,
         tmp_download_path,
         s3_path,
+        apikey,
         max_workers,
         start_datetime,
         stop_datetime,
@@ -450,7 +526,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         """
         Initialize the PrefectFlowConfig object with provided parameters.
         """
-        super().__init__(user, url, url_catalog, station, mission, tmp_download_path, s3_path)
+        super().__init__(user, url, url_catalog, station, mission, tmp_download_path, s3_path, apikey)
         self.max_workers: int = max_workers
         self.start_datetime: datetime = start_datetime
         self.stop_datetime: datetime = stop_datetime
@@ -481,10 +557,19 @@ def download_flow(config: PrefectFlowConfig):
         logger.info("Could not get the prefect logger due to missing context")
 
     try:
+        # get the endpoint
         endpoint = create_endpoint(config.url, config.station)
+        # create the apikey_headers
+        apikey_headers = create_apikey_headers(config.apikey)
 
         # get the list with files from the search endpoint
-        files_stac = get_station_files_list(endpoint, config.start_datetime, config.stop_datetime)
+        files_stac = get_station_files_list(
+            apikey_headers,
+            endpoint,
+            config.start_datetime,
+            config.stop_datetime,
+            logger,
+        )
         # check if the list with files returned from the station is not empty
         if len(files_stac) == 0:
             logger.warning(
@@ -493,7 +578,15 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
             )
             return True
         # filter those that are already existing
-        filter_unpublished_files(config.url_catalog, config.user, config.mission, files_stac, logger)
+        filter_unpublished_files(
+            apikey_headers,
+            config.url_catalog,
+            config.user,
+            config.mission,
+            files_stac,
+            logger,
+        )
+
         # distribute the filenames evenly in a number of lists equal with
         # the minimum between number of runners and files to be downloaded
         try:
@@ -517,6 +610,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
                     config.mission,
                     config.tmp_download_path,
                     config.s3_path,
+                    config.apikey,
                     files_stac,
                 ),
             )

@@ -70,7 +70,7 @@ def test_valid_check_status(filename, station):
         status=200,
     )
     logger = get_general_logger("tests")
-    assert check_status(endpoint, filename, logger) == EDownloadStatus.NOT_STARTED
+    assert check_status({}, endpoint, filename, logger) == EDownloadStatus.NOT_STARTED
 
     json_response["status"] = EDownloadStatus.IN_PROGRESS
     responses.add(
@@ -79,7 +79,7 @@ def test_valid_check_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert check_status(endpoint, filename, logger) == EDownloadStatus.IN_PROGRESS
+    assert check_status({}, endpoint, filename, logger) == EDownloadStatus.IN_PROGRESS
 
     json_response["status"] = EDownloadStatus.DONE
     responses.add(
@@ -88,7 +88,7 @@ def test_valid_check_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert check_status(endpoint, filename, logger) == EDownloadStatus.DONE
+    assert check_status({}, endpoint, filename, logger) == EDownloadStatus.DONE
 
 
 @pytest.mark.unit
@@ -125,7 +125,7 @@ def test_invalid_check_status(filename, station):
         status=404,
     )
     logger = get_general_logger("tests")
-    assert check_status(endpoint, filename, logger) == EDownloadStatus.FAILED
+    assert check_status({}, endpoint, filename, logger) == EDownloadStatus.FAILED
 
 
 @pytest.mark.unit
@@ -170,7 +170,15 @@ def test_update_stac_catalog(response_is_valid, station):
     )
 
     for file_s in files_stac[station]["features"]:
-        resp = update_stac_catalog("http://127.0.0.1:5000", "testUser", "s1", file_s, "s3://tmp_bucket/tmp")
+        resp = update_stac_catalog(
+            {},
+            "http://127.0.0.1:5000",
+            "testUser",
+            "s1",
+            file_s,
+            "s3://tmp_bucket/tmp",
+            get_general_logger("tests"),
+        )
         assert resp == response_is_valid
 
 
@@ -271,7 +279,7 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     )
     logger = get_general_logger("tests")
 
-    filter_unpublished_files("http://127.0.0.1:5000", "testUser", "s1", files_stac, logger)
+    filter_unpublished_files({}, "http://127.0.0.1:5000", "testUser", "s1", files_stac, logger)
 
     logger.debug(f"AFTER filtering ! FS = {files_stac} || ex = {mock_files_in_catalog}")
 
@@ -359,6 +367,7 @@ def test_ok_ingest_files(station):
         "s1",
         local_path_for_dwn,
         obs,
+        None,
         files_stac[station]["features"],
         1,
     )
@@ -429,6 +438,7 @@ def test_nok_ingest_files(station):
         "s1",
         local_path_for_dwn,
         obs,
+        None,
         files_stac[station]["features"],
         1,
     )
@@ -477,9 +487,11 @@ def test_get_station_files_list(station):
     )
 
     search_response = get_station_files_list(
+        {},
         endpoint.rstrip("/search"),
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+        get_general_logger("tests"),
     )
 
     assert len(search_response) == 2
@@ -527,11 +539,13 @@ def test_err_ret_get_station_files_list(station):
         json={"detail": "Operational error"},
         status=400,
     )
-
+    logger = get_general_logger("tests")
     search_response = get_station_files_list(
+        {},
         endpoint.rstrip("/search"),
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+        logger,
     )
     assert len(search_response) == 0
 
@@ -548,9 +562,11 @@ def test_err_ret_get_station_files_list(station):
 
     with pytest.raises(RuntimeError) as runtime_exception:
         search_response = get_station_files_list(
+            {},
             endpoint.rstrip("/search"),
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+            logger,
         )
     assert "Wrong format of search endpoint answer" in str(runtime_exception.value)
 
@@ -598,9 +614,11 @@ def test_wrong_url_get_station_files_list(station):
     # use a wrong endpoint
     with pytest.raises(RuntimeError) as runtime_exception:
         get_station_files_list(
+            {},
             "http://127.0.0.1:5000/search",
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+            get_general_logger("tests"),
         )
     assert "Could not get the response from the station search endpoint" in str(runtime_exception.value)
 
@@ -733,6 +751,7 @@ def test_download_flow(station):
         "s1",
         local_path_for_dwn,
         obs,
+        None,
         0,
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
