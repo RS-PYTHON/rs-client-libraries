@@ -535,7 +535,7 @@ def test_err_ret_get_station_files_list(station):
     # register a mock with an error answer
     responses.add(
         responses.GET,
-        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z",
+        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z&top=2",
         json={"detail": "Operational error"},
         status=400,
     )
@@ -546,6 +546,7 @@ def test_err_ret_get_station_files_list(station):
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
         logger,
+        2,
     )
     assert len(search_response) == 0
 
@@ -555,7 +556,7 @@ def test_err_ret_get_station_files_list(station):
     json_response["unk_features"] = json_response.pop("features")
     responses.add(
         responses.GET,
-        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z",
+        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z&top=2",
         json={"detail": "Operational error"},
         status=200,
     )
@@ -567,6 +568,7 @@ def test_err_ret_get_station_files_list(station):
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
             logger,
+            2,
         )
     assert "Wrong format of search endpoint answer" in str(runtime_exception.value)
 
@@ -606,7 +608,7 @@ def test_wrong_url_get_station_files_list(station):
     json_response = files_stac[station]
     responses.add(
         responses.GET,
-        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z",
+        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z&top=2",
         json=json_response,
         status=200,
     )
@@ -619,6 +621,7 @@ def test_wrong_url_get_station_files_list(station):
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
             get_general_logger("tests"),
+            2,
         )
     assert "Could not get the response from the station search endpoint" in str(runtime_exception.value)
 
