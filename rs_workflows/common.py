@@ -454,7 +454,7 @@ def get_station_files_list(  # pylint: disable=too-many-arguments
         + stop_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     if limit:
-        payload["top"] = str(limit)
+        payload["limit"] = str(limit)
     try:
         response = requests.get(endpoint + "/search", params=payload, timeout=SEARCH_ENDPOINT_TIMEOUT, **apikey_headers)
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:

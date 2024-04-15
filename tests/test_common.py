@@ -535,7 +535,7 @@ def test_err_ret_get_station_files_list(station):
     # register a mock with an error answer
     responses.add(
         responses.GET,
-        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z&top=2",
+        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z&limit=2",
         json={"detail": "Operational error"},
         status=400,
     )
@@ -556,7 +556,7 @@ def test_err_ret_get_station_files_list(station):
     json_response["unk_features"] = json_response.pop("features")
     responses.add(
         responses.GET,
-        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z&top=2",
+        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z&limit=2",
         json={"detail": "Operational error"},
         status=200,
     )
@@ -608,7 +608,7 @@ def test_wrong_url_get_station_files_list(station):
     json_response = files_stac[station]
     responses.add(
         responses.GET,
-        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z&top=2",
+        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z&limit=2",
         json=json_response,
         status=200,
     )
