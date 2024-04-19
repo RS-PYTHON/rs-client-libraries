@@ -639,7 +639,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
             logger.info("      %s", f["id"])
 
         for files_stac in tasks_files_stac:
-            ingest_files(
+            ingest_files.submit(
                 PrefectTaskConfig(
                     config.user,
                     config.url,
