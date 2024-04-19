@@ -17,7 +17,7 @@ ADGS = "ADGS"
 
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
-ENDPOINT_TIMEOUT = 2  # in seconds
+ENDPOINT_TIMEOUT = 10  # in seconds
 SEARCH_ENDPOINT_TIMEOUT = 60  # in seconds
 CATALOG_REQUEST_TIMEOUT = 20  # in seconds
 
@@ -112,7 +112,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     apikey_headers: dict,
     url: str,
     user: str,
-    mission: str,
+    collection_name: str,
     stac_file_info: dict,
     obs: str,
     logger,
@@ -123,7 +123,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
         apikey_headers (dict): The apikey used for request (may be empty)
         url (str): The URL of the catalog.
         user (str): The user identifier.
-        mission (str): The mission identifier.
+        collection_name (str): The name of the collection to be used.
         stac_file_info (dict): Information in stac format about the downloaded file.
         obs (str): The S3 bucket location where the file has been saved.
         logger: The logger object for logging.
@@ -131,8 +131,8 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     Returns:
         bool: True if the file information is successfully updated in the catalog, False otherwise.
     """
-    # add mission
-    stac_file_info["collection"] = f"{mission}_aux"
+    # add collection name
+    stac_file_info["collection"] = collection_name
     # add bucket location where the file has been saved
     stac_file_info["assets"]["file"]["href"] = f"{obs.rstrip('/')}/{stac_file_info['id']}"
     # add a fake geometry polygon (the whole globe)
@@ -151,7 +151,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     # pp = pprint.PrettyPrinter(indent=4)
     # pp.pprint(stac_file_info)
 
-    catalog_endpoint = url.rstrip("/") + f"/catalog/collections/{user}:{mission}_aux/items/"
+    catalog_endpoint = url.rstrip("/") + f"/catalog/collections/{user}:{collection_name}/items/"
     try:
         response = requests.post(
             catalog_endpoint,
@@ -295,13 +295,16 @@ def ingest_files(config: PrefectTaskConfig):
             # start_p = datetime.now()
             response = requests.get(endpoint, params=payload, timeout=ENDPOINT_TIMEOUT, **apikey_headers)
             # logger.debug(f"Download start endpoint returned in {(datetime.now() - start_p)}")
+            logger.debug(f"Download start endpoint returned in {response.elapsed.total_seconds()}")
             if not response.ok:
                 logger.error(
                     "The download endpoint returned error for file %s...\n",
                     file_stac["id"],
                 )
                 continue
-        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+        except (requests.exceptions.RequestException, 
+                requests.exceptions.Timeout, 
+                requests.exceptions.ReadTimeout) as e:
             logger.exception("Request exception caught: %s", e)
             continue
 
@@ -320,12 +323,12 @@ def ingest_files(config: PrefectTaskConfig):
             status = check_status(apikey_headers, endpoint + "/status", file_stac["id"], logger)
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...", file_stac["id"])
-            # TODO: call the STAC endpoint to insert it into the catalog !!
+            
             if update_stac_catalog(
                 apikey_headers,
                 config.url_catalog,
                 config.user,
-                config.mission,
+                create_collection_name(config.mission, config.station),
                 file_stac,
                 config.s3_path,
                 logger,
@@ -355,7 +358,7 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     apikey_headers: dict,
     url_catalog: str,
     user: str,
-    mission: str,
+    collection_name: str,
     files_stac: list,
     logger,
 ):
@@ -365,7 +368,7 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
         apikey_headers (dict): The apikey used for request (may be empty)
         url_catalog (str): The URL of the catalog.
         user (str): The user identifier.
-        mission (str): The mission identifier.
+        collection_name (str): The name of the collection to be used.
         files_stac (list): List of files to be checked for publication.
         logger: The logger object for logging.
 
@@ -374,10 +377,11 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     """
 
     ids = []
+    # TODO: Should this list be checked for duplicated items?
     for fs in files_stac:
         ids.append(str(fs["id"]))
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
-    request_params = {"collection": f"{mission}_aux", "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
+    request_params = {"collection": collection_name, "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
     try:
         response = requests.get(
             catalog_endpoint,
@@ -468,13 +472,15 @@ def create_endpoint(url, station):
     """Create a rs-server endpoint URL based on the provided base URL and station type.
 
     This function constructs and returns a specific endpoint URL based on the provided
-    base URL and the type of station. The supported station types are "ADGS" and "CADIP" for the time being
-    For other station types, a RuntimeError is raised.
+    base URL and the type of station. For the time being, the supported station types are "ADGS" and 
+    "CADIP", "INS", "MPS", "MTI", "NSG", "SGS".
+     
+    For other values, a RuntimeError is raised.
 
     Args:
         url (str): The base URL to which the station-specific path will be appended.
         station (str): The type of station for which the endpoint is being created. Supported
-            values are "ADGS" and "CADIP".
+            values are "ADGS" and "CADIP", "INS", "MPS", "MTI", "NSG", "SGS".
 
     Returns:
         str: The constructed endpoint URL.
@@ -486,7 +492,7 @@ def create_endpoint(url, station):
         - This function constructs a station-specific endpoint URL by appending a path
           based on the station type to the provided base URL.
         - For "ADGS" stations, the endpoint path is "/adgs/aux/".
-        - For "CADIP" stations, the endpoint path is "/cadip/CADIP/cadu/".
+        - For "CADIP" stations, the endpoint path is "/cadip/{station}/cadu/".
         - If an unsupported station type is provided, a RuntimeError is raised.
 
     """
@@ -494,6 +500,33 @@ def create_endpoint(url, station):
         return url.rstrip("/") + "/adgs/aux"
     if station in CADIP:
         return url.rstrip("/") + f"/cadip/{station}/cadu"
+    raise RuntimeError("Unknown station !")
+
+def create_collection_name(mission, station):
+    """Create the name of the catalog collection
+
+    This function constructs and returns a specific name for the catalog collection .
+    For ADGS station type should be "mission_name"_aux
+    For CADIP stations type should be "mission_name"_chunk
+     
+    For other values, a RuntimeError is raised.
+
+    Args:
+        mission (str): The name of the mission.
+        station (str): The type of station . Supported
+            values are "ADGS" and "CADIP", "INS", "MPS", "MTI", "NSG", "SGS".
+
+    Returns:
+        str: The name of the collection
+
+    Raises:
+        RuntimeError: If the provided station type is not supported.
+    
+    """
+    if station == ADGS:
+        return f"{mission}_aux"
+    if station in CADIP:
+        return f"{mission}_chunk"
     raise RuntimeError("Unknown station !")
 
 
@@ -577,12 +610,14 @@ def download_flow(config: PrefectFlowConfig):
 element for time interval {config.start_datetime} - {config.stop_datetime}",
             )
             return True
+        # create the collection name
+
         # filter those that are already existing
         filter_unpublished_files(
             apikey_headers,
             config.url_catalog,
             config.user,
-            config.mission,
+            create_collection_name(config.mission, config.station),
             files_stac,
             logger,
         )
