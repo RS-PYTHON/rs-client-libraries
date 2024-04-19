@@ -14,8 +14,8 @@ from rs_workflows.common import (
     PrefectFlowConfig,
     PrefectTaskConfig,
     check_status,
-    create_endpoint,
     create_collection_name,
+    create_endpoint,
     download_flow,
     filter_unpublished_files,
     get_general_logger,
@@ -170,7 +170,7 @@ def test_update_stac_catalog(response_is_valid, station):
         f"http://127.0.0.1:5000/catalog/collections/testUser:{collection_name}/items/",
         status=response_status,
     )
-    
+
     for file_s in files_stac[station]["features"]:
         resp = update_stac_catalog(
             {},
@@ -662,6 +662,7 @@ def test_create_endpoint(station):
             == "http://127.0.0.1:5000" + endpoints[station]["download"]
         )
 
+
 @pytest.mark.unit
 @responses.activate
 @pytest.mark.parametrize(
@@ -685,16 +686,13 @@ def test_create_collection_name(station):
     Returns:
         None: This test does not return any value.
     """
-    
+
     if station == "UNKNOWN":
         with pytest.raises(RuntimeError) as runtime_exception:
             create_collection_name(MISSION_NAME, station)
         assert "Unknown station !" in str(runtime_exception.value)
     else:
-        assert (
-            create_collection_name(MISSION_NAME, station)
-            == MISSION_NAME + "_aux" if station == "ADGS" else "_chunk"
-        )
+        assert create_collection_name(MISSION_NAME, station) == MISSION_NAME + "_aux" if station == "ADGS" else "_chunk"
 
 
 @pytest.mark.unit

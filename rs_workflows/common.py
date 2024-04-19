@@ -302,9 +302,11 @@ def ingest_files(config: PrefectTaskConfig):
                     file_stac["id"],
                 )
                 continue
-        except (requests.exceptions.RequestException, 
-                requests.exceptions.Timeout, 
-                requests.exceptions.ReadTimeout) as e:
+        except (
+            requests.exceptions.RequestException,
+            requests.exceptions.Timeout,
+            requests.exceptions.ReadTimeout,
+        ) as e:
             logger.exception("Request exception caught: %s", e)
             continue
 
@@ -323,7 +325,7 @@ def ingest_files(config: PrefectTaskConfig):
             status = check_status(apikey_headers, endpoint + "/status", file_stac["id"], logger)
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...", file_stac["id"])
-            
+
             if update_stac_catalog(
                 apikey_headers,
                 config.url_catalog,
@@ -472,9 +474,9 @@ def create_endpoint(url, station):
     """Create a rs-server endpoint URL based on the provided base URL and station type.
 
     This function constructs and returns a specific endpoint URL based on the provided
-    base URL and the type of station. For the time being, the supported station types are "ADGS" and 
+    base URL and the type of station. For the time being, the supported station types are "ADGS" and
     "CADIP", "INS", "MPS", "MTI", "NSG", "SGS".
-     
+
     For other values, a RuntimeError is raised.
 
     Args:
@@ -502,13 +504,14 @@ def create_endpoint(url, station):
         return url.rstrip("/") + f"/cadip/{station}/cadu"
     raise RuntimeError("Unknown station !")
 
+
 def create_collection_name(mission, station):
     """Create the name of the catalog collection
 
     This function constructs and returns a specific name for the catalog collection .
     For ADGS station type should be "mission_name"_aux
     For CADIP stations type should be "mission_name"_chunk
-     
+
     For other values, a RuntimeError is raised.
 
     Args:
@@ -521,7 +524,7 @@ def create_collection_name(mission, station):
 
     Raises:
         RuntimeError: If the provided station type is not supported.
-    
+
     """
     if station == ADGS:
         return f"{mission}_aux"
@@ -636,7 +639,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
             logger.info("      %s", f["id"])
 
         for files_stac in tasks_files_stac:
-            ingest_files.submit(
+            ingest_files(
                 PrefectTaskConfig(
                     config.user,
                     config.url,
