@@ -88,6 +88,7 @@ def build_eopf_triggering_yaml(cadip_files, adgs_files):
     yaml_template["workflow"][0]["inputs"] = yaml_inputs
     yaml_template["I/O"]["inputs_products"] = yaml_io_products
     logger.debug("Task build_eopf_triggering_yaml ENDED")
+    yaml_template = gen_payload_outputs(yaml_template)
     return yaml_template
 
 
@@ -111,6 +112,24 @@ def gen_payload_inputs(cadu_list, adgs_list):
 
     return composer, yaml_content
 
+
+def gen_payload_outputs(template):
+    composer = []
+    output_body = []
+    for typecnt, ptype in enumerate(template['workflow'][0]['parameters']['product_types']):
+        composer.append({f"out{typecnt}": ptype})
+        output_body.append({"id": ptype,
+                            "path": f"s3://rs-cluster-temp/zarr/dpr_processor_output/{ptype}/",
+                            "type": "folder|zip",
+                            "store_type": "zarr",
+                            "store_params": {}})
+    template['workflow'][0]['outputs'] = composer
+    template['I/O']['output_products'] = output_body
+    return template
+
+
+def get_yaml_outputs(template):
+    return [out['path'] for out in template['I/O']['output_products']]
 
 def create_cql2_filter(properties: dict, op="and"):
     args = [{"op": "=", "args": [{"property": field}, value]} for field, value in properties.items()]
@@ -205,14 +224,14 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods
     """
 
     def __init__(  # pylint: disable=too-many-arguments
-        self,
-        user,
-        url_catalog,
-        mission,
-        cadip_session_id,
-        s3_path,
-        apikey,
-        max_workers,
+            self,
+            user,
+            url_catalog,
+            mission,
+            cadip_session_id,
+            s3_path,
+            apikey,
+            max_workers,
     ):
         """
         Initialize the PrefectFlowConfig object with provided parameters.
@@ -269,6 +288,27 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
     if not files_stac:
         logger.error("DPR did not processed anything")
         sys.exit(-1)
+
+    # Temp, to be fixed
+    collection_name = f"{config.user}_dpr"
+    minimal_collection = {
+        "id": collection_name,
+        "type": "Collection",
+        "description": "test_description",
+        "stac_version": "1.0.0",
+        "owner": config.user,
+    }
+    requests.post(f"{config.url_catalog}/catalog/collections", json=minimal_collection)
+
+    for output_product in get_yaml_outputs(yaml_dpr_input):
+        matching_stac = next((d for d in files_stac if d['stac_discovery']['properties']['eopf:type'] in output_product), None)
+        # To be removed, temp fix
+        matching_stac['stac_discovery']['assets'] = {"file": {"href": ""}}
+        config.apikey = {}
+        obs = f"s3://rs-cluster-temp/zarr/dpr_processor_output/S1SEWRAW"
+        #
+        update_stac_catalog(config.apikey, config.url_catalog, config.user, collection_name, matching_stac['stac_discovery'], obs,
+                            logger)
 
     # collection_name = f"{config.user}_dpr_{datetime.now().strftime('%Y%m%dH%M%S')}"
     # for file_stac_info in files_stac:

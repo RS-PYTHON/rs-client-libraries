@@ -15,7 +15,7 @@ workflow:
   inputs:
   -
   outputs:
-    out: outputs
+  -
   parameters:
     product_types: # List of EOPF product types we want to generate. In this example we simulate S1L0 processor that generates 4 products
       - S1SEWRAW
@@ -26,11 +26,7 @@ I/O:
   inputs_products:
    -
   output_products:
-  - id: outputs
-    path: s3://rs-cluster-temp/zarr/dpr_processor_output/ # output folder or S3 bucket
-    type: folder
-    store_type: zarr
-    store_params: {}
+  -
 dask_context: {}
 logging: {}
 config: {}
