@@ -172,7 +172,7 @@ def test_update_stac_catalog(response_is_valid, station):
     )
 
     for file_s in files_stac[station]["features"]:
-        resp = update_stac_catalog(
+        resp = update_stac_catalog.fn(
             {},
             "http://127.0.0.1:5000",
             "testUser",
@@ -283,7 +283,7 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     )
     logger = get_general_logger("tests")
 
-    filter_unpublished_files({}, "http://127.0.0.1:5000", "testUser", collection_name, files_stac, logger)
+    filter_unpublished_files.fn({}, "http://127.0.0.1:5000", "testUser", collection_name, files_stac, logger)
 
     logger.debug(f"AFTER filtering ! FS = {files_stac} || ex = {mock_files_in_catalog}")
 
@@ -492,7 +492,7 @@ def test_get_station_files_list(station):
         status=200,
     )
 
-    search_response = get_station_files_list(
+    search_response = get_station_files_list.fn(
         {},
         endpoint.rstrip("/search"),
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
@@ -546,7 +546,7 @@ def test_err_ret_get_station_files_list(station):
         status=400,
     )
     logger = get_general_logger("tests")
-    search_response = get_station_files_list(
+    search_response = get_station_files_list.fn(
         {},
         endpoint.rstrip("/search"),
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
@@ -568,7 +568,7 @@ def test_err_ret_get_station_files_list(station):
     )
 
     with pytest.raises(RuntimeError) as runtime_exception:
-        search_response = get_station_files_list(
+        search_response = get_station_files_list.fn(
             {},
             endpoint.rstrip("/search"),
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
@@ -621,7 +621,7 @@ def test_wrong_url_get_station_files_list(station):
 
     # use a wrong endpoint
     with pytest.raises(RuntimeError) as runtime_exception:
-        get_station_files_list(
+        get_station_files_list.fn(
             {},
             "http://127.0.0.1:5000/search",
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),

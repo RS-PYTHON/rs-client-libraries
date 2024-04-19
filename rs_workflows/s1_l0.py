@@ -1,6 +1,6 @@
 """Docstring will be here."""
-import enum
 import logging
+import os
 import os.path as osp
 import pprint
 
@@ -22,8 +22,12 @@ from rs_workflows.common import (
     ADGS,
     CADIP,
     CATALOG_REQUEST_TIMEOUT,
+    SET_PREFECT_LOGGING_LEVEL,
     create_apikey_headers,
+    create_collection_name,
     get_general_logger,
+    get_prefect_logger,
+    update_stac_catalog,
 )
 
 CONFIG_DIR = Path(osp.realpath(osp.dirname(__file__))) / "config"
@@ -31,8 +35,10 @@ YAML_TEMPLATE_FILE = "dpr_config_template.yaml"
 LOGGER_NAME = "s1_l0_wf"
 
 
+@task
 def start_dpr(yaml_dpr_input):
     logger = get_general_logger(LOGGER_NAME)
+    logger.debug("Task start_dpr STARTED")
     logger.info("Faking dpr processing with the following input file:")
     logger.info(yaml.dump(yaml_dpr_input))
     dpr_simulator_endpoint = "http://127.0.0.1:6002/run"  # rs-server host = the container name
@@ -53,12 +59,14 @@ def start_dpr(yaml_dpr_input):
     pp = pprint.PrettyPrinter(indent=4)
     for attr in response.json():
         pp.pprint(attr)
-
+    logger.debug("Task start_dpr ENDED")
     return response.json()
 
 
+@task
 def build_eopf_triggering_yaml(cadip_files, adgs_files):
     logger = get_general_logger(LOGGER_NAME)
+    logger.debug("Task build_eopf_triggering_yaml STARTED")
     # Load YAML template
     try:
         with open(CONFIG_DIR / YAML_TEMPLATE_FILE, encoding="utf-8") as yaml_file:
@@ -79,7 +87,7 @@ def build_eopf_triggering_yaml(cadip_files, adgs_files):
     # Update YAML template with inputs and I/O products
     yaml_template["workflow"][0]["inputs"] = yaml_inputs
     yaml_template["I/O"]["inputs_products"] = yaml_io_products
-
+    logger.debug("Task build_eopf_triggering_yaml ENDED")
     return yaml_template
 
 
@@ -104,36 +112,16 @@ def gen_payload_inputs(cadu_list, adgs_list):
     return composer, yaml_content
 
 
-# def gen_payload_inputs(cadu_list, adgs_list):
-#     composer = []
-#     yaml_content = []
-
-#     def generate_inputs(file_list, prefix, start_id):
-#         nonlocal composer
-#         nonlocal yaml_content
-
-#         for input_cnt, file in enumerate(file_list):
-#             file_id = f'in{input_cnt}'
-#             input_id = f"{prefix}{start_id + input_cnt}"
-#             composer.append({file_id: input_id})
-#             yaml_template = {"id": input_id, "path": file, "store_type": file.split(".")[-1], "store_params": {}}
-#             yaml_content.append(yaml_template)
-
-#     generate_inputs(cadu_list, "CADU", 0)
-#     generate_inputs(adgs_list, "ADGS", len(cadu_list))
-
-#     return composer, yaml_content
-
-
 def create_cql2_filter(properties: dict, op="and"):
     args = [{"op": "=", "args": [{"property": field}, value]} for field, value in properties.items()]
     # args.append("collecttion=test_user_s1_chunk")
     return {"filter-lang": "cql2-json", "filter": {"op": op, "args": args}}
 
 
+@task
 def get_cadip_catalog_data(url_catalog, username, collection, session_id, apikey):
     logger = get_general_logger(LOGGER_NAME)
-
+    logger.debug("Task get_cadip_catalog_data STARTED")
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
 
     query = create_cql2_filter({"collection": f"{username}_{collection}", "cadip:session_id": session_id})
@@ -159,13 +147,16 @@ def get_cadip_catalog_data(url_catalog, username, collection, session_id, apikey
         return None
 
     try:
+        logger.debug("Task get_cadip_catalog_data ENDED")
         return response.json()
     except requests.exceptions.JSONDecodeError:
         return None
 
 
+@task
 def get_adgs_catalog_data(url_catalog, username, collection, files, apikey):
-    logger = get_general_logger(LOGGER_NAME)
+    logger = get_prefect_logger(LOGGER_NAME)
+    logger.debug("Task get_adgs_catalog_data STARTED")
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
 
     payload = {"collection": f"{username}_{collection}", "ids": ",".join(files), "filter": f"owner_id='{username}'"}
@@ -184,7 +175,7 @@ def get_adgs_catalog_data(url_catalog, username, collection, files, apikey):
             timeout=CATALOG_REQUEST_TIMEOUT,
             **create_apikey_headers(apikey),
         )
-        # response = requests.post(catalog_endpoint, 
+        # response = requests.post(catalog_endpoint,
         # json=query, timeout=ENDPOINT_TIMEOUT, **create_apikey_headers(apikey))
         logger.debug(f"json = {response.json()}")
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
@@ -195,6 +186,92 @@ def get_adgs_catalog_data(url_catalog, username, collection, files, apikey):
         logger.error(f"The request response failed: {response}")
         return None
     try:
+        logger.debug("Task get_adgs_catalog_data ENDED")
         return response.json()
     except requests.exceptions.JSONDecodeError:
         return None
+
+
+class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods
+    """Configuration class for Prefect flow.
+
+    This class inherits the PrefectCommonCongig and represents the configuration for a
+    Prefect flow
+
+    Attributes:
+        max_workers (int): The maximum number of workers for the Prefect flow.
+        start_datetime (datetime): The start datetime of the files that the station should return
+        stop_datetime (datetime): The stop datetime of the files that the station should return
+    """
+
+    def __init__(  # pylint: disable=too-many-arguments
+        self,
+        user,
+        url_catalog,
+        mission,
+        cadip_session_id,
+        s3_path,
+        apikey,
+        max_workers,
+    ):
+        """
+        Initialize the PrefectFlowConfig object with provided parameters.
+        """
+        self.user = user
+        self.url_catalog = url_catalog
+        self.mission = mission
+        self.s3_path = s3_path
+        self.apikey = apikey
+        self.cadip_session_id = cadip_session_id
+        self.max_workers: int = max_workers
+
+
+@flow(task_runner=DaskTaskRunner())
+def s1_l0_flow(config: PrefectS1L0FlowConfig):
+    logger = get_prefect_logger(LOGGER_NAME)
+
+    cadip_collection = create_collection_name(config.mission, CADIP[0])
+    adgs_collection = create_collection_name(config.mission, ADGS)
+    logger.debug(f"Collections: {cadip_collection} | {adgs_collection}")
+    # S1A_20200105072204051312
+    # gather the data for cadip session id
+    logger.debug("Starting task get_cadip_catalog_data")
+    cadip_catalog_data = get_cadip_catalog_data(
+        config.url_catalog,
+        config.user,
+        cadip_collection,
+        config.cadip_session_id,
+        config.apikey,
+    )
+    logger.debug("Starting task get_adgs_catalog_data")
+    # gather the data from ADGS. Excerpt from the RSPY-120 user story:
+    # "3. search in the STAC collection rs-ops/s1_aux for the three required AUX
+    # items (given that RSPY-115 has filled the collection). As we don't know yet the
+    # rules that will be specified by DPR to retrieve the correct AUX data, we will for
+    # now hardcode the AUX file names as below:
+    adgs_files = [
+        "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
+        "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
+        "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
+    ]
+    adgs_catalog_data = get_adgs_catalog_data(
+        config.url_catalog, config.user, adgs_collection, adgs_files, config.apikey,
+    )
+    # the previous tasks may be launched in parallel. The next task depends on the results from the previous tasks
+    logger.debug("Starting build_eopf_triggering_yaml get_adgs_catalog_data")
+    yaml_dpr_input = build_eopf_triggering_yaml(
+        cadip_catalog_data, adgs_catalog_data, wait_for=[cadip_catalog_data, adgs_catalog_data],
+    )
+    # this task depends on the result from the previous task
+    logger.debug("Starting start_dpr get_adgs_catalog_data")
+    files_stac = start_dpr(yaml_dpr_input, wait_for=[yaml_dpr_input])
+
+    if not files_stac:
+        logger.error("DPR did not processed anything")
+        sys.exit(-1)
+
+    # collection_name = f"{config.user}_dpr_{datetime.now().strftime('%Y%m%dH%M%S')}"
+    # for file_stac_info in files_stac:
+    #     obs = f"{config.s3_path.rstrip('/')}/{file_stac_info['id']}"
+    #     update_stac_catalog(config.apikey, config.url_catalog, config.user, collection_name, file_stac_info, obs, logger)
+    logger.info("Finished !")

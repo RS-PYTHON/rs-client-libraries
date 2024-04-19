@@ -57,6 +57,27 @@ def get_general_logger(logger_name):
     return logger
 
 
+def get_prefect_logger(general_logger_name):
+    """Get theprefect logger.
+    It returns the prefect logger. If this can't be taken due to the missing
+    prefect context (i.e. the flow/task is run as single function, from tests for example),
+    the general logger is returned
+
+    Args:
+        general_logger_name (str): The name of the general logger in case the prefect logger can't be returned.
+
+    Returns:
+        logging.Logger: A prefect logger instance or a general logger one.
+    """
+    try:
+        logger = get_run_logger()
+        logger.setLevel(SET_PREFECT_LOGGING_LEVEL)
+    except exceptions.MissingContextError:
+        logger = get_general_logger(general_logger_name)
+        logger.info("Could not get the prefect logger due to missing context")
+    return logger
+
+
 def create_apikey_headers(apikey):
     """Create the apikey
 
@@ -109,6 +130,7 @@ def check_status(apikey_headers, endpoint, filename, logger):
     return EDownloadStatus.FAILED
 
 
+@task
 def update_stac_catalog(  # pylint: disable=too-many-arguments
     apikey_headers: dict,
     url: str,
@@ -260,12 +282,7 @@ def ingest_files(config: PrefectTaskConfig):
         failed_failes: A list of files which could not be downloaded and / or uploaded to the s3.
     """
 
-    try:
-        logger = get_run_logger()
-        logger.setLevel(SET_PREFECT_LOGGING_LEVEL)
-    except exceptions.MissingContextError:
-        logger = get_general_logger("task_dwn")
-        logger.info("Could not get the prefect logger due to missing context")
+    logger = get_prefect_logger("task_dwn")
 
     # dictionary to be used for payload request
     payload = {}
@@ -327,7 +344,7 @@ def ingest_files(config: PrefectTaskConfig):
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...", file_stac["id"])
 
-            if update_stac_catalog(
+            if update_stac_catalog.fn(
                 apikey_headers,
                 config.url_catalog,
                 config.user,
@@ -357,6 +374,7 @@ def ingest_files(config: PrefectTaskConfig):
     return failed_failes
 
 
+@task
 def filter_unpublished_files(  # pylint: disable=too-many-arguments
     apikey_headers: dict,
     url_catalog: str,
@@ -418,6 +436,7 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
                 break
 
 
+@task
 def get_station_files_list(  # pylint: disable=too-many-arguments
     apikey_headers: dict,
     endpoint: str,
@@ -597,12 +616,7 @@ def download_flow(config: PrefectFlowConfig):
         None: This function does not raise any exceptions.
     """
     # get the Prefect logger
-    try:
-        logger = get_run_logger()
-        logger.setLevel(SET_PREFECT_LOGGING_LEVEL)
-    except exceptions.MissingContextError:
-        logger = get_general_logger("flow_dwn")
-        logger.info("Could not get the prefect logger due to missing context")
+    logger = get_prefect_logger("flow_dwn")
 
     try:
         # get the endpoint
@@ -636,6 +650,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
             create_collection_name(config.mission, config.station),
             files_stac,
             logger,
+            wait_for=[files_stac],
         )
 
         # distribute the filenames evenly in a number of lists equal with

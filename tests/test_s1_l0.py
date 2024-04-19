@@ -17,9 +17,11 @@ from rs_workflows.common import (
 )
 from rs_workflows.s1_l0 import (
     LOGGER_NAME,
+    PrefectS1L0FlowConfig,
     build_eopf_triggering_yaml,
     get_adgs_catalog_data,
     get_cadip_catalog_data,
+    s1_l0_flow,
     start_dpr,
 )
 
@@ -167,40 +169,48 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    apikey_headers = {}
     if not args.apikey:
         args.apikey = os.environ.get("RSPY_APIKEY", None)
-    if args.apikey:
-        apikey_headers = {"headers": {"x-api-key": args.apikey}}
 
-    cadip_collection = create_collection_name(args.mission, CADIP[0])
-    adgs_collection = create_collection_name(args.mission, ADGS)
-    # ingest files if they don't exist
-
-    # S1A_20200105072204051312
-    # gather the data for cadip session id
-    cadip_catalog_data = get_cadip_catalog_data(
-        args.url_catalog,
-        args.user,
-        cadip_collection,
-        args.session_id,
-        args.apikey,
+    s1_l0_flow(
+        PrefectS1L0FlowConfig(
+            args.user, args.url_catalog, args.mission, args.session_id, args.s3_storage, args.apikey, args.max_tasks,
+        ),
     )
 
-    adgs_files = [
-        "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
-        "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
-        "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
-    ]
-    adgs_catalog_data = get_adgs_catalog_data(args.url_catalog, args.user, adgs_collection, adgs_files, args.apikey)
-    yaml_dpr_input = build_eopf_triggering_yaml(cadip_catalog_data, adgs_catalog_data)
-    files_stac = start_dpr(yaml_dpr_input)
+    # apikey_headers = {}
+    # if not args.apikey:
+    #     args.apikey = os.environ.get("RSPY_APIKEY", None)
+    # if args.apikey:
+    #     apikey_headers = {"headers": {"x-api-key": args.apikey}}
 
-    if not files_stac:
-        logger.error("DPR did not processed anything")
-        sys.exit(-1)
+    # cadip_collection = create_collection_name(args.mission, CADIP[0])
+    # adgs_collection = create_collection_name(args.mission, ADGS)
 
-    collection_name = f"{args.user}_dpr_{datetime.now().strftime('%Y%m%dH%M%S')}"
-    # for file_stac_info in files_stac:
-    #     obs = f"{args.s3_storage.rstrip('/')}/{file_stac_info['id']}"
-    #     update_stac_catalog(args.apikey, args.url_catalog, args.user, collection_name, file_stac_info, obs, logger)
+    # # S1A_20200105072204051312
+    # # gather the data for cadip session id
+    # cadip_catalog_data = get_cadip_catalog_data(
+    #     args.url_catalog,
+    #     args.user,
+    #     cadip_collection,
+    #     args.session_id,
+    #     args.apikey,
+    # )
+
+    # adgs_files = [
+    #     "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
+    #     "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
+    #     "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
+    # ]
+    # adgs_catalog_data = get_adgs_catalog_data(args.url_catalog, args.user, adgs_collection, adgs_files, args.apikey)
+    # yaml_dpr_input = build_eopf_triggering_yaml(cadip_catalog_data, adgs_catalog_data)
+    # files_stac = start_dpr(yaml_dpr_input)
+
+    # if not files_stac:
+    #     logger.error("DPR did not processed anything")
+    #     sys.exit(-1)
+
+    # collection_name = f"{args.user}_dpr_{datetime.now().strftime('%Y%m%dH%M%S')}"
+    # # for file_stac_info in files_stac:
+    # #     obs = f"{args.s3_storage.rstrip('/')}/{file_stac_info['id']}"
+    # #     update_stac_catalog(args.apikey, args.url_catalog, args.user, collection_name, file_stac_info, obs, logger)
