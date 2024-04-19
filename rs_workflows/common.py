@@ -1,4 +1,4 @@
-"""Docstring will be here."""
+"""Common workflows for general usage"""
 import enum
 import logging
 
@@ -6,6 +6,7 @@ import logging
 import sys
 import time
 from datetime import datetime
+from typing import Union
 
 import numpy as np
 import requests
@@ -417,7 +418,14 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
                 break
 
 
-def get_station_files_list(apikey_headers: dict, endpoint: str, start_date: datetime, stop_date: datetime, logger):
+def get_station_files_list(  # pylint: disable=too-many-arguments
+    apikey_headers: dict,
+    endpoint: str,
+    start_date: datetime,
+    stop_date: datetime,
+    logger,
+    limit: Union[int, None] = None,
+):
     """Retrieve a list of files from the specified endpoint within the given time range.
 
     This function queries the specified endpoint to retrieve a list of files available in the
@@ -451,6 +459,8 @@ def get_station_files_list(apikey_headers: dict, endpoint: str, start_date: date
         + "/"  # 2014-01-01T12:00:00Z/2023-12-30T12:00:00Z",
         + stop_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
+    if limit:
+        payload["limit"] = str(limit)
     try:
         response = requests.get(endpoint + "/search", params=payload, timeout=SEARCH_ENDPOINT_TIMEOUT, **apikey_headers)
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
@@ -558,6 +568,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         max_workers,
         start_datetime,
         stop_datetime,
+        limit=None,
     ):
         """
         Initialize the PrefectFlowConfig object with provided parameters.
@@ -566,6 +577,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         self.max_workers: int = max_workers
         self.start_datetime: datetime = start_datetime
         self.stop_datetime: datetime = stop_datetime
+        self.limit = limit
 
 
 @flow(task_runner=DaskTaskRunner())
@@ -605,6 +617,7 @@ def download_flow(config: PrefectFlowConfig):
             config.start_datetime,
             config.stop_datetime,
             logger,
+            config.limit,
         )
         # check if the list with files returned from the station is not empty
         if len(files_stac) == 0:
