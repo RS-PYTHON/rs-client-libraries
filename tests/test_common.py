@@ -17,11 +17,11 @@ from rs_workflows.common import (
     create_endpoint,
     download_flow,
     filter_unpublished_files,
-    get_general_logger,
     get_station_files_list,
     ingest_files,
     update_stac_catalog,
 )
+from rs_workflows.utils.logging import Logging
 
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 
@@ -69,7 +69,7 @@ def test_valid_check_status(filename, station):
         json=json_response,
         status=200,
     )
-    logger = get_general_logger("tests")
+    logger = Logging.default(__name__)
     assert check_status({}, endpoint, filename, logger) == EDownloadStatus.NOT_STARTED
 
     json_response["status"] = EDownloadStatus.IN_PROGRESS
@@ -124,7 +124,7 @@ def test_invalid_check_status(filename, station):
         json=json_response,
         status=404,
     )
-    logger = get_general_logger("tests")
+    logger = Logging.default(__name__)
     assert check_status({}, endpoint, filename, logger) == EDownloadStatus.FAILED
 
 
@@ -177,7 +177,7 @@ def test_update_stac_catalog(response_is_valid, station):
             "s1",
             file_s,
             "s3://tmp_bucket/tmp",
-            get_general_logger("tests"),
+            Logging.default(__name__),
         )
         assert resp == response_is_valid
 
@@ -277,7 +277,7 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
         json=mock_files_in_catalog,
         status=200,
     )
-    logger = get_general_logger("tests")
+    logger = Logging.default(__name__)
 
     filter_unpublished_files({}, "http://127.0.0.1:5000", "testUser", "s1", files_stac, logger)
 
@@ -491,7 +491,7 @@ def test_get_station_files_list(station):
         endpoint.rstrip("/search"),
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
-        get_general_logger("tests"),
+        Logging.default(__name__),
     )
 
     assert len(search_response) == 2
@@ -539,7 +539,7 @@ def test_err_ret_get_station_files_list(station):
         json={"detail": "Operational error"},
         status=400,
     )
-    logger = get_general_logger("tests")
+    logger = Logging.default(__name__)
     search_response = get_station_files_list(
         {},
         endpoint.rstrip("/search"),
@@ -620,7 +620,7 @@ def test_wrong_url_get_station_files_list(station):
             "http://127.0.0.1:5000/search",
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
-            get_general_logger("tests"),
+            Logging.default(__name__),
             2,
         )
     assert "Could not get the response from the station search endpoint" in str(runtime_exception.value)

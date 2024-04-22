@@ -1,9 +1,7 @@
 """Common workflows for general usage"""
 import enum
-import logging
 
 # import pprint
-import sys
 import time
 from datetime import datetime
 from typing import Union
@@ -12,6 +10,8 @@ import numpy as np
 import requests
 from prefect import exceptions, flow, get_run_logger, task
 from prefect_dask.task_runners import DaskTaskRunner
+
+from rs_workflows.utils.logging import Logging
 
 CADIP = ["CADIP", "INS", "MPS", "MTI", "NSG", "SGS"]
 ADGS = "ADGS"
@@ -34,27 +34,6 @@ class EDownloadStatus(str, enum.Enum):
     IN_PROGRESS = "IN_PROGRESS"
     FAILED = "FAILED"
     DONE = "DONE"
-
-
-def get_general_logger(logger_name):
-    """Get a general logger with the specified name.
-
-    Args:
-        logger_name (str): The name of the logger.
-
-    Returns:
-        logging.Logger: A logger instance.
-    """
-
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.DEBUG)
-    logger.handlers = []
-    logger.propagate = False
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.DEBUG)
-    console_handler.setFormatter(logging.Formatter("[%(asctime)-20s] [%(name)-10s] [%(levelname)-6s] %(message)s"))
-    logger.addHandler(console_handler)
-    return logger
 
 
 def create_apikey_headers(apikey):
@@ -264,7 +243,7 @@ def ingest_files(config: PrefectTaskConfig):
         logger = get_run_logger()
         logger.setLevel(SET_PREFECT_LOGGING_LEVEL)
     except exceptions.MissingContextError:
-        logger = get_general_logger("task_dwn")
+        logger = Logging.default(__name__)
         logger.info("Could not get the prefect logger due to missing context")
 
     # dictionary to be used for payload request
@@ -565,7 +544,7 @@ def download_flow(config: PrefectFlowConfig):
         logger = get_run_logger()
         logger.setLevel(SET_PREFECT_LOGGING_LEVEL)
     except exceptions.MissingContextError:
-        logger = get_general_logger("flow_dwn")
+        logger = Logging.default(__name__)
         logger.info("Could not get the prefect logger due to missing context")
 
     try:
