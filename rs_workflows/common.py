@@ -599,7 +599,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         self.limit = limit
 
 
-@flow(task_runner=DaskTaskRunner())
+@flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 25, "threads_per_worker": 1}))
 def download_flow(config: PrefectFlowConfig):
     """Prefect flow for downloading files from a station.
 
