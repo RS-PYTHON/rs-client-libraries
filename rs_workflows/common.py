@@ -6,7 +6,7 @@ import logging
 import sys
 import time
 from datetime import datetime
-from typing import Union
+from typing import Any, List, Union
 
 import numpy as np
 import requests
@@ -381,8 +381,8 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     user: str,
     collection_name: str,
     files_stac: list,
-    logger,
-):
+    logger: Any,
+) -> None:
     """Check for unpublished files in the catalog.
 
     Args:
@@ -444,7 +444,7 @@ def get_station_files_list(  # pylint: disable=too-many-arguments
     stop_date: datetime,
     logger,
     limit: Union[int, None] = None,
-):
+) -> List:
     """Retrieve a list of files from the specified endpoint within the given time range.
 
     This function queries the specified endpoint to retrieve a list of files available in the
@@ -643,7 +643,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
         # create the collection name
 
         # filter those that are already existing
-        filter_unpublished_files(
+        filter_unpublished_files(  # type: ignore
             apikey_headers,
             config.url_catalog,
             config.user,

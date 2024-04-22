@@ -1,28 +1,17 @@
-"""Docstring will be here."""
-import logging
-import os
+"""Prefect flow for processing a S1 L0 product"""
 import os.path as osp
 import pprint
-
-# import pprint
-import sys
-import time
-from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-from typing import Any, List
 
-import numpy as np
 import requests
 import yaml
-from prefect import exceptions, flow, get_run_logger, task
+from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
 
 from rs_workflows.common import (
     ADGS,
     CADIP,
     CATALOG_REQUEST_TIMEOUT,
-    SET_PREFECT_LOGGING_LEVEL,
     create_apikey_headers,
     create_collection_name,
     get_general_logger,
@@ -33,19 +22,33 @@ from rs_workflows.common import (
 CONFIG_DIR = Path(osp.realpath(osp.dirname(__file__))) / "config"
 YAML_TEMPLATE_FILE = "dpr_config_template.yaml"
 LOGGER_NAME = "s1_l0_wf"
+DPR_PROCESSING_TIMEOUT = 14400  # 4 hours
 
 
 @task
-def start_dpr(yaml_dpr_input):
+def start_dpr(yaml_dpr_input: dict):
+    """Starts the DPR processing with the given YAML input.
+
+    Args:
+        yaml_dpr_input (dict): The YAML input for DPR processing.
+
+    Returns:
+        dict: The response JSON from the DPR simulator if successful, else None.
+
+    Raises:
+        None
+    """
     logger = get_general_logger(LOGGER_NAME)
     logger.debug("Task start_dpr STARTED")
     logger.info("Faking dpr processing with the following input file:")
     logger.info(yaml.dump(yaml_dpr_input))
     dpr_simulator_endpoint = "http://127.0.0.1:6002/run"  # rs-server host = the container name
     try:
-        # import pdb
-        # pdb.set_trace()
-        response = requests.post(dpr_simulator_endpoint, json=yaml.safe_load(yaml.dump(yaml_dpr_input)))
+        response = requests.post(
+            dpr_simulator_endpoint,
+            json=yaml.safe_load(yaml.dump(yaml_dpr_input)),
+            timeout=DPR_PROCESSING_TIMEOUT,
+        )
         logger.debug(f"stat = {response.status_code}")
         logger.debug(f"json = {response.json()}")
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
@@ -64,7 +67,20 @@ def start_dpr(yaml_dpr_input):
 
 
 @task
-def build_eopf_triggering_yaml(cadip_files, adgs_files, temp_s3_path):
+def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, temp_s3_path: str):
+    """Builds the EOPF triggering YAML file using CADIP and ADGS file paths.
+
+    Args:
+        cadip_files (dict): CADIP files metadata.
+        adgs_files (dict): ADGS files metadata.
+        temp_s3_path (str): Temporary S3 path.
+
+    Returns:
+        dict: The generated YAML template with updated inputs and I/O products, or None if unsuccessful.
+
+    Raises:
+        None
+    """
     logger = get_general_logger(LOGGER_NAME)
     logger.debug("Task build_eopf_triggering_yaml STARTED")
     # Load YAML template
@@ -92,7 +108,19 @@ def build_eopf_triggering_yaml(cadip_files, adgs_files, temp_s3_path):
     return yaml_template
 
 
-def gen_payload_inputs(cadu_list, adgs_list):
+def gen_payload_inputs(cadu_list: list, adgs_list: list):
+    """Generates payload inputs for the EOPF triggering YAML file.
+
+    Args:
+        cadu_list (list): List of CADU file paths.
+        adgs_list (list): List of ADGS file paths.
+
+    Returns:
+        tuple: A tuple containing the composer dictionary and the YAML content list.
+
+    Raises:
+        None
+    """
     yaml_content = []
     composer = []
 
@@ -113,7 +141,19 @@ def gen_payload_inputs(cadu_list, adgs_list):
     return composer, yaml_content
 
 
-def gen_payload_outputs(template, temp_s3_path):
+def gen_payload_outputs(template: dict, temp_s3_path: str):
+    """Generates payload outputs for the EOPF triggering YAML file.
+
+    Args:
+        template (dict): The YAML template.
+        temp_s3_path (str): The temporary S3 path.
+
+    Returns:
+        dict: The updated YAML template.
+
+    Raises:
+        None
+    """
     composer = []
     output_body = []
     # s3://rs-cluster-temp/zarr/dpr_processor_output
@@ -134,18 +174,51 @@ def gen_payload_outputs(template, temp_s3_path):
     return template
 
 
-def get_yaml_outputs(template):
+def get_yaml_outputs(template: dict):
+    """Extracts the paths of YAML outputs from the template.
+
+    Args:
+        template (dict): The YAML template.
+
+    Returns:
+        list: A list of paths for YAML outputs.
+
+    Raises:
+        None
+    """
     return [out["path"] for out in template["I/O"]["output_products"]]
 
 
-def create_cql2_filter(properties: dict, op="and"):
+def create_cql2_filter(properties: dict, op: str = "and"):
+    """
+    Create a CQL2 filter based on provided properties.
+
+    Args:
+        properties (dict): Dictionary containing field-value pairs for filtering.
+        op (str, optional): Logical operator to combine filter conditions. Defaults to "and".
+
+    Returns:
+        dict: CQL2 filter.
+    """
     args = [{"op": "=", "args": [{"property": field}, value]} for field, value in properties.items()]
     # args.append("collecttion=test_user_s1_chunk")
     return {"filter-lang": "cql2-json", "filter": {"op": op, "args": args}}
 
 
 @task
-def get_cadip_catalog_data(url_catalog, username, collection, session_id, apikey):
+def get_cadip_catalog_data(url_catalog: str, username: str, collection: str, session_id: str, apikey: str):
+    """Task to retrieve catalog data from CADIP.
+
+    Args:
+        url_catalog (str): URL of the catalog.
+        username (str): User name.
+        collection (str): Collection name.
+        session_id (str): Session ID.
+        apikey (str): API key.
+
+    Returns:
+        dict: Catalog data from CADIP.
+    """
     logger = get_general_logger(LOGGER_NAME)
     logger.debug("Task get_cadip_catalog_data STARTED")
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
@@ -180,19 +253,28 @@ def get_cadip_catalog_data(url_catalog, username, collection, session_id, apikey
 
 
 @task
-def get_adgs_catalog_data(url_catalog, username, collection, files, apikey):
+def get_adgs_catalog_data(url_catalog: str, username: str, collection: str, files: list, apikey: str):
+    """Task to retrieve catalog data from ADGS
+
+    Args:
+        url_catalog (str): The URL of the catalog.
+        username (str): The username.
+        collection (str): The collection name.
+        files (list): A list of file IDs.
+        apikey (str): The API key.
+
+    Returns:
+        dict or None: The catalog data in JSON format if successful, None otherwise.
+
+    Raises:
+        None
+    """
     logger = get_prefect_logger(LOGGER_NAME)
     logger.debug("Task get_adgs_catalog_data STARTED")
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
 
     payload = {"collection": f"{username}_{collection}", "ids": ",".join(files), "filter": f"owner_id='{username}'"}
 
-    #     payload = {
-    #         "collections": f"{username}_{collection}",
-    #         "ids": "S1A_OPER_AUX_OBMEMC_PDMC_20140201T000000.xml,\
-    # S1A_OPER_MPL_ORBPRE_20240113T021411_20240120T021411_0001.EOF,\
-    # S1A_OPER_MPL_ORBSCT_20140507T150704_99999999T999999_0025.EOF"
-    #     }
     logger.debug(f"payload = {payload}")
     try:
         response = requests.get(
@@ -219,39 +301,50 @@ def get_adgs_catalog_data(url_catalog, username, collection, files, apikey):
 
 
 class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods
-    """Configuration class for Prefect flow.
-
-    This class inherits the PrefectCommonCongig and represents the configuration for a
-    Prefect flow
-
-    Attributes:
-
-    """
+    """Configuration for Prefect flow related to S1 Level 0 data."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        user,
-        url_catalog,
-        mission,
-        cadip_session_id,
-        s3_path,
-        temp_s3_path,
-        apikey,
+        user: str,
+        url_catalog: str,
+        mission: str,
+        cadip_session_id: str,
+        s3_path: str,
+        temp_s3_path: str,
+        apikey: str,
     ):
         """
-        Initialize the PrefectFlowConfig object with provided parameters.
+        Initialize the PrefectS1L0FlowConfig object with provided parameters.
+
+        Args:
+            user (str): The username.
+            url_catalog (str): The URL of the catalog.
+            mission (str): The mission name.
+            cadip_session_id (str): The CADIP session ID.
+            s3_path (str): The S3 path.
+            temp_s3_path (str): The temporary S3 path.
+            apikey (str): The API key.
         """
         self.user = user
         self.url_catalog = url_catalog
         self.mission = mission
+        self.cadip_session_id = cadip_session_id
         self.s3_path = s3_path
         self.temp_s3_path = temp_s3_path
         self.apikey = apikey
-        self.cadip_session_id = cadip_session_id
 
 
 @flow(task_runner=DaskTaskRunner())
 def s1_l0_flow(config: PrefectS1L0FlowConfig):
+    """
+    Prefect flow for S1 Level 0 data processing.
+
+    Args:
+        config (PrefectS1L0FlowConfig): Configuration for the flow.
+
+    Returns:
+        None: If no data is found in the catalog.
+    """
     logger = get_prefect_logger(LOGGER_NAME)
 
     cadip_collection = create_collection_name(config.mission, CADIP[0])
@@ -286,6 +379,15 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         config.apikey,
     )
     # the previous tasks may be launched in parallel. The next task depends on the results from these previous tasks
+    if (
+        not cadip_catalog_data
+        or not adgs_catalog_data
+        or int(cadip_catalog_data["context"]["returned"]) == 0
+        or int(adgs_catalog_data["context"]["returned"]) == 0
+    ):
+        logger.error("No data found in catalog")
+        return
+
     logger.debug("Starting build_eopf_triggering_yaml get_adgs_catalog_data")
     yaml_dpr_input = build_eopf_triggering_yaml(
         cadip_catalog_data,
@@ -299,7 +401,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
 
     if not files_stac:
         logger.error("DPR did not processed anything")
-        sys.exit(-1)
+        return
 
     # Temp, to be fixed
     collection_name = f"{config.user}_dpr"
@@ -310,19 +412,17 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         "stac_version": "1.0.0",
         "owner": config.user,
     }
-    requests.post(f"{config.url_catalog}/catalog/collections", json=minimal_collection)
+    requests.post(f"{config.url_catalog}/catalog/collections", json=minimal_collection, timeout=CATALOG_REQUEST_TIMEOUT)
 
     for output_product in get_yaml_outputs(yaml_dpr_input):
         matching_stac = next(
-            (d for d in files_stac if d["stac_discovery"]["properties"]["eopf:type"] in output_product), None,
+            (d for d in files_stac if d["stac_discovery"]["properties"]["eopf:type"] in output_product),
+            None,
         )
         # To be removed, temp fix
         matching_stac["stac_discovery"]["assets"] = {"file": {"href": ""}}
         config.apikey = {}
-        #
-        import pdb
-
-        pdb.set_trace()
+        # Update catalog (it moves the products from temporary bucket to the final one)
         update_stac_catalog(
             config.apikey,
             config.url_catalog,
@@ -332,9 +432,4 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
             output_product,
             logger,
         )
-
-    # collection_name = f"{config.user}_dpr_{datetime.now().strftime('%Y%m%dH%M%S')}"
-    # for file_stac_info in files_stac:
-    #     obs = f"{config.s3_path.rstrip('/')}/{file_stac_info['id']}"
-    #     update_stac_catalog(config.apikey, config.url_catalog, config.user, collection_name, file_stac_info, obs, logger)
-    logger.info("Finished !")
+    logger.info("S1 L0 prefect flow finished")
