@@ -140,18 +140,27 @@ if __name__ == "__main__":
 
     parser.add_argument("-m", "--mission", type=str, required=True, help="Mission name")
 
-    parser.add_argument(
-        "-t",
-        "--max-tasks",
-        type=int,
-        required=False,
-        help="Maximum number of prefect tasks. Default 1 (the prefect flow will not be started)",
-        default=1,
-    )
+    # parser.add_argument(
+    #     "-t",
+    #     "--max-tasks",
+    #     type=int,
+    #     required=False,
+    #     help="Maximum number of prefect tasks. Default 1 (the prefect flow will not be started)",
+    #     default=1,
+    # )
 
     parser.add_argument(
         "-o",
         "--s3-storage",
+        type=str,
+        required=True,
+        help="S3 path on the bucket where the products will be copied",
+        default="",
+    )
+
+    parser.add_argument(
+        "-t",
+        "--temp-s3-storage",
         type=str,
         required=True,
         help="S3 path on the bucket where the products will be copied",
@@ -174,7 +183,13 @@ if __name__ == "__main__":
 
     s1_l0_flow(
         PrefectS1L0FlowConfig(
-            args.user, args.url_catalog, args.mission, args.session_id, args.s3_storage, args.apikey, args.max_tasks,
+            args.user,
+            args.url_catalog,
+            args.mission,
+            args.session_id,
+            args.s3_storage,
+            args.temp_s3_storage,
+            args.apikey,
         ),
     )
 

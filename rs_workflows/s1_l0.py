@@ -59,12 +59,12 @@ def start_dpr(yaml_dpr_input):
     pp = pprint.PrettyPrinter(indent=4)
     for attr in response.json():
         pp.pprint(attr)
-    logger.debug("Task start_dpr ENDED")
+    logger.debug("Task start_dpr FINISHED")
     return response.json()
 
 
 @task
-def build_eopf_triggering_yaml(cadip_files, adgs_files):
+def build_eopf_triggering_yaml(cadip_files, adgs_files, temp_s3_path):
     logger = get_general_logger(LOGGER_NAME)
     logger.debug("Task build_eopf_triggering_yaml STARTED")
     # Load YAML template
@@ -87,8 +87,8 @@ def build_eopf_triggering_yaml(cadip_files, adgs_files):
     # Update YAML template with inputs and I/O products
     yaml_template["workflow"][0]["inputs"] = yaml_inputs
     yaml_template["I/O"]["inputs_products"] = yaml_io_products
-    logger.debug("Task build_eopf_triggering_yaml ENDED")
-    yaml_template = gen_payload_outputs(yaml_template)
+    logger.debug("Task build_eopf_triggering_yaml ")
+    yaml_template = gen_payload_outputs(yaml_template, temp_s3_path)
     return yaml_template
 
 
@@ -113,23 +113,30 @@ def gen_payload_inputs(cadu_list, adgs_list):
     return composer, yaml_content
 
 
-def gen_payload_outputs(template):
+def gen_payload_outputs(template, temp_s3_path):
     composer = []
     output_body = []
-    for typecnt, ptype in enumerate(template['workflow'][0]['parameters']['product_types']):
+    # s3://rs-cluster-temp/zarr/dpr_processor_output
+    temp_s3_path = temp_s3_path.rstrip("/")
+    for typecnt, ptype in enumerate(template["workflow"][0]["parameters"]["product_types"]):
         composer.append({f"out{typecnt}": ptype})
-        output_body.append({"id": ptype,
-                            "path": f"s3://rs-cluster-temp/zarr/dpr_processor_output/{ptype}/",
-                            "type": "folder|zip",
-                            "store_type": "zarr",
-                            "store_params": {}})
-    template['workflow'][0]['outputs'] = composer
-    template['I/O']['output_products'] = output_body
+        output_body.append(
+            {
+                "id": ptype,
+                "path": f"{temp_s3_path}/{ptype}/",
+                "type": "folder|zip",
+                "store_type": "zarr",
+                "store_params": {},
+            },
+        )
+    template["workflow"][0]["outputs"] = composer
+    template["I/O"]["output_products"] = output_body
     return template
 
 
 def get_yaml_outputs(template):
-    return [out['path'] for out in template['I/O']['output_products']]
+    return [out["path"] for out in template["I/O"]["output_products"]]
+
 
 def create_cql2_filter(properties: dict, op="and"):
     args = [{"op": "=", "args": [{"property": field}, value]} for field, value in properties.items()]
@@ -166,7 +173,7 @@ def get_cadip_catalog_data(url_catalog, username, collection, session_id, apikey
         return None
 
     try:
-        logger.debug("Task get_cadip_catalog_data ENDED")
+        logger.debug("Task get_cadip_catalog_data FINISHED")
         return response.json()
     except requests.exceptions.JSONDecodeError:
         return None
@@ -205,7 +212,7 @@ def get_adgs_catalog_data(url_catalog, username, collection, files, apikey):
         logger.error(f"The request response failed: {response}")
         return None
     try:
-        logger.debug("Task get_adgs_catalog_data ENDED")
+        logger.debug("Task get_adgs_catalog_data FINISHED")
         return response.json()
     except requests.exceptions.JSONDecodeError:
         return None
@@ -218,20 +225,18 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods
     Prefect flow
 
     Attributes:
-        max_workers (int): The maximum number of workers for the Prefect flow.
-        start_datetime (datetime): The start datetime of the files that the station should return
-        stop_datetime (datetime): The stop datetime of the files that the station should return
+
     """
 
     def __init__(  # pylint: disable=too-many-arguments
-            self,
-            user,
-            url_catalog,
-            mission,
-            cadip_session_id,
-            s3_path,
-            apikey,
-            max_workers,
+        self,
+        user,
+        url_catalog,
+        mission,
+        cadip_session_id,
+        s3_path,
+        temp_s3_path,
+        apikey,
     ):
         """
         Initialize the PrefectFlowConfig object with provided parameters.
@@ -240,9 +245,9 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods
         self.url_catalog = url_catalog
         self.mission = mission
         self.s3_path = s3_path
+        self.temp_s3_path = temp_s3_path
         self.apikey = apikey
         self.cadip_session_id = cadip_session_id
-        self.max_workers: int = max_workers
 
 
 @flow(task_runner=DaskTaskRunner())
@@ -274,12 +279,19 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
     ]
     adgs_catalog_data = get_adgs_catalog_data(
-        config.url_catalog, config.user, adgs_collection, adgs_files, config.apikey,
+        config.url_catalog,
+        config.user,
+        adgs_collection,
+        adgs_files,
+        config.apikey,
     )
-    # the previous tasks may be launched in parallel. The next task depends on the results from the previous tasks
+    # the previous tasks may be launched in parallel. The next task depends on the results from these previous tasks
     logger.debug("Starting build_eopf_triggering_yaml get_adgs_catalog_data")
     yaml_dpr_input = build_eopf_triggering_yaml(
-        cadip_catalog_data, adgs_catalog_data, wait_for=[cadip_catalog_data, adgs_catalog_data],
+        cadip_catalog_data,
+        adgs_catalog_data,
+        config.temp_s3_path,
+        wait_for=[cadip_catalog_data, adgs_catalog_data],
     )
     # this task depends on the result from the previous task
     logger.debug("Starting start_dpr get_adgs_catalog_data")
@@ -301,14 +313,25 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
     requests.post(f"{config.url_catalog}/catalog/collections", json=minimal_collection)
 
     for output_product in get_yaml_outputs(yaml_dpr_input):
-        matching_stac = next((d for d in files_stac if d['stac_discovery']['properties']['eopf:type'] in output_product), None)
+        matching_stac = next(
+            (d for d in files_stac if d["stac_discovery"]["properties"]["eopf:type"] in output_product), None,
+        )
         # To be removed, temp fix
-        matching_stac['stac_discovery']['assets'] = {"file": {"href": ""}}
+        matching_stac["stac_discovery"]["assets"] = {"file": {"href": ""}}
         config.apikey = {}
-        obs = f"s3://rs-cluster-temp/zarr/dpr_processor_output/S1SEWRAW"
         #
-        update_stac_catalog(config.apikey, config.url_catalog, config.user, collection_name, matching_stac['stac_discovery'], obs,
-                            logger)
+        import pdb
+
+        pdb.set_trace()
+        update_stac_catalog(
+            config.apikey,
+            config.url_catalog,
+            config.user,
+            collection_name,
+            matching_stac["stac_discovery"],
+            output_product,
+            logger,
+        )
 
     # collection_name = f"{config.user}_dpr_{datetime.now().strftime('%Y%m%dH%M%S')}"
     # for file_stac_info in files_stac:
