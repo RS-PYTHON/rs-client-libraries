@@ -201,7 +201,7 @@ def create_cql2_filter(properties: dict, op: str = "and"):
     """
     args = [{"op": "=", "args": [{"property": field}, value]} for field, value in properties.items()]
     # args.append("collecttion=test_user_s1_chunk")
-    return {"filter-lang": "cql2-json", "filter": {"op": op, "args": args}}
+    return {"filter-lang": "cql2-json", "limit": "1000", "filter": {"op": op, "args": args}}
 
 
 @task
