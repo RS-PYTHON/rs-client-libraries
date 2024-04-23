@@ -102,8 +102,7 @@ def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, temp_s3_path
 
     # Update YAML template with inputs and I/O products
     yaml_template["workflow"][0]["inputs"] = yaml_inputs
-    yaml_template["I/O"]["inputs_products"] = yaml_io_products
-    logger.debug("Task build_eopf_triggering_yaml ")
+    yaml_template["I/O"]["inputs_products"] = yaml_io_products    
     yaml_template = gen_payload_outputs(yaml_template, temp_s3_path)
     return yaml_template
 
