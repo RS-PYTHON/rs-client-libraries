@@ -25,6 +25,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("-c", "--url-catalog", type=str, required=True, help="Url of the RS-Server catalog")
 
+    parser.add_argument("-d", "--url-dpr", type=str, required=True, help="Url of the DPR endpoint")
+
     parser.add_argument("-u", "--user", type=str, required=True, help="User name")
 
     parser.add_argument("-m", "--mission", type=str, required=True, help="Mission name")
@@ -74,6 +76,7 @@ if __name__ == "__main__":
         PrefectS1L0FlowConfig(
             args.user,
             args.url_catalog,
+            args.url_dpr,
             args.mission,
             args.session_id,
             args.s3_storage,

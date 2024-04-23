@@ -26,7 +26,7 @@ DPR_PROCESSING_TIMEOUT = 14400  # 4 hours
 
 
 @task
-def start_dpr(yaml_dpr_input: dict):
+def start_dpr(dpr_endpoint, yaml_dpr_input: dict):
     """Starts the DPR processing with the given YAML input.
 
     Args:
@@ -42,10 +42,9 @@ def start_dpr(yaml_dpr_input: dict):
     logger.debug("Task start_dpr STARTED")
     logger.info("Faking dpr processing with the following input file:")
     logger.info(yaml.dump(yaml_dpr_input))
-    dpr_simulator_endpoint = "http://127.0.0.1:6002/run"  # rs-server host = the container name
     try:
         response = requests.post(
-            dpr_simulator_endpoint,
+            dpr_endpoint,
             json=yaml.safe_load(yaml.dump(yaml_dpr_input)),
             timeout=DPR_PROCESSING_TIMEOUT,
         )
@@ -300,13 +299,14 @@ def get_adgs_catalog_data(url_catalog: str, username: str, collection: str, file
         return None
 
 
-class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods
+class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes
     """Configuration for Prefect flow related to S1 Level 0 data."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
         user: str,
         url_catalog: str,
+        url_dpr: str,
         mission: str,
         cadip_session_id: str,
         s3_path: str,
@@ -319,6 +319,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods
         Args:
             user (str): The username.
             url_catalog (str): The URL of the catalog.
+            url_dpr (str): The URL of the dpr endpoint
             mission (str): The mission name.
             cadip_session_id (str): The CADIP session ID.
             s3_path (str): The S3 path.
@@ -327,6 +328,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods
         """
         self.user = user
         self.url_catalog = url_catalog
+        self.url_dpr = url_dpr
         self.mission = mission
         self.cadip_session_id = cadip_session_id
         self.s3_path = s3_path
@@ -397,7 +399,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
     )
     # this task depends on the result from the previous task
     logger.debug("Starting start_dpr get_adgs_catalog_data")
-    files_stac = start_dpr(yaml_dpr_input, wait_for=[yaml_dpr_input])
+    files_stac = start_dpr(config.url_dpr, yaml_dpr_input, wait_for=[yaml_dpr_input])
 
     if not files_stac:
         logger.error("DPR did not processed anything")
