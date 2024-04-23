@@ -382,7 +382,7 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     collection_name: str,
     files_stac: list,
     logger: Any,
-) -> None:
+) -> list:
     """Check for unpublished files in the catalog.
 
     Args:
@@ -390,7 +390,7 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
         url_catalog (str): The URL of the catalog.
         user (str): The user identifier.
         collection_name (str): The name of the collection to be used.
-        files_stac (list): List of files to be checked for publication.
+        files_stac (list): List of files (dcitionary for each) to be checked for publication.
         logger: The logger object for logging.
 
     Returns:
@@ -402,7 +402,9 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     for fs in files_stac:
         ids.append(str(fs["id"]))
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
+    logger.debug(f"catalog_endpoint = {catalog_endpoint}")
     request_params = {"collection": collection_name, "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
+    logger.debug(f"The requested list len = {len(ids)}")
     try:
         response = requests.get(
             catalog_endpoint,
@@ -413,27 +415,34 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
         logger.exception("Request exception caught: %s", e)
         # try to ingest everything anyway
-        return
-
+        return files_stac
+    logger.debug(f"response.link = {response.url}")
+    logger.debug(f"response = {response.status_code}")
     # try to ingest everything anyway
     if response.status_code != 200:
-        return
+        logger.error(f"Quering the catalog endpoint returned status {response.status_code}")
+        return files_stac
+
     try:
         eval_response = response.json()
+        logger.debug(f"eval_response = {eval_response}")
     except requests.exceptions.JSONDecodeError:
         # content is empty, try to ingest everything anyway
-        return
+        return files_stac
 
     # no file in the catalog
     if eval_response["features"] is None:
-        return
+        return files_stac
 
     # logger.debug(f"Files found in the catalog ({len(eval_response['features'])}): {eval_response['features']} ")
     for feature in eval_response["features"]:
         for fs in files_stac:
             if feature["id"] == fs["id"]:
                 files_stac.remove(fs)
+                logger.debug(f"REMOVED {feature['id']}")
                 break
+    logger.debug(f"In the end: {files_stac}")
+    return files_stac
 
 
 @task
@@ -599,7 +608,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         self.limit = limit
 
 
-@flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 25, "threads_per_worker": 1}))
+@flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 15, "threads_per_worker": 1}))
 def download_flow(config: PrefectFlowConfig):
     """Prefect flow for downloading files from a station.
 
@@ -617,7 +626,7 @@ def download_flow(config: PrefectFlowConfig):
     """
     # get the Prefect logger
     logger = get_prefect_logger("flow_dwn")
-
+    logger.info(f"The download flow is starting. Received workers:{config.max_workers}")
     try:
         # get the endpoint
         endpoint = create_endpoint(config.url, config.station)
@@ -643,7 +652,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
         # create the collection name
 
         # filter those that are already existing
-        filter_unpublished_files(  # type: ignore
+        files_stac = filter_unpublished_files(  # type: ignore
             apikey_headers,
             config.url_catalog,
             config.user,
@@ -652,7 +661,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
             logger,
             wait_for=[files_stac],
         )
-
+        logger.debug(f"OUT = {files_stac}")
         # distribute the filenames evenly in a number of lists equal with
         # the minimum between number of runners and files to be downloaded
         try:

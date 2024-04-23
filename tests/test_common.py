@@ -283,7 +283,14 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     )
     logger = get_general_logger("tests")
 
-    filter_unpublished_files.fn({}, "http://127.0.0.1:5000", "testUser", collection_name, files_stac, logger)
+    files_stac = filter_unpublished_files.fn(
+        {},
+        "http://127.0.0.1:5000",
+        "testUser",
+        collection_name,
+        files_stac,
+        logger,
+    )
 
     logger.debug(f"AFTER filtering ! FS = {files_stac} || ex = {mock_files_in_catalog}")
 
