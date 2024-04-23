@@ -42,9 +42,10 @@ def start_dpr(dpr_endpoint, yaml_dpr_input: dict):
     logger.debug("Task start_dpr STARTED")
     logger.info("Faking dpr processing with the following input file:")
     logger.info(yaml.dump(yaml_dpr_input))
+    # dpr_simulator_endpoint = "http://127.0.0.1:6002/run"  # rs-server host = the container name
     try:
         response = requests.post(
-            dpr_endpoint,
+            dpr_endpoint.rstrip("/") + "/run",
             json=yaml.safe_load(yaml.dump(yaml_dpr_input)),
             timeout=DPR_PROCESSING_TIMEOUT,
         )
