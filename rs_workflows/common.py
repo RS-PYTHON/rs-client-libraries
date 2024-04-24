@@ -67,14 +67,14 @@ def get_prefect_logger(general_logger_name):
         general_logger_name (str): The name of the general logger in case the prefect logger can't be returned.
 
     Returns:
-        logging.Logger: A prefect logger instance or a general logger one.
+        logging.Logger: A prefect logger instance or a general logger instance.
     """
     try:
         logger = get_run_logger()
         logger.setLevel(SET_PREFECT_LOGGING_LEVEL)
     except exceptions.MissingContextError:
         logger = get_general_logger(general_logger_name)
-        logger.info("Could not get the prefect logger due to missing context")
+        logger.warning("Could not get the prefect logger due to missing context. Using the general one")
     return logger
 
 
@@ -193,7 +193,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     return response.status_code == 200
 
 
-class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes
+class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes,
     """Common configuration to Prefect tasks and flows.
     Base class for configuration to prefect tasks and flows that ingest files from different stations (cadip, adgs...)
 
@@ -416,8 +416,8 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
         logger.exception("Request exception caught: %s", e)
         # try to ingest everything anyway
         return files_stac
-    logger.debug(f"response.link = {response.url}")
-    logger.debug(f"response = {response.status_code}")
+    # logger.debug(f"response.link = {response.url}")
+    # logger.debug(f"response = {response.status_code}")
     # try to ingest everything anyway
     if response.status_code != 200:
         logger.error(f"Quering the catalog endpoint returned status {response.status_code}")
@@ -425,7 +425,7 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
 
     try:
         eval_response = response.json()
-        logger.debug(f"eval_response = {eval_response}")
+        # logger.debug(f"eval_response = {eval_response}")
     except requests.exceptions.JSONDecodeError:
         # content is empty, try to ingest everything anyway
         return files_stac

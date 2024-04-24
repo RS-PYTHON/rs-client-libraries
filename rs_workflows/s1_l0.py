@@ -41,24 +41,22 @@ def start_dpr(dpr_endpoint, yaml_dpr_input: dict):
     logger = get_general_logger(LOGGER_NAME)
     logger.debug("Task start_dpr STARTED")
     logger.info("Faking dpr processing with the following input file:")
-    logger.info(yaml.dump(yaml_dpr_input))
-    # dpr_simulator_endpoint = "http://127.0.0.1:6002/run"  # rs-server host = the container name
+    logger.debug(yaml.dump(yaml_dpr_input))
     try:
         response = requests.post(
             dpr_endpoint.rstrip("/") + "/run",
             json=yaml.safe_load(yaml.dump(yaml_dpr_input)),
             timeout=DPR_PROCESSING_TIMEOUT,
         )
-        logger.debug(f"stat = {response.status_code}")
-        logger.debug(f"json = {response.json()}")
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
         logger.exception("Calling the dpr simulater resulted in exception: %s", e)
         return None
 
     if response.status_code != 200:
-        logger.error(f"The request response failed: {response}")
+        logger.error(f"The dpr simulator endpoint failed with status code: {response.status_code}")
         return None
 
+    logger.debug("DPR processor results: \n\n")
     pp = pprint.PrettyPrinter(indent=4)
     for attr in response.json():
         pp.pprint(attr)
@@ -102,8 +100,9 @@ def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, temp_s3_path
 
     # Update YAML template with inputs and I/O products
     yaml_template["workflow"][0]["inputs"] = yaml_inputs
-    yaml_template["I/O"]["inputs_products"] = yaml_io_products    
+    yaml_template["I/O"]["inputs_products"] = yaml_io_products
     yaml_template = gen_payload_outputs(yaml_template, temp_s3_path)
+    logger.debug("Task build_eopf_triggering_yaml FINISHED")
     return yaml_template
 
 
@@ -223,7 +222,7 @@ def get_cadip_catalog_data(url_catalog: str, username: str, collection: str, ses
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
 
     query = create_cql2_filter({"collection": f"{username}_{collection}", "cadip:session_id": session_id})
-    logger.debug(f"{url_catalog} | {username} | {collection} | {session_id} | {apikey}")
+    # logger.debug(f"{url_catalog} | {username} | {collection} | {session_id} | {apikey}")
     try:
         response = requests.post(
             catalog_endpoint,
@@ -231,8 +230,8 @@ def get_cadip_catalog_data(url_catalog: str, username: str, collection: str, ses
             timeout=CATALOG_REQUEST_TIMEOUT,
             **create_apikey_headers(apikey),
         )
-        logger.debug(f"stat = {response.status_code}")
-        logger.debug(f"json = {response.json()}")
+        # logger.debug(f"stat = {response.status_code}")
+        # logger.debug(f"json = {response.json()}")
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
         logger.exception("Request exception caught: %s", e)
         return None
@@ -284,7 +283,7 @@ def get_adgs_catalog_data(url_catalog: str, username: str, collection: str, file
         )
         # response = requests.post(catalog_endpoint,
         # json=query, timeout=ENDPOINT_TIMEOUT, **create_apikey_headers(apikey))
-        logger.debug(f"json = {response.json()}")
+        # logger.debug(f"json = {response.json()}")
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
         logger.exception("Request exception caught: %s", e)
         return None
@@ -355,7 +354,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
     # S1A_20200105072204051312
     # gather the data for cadip session id
     logger.debug("Starting task get_cadip_catalog_data")
-    cadip_catalog_data = get_cadip_catalog_data(
+    cadip_catalog_data = get_cadip_catalog_data.submit(
         config.url_catalog,
         config.user,
         cadip_collection,
@@ -373,7 +372,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
         "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
     ]
-    adgs_catalog_data = get_adgs_catalog_data(
+    adgs_catalog_data = get_adgs_catalog_data.submit(
         config.url_catalog,
         config.user,
         adgs_collection,
@@ -382,31 +381,31 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
     )
     # the previous tasks may be launched in parallel. The next task depends on the results from these previous tasks
     if (
-        not cadip_catalog_data
-        or not adgs_catalog_data
-        or int(cadip_catalog_data["context"]["returned"]) == 0
-        or int(adgs_catalog_data["context"]["returned"]) == 0
+        not cadip_catalog_data.result()
+        or not adgs_catalog_data.result()
+        or int(cadip_catalog_data.result()["context"]["returned"]) == 0
+        or int(adgs_catalog_data.result()["context"]["returned"]) == 0
     ):
         logger.error("No data found in catalog")
         return
 
-    logger.debug("Starting build_eopf_triggering_yaml get_adgs_catalog_data")
+    logger.debug("Starting task build_eopf_triggering_yaml ")
     yaml_dpr_input = build_eopf_triggering_yaml(
-        cadip_catalog_data,
-        adgs_catalog_data,
+        cadip_catalog_data.result(),
+        adgs_catalog_data.result(),
         config.temp_s3_path,
         wait_for=[cadip_catalog_data, adgs_catalog_data],
     )
     # this task depends on the result from the previous task
-    logger.debug("Starting start_dpr get_adgs_catalog_data")
-    files_stac = start_dpr(config.url_dpr, yaml_dpr_input, wait_for=[yaml_dpr_input])
+    logger.debug("Starting task start_dpr")
+    files_stac = start_dpr.submit(config.url_dpr, yaml_dpr_input, wait_for=[yaml_dpr_input])
 
-    if not files_stac:
+    if not files_stac.result():
         logger.error("DPR did not processed anything")
         return
 
     # Temp, to be fixed
-    collection_name = f"{config.user}_dpr"
+    collection_name = f"{config.mission}_dpr"
     minimal_collection = {
         "id": collection_name,
         "type": "Collection",
@@ -414,24 +413,44 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         "stac_version": "1.0.0",
         "owner": config.user,
     }
-    requests.post(f"{config.url_catalog}/catalog/collections", json=minimal_collection, timeout=CATALOG_REQUEST_TIMEOUT)
-
+    logger.debug(f"Creating collection for the DPR products: {collection_name}")
+    requests.post(
+        f"{config.url_catalog}/catalog/collections",
+        json=minimal_collection,
+        timeout=CATALOG_REQUEST_TIMEOUT,
+        **create_apikey_headers(config.apikey),
+    )
+    fin_res = []
     for output_product in get_yaml_outputs(yaml_dpr_input):
         matching_stac = next(
-            (d for d in files_stac if d["stac_discovery"]["properties"]["eopf:type"] in output_product),
+            (d for d in files_stac.result() if d["stac_discovery"]["properties"]["eopf:type"] in output_product),
             None,
         )
         # To be removed, temp fix
         matching_stac["stac_discovery"]["assets"] = {"file": {"href": ""}}
-        config.apikey = {}
+
         # Update catalog (it moves the products from temporary bucket to the final one)
-        update_stac_catalog(
-            config.apikey,
-            config.url_catalog,
-            config.user,
-            collection_name,
-            matching_stac["stac_discovery"],
-            output_product,
-            logger,
+        logger.info("Starting task update_stac_catalog")
+        fin_res.append(
+            (
+                update_stac_catalog.submit(
+                    create_apikey_headers(config.apikey),
+                    config.url_catalog,
+                    config.user,
+                    collection_name,
+                    matching_stac["stac_discovery"],
+                    output_product,
+                    logger,
+                    wait_for=[files_stac],
+                ),
+                output_product,
+            ),
         )
+    logger.debug("All tasks submitted")
+    for tsk in fin_res:
+        if tsk[0].result():
+            logger.info(f"File well published: {tsk[1]}")
+        else:
+            logger.error(f"File could not be published: {tsk[1]}")
+
     logger.info("S1 L0 prefect flow finished")
