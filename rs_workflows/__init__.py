@@ -1,3 +1,5 @@
+"""rs-workflows main module."""
+
 # Configure OpenTelemetry
 from rs_workflows.utils import opentelemetry
 
