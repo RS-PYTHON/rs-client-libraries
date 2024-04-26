@@ -7,7 +7,6 @@ import requests
 import yaml
 from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
-from starlette.status import HTTP_200_OK
 
 from rs_workflows.common import (
     ADGS,
@@ -247,7 +246,7 @@ def get_cadip_catalog_data(url_catalog: str, username: str, collection: str, ses
         logger.exception("Request exception caught: %s", e)
         return None
 
-    if int(response.status_code) != HTTP_200_OK:
+    if int(response.status_code) != 200:
         logger.error(f"The request response failed: {response.status_code}")
         return None
 
@@ -294,7 +293,7 @@ def get_adgs_catalog_data(url_catalog: str, username: str, collection: str, file
         logger.exception("Request exception caught: %s", e)
         return None
 
-    if int(response.status_code) != HTTP_200_OK:
+    if int(response.status_code) != 200:
         logger.error(f"The request response failed: {response}")
         return None
     try:
