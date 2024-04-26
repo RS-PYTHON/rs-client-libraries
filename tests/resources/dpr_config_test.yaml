@@ -18,7 +18,7 @@ workflow:
   outputs:
   - out0: S1SEWRAW
   parameters:
-    product_types: 
+    product_types:
     - S1SEWRAW
 I/O:
   inputs_products:

@@ -406,6 +406,9 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         config.temp_s3_path,
         wait_for=[cadip_catalog_data, adgs_catalog_data],
     )
+    # the output product list should be :S1SEWRAW S1SIWRAW S1SSMRAW S1SWVRAW
+    # according to the jira story
+
     # this task depends on the result from the previous task
     logger.debug("Starting task start_dpr")
     files_stac = start_dpr.submit(config.url_dpr, yaml_dpr_input, wait_for=[yaml_dpr_input])
