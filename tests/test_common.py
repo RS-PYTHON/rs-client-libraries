@@ -753,17 +753,16 @@ def test_download_flow(station):
     file_ids = []
     for fs in files_stac[station]["features"]:
         file_ids.append(fs["id"])
-    request_params = {"collection": "s1_aux", "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
-
+    # set the collection name
+    collection_name = "s1_aux" if station == "ADGS" else "s1_chunk"
+    request_params = {"collection": collection_name, "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
     endpoint = endpoint + urllib.parse.urlencode(request_params)
-
     responses.add(
         responses.GET,
         endpoint,
         status=200,
     )
 
-    # for i in range(0, len(files_stac[station]["features"])):
     for fn in file_ids:
         # mock the status endpoint
         # fn = files_stac[station]["features"][i]["id"]

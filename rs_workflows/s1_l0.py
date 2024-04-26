@@ -7,6 +7,7 @@ import requests
 import yaml
 from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
+from starlette.status import HTTP_200_OK
 
 from rs_workflows.common import (
     ADGS,
@@ -52,7 +53,7 @@ def start_dpr(dpr_endpoint, yaml_dpr_input: dict):
         logger.exception("Calling the dpr simulater resulted in exception: %s", e)
         return None
 
-    if response.status_code != 200:
+    if int(response.status_code) != 200:
         logger.error(f"The dpr simulator endpoint failed with status code: {response.status_code}")
         return None
 
@@ -65,12 +66,13 @@ def start_dpr(dpr_endpoint, yaml_dpr_input: dict):
 
 
 @task
-def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, temp_s3_path: str):
+def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, product_types: list, temp_s3_path: str):
     """Builds the EOPF triggering YAML file using CADIP and ADGS file paths.
 
     Args:
         cadip_files (dict): CADIP files metadata.
         adgs_files (dict): ADGS files metadata.
+        product_types (list): The types for the output products
         temp_s3_path (str): Temporary S3 path.
 
     Returns:
@@ -91,17 +93,28 @@ def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, temp_s3_path
     except yaml.YAMLError as e:
         logger.exception(f"Could not load the YAML template file: {e}")
         return None
+    except IOError as e:
+        logger.exception(f"Could not find the YAML template file: {e}")
+        return None
 
     # Extract paths for CADIP and ADGS files
     cadip_paths = [file_prop["assets"]["file"]["alternate"]["s3"]["href"] for file_prop in cadip_files["features"]]
     adgs_paths = [file_prop["assets"]["file"]["alternate"]["s3"]["href"] for file_prop in adgs_files["features"]]
     # create the dictionaries to insert within the yaml template
-    yaml_inputs, yaml_io_products = gen_payload_inputs(cadip_paths, adgs_paths)
 
-    # Update YAML template with inputs and I/O products
-    yaml_template["workflow"][0]["inputs"] = yaml_inputs
-    yaml_template["I/O"]["inputs_products"] = yaml_io_products
-    yaml_template = gen_payload_outputs(yaml_template, temp_s3_path)
+    # Update the YAML template with inputs and I/O products
+    yaml_template["workflow"][0]["inputs"], yaml_template["I/O"]["inputs_products"] = gen_payload_inputs(
+        cadip_paths,
+        adgs_paths,
+    )
+
+    # Update the YAML  with the outpurs
+    yaml_template["workflow"][0]["parameters"]["product_types"] = product_types
+    yaml_template["workflow"][0]["outputs"], yaml_template["I/O"]["output_products"] = gen_payload_outputs(
+        product_types,
+        temp_s3_path,
+    )
+
     logger.debug("Task build_eopf_triggering_yaml FINISHED")
     return yaml_template
 
@@ -119,31 +132,30 @@ def gen_payload_inputs(cadu_list: list, adgs_list: list):
     Raises:
         None
     """
-    yaml_content = []
+    input_body = []
     composer = []
 
     def add_input(file_list, prefix, start_cnt):
         nonlocal composer
-        nonlocal yaml_content
+        nonlocal input_body
 
         for cnt, file in enumerate(file_list, start=start_cnt):
             file_id = f"in{cnt}"
             input_id = f"{prefix}{cnt}"
             composer.append({file_id: input_id})
             yaml_template = {"id": input_id, "path": file, "store_type": file.split(".")[-1], "store_params": {}}
-            yaml_content.append(yaml_template)
+            input_body.append(yaml_template)
 
     add_input(cadu_list, "CADU", 1)
     add_input(adgs_list, "ADGS", len(cadu_list) + 1)
 
-    return composer, yaml_content
+    return composer, input_body
 
 
-def gen_payload_outputs(template: dict, temp_s3_path: str):
+def gen_payload_outputs(product_types, temp_s3_path: str):
     """Generates payload outputs for the EOPF triggering YAML file.
 
     Args:
-        template (dict): The YAML template.
         temp_s3_path (str): The temporary S3 path.
 
     Returns:
@@ -154,9 +166,9 @@ def gen_payload_outputs(template: dict, temp_s3_path: str):
     """
     composer = []
     output_body = []
-    # s3://rs-cluster-temp/zarr/dpr_processor_output
+
     temp_s3_path = temp_s3_path.rstrip("/")
-    for typecnt, ptype in enumerate(template["workflow"][0]["parameters"]["product_types"]):
+    for typecnt, ptype in enumerate(product_types):
         composer.append({f"out{typecnt}": ptype})
         output_body.append(
             {
@@ -167,9 +179,8 @@ def gen_payload_outputs(template: dict, temp_s3_path: str):
                 "store_params": {},
             },
         )
-    template["workflow"][0]["outputs"] = composer
-    template["I/O"]["output_products"] = output_body
-    return template
+
+    return composer, output_body
 
 
 def get_yaml_outputs(template: dict):
@@ -236,11 +247,8 @@ def get_cadip_catalog_data(url_catalog: str, username: str, collection: str, ses
         logger.exception("Request exception caught: %s", e)
         return None
 
-    # response = requests.get(catalog_endpoint, \
-    # params=payload, timeout=ENDPOINT_TIMEOUT, **create_apikey_headers(apikey))
-
-    if response.status_code != 200:
-        logger.error(f"The request response failed: {response}")
+    if int(response.status_code) != HTTP_200_OK:
+        logger.error(f"The request response failed: {response.status_code}")
         return None
 
     try:
@@ -281,14 +289,12 @@ def get_adgs_catalog_data(url_catalog: str, username: str, collection: str, file
             timeout=CATALOG_REQUEST_TIMEOUT,
             **create_apikey_headers(apikey),
         )
-        # response = requests.post(catalog_endpoint,
-        # json=query, timeout=ENDPOINT_TIMEOUT, **create_apikey_headers(apikey))
-        # logger.debug(f"json = {response.json()}")
+
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
         logger.exception("Request exception caught: %s", e)
         return None
 
-    if response.status_code != 200:
+    if int(response.status_code) != HTTP_200_OK:
         logger.error(f"The request response failed: {response}")
         return None
     try:
@@ -308,6 +314,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
         url_dpr: str,
         mission: str,
         cadip_session_id: str,
+        product_types: list,
         s3_path: str,
         temp_s3_path: str,
         apikey: str,
@@ -321,6 +328,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
             url_dpr (str): The URL of the dpr endpoint
             mission (str): The mission name.
             cadip_session_id (str): The CADIP session ID.
+            product_types (list): The list with the products types to be processed by the DPR
             s3_path (str): The S3 path.
             temp_s3_path (str): The temporary S3 path.
             apikey (str): The API key.
@@ -330,6 +338,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
         self.url_dpr = url_dpr
         self.mission = mission
         self.cadip_session_id = cadip_session_id
+        self.product_types = product_types
         self.s3_path = s3_path
         self.temp_s3_path = temp_s3_path
         self.apikey = apikey
@@ -393,6 +402,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
     yaml_dpr_input = build_eopf_triggering_yaml(
         cadip_catalog_data.result(),
         adgs_catalog_data.result(),
+        config.product_types,
         config.temp_s3_path,
         wait_for=[cadip_catalog_data, adgs_catalog_data],
     )
