@@ -14,6 +14,7 @@ from rs_workflows.common import (
     PrefectFlowConfig,
     PrefectTaskConfig,
     check_status,
+    create_collection_name,
     create_endpoint,
     download_flow,
     filter_unpublished_files,
@@ -24,6 +25,7 @@ from rs_workflows.common import (
 )
 
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
+MISSION_NAME = "s1"
 
 endpoints = {
     "CADIP": {
@@ -162,19 +164,19 @@ def test_update_stac_catalog(response_is_valid, station):
     # set the response status
     response_status = 200 if response_is_valid else 400
     # mock the publish to catalog endpoint
-    endpoint = "http://127.0.0.1:5000/catalog/collections/testUser:s1_aux/items/"
+    collection_name = create_collection_name(MISSION_NAME, station)
     responses.add(
         responses.POST,
-        endpoint,
+        f"http://127.0.0.1:5000/catalog/collections/testUser:{collection_name}/items/",
         status=response_status,
     )
 
     for file_s in files_stac[station]["features"]:
-        resp = update_stac_catalog(
+        resp = update_stac_catalog.fn(
             {},
             "http://127.0.0.1:5000",
             "testUser",
-            "s1",
+            collection_name,
             file_s,
             "s3://tmp_bucket/tmp",
             get_general_logger("tests"),
@@ -266,7 +268,9 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     for fs in files_stac:
         file_ids.append(fs["id"])
 
-    request_params = {"collection": "s1_aux", "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
+    collection_name = create_collection_name(MISSION_NAME, station)
+
+    request_params = {"collection": collection_name, "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
 
     # mock the publish to catalog endpoint
     endpoint = "http://127.0.0.1:5000/catalog/search?" + urllib.parse.urlencode(request_params)
@@ -279,7 +283,14 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     )
     logger = get_general_logger("tests")
 
-    filter_unpublished_files({}, "http://127.0.0.1:5000", "testUser", "s1", files_stac, logger)
+    files_stac = filter_unpublished_files.fn(
+        {},
+        "http://127.0.0.1:5000",
+        "testUser",
+        collection_name,
+        files_stac,
+        logger,
+    )
 
     logger.debug(f"AFTER filtering ! FS = {files_stac} || ex = {mock_files_in_catalog}")
 
@@ -353,7 +364,8 @@ def test_ok_ingest_files(station):
         )
 
     # mock the publish to catalog endpoint
-    endpoint = "http://127.0.0.1:5000/catalog/collections/testUser:s1_aux/items/"
+    collection_name = create_collection_name(MISSION_NAME, station)
+    endpoint = f"http://127.0.0.1:5000/catalog/collections/testUser:{collection_name}/items/"
     responses.add(
         responses.POST,
         endpoint,
@@ -364,7 +376,7 @@ def test_ok_ingest_files(station):
         "http://127.0.0.1:5000",
         "http://127.0.0.1:5000",
         station,
-        "s1",
+        MISSION_NAME,
         local_path_for_dwn,
         obs,
         None,
@@ -424,7 +436,8 @@ def test_nok_ingest_files(station):
             status=503,
         )
     # mock the publish to catalog endpoint
-    endpoint = "http://127.0.0.1:5000/catalog/collections/testUser:s1_aux/items/"
+    collection_name = create_collection_name(MISSION_NAME, station)
+    endpoint = f"http://127.0.0.1:5000/catalog/collections/testUser:{collection_name}/items/"
     responses.add(
         responses.POST,
         endpoint,
@@ -435,7 +448,7 @@ def test_nok_ingest_files(station):
         "http://127.0.0.1:5000",
         "http://127.0.0.1:5000",
         station,
-        "s1",
+        MISSION_NAME,
         local_path_for_dwn,
         obs,
         None,
@@ -486,7 +499,7 @@ def test_get_station_files_list(station):
         status=200,
     )
 
-    search_response = get_station_files_list(
+    search_response = get_station_files_list.fn(
         {},
         endpoint.rstrip("/search"),
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
@@ -540,7 +553,7 @@ def test_err_ret_get_station_files_list(station):
         status=400,
     )
     logger = get_general_logger("tests")
-    search_response = get_station_files_list(
+    search_response = get_station_files_list.fn(
         {},
         endpoint.rstrip("/search"),
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
@@ -562,7 +575,7 @@ def test_err_ret_get_station_files_list(station):
     )
 
     with pytest.raises(RuntimeError) as runtime_exception:
-        search_response = get_station_files_list(
+        search_response = get_station_files_list.fn(
             {},
             endpoint.rstrip("/search"),
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
@@ -615,7 +628,7 @@ def test_wrong_url_get_station_files_list(station):
 
     # use a wrong endpoint
     with pytest.raises(RuntimeError) as runtime_exception:
-        get_station_files_list(
+        get_station_files_list.fn(
             {},
             "http://127.0.0.1:5000/search",
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
@@ -658,6 +671,38 @@ def test_create_endpoint(station):
             create_endpoint("http://127.0.0.1:5000", station)
             == "http://127.0.0.1:5000" + endpoints[station]["download"]
         )
+
+
+@pytest.mark.unit
+@responses.activate
+@pytest.mark.parametrize(
+    "station",
+    ["CADIP", "ADGS", "UNKNOWN"],
+)
+def test_create_collection_name(station):
+    """Unit test for the create_collection_name function.
+
+    This test validates the behavior of the create_collection_name function when creating
+    an the name of the collection to be used based on the mission name (currently, only s1) and
+    on the station name
+
+    Args:
+        station (str): The station type for which the collection name is created
+
+    Raises:
+        AssertionError: If the expected result does not match the actual result.
+        If a RuntimeError exception is not raised in case of an Unknown station
+
+    Returns:
+        None: This test does not return any value.
+    """
+
+    if station == "UNKNOWN":
+        with pytest.raises(RuntimeError) as runtime_exception:
+            create_collection_name(MISSION_NAME, station)
+        assert "Unknown station !" in str(runtime_exception.value)
+    else:
+        assert create_collection_name(MISSION_NAME, station) == MISSION_NAME + "_aux" if station == "ADGS" else "_chunk"
 
 
 @pytest.mark.unit
@@ -708,17 +753,16 @@ def test_download_flow(station):
     file_ids = []
     for fs in files_stac[station]["features"]:
         file_ids.append(fs["id"])
-    request_params = {"collection": "s1_aux", "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
-
+    # set the collection name
+    collection_name = "s1_aux" if station == "ADGS" else "s1_chunk"
+    request_params = {"collection": collection_name, "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
     endpoint = endpoint + urllib.parse.urlencode(request_params)
-
     responses.add(
         responses.GET,
         endpoint,
         status=200,
     )
 
-    # for i in range(0, len(files_stac[station]["features"])):
     for fn in file_ids:
         # mock the status endpoint
         # fn = files_stac[station]["features"][i]["id"]
@@ -751,7 +795,7 @@ def test_download_flow(station):
         "http://127.0.0.1:5000",
         "http://127.0.0.1:5000",
         station,
-        "s1",
+        MISSION_NAME,
         local_path_for_dwn,
         obs,
         None,

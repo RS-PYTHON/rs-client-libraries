@@ -1,0 +1,120 @@
+{
+    "type": "FeatureCollection",
+    "context": {"limit": 10, "returned": 3},
+    "features": [
+        {
+            "id": "ADGS1.EOF",
+            "type": "Feature",
+            "links": [
+                {
+                    "rel": "collection",
+                    "type": "application/json",
+                    "href": "http://127.0.0.1:8003/collections/TestUser_s1_aux"
+                },
+                {
+                    "rel": "parent",
+                    "type": "application/json",
+                    "href": "http://127.0.0.1:8003/collections/TestUser_s1_aux"
+                },
+                {
+                    "rel": "root",
+                    "type": "application/json",
+                    "href": "http://127.0.0.1:8003/"
+                },
+                {
+                    "rel": "self",
+                    "type": "application/geo+json",
+                    "href": "http://127.0.0.1:8003/collections/TestUser_s1_aux/items/ADGS1.EOF"
+                }
+            ],
+            "assets": {
+                "file": {
+                    "href": "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS1.EOF/download/file",
+                    "alternate": {
+                        "s3": {
+                            "href": "s3://rs-cluster-catalog/stations/ADGS/ADGS1.EOF"
+                        }
+                    },
+                    "file:size": 2029769
+                }
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [[180, -90], [180, 90], [-180, 90], [-180, -90], [180, -90]]
+                ]
+            },
+            "collection": "TestUser_s1_aux",
+            "properties": {
+                "owner": "TestUser",
+                "adgs:id": "09858a20-6996-4a07-9b79-e07741783f75",
+                "created": "2021-07-16T00:00:00.000Z",
+                "datetime": "2021-07-16T00:00:00.000Z",
+                "end_datetime": "2021-07-16T00:00:00.000Z",
+                "start_datetime": "2021-07-16T00:00:00.000Z"
+            },
+            "stac_version": "1.0.0",
+            "stac_extensions": [
+                "https://stac-extensions.github.io/file/v2.1.0/schema.json",
+                "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"
+            ]
+        },
+        {
+            "id": "ADGS2.EOF",
+            "type": "Feature",
+            "links": [
+                {
+                    "rel": "collection",
+                    "type": "application/json",
+                    "href": "http://127.0.0.1:8003/collections/TestUser_s1_aux"
+                },
+                {
+                    "rel": "parent",
+                    "type": "application/json",
+                    "href": "http://127.0.0.1:8003/collections/TestUser_s1_aux"
+                },
+                {
+                    "rel": "root",
+                    "type": "application/json",
+                    "href": "http://127.0.0.1:8003/"
+                },
+                {
+                    "rel": "self",
+                    "type": "application/geo+json",
+                    "href": "http://127.0.0.1:8003/collections/TestUser_s1_aux/items/ADGS2.EOF"
+                }
+            ],
+            "assets": {
+                "file": {
+                    "href": "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS2.EOF/download/file",
+                    "alternate": {
+                        "s3": {
+                            "href": "s3://rs-cluster-catalog/stations/ADGS/ADGS2.EOF"
+                        }
+                    },
+                    "file:size": 1922340
+                }
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [[180, -90], [180, 90], [-180, 90], [-180, -90], [180, -90]]
+                ]
+            },
+            "collection": "TestUser_s1_aux",
+            "properties": {
+                "owner": "TestUser",
+                "adgs:id": "6e7f7f39-4060-4448-875d-b11f96681551",
+                "created": "2020-04-09T00:00:00.000Z",
+                "datetime": "2020-04-16T00:00:00.000Z",
+                "end_datetime": "2020-04-16T00:00:00.000Z",
+                "start_datetime": "2020-04-16T00:00:00.000Z"
+            },
+            "stac_version": "1.0.0",
+            "stac_extensions": [
+                "https://stac-extensions.github.io/file/v2.1.0/schema.json",
+                "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"
+            ]
+        }
+    ]
+}

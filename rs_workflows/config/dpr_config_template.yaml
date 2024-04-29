@@ -1,0 +1,29 @@
+general_configuration:
+  logging:
+    level: DEBUG
+  triggering__validate_run: true
+  triggering__use_default_filename: true
+  triggering__use_basic_logging: true
+  triggering__load_default_logging: false
+breakpoints:
+workflow:
+- step: 1
+  active: true
+  module: rs.dpr.mockup # string corresponding to the python path of the module
+  processing_unit: DprMockupProcessor # EOProcessingUnit class name
+  name: DprMockupProcessor # identifier for the processing unit
+  inputs:
+  -
+  outputs:
+  -
+  parameters:
+    product_types: # List of EOPF product types we want to generate. In this example we simulate S1L0 processor that generates 4 products
+      -
+I/O:
+  inputs_products:
+   -
+  output_products:
+  -
+dask_context: {}
+logging: {}
+config: {}
