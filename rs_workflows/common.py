@@ -4,7 +4,7 @@ import enum
 # import pprint
 import time
 from datetime import datetime
-from typing import Union
+from typing import Any, List, Union
 
 import numpy as np
 import requests
@@ -18,7 +18,7 @@ ADGS = "ADGS"
 
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
-ENDPOINT_TIMEOUT = 2  # in seconds
+ENDPOINT_TIMEOUT = 10  # in seconds
 SEARCH_ENDPOINT_TIMEOUT = 60  # in seconds
 CATALOG_REQUEST_TIMEOUT = 20  # in seconds
 
@@ -34,6 +34,27 @@ class EDownloadStatus(str, enum.Enum):
     IN_PROGRESS = "IN_PROGRESS"
     FAILED = "FAILED"
     DONE = "DONE"
+
+
+def get_prefect_logger(general_logger_name):
+    """Get theprefect logger.
+    It returns the prefect logger. If this can't be taken due to the missing
+    prefect context (i.e. the flow/task is run as single function, from tests for example),
+    the general logger is returned
+
+    Args:
+        general_logger_name (str): The name of the general logger in case the prefect logger can't be returned.
+
+    Returns:
+        logging.Logger: A prefect logger instance or a general logger instance.
+    """
+    try:
+        logger = get_run_logger()
+        logger.setLevel(SET_PREFECT_LOGGING_LEVEL)
+    except exceptions.MissingContextError:
+        logger = Logging.default(general_logger_name)
+        logger.warning("Could not get the prefect logger due to missing context. Using the general one")
+    return logger
 
 
 def create_apikey_headers(apikey):
@@ -88,11 +109,12 @@ def check_status(apikey_headers, endpoint, filename, logger):
     return EDownloadStatus.FAILED
 
 
+@task
 def update_stac_catalog(  # pylint: disable=too-many-arguments
     apikey_headers: dict,
     url: str,
     user: str,
-    mission: str,
+    collection_name: str,
     stac_file_info: dict,
     obs: str,
     logger,
@@ -103,7 +125,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
         apikey_headers (dict): The apikey used for request (may be empty)
         url (str): The URL of the catalog.
         user (str): The user identifier.
-        mission (str): The mission identifier.
+        collection_name (str): The name of the collection to be used.
         stac_file_info (dict): Information in stac format about the downloaded file.
         obs (str): The S3 bucket location where the file has been saved.
         logger: The logger object for logging.
@@ -111,8 +133,8 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     Returns:
         bool: True if the file information is successfully updated in the catalog, False otherwise.
     """
-    # add mission
-    stac_file_info["collection"] = f"{mission}_aux"
+    # add collection name
+    stac_file_info["collection"] = collection_name
     # add bucket location where the file has been saved
     stac_file_info["assets"]["file"]["href"] = f"{obs.rstrip('/')}/{stac_file_info['id']}"
     # add a fake geometry polygon (the whole globe)
@@ -131,7 +153,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     # pp = pprint.PrettyPrinter(indent=4)
     # pp.pprint(stac_file_info)
 
-    catalog_endpoint = url.rstrip("/") + f"/catalog/collections/{user}:{mission}_aux/items/"
+    catalog_endpoint = url.rstrip("/") + f"/catalog/collections/{user}:{collection_name}/items/"
     try:
         response = requests.post(
             catalog_endpoint,
@@ -150,7 +172,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     return response.status_code == 200
 
 
-class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes
+class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes,
     """Common configuration to Prefect tasks and flows.
     Base class for configuration to prefect tasks and flows that ingest files from different stations (cadip, adgs...)
 
@@ -239,12 +261,7 @@ def ingest_files(config: PrefectTaskConfig):
         failed_failes: A list of files which could not be downloaded and / or uploaded to the s3.
     """
 
-    try:
-        logger = get_run_logger()
-        logger.setLevel(SET_PREFECT_LOGGING_LEVEL)
-    except exceptions.MissingContextError:
-        logger = Logging.default(__name__)
-        logger.info("Could not get the prefect logger due to missing context")
+    logger = get_prefect_logger("task_dwn")
 
     # dictionary to be used for payload request
     payload = {}
@@ -275,13 +292,18 @@ def ingest_files(config: PrefectTaskConfig):
             # start_p = datetime.now()
             response = requests.get(endpoint, params=payload, timeout=ENDPOINT_TIMEOUT, **apikey_headers)
             # logger.debug(f"Download start endpoint returned in {(datetime.now() - start_p)}")
+            logger.debug(f"Download start endpoint returned in {response.elapsed.total_seconds()}")
             if not response.ok:
                 logger.error(
                     "The download endpoint returned error for file %s...\n",
                     file_stac["id"],
                 )
                 continue
-        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+        except (
+            requests.exceptions.RequestException,
+            requests.exceptions.Timeout,
+            requests.exceptions.ReadTimeout,
+        ) as e:
             logger.exception("Request exception caught: %s", e)
             continue
 
@@ -300,12 +322,12 @@ def ingest_files(config: PrefectTaskConfig):
             status = check_status(apikey_headers, endpoint + "/status", file_stac["id"], logger)
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...", file_stac["id"])
-            # TODO: call the STAC endpoint to insert it into the catalog !!
-            if update_stac_catalog(
+
+            if update_stac_catalog.fn(
                 apikey_headers,
                 config.url_catalog,
                 config.user,
-                config.mission,
+                create_collection_name(config.mission, config.station),
                 file_stac,
                 config.s3_path,
                 logger,
@@ -331,22 +353,23 @@ def ingest_files(config: PrefectTaskConfig):
     return failed_failes
 
 
+@task
 def filter_unpublished_files(  # pylint: disable=too-many-arguments
     apikey_headers: dict,
     url_catalog: str,
     user: str,
-    mission: str,
+    collection_name: str,
     files_stac: list,
-    logger,
-):
+    logger: Any,
+) -> list:
     """Check for unpublished files in the catalog.
 
     Args:
         apikey_headers (dict): The apikey used for request (may be empty)
         url_catalog (str): The URL of the catalog.
         user (str): The user identifier.
-        mission (str): The mission identifier.
-        files_stac (list): List of files to be checked for publication.
+        collection_name (str): The name of the collection to be used.
+        files_stac (list): List of files (dcitionary for each) to be checked for publication.
         logger: The logger object for logging.
 
     Returns:
@@ -354,10 +377,13 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     """
 
     ids = []
+    # TODO: Should this list be checked for duplicated items?
     for fs in files_stac:
         ids.append(str(fs["id"]))
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
-    request_params = {"collection": f"{mission}_aux", "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
+    logger.debug(f"catalog_endpoint = {catalog_endpoint}")
+    request_params = {"collection": collection_name, "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
+    logger.debug(f"The requested list len = {len(ids)}")
     try:
         response = requests.get(
             catalog_endpoint,
@@ -368,29 +394,37 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
         logger.exception("Request exception caught: %s", e)
         # try to ingest everything anyway
-        return
-
+        return files_stac
+    # logger.debug(f"response.link = {response.url}")
+    # logger.debug(f"response = {response.status_code}")
     # try to ingest everything anyway
     if response.status_code != 200:
-        return
+        logger.error(f"Quering the catalog endpoint returned status {response.status_code}")
+        return files_stac
+
     try:
         eval_response = response.json()
+        # logger.debug(f"eval_response = {eval_response}")
     except requests.exceptions.JSONDecodeError:
         # content is empty, try to ingest everything anyway
-        return
+        return files_stac
 
     # no file in the catalog
     if eval_response["features"] is None:
-        return
+        return files_stac
 
     # logger.debug(f"Files found in the catalog ({len(eval_response['features'])}): {eval_response['features']} ")
     for feature in eval_response["features"]:
         for fs in files_stac:
             if feature["id"] == fs["id"]:
                 files_stac.remove(fs)
+                logger.debug(f"REMOVED {feature['id']}")
                 break
+    logger.debug(f"In the end: {files_stac}")
+    return files_stac
 
 
+@task
 def get_station_files_list(  # pylint: disable=too-many-arguments
     apikey_headers: dict,
     endpoint: str,
@@ -398,7 +432,7 @@ def get_station_files_list(  # pylint: disable=too-many-arguments
     stop_date: datetime,
     logger,
     limit: Union[int, None] = None,
-):
+) -> List:
     """Retrieve a list of files from the specified endpoint within the given time range.
 
     This function queries the specified endpoint to retrieve a list of files available in the
@@ -457,13 +491,15 @@ def create_endpoint(url, station):
     """Create a rs-server endpoint URL based on the provided base URL and station type.
 
     This function constructs and returns a specific endpoint URL based on the provided
-    base URL and the type of station. The supported station types are "ADGS" and "CADIP" for the time being
-    For other station types, a RuntimeError is raised.
+    base URL and the type of station. For the time being, the supported station types are "ADGS" and
+    "CADIP", "INS", "MPS", "MTI", "NSG", "SGS".
+
+    For other values, a RuntimeError is raised.
 
     Args:
         url (str): The base URL to which the station-specific path will be appended.
         station (str): The type of station for which the endpoint is being created. Supported
-            values are "ADGS" and "CADIP".
+            values are "ADGS" and "CADIP", "INS", "MPS", "MTI", "NSG", "SGS".
 
     Returns:
         str: The constructed endpoint URL.
@@ -475,7 +511,7 @@ def create_endpoint(url, station):
         - This function constructs a station-specific endpoint URL by appending a path
           based on the station type to the provided base URL.
         - For "ADGS" stations, the endpoint path is "/adgs/aux/".
-        - For "CADIP" stations, the endpoint path is "/cadip/CADIP/cadu/".
+        - For "CADIP" stations, the endpoint path is "/cadip/{station}/cadu/".
         - If an unsupported station type is provided, a RuntimeError is raised.
 
     """
@@ -483,6 +519,34 @@ def create_endpoint(url, station):
         return url.rstrip("/") + "/adgs/aux"
     if station in CADIP:
         return url.rstrip("/") + f"/cadip/{station}/cadu"
+    raise RuntimeError("Unknown station !")
+
+
+def create_collection_name(mission, station):
+    """Create the name of the catalog collection
+
+    This function constructs and returns a specific name for the catalog collection .
+    For ADGS station type should be "mission_name"_aux
+    For CADIP stations type should be "mission_name"_chunk
+
+    For other values, a RuntimeError is raised.
+
+    Args:
+        mission (str): The name of the mission.
+        station (str): The type of station . Supported
+            values are "ADGS" and "CADIP", "INS", "MPS", "MTI", "NSG", "SGS".
+
+    Returns:
+        str: The name of the collection
+
+    Raises:
+        RuntimeError: If the provided station type is not supported.
+
+    """
+    if station == ADGS:
+        return f"{mission}_aux"
+    if station in CADIP:
+        return f"{mission}_chunk"
     raise RuntimeError("Unknown station !")
 
 
@@ -523,7 +587,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         self.limit = limit
 
 
-@flow(task_runner=DaskTaskRunner())
+@flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 15, "threads_per_worker": 1}))
 def download_flow(config: PrefectFlowConfig):
     """Prefect flow for downloading files from a station.
 
@@ -540,13 +604,8 @@ def download_flow(config: PrefectFlowConfig):
         None: This function does not raise any exceptions.
     """
     # get the Prefect logger
-    try:
-        logger = get_run_logger()
-        logger.setLevel(SET_PREFECT_LOGGING_LEVEL)
-    except exceptions.MissingContextError:
-        logger = Logging.default(__name__)
-        logger.info("Could not get the prefect logger due to missing context")
-
+    logger = get_prefect_logger("flow_dwn")
+    logger.info(f"The download flow is starting. Received workers:{config.max_workers}")
     try:
         # get the endpoint
         endpoint = create_endpoint(config.url, config.station)
@@ -569,16 +628,19 @@ def download_flow(config: PrefectFlowConfig):
 element for time interval {config.start_datetime} - {config.stop_datetime}",
             )
             return True
+        # create the collection name
+
         # filter those that are already existing
-        filter_unpublished_files(
+        files_stac = filter_unpublished_files(  # type: ignore
             apikey_headers,
             config.url_catalog,
             config.user,
-            config.mission,
+            create_collection_name(config.mission, config.station),
             files_stac,
             logger,
+            wait_for=[files_stac],
         )
-
+        logger.debug(f"OUT = {files_stac}")
         # distribute the filenames evenly in a number of lists equal with
         # the minimum between number of runners and files to be downloaded
         try:
