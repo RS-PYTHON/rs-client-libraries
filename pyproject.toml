@@ -1,10 +1,10 @@
 [project]
 name = "rs-client-libraries"
-version = "0.0.2" # see: https://github.com/mtkennerly/poetry-dynamic-versioning
+version = "0.0.0" # see: https://github.com/mtkennerly/poetry-dynamic-versioning
 
 [tool.poetry]
 name = "rs-client-libraries"
-version = "0.0.2"
+version = "0.0.0"
 description = ""
 authors = ["Your Name <you@example.com>"]
 readme = "README.adoc"
