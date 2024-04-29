@@ -9,7 +9,6 @@ import pytest
 import responses
 import yaml
 
-from rs_workflows.common import get_general_logger
 from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     LOGGER_NAME,
     PrefectS1L0FlowConfig,
@@ -23,6 +22,7 @@ from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     s1_l0_flow,
     start_dpr,
 )
+from rs_workflows.utils.logging import Logging
 
 # from prefect.testing.utilities import prefect_test_harness
 
@@ -467,7 +467,7 @@ if __name__ == "__main__":
     # It requires the CADIP session ID, RS-Server catalog URL, user name, mission name, S3 storage paths,
     # and optionally an API key (when this is run on the cluster).
 
-    logger = get_general_logger(LOGGER_NAME)
+    logger = Logging.default(LOGGER_NAME)
 
     parser = argparse.ArgumentParser(
         description="Starts the demo for sprint 1 phase",

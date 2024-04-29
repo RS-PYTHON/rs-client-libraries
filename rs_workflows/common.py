@@ -1,9 +1,7 @@
 """Common workflows for general usage"""
 import enum
-import logging
 
 # import pprint
-import sys
 import time
 from datetime import datetime
 from typing import Any, List, Union
@@ -12,6 +10,8 @@ import numpy as np
 import requests
 from prefect import exceptions, flow, get_run_logger, task
 from prefect_dask.task_runners import DaskTaskRunner
+
+from rs_workflows.utils.logging import Logging
 
 CADIP = ["CADIP", "INS", "MPS", "MTI", "NSG", "SGS"]
 ADGS = "ADGS"
@@ -36,27 +36,6 @@ class EDownloadStatus(str, enum.Enum):
     DONE = "DONE"
 
 
-def get_general_logger(logger_name):
-    """Get a general logger with the specified name.
-
-    Args:
-        logger_name (str): The name of the logger.
-
-    Returns:
-        logging.Logger: A logger instance.
-    """
-
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.DEBUG)
-    logger.handlers = []
-    logger.propagate = False
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.DEBUG)
-    console_handler.setFormatter(logging.Formatter("[%(asctime)-20s] [%(name)-10s] [%(levelname)-6s] %(message)s"))
-    logger.addHandler(console_handler)
-    return logger
-
-
 def get_prefect_logger(general_logger_name):
     """Get theprefect logger.
     It returns the prefect logger. If this can't be taken due to the missing
@@ -73,7 +52,7 @@ def get_prefect_logger(general_logger_name):
         logger = get_run_logger()
         logger.setLevel(SET_PREFECT_LOGGING_LEVEL)
     except exceptions.MissingContextError:
-        logger = get_general_logger(general_logger_name)
+        logger = Logging.default(general_logger_name)
         logger.warning("Could not get the prefect logger due to missing context. Using the general one")
     return logger
 

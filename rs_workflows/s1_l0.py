@@ -14,10 +14,10 @@ from rs_workflows.common import (
     CATALOG_REQUEST_TIMEOUT,
     create_apikey_headers,
     create_collection_name,
-    get_general_logger,
     get_prefect_logger,
     update_stac_catalog,
 )
+from rs_workflows.utils.logging import Logging
 
 CONFIG_DIR = Path(osp.realpath(osp.dirname(__file__))) / "config"
 YAML_TEMPLATE_FILE = "dpr_config_template.yaml"
@@ -38,7 +38,7 @@ def start_dpr(dpr_endpoint, yaml_dpr_input: dict):
     Raises:
         None
     """
-    logger = get_general_logger(LOGGER_NAME)
+    logger = Logging.default(LOGGER_NAME)
     logger.debug("Task start_dpr STARTED")
     logger.info("Faking dpr processing with the following input file:")
     logger.debug(yaml.dump(yaml_dpr_input))
@@ -80,7 +80,7 @@ def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, product_type
     Raises:
         None
     """
-    logger = get_general_logger(LOGGER_NAME)
+    logger = Logging.default(LOGGER_NAME)
     logger.debug("Task build_eopf_triggering_yaml STARTED")
     # Load YAML template
     try:
@@ -227,7 +227,7 @@ def get_cadip_catalog_data(url_catalog: str, username: str, collection: str, ses
     Returns:
         dict: Catalog data from CADIP.
     """
-    logger = get_general_logger(LOGGER_NAME)
+    logger = Logging.default(LOGGER_NAME)
     logger.debug("Task get_cadip_catalog_data STARTED")
     catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
 
