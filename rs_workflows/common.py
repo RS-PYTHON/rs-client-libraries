@@ -1,43 +1,29 @@
 """Common workflows for general usage"""
-import enum
 
-# import pprint
 import time
 from datetime import datetime
-from typing import Any, List, Union
+from typing import Any
 
 import numpy as np
 import requests
 from prefect import exceptions, flow, get_run_logger, task
 from prefect_dask.task_runners import DaskTaskRunner
 
-from rs_workflows.utils.logging import Logging
 from rs_client.rs_client import (
     ADGS,
     CADIP,
     AuxipClient,
     CadipClient,
+    EDownloadStatus,
     RsClient,
 )
+from rs_workflows.utils.logging import Logging
 
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
 ENDPOINT_TIMEOUT = 10  # in seconds
 SEARCH_ENDPOINT_TIMEOUT = 60  # in seconds
 CATALOG_REQUEST_TIMEOUT = 20  # in seconds
-
-RSPY_APIKEY = "RSPY_APIKEY"
-
-
-class EDownloadStatus(str, enum.Enum):
-    """
-    Download status enumeration.
-    """
-
-    NOT_STARTED = "NOT_STARTED"
-    IN_PROGRESS = "IN_PROGRESS"
-    FAILED = "FAILED"
-    DONE = "DONE"
 
 
 def get_prefect_logger(general_logger_name):
@@ -59,58 +45,6 @@ def get_prefect_logger(general_logger_name):
         logger = Logging.default(general_logger_name)
         logger.warning("Could not get the prefect logger due to missing context. Using the general one")
     return logger
-
-
-def create_apikey_headers(apikey):
-    """Create the apikey
-
-    This function creates the apikey headers used when calling the endpoints. This may be empty
-    Args:
-        apikey_headers (dict): A dictionary with the apikey
-    """
-
-    return {"headers": {"x-api-key": apikey}} if apikey else {}
-
-
-def check_status(apikey_headers, endpoint, filename, logger):
-    """Check the status of a file download from the specified rs-server endpoint.
-
-    This function sends a GET request to the rs-server endpoint with the filename as a query parameter
-    to retrieve the status of the file download. If the response is successful and contains a 'status'
-    key in the JSON response, the function returns the corresponding download status enum value. If the
-    response is not successful or does not contain the 'status' key, the function returns a FAILED status.
-
-    Args:
-        apikey_headers (dict): The apikey used for request (may be empty)
-        endpoint (str): The rs-server endpoint URL to query for the file status.
-        filename (str): The name of the file for which to check the status.
-
-    Returns:
-        EDownloadStatus: The download status enum value based on the response from the endpoint.
-
-    """
-    # TODO: check the status for a certain timeout if http returns NOK ?
-    try:
-        response = requests.get(
-            endpoint,
-            params={"name": filename},
-            timeout=ENDPOINT_TIMEOUT,
-            **apikey_headers,
-        )
-
-        eval_response = response.json()
-        if (
-            response.ok
-            and "name" in eval_response.keys()
-            and filename == eval_response["name"]
-            and "status" in eval_response.keys()
-        ):
-            return EDownloadStatus(eval_response["status"])
-
-    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-        logger.exception(f"Status endpoint exception: {e}")
-
-    return EDownloadStatus.FAILED
 
 
 @task
@@ -269,50 +203,36 @@ def staging_files(config: PrefectTaskConfig):
     # list with failed files
     failed_failes = config.task_files_stac.copy()
     try:
-        rs_client = get_rs_client(config.apikey,
-                                config.url, 
-                                config.url_catalog,
-                                config.user,   
-                                config.station,                             
-                                config.mission,
-                                logger)
+        rs_client = get_rs_client(
+            config.apikey,
+            config.url,
+            config.url_catalog,
+            config.user,
+            config.station,
+            config.mission,
+            logger,
+        )
     except RuntimeError as e:
         logger.exception(f"Could not get the RsClient object. Reason: {e}")
         return failed_failes
 
-    # dictionary to be used for payload request
-    #payload = {}
-    # some protections for the optional args
-    #if config.s3_path is not None and len(config.s3_path) > 0:
-    #    payload["obs"] = config.s3_path
-    #if config.tmp_download_path is not None and len(config.tmp_download_path) > 0:
-    #    payload["local"] = config.tmp_download_path
-    # logger.debug("Files to be downloaded:")
-    # pp = pprint.PrettyPrinter(indent=4)
-    # for f in config.task_files_stac:
-    #    pp.pprint(f)
-    # sys.stdout.flush()
-
-    # get the endpoint
-    #endpoint = create_endpoint(config.url, config.station)
     # create the apikey_headers
     apikey_headers = RsClient.create_apikey_headers(config.apikey)
-    
+
     downloaded_files_indices = []
-    
+
     # Call the download endpoint for each requested file
     for i, file_stac in enumerate(config.task_files_stac):
-        # update the filename to be ingested        
+        # update the filename to be ingested
         try:
-            rs_client.staging_file(file_stac["id"], config.s3_path, config.tmp_download_path, ENDPOINT_TIMEOUT)            
+            rs_client.staging_file(file_stac["id"], config.s3_path, config.tmp_download_path, ENDPOINT_TIMEOUT)
         except RuntimeError as e:
             # TODO: Continue? Stop ?
             logger.exception(f"Could not stage file %s. Exception: {e}")
             continue
-        
+
         # monitor the status of the file until it is completely downloaded before initiating the next download request
         status = rs_client.check_status(file_stac["id"], ENDPOINT_TIMEOUT)
-        #status = check_status(apikey_headers, endpoint + "/status", file_stac["id"], logger)
         # just for the demo the timeout is hardcoded, it should be otherwise defined somewhere in the configuration
         timeout = DOWNLOAD_FILE_TIMEOUT  # 3 minutes
         while status in [EDownloadStatus.NOT_STARTED, EDownloadStatus.IN_PROGRESS] and timeout > 0:
@@ -324,7 +244,6 @@ def staging_files(config: PrefectTaskConfig):
             time.sleep(1)
             timeout -= 1
             status = rs_client.check_status(file_stac["id"], ENDPOINT_TIMEOUT)
-            #status = check_status(apikey_headers, endpoint + "/status", file_stac["id"], logger)
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...", file_stac["id"])
             # TODO: either move the code from filter_unpublished_files to RsClient
@@ -358,6 +277,7 @@ def staging_files(config: PrefectTaskConfig):
 
     return failed_failes
 
+
 @task
 def filter_unpublished_files(  # pylint: disable=too-many-arguments
     apikey_headers: dict,
@@ -385,8 +305,8 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     # TODO: Should this list be checked for duplicated items?
     for fs in files_stac:
         ids.append(str(fs["id"]))
-    catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"    
-    request_params = {"collection": collection_name, "ids": ",".join(ids), "filter": f"owner_id='{user}'"}    
+    catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
+    request_params = {"collection": collection_name, "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
     try:
         response = requests.get(
             catalog_endpoint,
@@ -398,14 +318,14 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
         logger.exception("Request exception caught: %s", e)
         # try to ingest everything anyway
         return files_stac
-        
+
     # try to ingest everything anyway
     if response.status_code != 200:
         logger.error(f"Quering the catalog endpoint returned status {response.status_code}")
         return files_stac
 
     try:
-        eval_response = response.json()        
+        eval_response = response.json()
     except requests.exceptions.JSONDecodeError:
         # content is empty, try to ingest everything anyway
         return files_stac
@@ -413,76 +333,13 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     # no file in the catalog
     if eval_response["features"] is None:
         return files_stac
-    
+
     for feature in eval_response["features"]:
         for fs in files_stac:
             if feature["id"] == fs["id"]:
                 files_stac.remove(fs)
                 break
     return files_stac
-
-
-@task
-def get_station_files_list(  # pylint: disable=too-many-arguments
-    apikey_headers: dict,
-    endpoint: str,
-    start_date: datetime,
-    stop_date: datetime,
-    logger,
-    limit: Union[int, None] = None,
-) -> List:
-    """Retrieve a list of files from the specified endpoint within the given time range.
-
-    This function queries the specified endpoint to retrieve a list of files available in the
-    station (CADIP, ADGS, LTA ...) within the provided time range, starting from 'start_date' up
-    to 'stop_date' (inclusive).
-
-    Args:
-        apikey_headers (dict): The apikey used for request (may be empty)
-        endpoint (str): The URL endpoint to query for file information.
-        start_date (datetime): The start date/time of the time range.
-        stop_date (datetime, optional): The stop date/time of the time range.
-
-    Returns:
-        files (list): A list of files (in stac format) available at the endpoint within the specified time range.
-
-    Raises:
-        - RuntimeError if the endpoint can't be reached
-
-    Notes:
-        - This function queries the specified endpoint with a time range to retrieve information about
-         available files.
-        - It constructs a payload with the start and stop dates in ISO 8601 format and sends a GET
-        request to the endpoint.
-        - The response is expected to be in JSON format, containing information about available files.
-        - The function then extracts file information from the response and returns a list of files.
-
-    """
-
-    payload = {
-        "datetime": start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
-        + "/"  # 2014-01-01T12:00:00Z/2023-12-30T12:00:00Z",
-        + stop_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
-    }
-    if limit:
-        payload["limit"] = str(limit)
-    try:
-        response = requests.get(endpoint + "/search", params=payload, timeout=SEARCH_ENDPOINT_TIMEOUT, **apikey_headers)
-    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-        logger.exception(f"Could not get the response from the station search endpoint: {e}")
-        raise RuntimeError("Could not get the response from the station search endpoint") from e
-
-    files = []
-    try:
-        if response.ok:
-            for file_info in response.json()["features"]:
-                files.append(file_info)
-        else:
-            logger.error(f"Error: {response.status_code} : {response.json()}")
-    except KeyError as e:
-        raise RuntimeError("Wrong format of search endpoint answer") from e
-
-    return files
 
 
 def create_endpoint(url, station):
@@ -519,18 +376,13 @@ def create_endpoint(url, station):
         return url.rstrip("/") + f"/cadip/{station}/cadu"
     raise RuntimeError("Unknown station !")
 
-def get_rs_client(apikey,
-                  url, 
-                  url_catalog,
-                  user,   
-                  station,                 
-                  mission,
-                  logger):
 
+def get_rs_client(apikey, url, url_catalog, user, station, mission, logger):
+    """Get the RsClient"""
     if station == ADGS:
-        return AuxipClient(apikey, url, url_catalog, user, mission, logger)    
+        return AuxipClient(apikey, url, url_catalog, user, mission, logger)
     return CadipClient(apikey, url, url_catalog, user, station, mission, logger)
-    
+
 
 def create_collection_name(mission, station):
     """Create the name of the catalog collection
@@ -618,32 +470,35 @@ def download_flow(config: PrefectFlowConfig):
     logger.info(f"The download flow is starting. Received workers:{config.max_workers}")
     try:
         # get the endpoint
-        #endpoint = create_endpoint(config.url, config.station)
+        # endpoint = create_endpoint(config.url, config.station)
         try:
-            rs_client = get_rs_client(config.apikey,
-                                  config.url, 
-                                  config.url_catalog,
-                                  config.user,   
-                                  config.station,                 
-                                  config.mission,
-                                  logger)
+            rs_client = get_rs_client(
+                config.apikey,
+                config.url,
+                config.url_catalog,
+                config.user,
+                config.station,
+                config.mission,
+                logger,
+            )
         except RuntimeError as e:
             logger.exception(f"Could not get the RsClient object. Reason: {e}")
             return False
         # create the apikey_headers
-        #apikey_headers = create_apikey_headers(config.apikey)
+        # apikey_headers = create_apikey_headers(config.apikey)
 
         # get the list with files from the search endpoint
         try:
-            files_stac = rs_client.get_station_files_list(config.start_datetime,            
-                                                      config.stop_datetime,
-                                                      SEARCH_ENDPOINT_TIMEOUT,
-                                                      config.limit
-                                                      )
+            files_stac = rs_client.get_station_files_list(
+                config.start_datetime,
+                config.stop_datetime,
+                SEARCH_ENDPOINT_TIMEOUT,
+                config.limit,
+            )
         except RuntimeError as e:
             logger.exception(f"Unable to get the list with files for staging: {e}")
             return False
-        
+
         # check if the list with files returned from the station is not empty
         if len(files_stac) == 0:
             logger.warning(
@@ -664,7 +519,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
             files_stac,
             logger,
             wait_for=[files_stac],
-        )        
+        )
         # distribute the filenames evenly in a number of lists equal with
         # the minimum between number of runners and files to be downloaded
         try:

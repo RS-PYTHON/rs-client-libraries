@@ -9,16 +9,14 @@ from pathlib import Path
 import pytest
 import responses
 
+from rs_client.rs_client import ADGS, CADIP, AuxipClient, CadipClient, EDownloadStatus
 from rs_workflows.common import (
-    EDownloadStatus,
     PrefectFlowConfig,
     PrefectTaskConfig,
-    check_status,
     create_collection_name,
     create_endpoint,
     download_flow,
     filter_unpublished_files,
-    get_station_files_list,
     staging_files,
     update_stac_catalog,
 )
@@ -42,8 +40,8 @@ endpoints = {
 @pytest.mark.parametrize(
     "filename, station",
     [
-        ("CADU_PRODUCT_TEST.tst", "CADIP"),
-        ("ADGS_PRODUCT_TEST.tst", "ADGS"),
+        ("CADU_PRODUCT_TEST.tst", CADIP[0]),
+        ("ADGS_PRODUCT_TEST.tst", ADGS),
     ],
 )
 def test_valid_check_status(filename, station):
@@ -62,7 +60,15 @@ def test_valid_check_status(filename, station):
     Returns:
         None: This test does not return any value.
     """
-    endpoint = "http://127.0.0.1:5000" + endpoints[station]["status"]
+    logger = Logging.default(__name__)
+    href = "http://127.0.0.1:5000"
+    timeout = 3  # seconds
+
+    if station == ADGS:
+        rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
+    else:
+        rs_client = CadipClient(None, href, None, "test_user", "CADIP", "s1", logger)
+    endpoint = href + endpoints[station]["status"]
     json_response = {"name": filename, "status": EDownloadStatus.NOT_STARTED}
 
     responses.add(
@@ -71,8 +77,8 @@ def test_valid_check_status(filename, station):
         json=json_response,
         status=200,
     )
-    logger = Logging.default(__name__)
-    assert check_status({}, endpoint, filename, logger) == EDownloadStatus.NOT_STARTED
+
+    assert rs_client.check_status(filename, timeout) == EDownloadStatus.NOT_STARTED
 
     json_response["status"] = EDownloadStatus.IN_PROGRESS
     responses.add(
@@ -81,7 +87,7 @@ def test_valid_check_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert check_status({}, endpoint, filename, logger) == EDownloadStatus.IN_PROGRESS
+    assert rs_client.check_status(filename, timeout) == EDownloadStatus.IN_PROGRESS
 
     json_response["status"] = EDownloadStatus.DONE
     responses.add(
@@ -90,7 +96,7 @@ def test_valid_check_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert check_status({}, endpoint, filename, logger) == EDownloadStatus.DONE
+    assert rs_client.check_status(filename, timeout) == EDownloadStatus.DONE
 
 
 @pytest.mark.unit
@@ -98,8 +104,8 @@ def test_valid_check_status(filename, station):
 @pytest.mark.parametrize(
     "filename, station",
     [
-        ("CADU_PRODUCT_TEST.tst", "CADIP"),
-        ("ADGS_PRODUCT_TEST.tst", "ADGS"),
+        ("CADU_PRODUCT_TEST.tst", CADIP[0]),
+        ("ADGS_PRODUCT_TEST.tst", ADGS),
     ],
 )
 def test_invalid_check_status(filename, station):
@@ -118,7 +124,16 @@ def test_invalid_check_status(filename, station):
     Returns:
         None: This test does not return any value.
     """
-    endpoint = "http://127.0.0.1:5000" + endpoints[station]["status"]
+    logger = Logging.default(__name__)
+    href = "http://127.0.0.1:5000"
+    timeout = 3  # seconds
+
+    if station == ADGS:
+        rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
+    else:
+        rs_client = CadipClient(None, href, None, "test_user", "CADIP", "s1", logger)
+    endpoint = href + endpoints[station]["status"]
+
     json_response = {"detail": "Not Found"}
     responses.add(
         responses.GET,
@@ -126,8 +141,8 @@ def test_invalid_check_status(filename, station):
         json=json_response,
         status=404,
     )
-    logger = Logging.default(__name__)
-    assert check_status({}, endpoint, filename, logger) == EDownloadStatus.FAILED
+
+    assert rs_client.check_status(filename, timeout) == EDownloadStatus.FAILED
 
 
 @pytest.mark.unit
@@ -308,8 +323,8 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
 @pytest.mark.parametrize(
     "station",
     [
-        "CADIP",
-        "ADGS",
+        CADIP[0],
+        ADGS,
     ],
 )
 def test_ok_staging_files(station):
@@ -328,6 +343,7 @@ def test_ok_staging_files(station):
     Returns:
         None: This test does not return any value.
     """
+    href = "http://127.0.0.1:5000"
 
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
@@ -338,7 +354,7 @@ def test_ok_staging_files(station):
     for i in range(0, len(files_stac[station]["features"])):
         # mock the status endpoint
         fn = files_stac[station]["features"][i]["id"]
-        endpoint = "http://127.0.0.1:5000" + endpoints[station]["status"] + f"?name={fn}"
+        endpoint = href + endpoints[station]["status"] + f"?name={fn}"
         json_response = {"name": fn, "status": EDownloadStatus.DONE}
         responses.add(
             responses.GET,
@@ -349,11 +365,7 @@ def test_ok_staging_files(station):
         # mock the download endpoint
 
         endpoint = (
-            "http://127.0.0.1:5000"
-            + endpoints[station]["download"]
-            + f"?name={fn}&"
-            + f"local={local_path_for_dwn}&"
-            + f"obs={obs}"
+            href + endpoints[station]["download"] + f"?name={fn}&" + f"local={local_path_for_dwn}&" + f"obs={obs}"
         )
         json_response = {"started": "true"}
         responses.add(
@@ -365,7 +377,7 @@ def test_ok_staging_files(station):
 
     # mock the publish to catalog endpoint
     collection_name = create_collection_name(MISSION_NAME, station)
-    endpoint = f"http://127.0.0.1:5000/catalog/collections/testUser:{collection_name}/items/"
+    endpoint = f"{href}/catalog/collections/testUser:{collection_name}/items/"
     responses.add(
         responses.POST,
         endpoint,
@@ -373,8 +385,8 @@ def test_ok_staging_files(station):
     )
     task_config = PrefectTaskConfig(
         "testUser",
-        "http://127.0.0.1:5000",
-        "http://127.0.0.1:5000",
+        href,
+        href,
         station,
         MISSION_NAME,
         local_path_for_dwn,
@@ -392,8 +404,8 @@ def test_ok_staging_files(station):
 @pytest.mark.parametrize(
     "station",
     [
-        "CADIP",
-        "ADGS",
+        CADIP[0],
+        ADGS,
     ],
 )
 def test_nok_staging_files(station):
@@ -411,7 +423,7 @@ def test_nok_staging_files(station):
     Returns:
         None: This test does not return any value.
     """
-
+    href = "http://127.0.0.1:5000"
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())
@@ -422,11 +434,7 @@ def test_nok_staging_files(station):
     for i in range(0, len(files_stac[station]["features"])):
         fn = files_stac[station]["features"][i]["id"]
         endpoint = (
-            "http://127.0.0.1:5000"
-            + endpoints[station]["download"]
-            + f"?name={fn}&"
-            + f"local={local_path_for_dwn}&"
-            + f"obs={obs}"
+            href + endpoints[station]["download"] + f"?name={fn}&" + f"local={local_path_for_dwn}&" + f"obs={obs}"
         )
         json_response = {"started": "false"}
         responses.add(
@@ -437,7 +445,7 @@ def test_nok_staging_files(station):
         )
     # mock the publish to catalog endpoint
     collection_name = create_collection_name(MISSION_NAME, station)
-    endpoint = f"http://127.0.0.1:5000/catalog/collections/testUser:{collection_name}/items/"
+    endpoint = f"{href}/catalog/collections/testUser:{collection_name}/items/"
     responses.add(
         responses.POST,
         endpoint,
@@ -445,8 +453,8 @@ def test_nok_staging_files(station):
     )
     task_config = PrefectTaskConfig(
         "testUser",
-        "http://127.0.0.1:5000",
-        "http://127.0.0.1:5000",
+        href,
+        href,
         station,
         MISSION_NAME,
         local_path_for_dwn,
@@ -464,8 +472,8 @@ def test_nok_staging_files(station):
 @pytest.mark.parametrize(
     "station",
     [
-        "CADIP",
-        "ADGS",
+        CADIP[0],
+        ADGS,
     ],
 )
 def test_get_station_files_list(station):
@@ -488,8 +496,17 @@ def test_get_station_files_list(station):
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())
 
+    logger = Logging.default(__name__)
+    href = "http://127.0.0.1:5000"
+    timeout = 3  # seconds
+
+    if station == ADGS:
+        rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
+    else:
+        rs_client = CadipClient(None, href, None, "test_user", "CADIP", "s1", logger)
+
     # mock the search endpoint
-    endpoint = "http://127.0.0.1:5000" + endpoints[station]["search"]
+    endpoint = href + endpoints[station]["search"]
 
     json_response = files_stac[station]
     responses.add(
@@ -499,15 +516,27 @@ def test_get_station_files_list(station):
         status=200,
     )
 
-    search_response = get_station_files_list.fn(
-        {},
-        endpoint.rstrip("/search"),
+    search_response = rs_client.get_station_files_list(
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
-        Logging.default(__name__),
+        timeout,
     )
-
     assert len(search_response) == 2
+    del files_stac[station]["features"][1]
+    json_response = files_stac[station]
+    responses.add(
+        responses.GET,
+        endpoint + "?datetime=2014-01-01T00:00:00Z/2024-02-02T23:59:59Z&limit=1",
+        json=json_response,
+        status=200,
+    )
+    search_response = rs_client.get_station_files_list(
+        datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
+        datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+        timeout,
+        1,
+    )
+    assert len(search_response) == 1
 
 
 @pytest.mark.unit
@@ -515,8 +544,8 @@ def test_get_station_files_list(station):
 @pytest.mark.parametrize(
     "station",
     [
-        "CADIP",
-        "ADGS",
+        CADIP[0],
+        ADGS,
     ],
 )
 def test_err_ret_get_station_files_list(station):
@@ -542,8 +571,17 @@ def test_err_ret_get_station_files_list(station):
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())
 
+    logger = Logging.default(__name__)
+    href = "http://127.0.0.1:5000"
+    timeout = 3  # seconds
+
+    if station == ADGS:
+        rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
+    else:
+        rs_client = CadipClient(None, href, None, "test_user", "CADIP", "s1", logger)
+
     # mock the search endpoint
-    endpoint = "http://127.0.0.1:5000" + endpoints[station]["search"]
+    endpoint = href + endpoints[station]["search"]
 
     # register a mock with an error answer
     responses.add(
@@ -553,12 +591,10 @@ def test_err_ret_get_station_files_list(station):
         status=400,
     )
     logger = Logging.default(__name__)
-    search_response = get_station_files_list.fn(
-        {},
-        endpoint.rstrip("/search"),
+    search_response = rs_client.get_station_files_list(
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
-        logger,
+        timeout,
         2,
     )
     assert len(search_response) == 0
@@ -575,12 +611,10 @@ def test_err_ret_get_station_files_list(station):
     )
 
     with pytest.raises(RuntimeError) as runtime_exception:
-        search_response = get_station_files_list.fn(
-            {},
-            endpoint.rstrip("/search"),
+        search_response = rs_client.get_station_files_list(
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
-            logger,
+            timeout,
             2,
         )
     assert "Wrong format of search endpoint answer" in str(runtime_exception.value)
@@ -591,8 +625,8 @@ def test_err_ret_get_station_files_list(station):
 @pytest.mark.parametrize(
     "station",
     [
-        "CADIP",
-        "ADGS",
+        CADIP[0],
+        ADGS,
     ],
 )
 def test_wrong_url_get_station_files_list(station):
@@ -614,9 +648,17 @@ def test_wrong_url_get_station_files_list(station):
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())
+    logger = Logging.default(__name__)
+    href = "http://127.0.0.1:5000"
+    bad_href = "http://127.0.0.1:6000"
+    timeout = 3  # seconds
 
+    if station == ADGS:
+        rs_client = AuxipClient(None, bad_href, None, "test_user", "s1", logger)
+    else:
+        rs_client = CadipClient(None, bad_href, None, "test_user", "CADIP", "s1", logger)
     # mock the search endpoint
-    endpoint = "http://127.0.0.1:5000" + endpoints[station]["search"]
+    endpoint = href + endpoints[station]["search"]
 
     json_response = files_stac[station]
     responses.add(
@@ -628,12 +670,10 @@ def test_wrong_url_get_station_files_list(station):
 
     # use a wrong endpoint
     with pytest.raises(RuntimeError) as runtime_exception:
-        get_station_files_list.fn(
-            {},
-            "http://127.0.0.1:5000/search",
+        rs_client.get_station_files_list(
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
-            Logging.default(__name__),
+            timeout,
             2,
         )
     assert "Could not get the response from the station search endpoint" in str(runtime_exception.value)
@@ -735,9 +775,10 @@ def test_download_flow(station):
         files_stac = json.loads(files_stac_f.read())
     local_path_for_dwn = f"./temporary/{station}"
     obs = "s3://test/tmp"
+    href = "http://127.0.0.1:5000"
 
     # mock the search endpoint
-    endpoint = "http://127.0.0.1:5000" + endpoints[station]["search"]
+    endpoint = href + endpoints[station]["search"]
 
     json_response = files_stac[station]
     responses.add(
@@ -748,7 +789,7 @@ def test_download_flow(station):
     )
 
     # mock the catalog search endpoint
-    endpoint = "http://127.0.0.1:5000/catalog/search?"
+    endpoint = f"{href}/catalog/search?"
     # get filenames
     file_ids = []
     for fs in files_stac[station]["features"]:
@@ -766,7 +807,7 @@ def test_download_flow(station):
     for fn in file_ids:
         # mock the status endpoint
         # fn = files_stac[station]["features"][i]["id"]
-        endpoint = "http://127.0.0.1:5000" + endpoints[station]["status"] + f"?name={fn}"
+        endpoint = href + endpoints[station]["status"] + f"?name={fn}"
         json_response = {"name": fn, "status": EDownloadStatus.DONE}
         responses.add(
             responses.GET,
@@ -776,11 +817,7 @@ def test_download_flow(station):
         )
         # mock the download endpoint
         endpoint = (
-            "http://127.0.0.1:5000"
-            + endpoints[station]["download"]
-            + f"?name={fn}&"
-            + f"local={local_path_for_dwn}&"
-            + f"obs={obs}"
+            href + endpoints[station]["download"] + f"?name={fn}&" + f"local={local_path_for_dwn}&" + f"obs={obs}"
         )
         json_response = {"started": "true"}
         responses.add(
@@ -792,8 +829,8 @@ def test_download_flow(station):
 
     flow_config = PrefectFlowConfig(
         "testUser",
-        "http://127.0.0.1:5000",
-        "http://127.0.0.1:5000",
+        href,
+        href,
         station,
         MISSION_NAME,
         local_path_for_dwn,

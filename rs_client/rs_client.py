@@ -1,13 +1,14 @@
-import requests
 import enum
-
 from datetime import datetime
-from typing import Union, Any
+from typing import Any, Union
+
+import requests
 
 from rs_workflows.utils.logging import Logging
 
 CADIP = ["CADIP", "INS", "MPS", "MTI", "NSG", "SGS"]
 ADGS = "ADGS"
+
 
 class EDownloadStatus(str, enum.Enum):
     """
@@ -19,21 +20,23 @@ class EDownloadStatus(str, enum.Enum):
     FAILED = "FAILED"
     DONE = "DONE"
 
+
 class RsClient:
-    def __init__(self, 
-                 apikey: str, 
-                 rs_server_href: str, 
-                 rs_server_href_endpoint: str,
-                 rs_server_href_catalog: str,
-                 owner_id: str,                  
-                 station: str,
-                 platform: str,
-                 logger: Any,
-                 ):
-        """ Init function of RsClient class"""
+    def __init__(
+        self,
+        apikey: str,
+        rs_server_href: str,
+        rs_server_href_endpoint: str,
+        rs_server_href_catalog: str,
+        owner_id: str,
+        station: str,
+        platform: str,
+        logger: Any,
+    ):
+        """Init function of RsClient class"""
         self.apikey = apikey
         self.apikey_headers = RsClient.create_apikey_headers(apikey)
-        self.rs_server_href = rs_server_href.rstrip("/") + "/" + rs_server_href_endpoint.lstrip("/")        
+        self.rs_server_href = rs_server_href.rstrip("/") + "/" + rs_server_href_endpoint.lstrip("/")
         self.status_endpoint = self.rs_server_href + "/status"
         self.rs_server_href_catalog = rs_server_href_catalog
         self.owner_id = owner_id
@@ -42,7 +45,6 @@ class RsClient:
         self.logger = logger
         if not self.logger:
             self.logger = Logging.default("RsClient")
-        
 
     @staticmethod
     def create_apikey_headers(apikey):
@@ -93,8 +95,8 @@ class RsClient:
         except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
             self.logger.exception(f"Status endpoint exception: {e}")
 
-        return EDownloadStatus.FAILED        
-    
+        return EDownloadStatus.FAILED
+
     def staging_file(self, filename, s3_path, tmp_download_path, staging_endpoint_timeout):
         """Prefect task function to ingest files.
 
@@ -117,21 +119,21 @@ class RsClient:
         if s3_path:
             payload["obs"] = s3_path
         if tmp_download_path:
-            payload["local"] = tmp_download_path        
-        
+            payload["local"] = tmp_download_path
+
         # update the filename to be ingested
         payload["name"] = filename
         try:
-            # logger.debug(f"Calling  {endpoint} with payload {payload}")            
-            response = requests.get(self.rs_server_href, 
-                                    params=payload, 
-                                    timeout=staging_endpoint_timeout, 
-                                    **self.apikey_headers)            
+            # logger.debug(f"Calling  {endpoint} with payload {payload}")
+            response = requests.get(
+                self.rs_server_href,
+                params=payload,
+                timeout=staging_endpoint_timeout,
+                **self.apikey_headers,
+            )
             self.logger.debug(f"Download start endpoint returned in {response.elapsed.total_seconds()}")
             if not response.ok:
-                self.logger.error(
-                    f"The download endpoint returned error for file {filename}\n"                    
-                )
+                self.logger.error(f"The download endpoint returned error for file {filename}\n")
                 raise RuntimeError(f"The download endpoint returned error for file {filename}")
         except (
             requests.exceptions.RequestException,
@@ -142,10 +144,10 @@ class RsClient:
             raise RuntimeError(f"Staging file exception for {filename}") from e
 
     def get_station_files_list(  # pylint: disable=too-many-arguments
-        self,        
+        self,
         start_date: datetime,
         stop_date: datetime,
-        search_endpoint_timeout,        
+        search_endpoint_timeout,
         limit: Union[int, None] = None,
     ) -> list:
         """Retrieve a list of files from the specified endpoint within the given time range.
@@ -184,10 +186,12 @@ class RsClient:
         if limit:
             payload["limit"] = str(limit)
         try:
-            response = requests.get(self.rs_server_href + "/search", 
-                                    params=payload, 
-                                    timeout=search_endpoint_timeout, 
-                                    **self.apikey_headers)
+            response = requests.get(
+                self.rs_server_href + "/search",
+                params=payload,
+                timeout=search_endpoint_timeout,
+                **self.apikey_headers,
+            )
         except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
             self.logger.exception(f"Could not get the response from the station search endpoint: {e}")
             raise RuntimeError("Could not get the response from the station search endpoint") from e
@@ -204,35 +208,45 @@ class RsClient:
 
         return files
 
+
 class AuxipClient(RsClient):
-    def __init__(self, 
-                 apikey: str, 
-                 rs_server_href: str,
-                 rs_server_href_catalog: str, 
-                 owner_id: str,                  
-                 platform: str,
-                 logger: Any
-                 ):
-        """ Init function of AuxipClient class"""
-        super().__init__(apikey, rs_server_href, "/adgs/aux", rs_server_href_catalog, owner_id, ADGS, platform, logger)        
+    def __init__(
+        self,
+        apikey: str,
+        rs_server_href: str,
+        rs_server_href_catalog: str,
+        owner_id: str,
+        platform: str,
+        logger: Any,
+    ):
+        """Init function of AuxipClient class"""
+        super().__init__(apikey, rs_server_href, "/adgs/aux", rs_server_href_catalog, owner_id, ADGS, platform, logger)
+
 
 class CadipClient(RsClient):
-    def __init__(self, 
-                 apikey: str, 
-                 rs_server_href: str,
-                 rs_server_href_catalog: str, 
-                 owner_id: str,                  
-                 station: str,
-                 platform: str,
-                 logger: Any
-                 ):
-        
-        """ Init function of CadipClient class"""
+    def __init__(
+        self,
+        apikey: str,
+        rs_server_href: str,
+        rs_server_href_catalog: str,
+        owner_id: str,
+        station: str,
+        platform: str,
+        logger: Any,
+    ):
+        """Init function of CadipClient class"""
         if station not in CADIP:
             self.logger.error(f"Unknown CADIP station type: {station}")
             raise RuntimeError("Unknown CADIP station type: {station}")
-        
-        super().__init__(apikey, rs_server_href, f"/cadip/{station}/cadu", rs_server_href_catalog, owner_id, station, platform, logger)        
+
+        super().__init__(
+            apikey,
+            rs_server_href,
+            f"/cadip/{station}/cadu",
+            rs_server_href_catalog,
+            owner_id,
+            station,
+            platform,
+            logger,
+        )
         self.station = station
-        
-        

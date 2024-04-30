@@ -8,11 +8,11 @@ import yaml
 from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
 
+from rs_client.rs_client import RsClient
 from rs_workflows.common import (
     ADGS,
     CADIP,
     CATALOG_REQUEST_TIMEOUT,
-    create_apikey_headers,
     create_collection_name,
     get_prefect_logger,
     update_stac_catalog,
@@ -238,7 +238,7 @@ def get_cadip_catalog_data(url_catalog: str, username: str, collection: str, ses
             catalog_endpoint,
             json=query,
             timeout=CATALOG_REQUEST_TIMEOUT,
-            **create_apikey_headers(apikey),
+            **RsClient.create_apikey_headers(apikey),
         )
         # logger.debug(f"stat = {response.status_code}")
         # logger.debug(f"json = {response.json()}")
@@ -286,7 +286,7 @@ def get_adgs_catalog_data(url_catalog: str, username: str, collection: str, file
             catalog_endpoint,
             params=payload,
             timeout=CATALOG_REQUEST_TIMEOUT,
-            **create_apikey_headers(apikey),
+            **RsClient.create_apikey_headers(apikey),
         )
 
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
@@ -430,7 +430,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         f"{config.url_catalog}/catalog/collections",
         json=minimal_collection,
         timeout=CATALOG_REQUEST_TIMEOUT,
-        **create_apikey_headers(config.apikey),
+        **RsClient.create_apikey_headers(config.apikey),
     )
     fin_res = []
     for output_product in get_yaml_outputs(yaml_dpr_input):
@@ -446,7 +446,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         fin_res.append(
             (
                 update_stac_catalog.submit(
-                    create_apikey_headers(config.apikey),
+                    RsClient.create_apikey_headers(config.apikey),
                     config.url_catalog,
                     config.user,
                     collection_name,
