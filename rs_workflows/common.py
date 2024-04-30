@@ -12,9 +12,13 @@ from prefect import exceptions, flow, get_run_logger, task
 from prefect_dask.task_runners import DaskTaskRunner
 
 from rs_workflows.utils.logging import Logging
-
-CADIP = ["CADIP", "INS", "MPS", "MTI", "NSG", "SGS"]
-ADGS = "ADGS"
+from rs_client.rs_client import (
+    ADGS,
+    CADIP,
+    AuxipClient,
+    CadipClient,
+    RsClient,
+)
 
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
@@ -245,7 +249,7 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
 
 
 @task
-def ingest_files(config: PrefectTaskConfig):
+def staging_files(config: PrefectTaskConfig):
     """Prefect task function to ingest files.
 
     This prefect task function access the RS-Server endpoints that start the download of files and
@@ -262,14 +266,27 @@ def ingest_files(config: PrefectTaskConfig):
     """
 
     logger = get_prefect_logger("task_dwn")
+    # list with failed files
+    failed_failes = config.task_files_stac.copy()
+    try:
+        rs_client = get_rs_client(config.apikey,
+                                config.url, 
+                                config.url_catalog,
+                                config.user,   
+                                config.station,                             
+                                config.mission,
+                                logger)
+    except RuntimeError as e:
+        logger.exception(f"Could not get the RsClient object. Reason: {e}")
+        return failed_failes
 
     # dictionary to be used for payload request
-    payload = {}
+    #payload = {}
     # some protections for the optional args
-    if config.s3_path is not None and len(config.s3_path) > 0:
-        payload["obs"] = config.s3_path
-    if config.tmp_download_path is not None and len(config.tmp_download_path) > 0:
-        payload["local"] = config.tmp_download_path
+    #if config.s3_path is not None and len(config.s3_path) > 0:
+    #    payload["obs"] = config.s3_path
+    #if config.tmp_download_path is not None and len(config.tmp_download_path) > 0:
+    #    payload["local"] = config.tmp_download_path
     # logger.debug("Files to be downloaded:")
     # pp = pprint.PrettyPrinter(indent=4)
     # for f in config.task_files_stac:
@@ -277,38 +294,25 @@ def ingest_files(config: PrefectTaskConfig):
     # sys.stdout.flush()
 
     # get the endpoint
-    endpoint = create_endpoint(config.url, config.station)
+    #endpoint = create_endpoint(config.url, config.station)
     # create the apikey_headers
-    apikey_headers = create_apikey_headers(config.apikey)
-    # list with failed files
+    apikey_headers = RsClient.create_apikey_headers(config.apikey)
+    
     downloaded_files_indices = []
-    failed_failes = config.task_files_stac.copy()
+    
     # Call the download endpoint for each requested file
     for i, file_stac in enumerate(config.task_files_stac):
-        # update the filename to be ingested
-        payload["name"] = file_stac["id"]
+        # update the filename to be ingested        
         try:
-            # logger.debug(f"Calling  {endpoint} with payload {payload}")
-            # start_p = datetime.now()
-            response = requests.get(endpoint, params=payload, timeout=ENDPOINT_TIMEOUT, **apikey_headers)
-            # logger.debug(f"Download start endpoint returned in {(datetime.now() - start_p)}")
-            logger.debug(f"Download start endpoint returned in {response.elapsed.total_seconds()}")
-            if not response.ok:
-                logger.error(
-                    "The download endpoint returned error for file %s...\n",
-                    file_stac["id"],
-                )
-                continue
-        except (
-            requests.exceptions.RequestException,
-            requests.exceptions.Timeout,
-            requests.exceptions.ReadTimeout,
-        ) as e:
-            logger.exception("Request exception caught: %s", e)
+            rs_client.staging_file(file_stac["id"], config.s3_path, config.tmp_download_path, ENDPOINT_TIMEOUT)            
+        except RuntimeError as e:
+            # TODO: Continue? Stop ?
+            logger.exception(f"Could not stage file %s. Exception: {e}")
             continue
-
+        
         # monitor the status of the file until it is completely downloaded before initiating the next download request
-        status = check_status(apikey_headers, endpoint + "/status", file_stac["id"], logger)
+        status = rs_client.check_status(file_stac["id"], ENDPOINT_TIMEOUT)
+        #status = check_status(apikey_headers, endpoint + "/status", file_stac["id"], logger)
         # just for the demo the timeout is hardcoded, it should be otherwise defined somewhere in the configuration
         timeout = DOWNLOAD_FILE_TIMEOUT  # 3 minutes
         while status in [EDownloadStatus.NOT_STARTED, EDownloadStatus.IN_PROGRESS] and timeout > 0:
@@ -319,10 +323,12 @@ def ingest_files(config: PrefectTaskConfig):
             )
             time.sleep(1)
             timeout -= 1
-            status = check_status(apikey_headers, endpoint + "/status", file_stac["id"], logger)
+            status = rs_client.check_status(file_stac["id"], ENDPOINT_TIMEOUT)
+            #status = check_status(apikey_headers, endpoint + "/status", file_stac["id"], logger)
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...", file_stac["id"])
-
+            # TODO: either move the code from filter_unpublished_files to RsClient
+            # or use the new PgstacClient ?
             if update_stac_catalog.fn(
                 apikey_headers,
                 config.url_catalog,
@@ -352,7 +358,6 @@ def ingest_files(config: PrefectTaskConfig):
 
     return failed_failes
 
-
 @task
 def filter_unpublished_files(  # pylint: disable=too-many-arguments
     apikey_headers: dict,
@@ -380,10 +385,8 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     # TODO: Should this list be checked for duplicated items?
     for fs in files_stac:
         ids.append(str(fs["id"]))
-    catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
-    logger.debug(f"catalog_endpoint = {catalog_endpoint}")
-    request_params = {"collection": collection_name, "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
-    logger.debug(f"The requested list len = {len(ids)}")
+    catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"    
+    request_params = {"collection": collection_name, "ids": ",".join(ids), "filter": f"owner_id='{user}'"}    
     try:
         response = requests.get(
             catalog_endpoint,
@@ -395,16 +398,14 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
         logger.exception("Request exception caught: %s", e)
         # try to ingest everything anyway
         return files_stac
-    # logger.debug(f"response.link = {response.url}")
-    # logger.debug(f"response = {response.status_code}")
+        
     # try to ingest everything anyway
     if response.status_code != 200:
         logger.error(f"Quering the catalog endpoint returned status {response.status_code}")
         return files_stac
 
     try:
-        eval_response = response.json()
-        # logger.debug(f"eval_response = {eval_response}")
+        eval_response = response.json()        
     except requests.exceptions.JSONDecodeError:
         # content is empty, try to ingest everything anyway
         return files_stac
@@ -412,15 +413,12 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     # no file in the catalog
     if eval_response["features"] is None:
         return files_stac
-
-    # logger.debug(f"Files found in the catalog ({len(eval_response['features'])}): {eval_response['features']} ")
+    
     for feature in eval_response["features"]:
         for fs in files_stac:
             if feature["id"] == fs["id"]:
                 files_stac.remove(fs)
-                logger.debug(f"REMOVED {feature['id']}")
                 break
-    logger.debug(f"In the end: {files_stac}")
     return files_stac
 
 
@@ -521,6 +519,18 @@ def create_endpoint(url, station):
         return url.rstrip("/") + f"/cadip/{station}/cadu"
     raise RuntimeError("Unknown station !")
 
+def get_rs_client(apikey,
+                  url, 
+                  url_catalog,
+                  user,   
+                  station,                 
+                  mission,
+                  logger):
+
+    if station == ADGS:
+        return AuxipClient(apikey, url, url_catalog, user, mission, logger)    
+    return CadipClient(apikey, url, url_catalog, user, station, mission, logger)
+    
 
 def create_collection_name(mission, station):
     """Create the name of the catalog collection
@@ -608,19 +618,32 @@ def download_flow(config: PrefectFlowConfig):
     logger.info(f"The download flow is starting. Received workers:{config.max_workers}")
     try:
         # get the endpoint
-        endpoint = create_endpoint(config.url, config.station)
+        #endpoint = create_endpoint(config.url, config.station)
+        try:
+            rs_client = get_rs_client(config.apikey,
+                                  config.url, 
+                                  config.url_catalog,
+                                  config.user,   
+                                  config.station,                 
+                                  config.mission,
+                                  logger)
+        except RuntimeError as e:
+            logger.exception(f"Could not get the RsClient object. Reason: {e}")
+            return False
         # create the apikey_headers
-        apikey_headers = create_apikey_headers(config.apikey)
+        #apikey_headers = create_apikey_headers(config.apikey)
 
         # get the list with files from the search endpoint
-        files_stac = get_station_files_list(
-            apikey_headers,
-            endpoint,
-            config.start_datetime,
-            config.stop_datetime,
-            logger,
-            config.limit,
-        )
+        try:
+            files_stac = rs_client.get_station_files_list(config.start_datetime,            
+                                                      config.stop_datetime,
+                                                      SEARCH_ENDPOINT_TIMEOUT,
+                                                      config.limit
+                                                      )
+        except RuntimeError as e:
+            logger.exception(f"Unable to get the list with files for staging: {e}")
+            return False
+        
         # check if the list with files returned from the station is not empty
         if len(files_stac) == 0:
             logger.warning(
@@ -631,16 +654,17 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
         # create the collection name
 
         # filter those that are already existing
+        # TODO: either move the code from filter_unpublished_files to RsClient
+        # or use the new PgstacClient ?
         files_stac = filter_unpublished_files(  # type: ignore
-            apikey_headers,
+            RsClient.create_apikey_headers(config.apikey),
             config.url_catalog,
             config.user,
             create_collection_name(config.mission, config.station),
             files_stac,
             logger,
             wait_for=[files_stac],
-        )
-        logger.debug(f"OUT = {files_stac}")
+        )        
         # distribute the filenames evenly in a number of lists equal with
         # the minimum between number of runners and files to be downloaded
         try:
@@ -655,7 +679,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
             logger.info("      %s", f["id"])
 
         for files_stac in tasks_files_stac:
-            ingest_files.submit(
+            staging_files.submit(
                 PrefectTaskConfig(
                     config.user,
                     config.url,

@@ -19,7 +19,7 @@ from rs_workflows.common import (
     download_flow,
     filter_unpublished_files,
     get_station_files_list,
-    ingest_files,
+    staging_files,
     update_stac_catalog,
 )
 from rs_workflows.utils.logging import Logging
@@ -312,10 +312,10 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
         "ADGS",
     ],
 )
-def test_ok_ingest_files(station):
-    """Unit test for the ingest_files function in case of successful files ingestion.
+def test_ok_staging_files(station):
+    """Unit test for the staging_files function in case of successful files ingestion.
 
-    This test validates the behavior of the ingest_files function when successfully ingesting files
+    This test validates the behavior of the staging_files function when successfully ingesting files
     from the station, resulting in an empty list of returned failed files.
 
     Args:
@@ -383,7 +383,7 @@ def test_ok_ingest_files(station):
         files_stac[station]["features"],
         1,
     )
-    ret_files = ingest_files.fn(task_config)
+    ret_files = staging_files.fn(task_config)
     assert len(ret_files) == 0
 
 
@@ -396,10 +396,10 @@ def test_ok_ingest_files(station):
         "ADGS",
     ],
 )
-def test_nok_ingest_files(station):
-    """Unit test for the ingest_files function in case of failed file ingestion.
+def test_nok_staging_files(station):
+    """Unit test for the staging_files function in case of failed file ingestion.
 
-    This test validates the behavior of the ingest_files function when file ingestion
+    This test validates the behavior of the staging_files function when file ingestion
     fails for some files, resulting in a non-empty list of returned files.
 
     Args:
@@ -455,7 +455,7 @@ def test_nok_ingest_files(station):
         files_stac[station]["features"],
         1,
     )
-    ret_files = ingest_files.fn(task_config)
+    ret_files = staging_files.fn(task_config)
     assert len(ret_files) == 2
 
 
