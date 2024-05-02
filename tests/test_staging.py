@@ -10,17 +10,17 @@ import pytest
 import responses
 
 from rs_client.rs_client import ADGS, CADIP, AuxipClient, CadipClient, EDownloadStatus
+from rs_common.logging import Logging
 from rs_workflows.staging import (
     PrefectFlowConfig,
     PrefectTaskConfig,
     create_collection_name,
     create_endpoint,
     filter_unpublished_files,
-    staging_files,
+    staging,
     staging_flow,
     update_stac_catalog,
 )
-from rs_workflows.utils.logging import Logging
 
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 MISSION_NAME = "s1"
@@ -64,6 +64,7 @@ def test_valid_check_status(filename, station):
     href = "http://127.0.0.1:5000"
     timeout = 3  # seconds
 
+    rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
         rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
     else:
@@ -128,6 +129,7 @@ def test_invalid_check_status(filename, station):
     href = "http://127.0.0.1:5000"
     timeout = 3  # seconds
 
+    rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
         rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
     else:
@@ -327,10 +329,10 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
         ADGS,
     ],
 )
-def test_ok_staging_files(station):
-    """Unit test for the staging_files function in case of successful files ingestion.
+def test_ok_staging(station):
+    """Unit test for the staging function in case of successful files ingestion.
 
-    This test validates the behavior of the staging_files function when successfully ingesting files
+    This test validates the behavior of the staging function when successfully ingesting files
     from the station, resulting in an empty list of returned failed files.
 
     Args:
@@ -395,7 +397,7 @@ def test_ok_staging_files(station):
         files_stac[station]["features"],
         1,
     )
-    ret_files = staging_files.fn(task_config)
+    ret_files = staging.fn(task_config)
     assert len(ret_files) == 0
 
 
@@ -408,10 +410,10 @@ def test_ok_staging_files(station):
         ADGS,
     ],
 )
-def test_nok_staging_files(station):
-    """Unit test for the staging_files function in case of failed file ingestion.
+def test_nok_staging(station):
+    """Unit test for the staging function in case of failed file ingestion.
 
-    This test validates the behavior of the staging_files function when file ingestion
+    This test validates the behavior of the staging function when file ingestion
     fails for some files, resulting in a non-empty list of returned files.
 
     Args:
@@ -463,7 +465,7 @@ def test_nok_staging_files(station):
         files_stac[station]["features"],
         1,
     )
-    ret_files = staging_files.fn(task_config)
+    ret_files = staging.fn(task_config)
     assert len(ret_files) == 2
 
 
@@ -476,10 +478,10 @@ def test_nok_staging_files(station):
         ADGS,
     ],
 )
-def test_get_station_files_list(station):
-    """Unit test for the get_station_files_list function.
+def test_search_stations(station):
+    """Unit test for the search_stations function.
 
-    This test validates the behavior of the get_station_files_list function when fetching
+    This test validates the behavior of the search_stations function when fetching
     the list of files from the search endpoint of station.
 
     Args:
@@ -500,6 +502,7 @@ def test_get_station_files_list(station):
     href = "http://127.0.0.1:5000"
     timeout = 3  # seconds
 
+    rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
         rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
     else:
@@ -516,7 +519,7 @@ def test_get_station_files_list(station):
         status=200,
     )
 
-    search_response = rs_client.get_station_files_list(
+    search_response = rs_client.search_stations(
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
         timeout,
@@ -530,7 +533,7 @@ def test_get_station_files_list(station):
         json=json_response,
         status=200,
     )
-    search_response = rs_client.get_station_files_list(
+    search_response = rs_client.search_stations(
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
         timeout,
@@ -548,10 +551,10 @@ def test_get_station_files_list(station):
         ADGS,
     ],
 )
-def test_err_ret_get_station_files_list(station):
-    """Unit test for the get_station_files_list function in case of error response.
+def test_err_ret_search_stations(station):
+    """Unit test for the search_stations function in case of error response.
 
-    This test validates the behavior of the get_station_files_list function in erroneous situations:
+    This test validates the behavior of the search_stations function in erroneous situations:
     - when receiving an error response from the search endpoint of station, with status 400
     - when receiving a bad format answer, even if the status is ok.
 
@@ -575,6 +578,7 @@ def test_err_ret_get_station_files_list(station):
     href = "http://127.0.0.1:5000"
     timeout = 3  # seconds
 
+    rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
         rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
     else:
@@ -591,7 +595,7 @@ def test_err_ret_get_station_files_list(station):
         status=400,
     )
     logger = Logging.default(__name__)
-    search_response = rs_client.get_station_files_list(
+    search_response = rs_client.search_stations(
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
         timeout,
@@ -611,7 +615,7 @@ def test_err_ret_get_station_files_list(station):
     )
 
     with pytest.raises(RuntimeError) as runtime_exception:
-        search_response = rs_client.get_station_files_list(
+        search_response = rs_client.search_stations(
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
             timeout,
@@ -629,10 +633,10 @@ def test_err_ret_get_station_files_list(station):
         ADGS,
     ],
 )
-def test_wrong_url_get_station_files_list(station):
-    """Unit test for the get_station_files_list function in case of wrong endpoint URL.
+def test_wrong_url_search_stations(station):
+    """Unit test for the search_stations function in case of wrong endpoint URL.
 
-    This test validates the behavior of the get_station_files_list function when providing
+    This test validates the behavior of the search_stations function when providing
     a wrong endpoint URL, which should raise a RuntimeError.
 
     Args:
@@ -653,6 +657,7 @@ def test_wrong_url_get_station_files_list(station):
     bad_href = "http://127.0.0.1:6000"
     timeout = 3  # seconds
 
+    rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
         rs_client = AuxipClient(None, bad_href, None, "test_user", "s1", logger)
     else:
@@ -670,7 +675,7 @@ def test_wrong_url_get_station_files_list(station):
 
     # use a wrong endpoint
     with pytest.raises(RuntimeError) as runtime_exception:
-        rs_client.get_station_files_list(
+        rs_client.search_stations(
             datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
             datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
             timeout,

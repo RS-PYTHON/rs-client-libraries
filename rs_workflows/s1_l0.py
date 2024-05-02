@@ -9,6 +9,7 @@ from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
 
 from rs_client.rs_client import RsClient
+from rs_common.logging import Logging
 from rs_workflows.staging import (
     ADGS,
     CADIP,
@@ -17,7 +18,6 @@ from rs_workflows.staging import (
     get_prefect_logger,
     update_stac_catalog,
 )
-from rs_workflows.utils.logging import Logging
 
 CONFIG_DIR = Path(osp.realpath(osp.dirname(__file__))) / "config"
 YAML_TEMPLATE_FILE = "dpr_config_template.yaml"

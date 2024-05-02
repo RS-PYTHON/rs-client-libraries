@@ -1,50 +1,46 @@
-import enum
+"""RsClient class implementation."""
+
+import logging
+import os
+from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Union
+from typing import Union
 
 import requests
 
-from rs_workflows.utils.logging import Logging
-
-CADIP = ["CADIP", "INS", "MPS", "MTI", "NSG", "SGS"]
-ADGS = "ADGS"
+from rs_common.config import EDownloadStatus, EPlatform
+from rs_common.logging import Logging
 
 
-class EDownloadStatus(str, enum.Enum):
+class RsClient(ABC):
     """
-    Download status enumeration.
+    RsClient class implementation.
+
+    Attributes:
+        rs_server_href (str): RS-Server URL.
+        rs_server_api_key (str): API key for RS-Server authentication.
+        owner_id (str): Owner of the catalog collections. The API key must give us the right to read/write this owner
+                        collections in the catalog. This owner ID is also used in the RS-Client logging.
+        platforms (list[PlatformEnum]): platform list.
+        logger (logging.Logger): Logging instance.
     """
 
-    NOT_STARTED = "NOT_STARTED"
-    IN_PROGRESS = "IN_PROGRESS"
-    FAILED = "FAILED"
-    DONE = "DONE"
-
-
-class RsClient:
     def __init__(
         self,
-        apikey: str,
-        rs_server_href: str,
-        rs_server_href_endpoint: str,
-        rs_server_href_catalog: str,
+        rs_server_href: str | None,
+        rs_server_api_key: str | None,
         owner_id: str,
-        station: str,
-        platform: str,
-        logger: Any,
+        platforms: list[EPlatform],
+        logger: logging.Logger | None = None,
     ):
-        """Init function of RsClient class"""
-        self.apikey = apikey
-        self.apikey_headers = RsClient.create_apikey_headers(apikey)
-        self.rs_server_href = rs_server_href.rstrip("/") + "/" + rs_server_href_endpoint.lstrip("/")
-        self.status_endpoint = self.rs_server_href + "/status"
-        self.rs_server_href_catalog = rs_server_href_catalog
-        self.owner_id = owner_id
-        self.station = station
-        self.platform = platform
-        self.logger = logger
-        if not self.logger:
-            self.logger = Logging.default("RsClient")
+        """RsClient class constructor."""
+        self.rs_server_href: str | None = rs_server_href
+        self.rs_server_api_key: str | None = rs_server_api_key
+        self.owner_id: str = owner_id
+        self.platforms: list[EPlatform] = platforms
+        self.logger: logging.Logger = logger or Logging.default(__name__)
+
+        self.apikey_headers: dict = self.create_apikey_headers(rs_server_api_key)
 
     @staticmethod
     def create_apikey_headers(apikey):
@@ -56,6 +52,26 @@ class RsClient:
         """
 
         return {"headers": {"x-api-key": apikey}} if apikey else {}
+
+    def hostname_for(self, service: str) -> str:
+        """
+        Return the URL hostname of a service deployed on the host.
+        This URL can be overwritten using the RSPY_HOST_<SERVICE> env variable (used e.g. for local mode).
+        """
+        if from_env := os.getenv(f"RSPY_HOST_{service.upper()}", None):
+            return from_env
+        if self.rs_server_href is None:
+            raise RuntimeError(f"RS-Server URL is undefined")
+        return self.rs_server_href.rstrip("/")
+
+    @abstractmethod
+    def href(self) -> str:
+        """Return the RS-Server hostname and path for the child class: Auxip, Cadip, ..."""
+        pass
+
+    @abstractmethod
+    def station_name(self) -> str:
+        """Return the station name for CADIP ("INS", "MPS", ...) or just "ADGS" for ADGS."""
 
     def check_status(self, filename, endpoint_timeout):
         """Check the status of a file download from the specified rs-server endpoint.
@@ -77,7 +93,7 @@ class RsClient:
         # TODO: check the status for a certain timeout if http returns NOK ?
         try:
             response = requests.get(
-                self.status_endpoint,
+                f"{self.href()}/status",
                 params={"name": filename},
                 timeout=endpoint_timeout,
                 **self.apikey_headers,
@@ -97,7 +113,7 @@ class RsClient:
 
         return EDownloadStatus.FAILED
 
-    def staging_file(self, filename, s3_path, tmp_download_path, staging_endpoint_timeout):
+    def staging(self, filename, s3_path, tmp_download_path, staging_endpoint_timeout):
         """Prefect task function to stage (=download/ingest) files.
 
         This prefect task function access the RS-Server endpoints that start the download of files and
@@ -126,7 +142,7 @@ class RsClient:
         try:
             # logger.debug(f"Calling  {endpoint} with payload {payload}")
             response = requests.get(
-                self.rs_server_href,
+                self.href(),
                 params=payload,
                 timeout=staging_endpoint_timeout,
                 **self.apikey_headers,
@@ -143,7 +159,7 @@ class RsClient:
             self.logger.exception(f"Staging file exception for {filename}:", e)
             raise RuntimeError(f"Staging file exception for {filename}") from e
 
-    def get_station_files_list(  # pylint: disable=too-many-arguments
+    def search_stations(  # pylint: disable=too-many-arguments
         self,
         start_date: datetime,
         stop_date: datetime,
@@ -187,7 +203,7 @@ class RsClient:
             payload["limit"] = str(limit)
         try:
             response = requests.get(
-                self.rs_server_href + "/search",
+                f"{self.href()}/search",
                 params=payload,
                 timeout=search_endpoint_timeout,
                 **self.apikey_headers,
@@ -207,46 +223,3 @@ class RsClient:
             raise RuntimeError("Wrong format of search endpoint answer") from e
 
         return files
-
-
-class AuxipClient(RsClient):
-    def __init__(
-        self,
-        apikey: str,
-        rs_server_href: str,
-        rs_server_href_catalog: str,
-        owner_id: str,
-        platform: str,
-        logger: Any,
-    ):
-        """Init function of AuxipClient class"""
-        super().__init__(apikey, rs_server_href, "/adgs/aux", rs_server_href_catalog, owner_id, ADGS, platform, logger)
-
-
-class CadipClient(RsClient):
-    def __init__(
-        self,
-        apikey: str,
-        rs_server_href: str,
-        rs_server_href_catalog: str,
-        owner_id: str,
-        station: str,
-        platform: str,
-        logger: Any,
-    ):
-        """Init function of CadipClient class"""
-        if station not in CADIP:
-            self.logger.error(f"Unknown CADIP station type: {station}")
-            raise RuntimeError("Unknown CADIP station type: {station}")
-
-        super().__init__(
-            apikey,
-            rs_server_href,
-            f"/cadip/{station}/cadu",
-            rs_server_href_catalog,
-            owner_id,
-            station,
-            platform,
-            logger,
-        )
-        self.station = station

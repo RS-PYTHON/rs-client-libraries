@@ -9,6 +9,7 @@ import pytest
 import responses
 import yaml
 
+from rs_common.logging import Logging
 from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     LOGGER_NAME,
     PrefectS1L0FlowConfig,
@@ -22,7 +23,6 @@ from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     s1_l0_flow,
     start_dpr,
 )
-from rs_workflows.utils.logging import Logging
 
 # from prefect.testing.utilities import prefect_test_harness
 
