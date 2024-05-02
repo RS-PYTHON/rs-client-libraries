@@ -27,7 +27,7 @@ CATALOG_REQUEST_TIMEOUT = 20  # in seconds
 
 
 def get_prefect_logger(general_logger_name):
-    """Get theprefect logger.
+    """Get the prefect logger.
     It returns the prefect logger. If this can't be taken due to the missing
     prefect context (i.e. the flow/task is run as single function, from tests for example),
     the general logger is returned
@@ -184,7 +184,7 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
 
 @task
 def staging_files(config: PrefectTaskConfig):
-    """Prefect task function to ingest files.
+    """Prefect task function to stage (=download/ingest) files.
 
     This prefect task function access the RS-Server endpoints that start the download of files and
     check the status for the actions
@@ -196,12 +196,12 @@ def staging_files(config: PrefectTaskConfig):
         None: This function does not raise any exceptions.
 
     Returns:
-        failed_failes: A list of files which could not be downloaded and / or uploaded to the s3.
+        failed_files: A list of files which could not be downloaded and / or uploaded to the s3.
     """
 
     logger = get_prefect_logger("task_dwn")
     # list with failed files
-    failed_failes = config.task_files_stac.copy()
+    failed_files = config.task_files_stac.copy()
     try:
         rs_client = get_rs_client(
             config.apikey,
@@ -214,7 +214,7 @@ def staging_files(config: PrefectTaskConfig):
         )
     except RuntimeError as e:
         logger.exception(f"Could not get the RsClient object. Reason: {e}")
-        return failed_failes
+        return failed_files
 
     # create the apikey_headers
     apikey_headers = RsClient.create_apikey_headers(config.apikey)
@@ -273,9 +273,9 @@ def staging_files(config: PrefectTaskConfig):
     # remove all the well ingested files
     # return only those that failed
     for idx in sorted(downloaded_files_indices, reverse=True):
-        del failed_failes[idx]
+        del failed_files[idx]
 
-    return failed_failes
+    return failed_files
 
 
 @task
@@ -415,7 +415,7 @@ def create_collection_name(mission, station):
 class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-methods
     """Configuration class for Prefect flow.
 
-    This class inherits the PrefectCommonCongig and represents the configuration for a
+    This class inherits the PrefectCommonConfig and represents the configuration for a
     Prefect flow
 
     Attributes:
@@ -450,8 +450,8 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
 
 
 @flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 15, "threads_per_worker": 1}))
-def download_flow(config: PrefectFlowConfig):
-    """Prefect flow for downloading files from a station.
+def staging_flow(config: PrefectFlowConfig):
+    """Prefect flow for staging (=download/ingest) files from a station.
 
     This flow orchestrates the download process by obtaining the list of files from the search endpoint (provided
     station), splitting the list into tasks based on the number of workers, and submitting tasks for ingestion.
@@ -467,7 +467,7 @@ def download_flow(config: PrefectFlowConfig):
     """
     # get the Prefect logger
     logger = get_prefect_logger("flow_dwn")
-    logger.info(f"The download flow is starting. Received workers:{config.max_workers}")
+    logger.info(f"The staging flow is starting. Received workers:{config.max_workers}")
     try:
         # get the endpoint
         # endpoint = create_endpoint(config.url, config.station)

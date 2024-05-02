@@ -442,7 +442,7 @@ def test_get_adgs_catalog_data(endpoint, status):
 #             status=200,
 #         )
 #     mocker.patch(
-#         "rs_workflows.common.update_stac_catalog",
+#         "rs_workflows.staging.update_stac_catalog",
 #         return_value=True,
 #     )
 #     with prefect_test_harness():

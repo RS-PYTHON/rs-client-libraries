@@ -9,7 +9,7 @@ from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
 
 from rs_client.rs_client import RsClient
-from rs_workflows.common import (
+from rs_workflows.staging import (
     ADGS,
     CADIP,
     CATALOG_REQUEST_TIMEOUT,

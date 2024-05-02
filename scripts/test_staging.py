@@ -11,7 +11,7 @@ import boto3
 import botocore
 import requests
 
-from rs_workflows.common import PrefectFlowConfig, create_collection_name, download_flow
+from rs_workflows.staging import PrefectFlowConfig, create_collection_name, staging_flow
 
 s3_session = boto3.session.Session()
 s3_client = s3_session.client(
@@ -90,7 +90,7 @@ def run_flow(
 ):
     # start the prefect flow
     print(f"{url} | {url_catalog}")
-    download_flow(
+    staging_flow(
         (
             PrefectFlowConfig(
                 user,
@@ -247,7 +247,7 @@ if __name__ == "__main__":
         None,
     )
 
-    dwn_flow_id = download_flow(flowConfig)
+    dwn_flow_id = staging_flow(flowConfig)
     logger.info("EXIT !")
     # mission = "s1"
     # catalog_data = json.loads( (requests.get(args.url_catalog.rstrip("/") + f"/catalog/collections/{args.user}:{mission}_aux/items?limit=100", **apikey_headers).content.decode()))

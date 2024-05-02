@@ -98,7 +98,7 @@ class RsClient:
         return EDownloadStatus.FAILED
 
     def staging_file(self, filename, s3_path, tmp_download_path, staging_endpoint_timeout):
-        """Prefect task function to ingest files.
+        """Prefect task function to stage (=download/ingest) files.
 
         This prefect task function access the RS-Server endpoints that start the download of files and
         check the status for the actions

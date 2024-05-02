@@ -1,4 +1,4 @@
-"""Unit tests for common (cadip/adgs) prefect flow"""
+"""Unit tests for staging (cadip/adgs) prefect flow"""
 import json
 import os.path as osp
 import urllib
@@ -10,14 +10,14 @@ import pytest
 import responses
 
 from rs_client.rs_client import ADGS, CADIP, AuxipClient, CadipClient, EDownloadStatus
-from rs_workflows.common import (
+from rs_workflows.staging import (
     PrefectFlowConfig,
     PrefectTaskConfig,
     create_collection_name,
     create_endpoint,
-    download_flow,
     filter_unpublished_files,
     staging_files,
+    staging_flow,
     update_stac_catalog,
 )
 from rs_workflows.utils.logging import Logging
@@ -754,17 +754,17 @@ def test_create_collection_name(station):
         "ADGS",
     ],
 )
-def test_download_flow(station):
-    """Unit test for the download_flow function.
+def test_staging_flow(station):
+    """Unit test for the staging_flow function.
 
-    This test validates the behavior of the download_flow function prefect flow when ingests
+    This test validates the behavior of the staging_flow function prefect flow when ingests
     files from the station.
 
     Args:
         station (str): The station type for which files are being ingested.
 
     Raises:
-        AssertionError: If the return value of download_flow is not True.
+        AssertionError: If the return value of staging_flow is not True.
 
     Returns:
         None: This test does not return any value.
@@ -840,4 +840,4 @@ def test_download_flow(station):
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
     )
-    assert download_flow(flow_config) is True
+    assert staging_flow(flow_config) is True
