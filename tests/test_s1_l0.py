@@ -9,6 +9,10 @@ import pytest
 import responses
 import yaml
 
+from rs_client.auxip_client import AuxipClient
+from rs_client.cadip_client import CadipClient
+from rs_client.stac_client import StacClient
+from rs_common.config import ECadipStation
 from rs_common.logging import Logging
 from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     LOGGER_NAME,
@@ -306,7 +310,6 @@ def test_get_cadip_catalog_data(endpoint, status):
     username = "TestUser"
     collection = "s1_test"
     cadip_session_id = "S1A_20200105072204051312"
-    apikey = ""
     cadip_catalog = RESOURCES / "cadip_catalog.json"
     with open(cadip_catalog, encoding="utf-8") as cadip_catalog_f:
         cadip_catalog = json.loads(cadip_catalog_f.read())
@@ -318,15 +321,17 @@ def test_get_cadip_catalog_data(endpoint, status):
             status=status,
         )
 
+    rs_client = CadipClient(endpoint, "", username, ECadipStation.CADIP, [])
+    cadip_res = get_cadip_catalog_data.fn(rs_client, collection, cadip_session_id)
+
     if "bad_endpoint" not in endpoint:
-        cadip_res = get_cadip_catalog_data.fn(endpoint, username, collection, cadip_session_id, apikey)
-        print(cadip_res)
+        # print(cadip_res)
         if int(status) == 200:
             assert cadip_res == cadip_catalog
         else:
             assert cadip_res is None
     else:
-        assert get_cadip_catalog_data.fn(endpoint, username, collection, cadip_session_id, apikey) is None
+        assert cadip_res is None
 
 
 @pytest.mark.unit
@@ -359,7 +364,6 @@ def test_get_adgs_catalog_data(endpoint, status):
     username = "TestUser"
     collection = "s1_test"
     files_list = ["ADGS1.EOF", "ADGS2.EOF"]
-    apikey = ""
     adgs_catalog = RESOURCES / "adgs_catalog.json"
     with open(adgs_catalog, encoding="utf-8") as adgs_catalog_f:
         adgs_catalog = json.loads(adgs_catalog_f.read())
@@ -371,18 +375,20 @@ def test_get_adgs_catalog_data(endpoint, status):
             status=status,
         )
 
+    rs_client = AuxipClient(endpoint, "", username, [])
+    adgs_res = get_adgs_catalog_data.fn(rs_client, collection, files_list)
+
     if "bad_endpoint" not in endpoint:
-        adgs_res = get_adgs_catalog_data.fn(endpoint, username, collection, files_list, apikey)
         print(adgs_res)
         if int(status) == 200:
             assert adgs_res == adgs_catalog
         else:
             assert adgs_res is None
     else:
-        assert get_adgs_catalog_data.fn(endpoint, username, collection, files_list, apikey) is None
+        assert adgs_res is None
 
 
-# TODO: The unit testing for this prefect flow does not work
+# TODO: The unit testing for this prefect flow does not work (?)
 # We can consider that all the other files / task have been tested (see up)
 # @pytest.mark.unit
 # @responses.activate
@@ -521,16 +527,24 @@ if __name__ == "__main__":
     if not args.apikey:
         args.apikey = os.environ.get("RSPY_APIKEY", None)
 
+    rs_client = StacClient(args.url_catalog, args.apikey, args.user, logger)
+
+    # TODO: use "real" values ?
+    adgs_files = [
+        "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
+        "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
+        "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
+    ]
+
     s1_l0_flow(
         PrefectS1L0FlowConfig(
-            args.user,
-            args.url_catalog,
+            rs_client,
             args.url_dpr,
             args.mission,
             args.session_id,
             args.product_types,
+            adgs_files,
             args.s3_storage,
             args.temp_s3_storage,
-            args.apikey,
         ),
     )

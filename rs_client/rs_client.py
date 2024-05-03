@@ -8,7 +8,7 @@ from typing import Union
 
 import requests
 
-from rs_common.config import EDownloadStatus, EPlatform
+from rs_common.config import EDownloadStatus
 from rs_common.logging import Logging
 
 
@@ -21,7 +21,6 @@ class RsClient(ABC):
         rs_server_api_key (str): API key for RS-Server authentication.
         owner_id (str): Owner of the catalog collections. The API key must give us the right to read/write this owner
                         collections in the catalog. This owner ID is also used in the RS-Client logging.
-        platforms (list[PlatformEnum]): platform list.
         logger (logging.Logger): Logging instance.
     """
 
@@ -30,14 +29,12 @@ class RsClient(ABC):
         rs_server_href: str | None,
         rs_server_api_key: str | None,
         owner_id: str,
-        platforms: list[EPlatform],
         logger: logging.Logger | None = None,
     ):
         """RsClient class constructor."""
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
         self.owner_id: str = owner_id
-        self.platforms: list[EPlatform] = platforms
         self.logger: logging.Logger = logger or Logging.default(__name__)
 
         self.apikey_headers: dict = self.create_apikey_headers(rs_server_api_key)
@@ -57,6 +54,7 @@ class RsClient(ABC):
         """
         Return the URL hostname of a service deployed on the host.
         This URL can be overwritten using the RSPY_HOST_<SERVICE> env variable (used e.g. for local mode).
+        Either it should just be the RS-Server URL.
         """
         if from_env := os.getenv(f"RSPY_HOST_{service.upper()}", None):
             return from_env
@@ -66,12 +64,13 @@ class RsClient(ABC):
 
     @abstractmethod
     def href(self) -> str:
-        """Return the RS-Server hostname and path for the child class: Auxip, Cadip, ..."""
+        """Return the RS-Server hostname and path where the child class endpoints (ADGS, CADIP, ...) are deployed."""
         pass
 
     @abstractmethod
     def station_name(self) -> str:
         """Return the station name for CADIP ("INS", "MPS", ...) or just "ADGS" for ADGS."""
+        pass
 
     def check_status(self, filename, endpoint_timeout):
         """Check the status of a file download from the specified rs-server endpoint.

@@ -110,7 +110,7 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-i
     Base class for configuration to prefect tasks and flows that ingest files from different stations (cadip, adgs...)
 
     Attributes:
-        rs_client (RsClient): RsClient instance
+        rs_client (AuxipClient | CadipClient): RsClient instance
         mission (str): The mission identifier.
         tmp_download_path (str): The temporary download path.
         s3_path (str): The S3 path for storing downloaded files.
@@ -118,12 +118,12 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-i
 
     def __init__(
         self,
-        rs_client,
+        rs_client: AuxipClient | CadipClient,
         mission,
         tmp_download_path,
         s3_path,
     ):
-        self.rs_client: RsClient = rs_client
+        self.rs_client: AuxipClient | CadipClient = rs_client
         self.mission: str = mission
         self.tmp_download_path: str = tmp_download_path
         self.s3_path: str = s3_path
@@ -145,7 +145,7 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
 
     def __init__(
         self,
-        rs_client,
+        rs_client: AuxipClient | CadipClient,
         mission,
         tmp_download_path,
         s3_path,
@@ -240,23 +240,17 @@ def staging(config: PrefectTaskConfig):
 
 
 @task
-def filter_unpublished_files(  # pylint: disable=too-many-arguments
-    apikey_headers: dict,
-    url_catalog: str,
-    user: str,
+def filter_unpublished_files(
+    rs_client: RsClient,
     collection_name: str,
     files_stac: list,
-    logger: Any,
 ) -> list:
     """Check for unpublished files in the catalog.
 
     Args:
-        apikey_headers (dict): The apikey used for request (may be empty)
-        url_catalog (str): The URL of the catalog.
-        user (str): The user identifier.
+        rs_client (RsClient): RsClient instance.
         collection_name (str): The name of the collection to be used.
         files_stac (list): List of files (dcitionary for each) to be checked for publication.
-        logger: The logger object for logging.
 
     Returns:
         list: List of files that are not yet published in the catalog.
@@ -266,23 +260,23 @@ def filter_unpublished_files(  # pylint: disable=too-many-arguments
     # TODO: Should this list be checked for duplicated items?
     for fs in files_stac:
         ids.append(str(fs["id"]))
-    catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
-    request_params = {"collection": collection_name, "ids": ",".join(ids), "filter": f"owner_id='{user}'"}
+    catalog_endpoint = rs_client.hostname_for("catalog") + "/catalog/search"
+    request_params = {"collection": collection_name, "ids": ",".join(ids), "filter": f"owner_id='{rs_client.owner_id}'"}
     try:
         response = requests.get(
             catalog_endpoint,
             params=request_params,
             timeout=CATALOG_REQUEST_TIMEOUT,
-            **apikey_headers,
+            **rs_client.apikey_headers,
         )
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-        logger.exception("Request exception caught: %s", e)
+        rs_client.logger.exception("Request exception caught: %s", e)
         # try to ingest everything anyway
         return files_stac
 
     # try to ingest everything anyway
     if response.status_code != 200:
-        logger.error(f"Quering the catalog endpoint returned status {response.status_code}")
+        rs_client.logger.error(f"Quering the catalog endpoint returned status {response.status_code}")
         return files_stac
 
     try:
@@ -313,7 +307,7 @@ def create_collection_name(rs_client, mission):
     For other values, a RuntimeError is raised.
 
     Args:
-        rs_client (RsClient): RsClient instance.
+        rs_client (AuxipClient | CadipClient | type): RsClient instance or type.
         mission (str): The name of the mission.
 
     Returns:
@@ -323,9 +317,9 @@ def create_collection_name(rs_client, mission):
         RuntimeError: If the provided station type is not supported.
 
     """
-    if isinstance(rs_client, AuxipClient):
+    if (rs_client == AuxipClient) or isinstance(rs_client, AuxipClient):
         return f"{mission}_aux"
-    if isinstance(rs_client, CadipClient):
+    if (rs_client == CadipClient) or isinstance(rs_client, CadipClient):
         return f"{mission}_chunk"
     raise RuntimeError("Unknown station !")
 
@@ -344,7 +338,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        rs_client,
+        rs_client: AuxipClient | CadipClient,
         mission,
         tmp_download_path,
         s3_path,
@@ -410,12 +404,9 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
         # TODO: either move the code from filter_unpublished_files to RsClient
         # or use the new PgstacClient ?
         files_stac = filter_unpublished_files(  # type: ignore
-            RsClient.create_apikey_headers(config.apikey),
-            config.url_catalog,
-            config.user,
+            rs_client,
             create_collection_name(rs_client, config.mission),
             files_stac,
-            logger,
             wait_for=[files_stac],
         )
         # distribute the filenames evenly in a number of lists equal with
@@ -434,14 +425,10 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
         for files_stac in tasks_files_stac:
             staging.submit(
                 PrefectTaskConfig(
-                    config.user,
-                    config.url,
-                    config.url_catalog,
-                    config.station,
+                    config.rs_client,
                     config.mission,
                     config.tmp_download_path,
                     config.s3_path,
-                    config.apikey,
                     files_stac,
                 ),
             )

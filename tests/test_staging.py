@@ -9,13 +9,14 @@ from pathlib import Path
 import pytest
 import responses
 
-from rs_client.rs_client import ADGS, CADIP, AuxipClient, CadipClient, EDownloadStatus
+from rs_client.auxip_client import AuxipClient
+from rs_client.cadip_client import CadipClient
+from rs_common.config import ECadipStation, EDownloadStatus, EPlatform
 from rs_common.logging import Logging
 from rs_workflows.staging import (
     PrefectFlowConfig,
     PrefectTaskConfig,
     create_collection_name,
-    create_endpoint,
     filter_unpublished_files,
     staging,
     staging_flow,
@@ -24,6 +25,9 @@ from rs_workflows.staging import (
 
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 MISSION_NAME = "s1"
+
+ADGS = "ADGS"
+CADIP = "CADIP"
 
 endpoints = {
     "CADIP": {
@@ -40,7 +44,7 @@ endpoints = {
 @pytest.mark.parametrize(
     "filename, station",
     [
-        ("CADU_PRODUCT_TEST.tst", CADIP[0]),
+        ("CADU_PRODUCT_TEST.tst", CADIP),
         ("ADGS_PRODUCT_TEST.tst", ADGS),
     ],
 )
@@ -66,9 +70,9 @@ def test_valid_check_status(filename, station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
+        rs_client = AuxipClient(href, None, "test_user", [EPlatform.S1A], logger)
     else:
-        rs_client = CadipClient(None, href, None, "test_user", "CADIP", "s1", logger)
+        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
     endpoint = href + endpoints[station]["status"]
     json_response = {"name": filename, "status": EDownloadStatus.NOT_STARTED}
 
@@ -105,7 +109,7 @@ def test_valid_check_status(filename, station):
 @pytest.mark.parametrize(
     "filename, station",
     [
-        ("CADU_PRODUCT_TEST.tst", CADIP[0]),
+        ("CADU_PRODUCT_TEST.tst", CADIP),
         ("ADGS_PRODUCT_TEST.tst", ADGS),
     ],
 )
@@ -131,9 +135,9 @@ def test_invalid_check_status(filename, station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
+        rs_client = AuxipClient(href, None, "test_user", [EPlatform.S1A], logger)
     else:
-        rs_client = CadipClient(None, href, None, "test_user", "CADIP", "s1", logger)
+        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
     endpoint = href + endpoints[station]["status"]
 
     json_response = {"detail": "Not Found"}
@@ -174,6 +178,15 @@ def test_update_stac_catalog(response_is_valid, station):
         None
     """
 
+    logger = Logging.default(__name__)
+    href = "http://127.0.0.1:5000"
+
+    rs_client: AuxipClient | CadipClient | None = None
+    if station == ADGS:
+        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+    else:
+        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())
@@ -181,23 +194,15 @@ def test_update_stac_catalog(response_is_valid, station):
     # set the response status
     response_status = 200 if response_is_valid else 400
     # mock the publish to catalog endpoint
-    collection_name = create_collection_name(MISSION_NAME, station)
+    collection_name = create_collection_name(rs_client, MISSION_NAME)
     responses.add(
         responses.POST,
-        f"http://127.0.0.1:5000/catalog/collections/testUser:{collection_name}/items/",
+        f"{href}/catalog/collections/testUser:{collection_name}/items/",
         status=response_status,
     )
 
     for file_s in files_stac[station]["features"]:
-        resp = update_stac_catalog.fn(
-            {},
-            "http://127.0.0.1:5000",
-            "testUser",
-            collection_name,
-            file_s,
-            "s3://tmp_bucket/tmp",
-            Logging.default(__name__),
-        )
+        resp = update_stac_catalog.fn(rs_client, collection_name, file_s, "s3://tmp_bucket/tmp")
         assert resp == response_is_valid
 
 
@@ -274,6 +279,16 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     Returns:
         None
     """
+
+    logger = Logging.default(__name__)
+    href = "http://127.0.0.1:5000"
+
+    rs_client: AuxipClient | CadipClient | None = None
+    if station == ADGS:
+        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+    else:
+        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())[station]["features"]
@@ -285,12 +300,12 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     for fs in files_stac:
         file_ids.append(fs["id"])
 
-    collection_name = create_collection_name(MISSION_NAME, station)
+    collection_name = create_collection_name(rs_client, MISSION_NAME)
 
     request_params = {"collection": collection_name, "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
 
     # mock the publish to catalog endpoint
-    endpoint = "http://127.0.0.1:5000/catalog/search?" + urllib.parse.urlencode(request_params)
+    endpoint = f"{href}/catalog/search?" + urllib.parse.urlencode(request_params)
 
     responses.add(
         responses.GET,
@@ -301,12 +316,9 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     logger = Logging.default(__name__)
 
     files_stac = filter_unpublished_files.fn(
-        {},
-        "http://127.0.0.1:5000",
-        "testUser",
+        rs_client,
         collection_name,
         files_stac,
-        logger,
     )
 
     logger.debug(f"AFTER filtering ! FS = {files_stac} || ex = {mock_files_in_catalog}")
@@ -325,7 +337,7 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
 @pytest.mark.parametrize(
     "station",
     [
-        CADIP[0],
+        CADIP,
         ADGS,
     ],
 )
@@ -345,6 +357,8 @@ def test_ok_staging(station):
     Returns:
         None: This test does not return any value.
     """
+
+    logger = Logging.default(__name__)
     href = "http://127.0.0.1:5000"
 
     files_stac_path = RESOURCES / "files_stac.json"
@@ -377,8 +391,14 @@ def test_ok_staging(station):
             status=200,
         )
 
+    rs_client: AuxipClient | CadipClient | None = None
+    if station == ADGS:
+        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+    else:
+        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+
     # mock the publish to catalog endpoint
-    collection_name = create_collection_name(MISSION_NAME, station)
+    collection_name = create_collection_name(rs_client, MISSION_NAME)
     endpoint = f"{href}/catalog/collections/testUser:{collection_name}/items/"
     responses.add(
         responses.POST,
@@ -386,14 +406,10 @@ def test_ok_staging(station):
         status=200,
     )
     task_config = PrefectTaskConfig(
-        "testUser",
-        href,
-        href,
-        station,
+        rs_client,
         MISSION_NAME,
         local_path_for_dwn,
         obs,
-        None,
         files_stac[station]["features"],
         1,
     )
@@ -406,7 +422,7 @@ def test_ok_staging(station):
 @pytest.mark.parametrize(
     "station",
     [
-        CADIP[0],
+        CADIP,
         ADGS,
     ],
 )
@@ -425,7 +441,10 @@ def test_nok_staging(station):
     Returns:
         None: This test does not return any value.
     """
+
+    logger = Logging.default(__name__)
     href = "http://127.0.0.1:5000"
+
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())
@@ -445,8 +464,15 @@ def test_nok_staging(station):
             json=json_response,
             status=503,
         )
+
+    rs_client: AuxipClient | CadipClient | None = None
+    if station == ADGS:
+        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+    else:
+        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+
     # mock the publish to catalog endpoint
-    collection_name = create_collection_name(MISSION_NAME, station)
+    collection_name = create_collection_name(rs_client, MISSION_NAME)
     endpoint = f"{href}/catalog/collections/testUser:{collection_name}/items/"
     responses.add(
         responses.POST,
@@ -454,14 +480,10 @@ def test_nok_staging(station):
         status=200,
     )
     task_config = PrefectTaskConfig(
-        "testUser",
-        href,
-        href,
-        station,
+        rs_client,
         MISSION_NAME,
         local_path_for_dwn,
         obs,
-        None,
         files_stac[station]["features"],
         1,
     )
@@ -474,7 +496,7 @@ def test_nok_staging(station):
 @pytest.mark.parametrize(
     "station",
     [
-        CADIP[0],
+        CADIP,
         ADGS,
     ],
 )
@@ -504,9 +526,9 @@ def test_search_stations(station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
+        rs_client = AuxipClient(href, None, "test_user", [EPlatform.S1A], logger)
     else:
-        rs_client = CadipClient(None, href, None, "test_user", "CADIP", "s1", logger)
+        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
 
     # mock the search endpoint
     endpoint = href + endpoints[station]["search"]
@@ -547,7 +569,7 @@ def test_search_stations(station):
 @pytest.mark.parametrize(
     "station",
     [
-        CADIP[0],
+        CADIP,
         ADGS,
     ],
 )
@@ -580,9 +602,9 @@ def test_err_ret_search_stations(station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(None, href, None, "test_user", "s1", logger)
+        rs_client = AuxipClient(href, None, "test_user", [EPlatform.S1A], logger)
     else:
-        rs_client = CadipClient(None, href, None, "test_user", "CADIP", "s1", logger)
+        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
 
     # mock the search endpoint
     endpoint = href + endpoints[station]["search"]
@@ -629,7 +651,7 @@ def test_err_ret_search_stations(station):
 @pytest.mark.parametrize(
     "station",
     [
-        CADIP[0],
+        CADIP,
         ADGS,
     ],
 )
@@ -659,9 +681,10 @@ def test_wrong_url_search_stations(station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(None, bad_href, None, "test_user", "s1", logger)
+        rs_client = AuxipClient(bad_href, None, "testUser", [EPlatform.S1A], logger)
     else:
-        rs_client = CadipClient(None, bad_href, None, "test_user", "CADIP", "s1", logger)
+        rs_client = CadipClient(bad_href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+
     # mock the search endpoint
     endpoint = href + endpoints[station]["search"]
 
@@ -690,40 +713,6 @@ def test_wrong_url_search_stations(station):
     "station",
     ["CADIP", "ADGS", "UNKNOWN"],
 )
-def test_create_endpoint(station):
-    """Unit test for the create_endpoint function.
-
-    This test validates the behavior of the create_endpoint function when creating
-    an endpoint URL for different station types, including an unknown one.
-
-    Args:
-        station (str): The station type for which the endpoint URL is being created.
-
-    Raises:
-        AssertionError: If the expected result does not match the actual result.
-        If a RuntimeError exception is not raised in case of an Unknown station
-
-    Returns:
-        None: This test does not return any value.
-    """
-
-    if station == "UNKNOWN":
-        with pytest.raises(RuntimeError) as runtime_exception:
-            create_endpoint("http://127.0.0.1:5000", station)
-        assert "Unknown station !" in str(runtime_exception.value)
-    else:
-        assert (
-            create_endpoint("http://127.0.0.1:5000", station)
-            == "http://127.0.0.1:5000" + endpoints[station]["download"]
-        )
-
-
-@pytest.mark.unit
-@responses.activate
-@pytest.mark.parametrize(
-    "station",
-    ["CADIP", "ADGS", "UNKNOWN"],
-)
 def test_create_collection_name(station):
     """Unit test for the create_collection_name function.
 
@@ -742,12 +731,25 @@ def test_create_collection_name(station):
         None: This test does not return any value.
     """
 
+    logger = Logging.default(__name__)
+    href = "http://127.0.0.1:5000"
+
+    rs_client: AuxipClient | CadipClient | None = None
+    if station == ADGS:
+        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+    elif station == CADIP:
+        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+    else:
+        rs_client = None
+
     if station == "UNKNOWN":
         with pytest.raises(RuntimeError) as runtime_exception:
-            create_collection_name(MISSION_NAME, station)
+            create_collection_name(rs_client, MISSION_NAME)
         assert "Unknown station !" in str(runtime_exception.value)
     else:
-        assert create_collection_name(MISSION_NAME, station) == MISSION_NAME + "_aux" if station == "ADGS" else "_chunk"
+        assert (
+            create_collection_name(rs_client, MISSION_NAME) == MISSION_NAME + "_aux" if station == "ADGS" else "_chunk"
+        )
 
 
 @pytest.mark.unit
@@ -781,6 +783,7 @@ def test_staging_flow(station):
     local_path_for_dwn = f"./temporary/{station}"
     obs = "s3://test/tmp"
     href = "http://127.0.0.1:5000"
+    logger = Logging.default(__name__)
 
     # mock the search endpoint
     endpoint = href + endpoints[station]["search"]
@@ -832,15 +835,17 @@ def test_staging_flow(station):
             status=200,
         )
 
+    rs_client: AuxipClient | CadipClient | None = None
+    if station == ADGS:
+        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+    else:
+        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+
     flow_config = PrefectFlowConfig(
-        "testUser",
-        href,
-        href,
-        station,
+        rs_client,
         MISSION_NAME,
         local_path_for_dwn,
         obs,
-        None,
         0,
         datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
