@@ -527,10 +527,10 @@ if __name__ == "__main__":
     if not args.apikey:
         args.apikey = os.environ.get("RSPY_APIKEY", None)
 
-    rs_client = StacClient(args.url_catalog, args.apikey, args.user, logger)
+    _rs_client = StacClient(args.url_catalog, args.apikey, args.user, logger)
 
     # TODO: use "real" values ?
-    adgs_files = [
+    _adgs_files = [
         "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
         "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
         "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
@@ -538,12 +538,12 @@ if __name__ == "__main__":
 
     s1_l0_flow(
         PrefectS1L0FlowConfig(
-            rs_client,
+            _rs_client,
             args.url_dpr,
             args.mission,
             args.session_id,
             args.product_types,
-            adgs_files,
+            _adgs_files,
             args.s3_storage,
             args.temp_s3_storage,
         ),

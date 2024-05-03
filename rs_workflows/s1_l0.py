@@ -406,14 +406,14 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         "type": "Collection",
         "description": "test_description",
         "stac_version": "1.0.0",
-        "owner": config.user,
+        "owner": config.rs_client.owner_id,
     }
     logger.debug(f"Creating collection for the DPR products: {collection_name}")
     requests.post(
-        f"{config.url_catalog}/catalog/collections",
+        f"{config.rs_client.hostname_for('catalog')}/catalog/collections",
         json=minimal_collection,
         timeout=CATALOG_REQUEST_TIMEOUT,
-        **RsClient.create_apikey_headers(config.apikey),
+        **config.rs_client.apikey_headers,
     )
     fin_res = []
     for output_product in get_yaml_outputs(yaml_dpr_input):
@@ -429,13 +429,10 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         fin_res.append(
             (
                 update_stac_catalog.submit(
-                    RsClient.create_apikey_headers(config.apikey),
-                    config.url_catalog,
-                    config.user,
+                    config.rs_client,
                     collection_name,
                     matching_stac["stac_discovery"],
                     output_product,
-                    logger,
                     wait_for=[files_stac],
                 ),
                 output_product,

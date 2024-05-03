@@ -2,7 +2,6 @@
 
 import time
 from datetime import datetime
-from typing import Any
 
 import numpy as np
 import requests
@@ -143,7 +142,7 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         max_retries (int): Maximum number of retries for the task.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         rs_client: AuxipClient | CadipClient,
         mission,

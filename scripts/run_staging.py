@@ -11,6 +11,9 @@ import boto3
 import botocore
 import requests
 
+from rs_client.auxip_client import AuxipClient
+from rs_client.cadip_client import CadipClient
+from rs_common.config import ECadipStation
 from rs_workflows.staging import PrefectFlowConfig, create_collection_name, staging_flow
 
 s3_session = boto3.session.Session()
@@ -75,50 +78,19 @@ class Collection:
         }
 
 
-def run_flow(
-    user,
-    url,
-    url_catalog,
-    station,
-    mission,
-    tmp_local_download,
-    bucket_url,
-    api_key,
-    no_of_tasks,
-    start_date,
-    stop_date,
-):
-    # start the prefect flow
-    print(f"{url} | {url_catalog}")
-    staging_flow(
-        (
-            PrefectFlowConfig(
-                user,
-                url,
-                url_catalog,
-                station,
-                mission,
-                tmp_local_download,
-                bucket_url,
-                api_key,
-                no_of_tasks,
-                datetime.strptime(start_date, "%Y-%m-%dT%H:%M:%SZ"),
-                datetime.strptime(stop_date, "%Y-%m-%dT%H:%M:%SZ"),
-            )
-        ),
-    )
-
-
-def create_collection(url_catalog, user, collection_name, apikey_headers):
-    catalog_endpoint = url_catalog.rstrip("/") + "/catalog/collections"
-    collection_type = Collection(user, collection_name)
+def create_collection(rs_client, collection_name):
+    catalog_endpoint = rs_client.hostname_for("catalog") + "/catalog/collections"
+    collection_type = Collection(rs_client.owner_id, collection_name)
     logger.info(f"Endpoint used to insert the item info  within the catalog: {catalog_endpoint}")
-    response = requests.post(catalog_endpoint, data=None, json=collection_type.properties, **apikey_headers)
+    response = requests.post(catalog_endpoint, data=None, json=collection_type.properties, **rs_client.apikey_headers)
     logger.info("response = {} ".format(response))
 
 
 if __name__ == "__main__":
-    """This is a demo which integrates the search and download from a CADIP server. It also checks the download status"""
+    """
+    This is a demo which integrates the search and download from a CADIP server.
+    It also checks the download status.
+    """
 
     # If the bucket is already created, clear all files to start fresh for each demo.
     for b in buckets:
@@ -148,7 +120,6 @@ if __name__ == "__main__":
         description="Starts the demo for sprint 1 phase",
     )
     parser.add_argument("-a", "--url", type=str, required=True, help="Url of the RS-Server endpoints")
-    parser.add_argument("-c", "--url-catalog", type=str, required=True, help="Url of the RS-Server catalog")
 
     parser.add_argument(
         "-s",
@@ -214,13 +185,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # check if the RSPY_APIKEY env var is set
-    apikey_headers = {}
     if not args.apikey:
         args.apikey = os.environ.get("RSPY_APIKEY", None)
-    if args.apikey:
-        apikey_headers = {"headers": {"x-api-key": args.apikey}}
 
-    create_collection(args.url_catalog, args.user, create_collection_name(args.mission, args.station), apikey_headers)
+    rs_client: AuxipClient | CadipClient | None = None
+    if args.station == "ADGS":
+        rs_client = AuxipClient(args.url, args.apikey, args.user, [])
+    else:
+        rs_client = CadipClient(args.url, args.apikey, args.user, ECadipStation.CADIP, [])
+
+    create_collection(rs_client, create_collection_name(rs_client, args.mission))
 
     # catalog_endpoint = args.url_catalog.rstrip("/") + "/catalog/collections"
     # collection_type = Collection(args.user, "s1_aux")
@@ -233,14 +207,10 @@ if __name__ == "__main__":
     # logger.info("response = {} ".format(response))
 
     flowConfig = PrefectFlowConfig(
-        args.user,
-        args.url,
-        args.url_catalog,
-        args.station,
+        rs_client,
         "s1",
         args.location,
         args.s3_storage,
-        args.apikey,
         args.max_tasks,
         datetime.strptime(args.start_date, "%Y-%m-%dT%H:%M:%SZ"),
         datetime.strptime(args.stop_date, "%Y-%m-%dT%H:%M:%SZ"),
@@ -250,7 +220,20 @@ if __name__ == "__main__":
     dwn_flow_id = staging_flow(flowConfig)
     logger.info("EXIT !")
     # mission = "s1"
-    # catalog_data = json.loads( (requests.get(args.url_catalog.rstrip("/") + f"/catalog/collections/{args.user}:{mission}_aux/items?limit=100", **apikey_headers).content.decode()))
+    # catalog_data = json.loads(
+    #     (
+    #         requests.get(
+    #             args.url_catalog.rstrip("/") + f"/catalog/collections/{args.user}:{mission}_aux/items?limit=100",
+    #             **apikey_headers,
+    #         ).content.decode()
+    #     ),
+    # )
 
-    # for feature in catalog_data['features']:
-    #    print(requests.get(args.url_catalog + f"/catalog/collections/{args.user}:{mission}_aux/items/{feature['id']}/download/file", **apikey_headers).content)
+    # for feature in catalog_data["features"]:
+    #     print(
+    #         requests.get(
+    #             args.url_catalog
+    #             + f"/catalog/collections/{args.user}:{mission}_aux/items/{feature['id']}/download/file",
+    #             **apikey_headers,
+    #         ).content,
+    #     )

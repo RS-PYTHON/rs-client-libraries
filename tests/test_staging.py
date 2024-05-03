@@ -341,7 +341,7 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
         ADGS,
     ],
 )
-def test_ok_staging(station):
+def test_ok_staging(station):  # pylint: disable=too-many-locals
     """Unit test for the staging function in case of successful files ingestion.
 
     This test validates the behavior of the staging function when successfully ingesting files
@@ -426,7 +426,7 @@ def test_ok_staging(station):
         ADGS,
     ],
 )
-def test_nok_staging(station):
+def test_nok_staging(station):  # pylint: disable=too-many-locals
     """Unit test for the staging function in case of failed file ingestion.
 
     This test validates the behavior of the staging function when file ingestion
@@ -761,7 +761,7 @@ def test_create_collection_name(station):
         "ADGS",
     ],
 )
-def test_staging_flow(station):
+def test_staging_flow(station):  # pylint: disable=too-many-locals
     """Unit test for the staging_flow function.
 
     This test validates the behavior of the staging_flow function prefect flow when ingests
