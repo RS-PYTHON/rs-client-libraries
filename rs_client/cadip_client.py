@@ -15,7 +15,7 @@ class CadipClient(StacClient):
         platforms (list[PlatformEnum]): platform list.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None,

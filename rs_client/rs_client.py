@@ -2,17 +2,16 @@
 
 import logging
 import os
-from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Union
 
 import requests
 
-from rs_common.config import EDownloadStatus
+from rs_common.config import ECadipStation, EDownloadStatus, EPlatform
 from rs_common.logging import Logging
 
 
-class RsClient(ABC):
+class RsClient:
     """
     RsClient class implementation.
 
@@ -37,18 +36,44 @@ class RsClient(ABC):
         self.owner_id: str = owner_id
         self.logger: logging.Logger = logger or Logging.default(__name__)
 
-        self.apikey_headers: dict = self.create_apikey_headers(rs_server_api_key)
+        self.apikey_headers: dict = {"headers": {"x-api-key": rs_server_api_key}} if rs_server_api_key else {}
 
-    @staticmethod
-    def create_apikey_headers(apikey):
-        """Create the apikey
-
-        This function creates the apikey headers used when calling the endpoints. This may be empty
-        Args:
-            apikey_headers (dict): A dictionary with the apikey
+    def get_auxip_client(self, platforms: list[EPlatform]) -> "AuxipClient":  # type: ignore
         """
+        Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
 
-        return {"headers": {"x-api-key": apikey}} if apikey else {}
+        Args:
+            platforms (list[PlatformEnum]): platform list.
+        """
+        from rs_client.auxip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            AuxipClient,
+        )
+
+        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, platforms, self.logger)
+
+    def get_cadip_client(self, station: ECadipStation, platforms: list[EPlatform]) -> "CadipClient":  # type: ignore
+        """
+        Return an instance of the child class CadipClient, with the same attributes as this "self" instance.
+
+        Args:
+            station (ECadipStation): Cadip station
+            platforms (list[PlatformEnum]): platform list.
+        """
+        from rs_client.cadip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            CadipClient,
+        )
+
+        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, platforms, self.logger)
+
+    def get_stac_client(self) -> "StacClient":  # type: ignore
+        """
+        Return an instance of the child class StacClient, with the same attributes as this "self" instance.
+        """
+        from rs_client.stac_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            StacClient,
+        )
+
+        return StacClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
 
     def hostname_for(self, service: str) -> str:
         """
@@ -59,18 +84,16 @@ class RsClient(ABC):
         if from_env := os.getenv(f"RSPY_HOST_{service.upper()}", None):
             return from_env
         if self.rs_server_href is None:
-            raise RuntimeError(f"RS-Server URL is undefined")
+            raise RuntimeError("RS-Server URL is undefined")
         return self.rs_server_href.rstrip("/")
 
-    @abstractmethod
     def href(self) -> str:
         """Return the RS-Server hostname and path where the child class endpoints (ADGS, CADIP, ...) are deployed."""
-        pass
+        return ""  # not applicable by default
 
-    @abstractmethod
     def station_name(self) -> str:
         """Return the station name for CADIP ("INS", "MPS", ...) or just "ADGS" for ADGS."""
-        pass
+        return ""  # not applicable by default
 
     def check_status(self, filename, endpoint_timeout):
         """Check the status of a file download from the specified rs-server endpoint.
