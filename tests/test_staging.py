@@ -84,7 +84,7 @@ def test_valid_staging_status(filename, station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(href, None, "test_user", [EPlatform.S1A], logger)
+        rs_client = AuxipClient(href, None, "test_user", logger)
     else:
         rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
     endpoint = href + endpoints[station]["status"]
@@ -149,7 +149,7 @@ def test_invalid_staging_status(filename, station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(href, None, "test_user", [EPlatform.S1A], logger)
+        rs_client = AuxipClient(href, None, "test_user", logger)
     else:
         rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
     endpoint = href + endpoints[station]["status"]
@@ -197,7 +197,7 @@ def test_update_stac_catalog(response_is_valid, station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+        rs_client = AuxipClient(href, None, "testUser", logger)
     else:
         rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
 
@@ -299,7 +299,7 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+        rs_client = AuxipClient(href, None, "testUser", logger)
     else:
         rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
 
@@ -407,7 +407,7 @@ def test_ok_staging(station):  # pylint: disable=too-many-locals
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+        rs_client = AuxipClient(href, None, "testUser", logger)
     else:
         rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
 
@@ -481,7 +481,7 @@ def test_nok_staging(station):  # pylint: disable=too-many-locals
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+        rs_client = AuxipClient(href, None, "testUser", logger)
     else:
         rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
 
@@ -540,7 +540,7 @@ def test_search_stations(station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(href, None, "test_user", [EPlatform.S1A], logger)
+        rs_client = AuxipClient(href, None, "test_user", logger)
     else:
         rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
 
@@ -616,7 +616,7 @@ def test_err_ret_search_stations(station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(href, None, "test_user", [EPlatform.S1A], logger)
+        rs_client = AuxipClient(href, None, "test_user", logger)
     else:
         rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
 
@@ -695,7 +695,7 @@ def test_wrong_url_search_stations(station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(bad_href, None, "testUser", [EPlatform.S1A], logger)
+        rs_client = AuxipClient(bad_href, None, "testUser", logger)
     else:
         rs_client = CadipClient(bad_href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
 
@@ -750,7 +750,7 @@ def test_create_collection_name(station):
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+        rs_client = AuxipClient(href, None, "testUser", logger)
     elif station == CADIP:
         rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
     else:
@@ -851,7 +851,7 @@ def test_staging_flow(station):  # pylint: disable=too-many-locals
 
     rs_client: AuxipClient | CadipClient | None = None
     if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", [EPlatform.S1A], logger)
+        rs_client = AuxipClient(href, None, "testUser", logger)
     else:
         rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
 

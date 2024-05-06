@@ -384,6 +384,10 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         adgs_collection,
         config.adgs_files,
     )
+
+    print(f"TOTOOOO : {int(cadip_catalog_data.result()['context']['returned'])}")
+    print(f"TOTOOOO : {int(adgs_catalog_data.result()['context']['returned'])}")
+
     # the previous tasks may be launched in parallel. The next task depends on the results from these previous tasks
     if (
         not cadip_catalog_data.result()

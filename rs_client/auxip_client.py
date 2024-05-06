@@ -1,6 +1,5 @@
 """AuxipClient class implementation."""
 
-import logging
 import os
 
 from rs_client.stac_client import StacClient
@@ -12,16 +11,6 @@ class AuxipClient(StacClient):
 
     Attributes: see :py:class:`RsClient`
     """
-
-    def __init__(  # pylint: disable=too-many-arguments
-        self,
-        rs_server_href: str | None,
-        rs_server_api_key: str | None,
-        owner_id: str,
-        logger: logging.Logger | None = None,
-    ):
-        """AuxipClient class constructor."""
-        super().__init__(rs_server_href, rs_server_api_key, owner_id, logger)
 
     @property
     def href_adgs(self) -> str:

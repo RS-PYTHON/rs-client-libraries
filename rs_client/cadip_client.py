@@ -69,7 +69,7 @@ class CadipClient(StacClient):
     @property
     def station_name(self) -> str:
         """Return the station name."""
-        return f"CADIP/{self.station.value}"
+        return f"CADIP/{self.station.value}"  # TO BE DISCUSSED: maybe just return "CADIP"
 
     ############################
     # Call RS-Server endpoints #
@@ -78,22 +78,22 @@ class CadipClient(StacClient):
     def search_sessions(
         self,
         timeout: int,
-        id: str | None = None,
+        session_ids: list[str] = None,
         start_date: datetime | None = None,
         stop_date: datetime | None = None,
     ) -> dict:  # TODO return pystac.ItemCollection instead
         """Endpoint to retrieve list of sessions from any CADIP station.
 
         Args:
-            id (str, list-like-str): Session identifier
-                (eg: "S1A_20170501121534062343" or "S1A_20170501121534062343, S1A_20240328185208053186")
+            session_ids (list[str]): Session identifiers
+                (eg: ["S1A_20170501121534062343"] or ["S1A_20170501121534062343, S1A_20240328185208053186"])
             start_date (datetime): Start date of the time interval
             stop_date (datetime): Stop date of the time interval
         """
 
         payload = {}
-        if id:
-            payload["id"] = str(id)
+        if session_ids:
+            payload["id"] = ",".join(session_ids)
         if self.platforms:
             payload["platform"] = ",".join(self.platforms)
         if start_date:

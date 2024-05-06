@@ -41,7 +41,7 @@ class RsClient:
     # Get child class instances #
     #############################
 
-    def get_auxip_client(self) -> "AuxipClient":  # type: ignore
+    def get_auxip_client(self) -> "AuxipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
         """
@@ -51,7 +51,11 @@ class RsClient:
 
         return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
 
-    def get_cadip_client(self, station: ECadipStation, platforms: list[EPlatform]) -> "CadipClient":  # type: ignore
+    def get_cadip_client(
+        self,
+        station: ECadipStation,
+        platforms: list[EPlatform],
+    ) -> "CadipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class CadipClient, with the same attributes as this "self" instance.
 
@@ -65,7 +69,7 @@ class RsClient:
 
         return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, platforms, self.logger)
 
-    def get_stac_client(self) -> "StacClient":  # type: ignore
+    def get_stac_client(self) -> "StacClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class StacClient, with the same attributes as this "self" instance.
         """
@@ -99,7 +103,7 @@ class RsClient:
         # TODO: check the status for a certain timeout if http returns NOK ?
         try:
             response = requests.get(
-                self.href_status,
+                self.href_status,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
                 params={"name": filename},
                 timeout=timeout,
                 **self.apikey_headers,
@@ -148,7 +152,7 @@ class RsClient:
         try:
             # logger.debug(f"Calling  {endpoint} with payload {payload}")
             response = requests.get(
-                self.href_staging,
+                self.href_staging,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
                 params=payload,
                 timeout=timeout,
                 **self.apikey_headers,
@@ -213,7 +217,7 @@ class RsClient:
             payload["sortby"] = str(sortby)
         try:
             response = requests.get(
-                self.href_search,
+                self.href_search,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
                 params=payload,
                 timeout=timeout,
                 **self.apikey_headers,
