@@ -79,7 +79,7 @@ class Collection:
 
 
 def create_collection(rs_client, collection_name):
-    catalog_endpoint = rs_client.hostname_for("catalog") + "/catalog/collections"
+    catalog_endpoint = rs_client.href_catalog + "/catalog/collections"
     collection_type = Collection(rs_client.owner_id, collection_name)
     logger.info(f"Endpoint used to insert the item info  within the catalog: {catalog_endpoint}")
     response = requests.post(catalog_endpoint, data=None, json=collection_type.properties, **rs_client.apikey_headers)

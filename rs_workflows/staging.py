@@ -83,9 +83,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     # pp = pprint.PrettyPrinter(indent=4)
     # pp.pprint(stac_file_info)
 
-    catalog_endpoint = (
-        rs_client.hostname_for("catalog") + f"/catalog/collections/{rs_client.owner_id}:{collection_name}/items/"
-    )
+    catalog_endpoint = rs_client.href_catalog + f"/catalog/collections/{rs_client.owner_id}:{collection_name}/items/"
     try:
         response = requests.post(
             catalog_endpoint,
@@ -188,14 +186,14 @@ def staging(config: PrefectTaskConfig):
     for i, file_stac in enumerate(config.task_files_stac):
         # update the filename to be ingested
         try:
-            rs_client.staging(file_stac["id"], config.s3_path, config.tmp_download_path, ENDPOINT_TIMEOUT)
+            rs_client.staging(file_stac["id"], ENDPOINT_TIMEOUT, config.s3_path, config.tmp_download_path)
         except RuntimeError as e:
             # TODO: Continue? Stop ?
             logger.exception(f"Could not stage file %s. Exception: {e}")
             continue
 
         # monitor the status of the file until it is completely downloaded before initiating the next download request
-        status = rs_client.check_status(file_stac["id"], ENDPOINT_TIMEOUT)
+        status = rs_client.staging_status(file_stac["id"], ENDPOINT_TIMEOUT)
         # just for the demo the timeout is hardcoded, it should be otherwise defined somewhere in the configuration
         timeout = DOWNLOAD_FILE_TIMEOUT  # 3 minutes
         while status in [EDownloadStatus.NOT_STARTED, EDownloadStatus.IN_PROGRESS] and timeout > 0:
@@ -206,7 +204,7 @@ def staging(config: PrefectTaskConfig):
             )
             time.sleep(1)
             timeout -= 1
-            status = rs_client.check_status(file_stac["id"], ENDPOINT_TIMEOUT)
+            status = rs_client.staging_status(file_stac["id"], ENDPOINT_TIMEOUT)
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...", file_stac["id"])
             # TODO: either move the code from filter_unpublished_files to RsClient
@@ -259,7 +257,7 @@ def filter_unpublished_files(
     # TODO: Should this list be checked for duplicated items?
     for fs in files_stac:
         ids.append(str(fs["id"]))
-    catalog_endpoint = rs_client.hostname_for("catalog") + "/catalog/search"
+    catalog_endpoint = rs_client.href_catalog + "/catalog/search"
     request_params = {"collection": collection_name, "ids": ",".join(ids), "filter": f"owner_id='{rs_client.owner_id}'"}
     try:
         response = requests.get(

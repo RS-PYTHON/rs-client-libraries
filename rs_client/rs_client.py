@@ -1,7 +1,6 @@
 """RsClient class implementation."""
 
 import logging
-import os
 from datetime import datetime
 from typing import Union
 
@@ -38,18 +37,19 @@ class RsClient:
 
         self.apikey_headers: dict = {"headers": {"x-api-key": rs_server_api_key}} if rs_server_api_key else {}
 
-    def get_auxip_client(self, platforms: list[EPlatform]) -> "AuxipClient":  # type: ignore
+    #############################
+    # Get child class instances #
+    #############################
+
+    def get_auxip_client(self) -> "AuxipClient":  # type: ignore
         """
         Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
-
-        Args:
-            platforms (list[PlatformEnum]): platform list.
         """
         from rs_client.auxip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             AuxipClient,
         )
 
-        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, platforms, self.logger)
+        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
 
     def get_cadip_client(self, station: ECadipStation, platforms: list[EPlatform]) -> "CadipClient":  # type: ignore
         """
@@ -75,27 +75,11 @@ class RsClient:
 
         return StacClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
 
-    def hostname_for(self, service: str) -> str:
-        """
-        Return the URL hostname of a service deployed on the host.
-        This URL can be overwritten using the RSPY_HOST_<SERVICE> env variable (used e.g. for local mode).
-        Either it should just be the RS-Server URL.
-        """
-        if from_env := os.getenv(f"RSPY_HOST_{service.upper()}", None):
-            return from_env
-        if self.rs_server_href is None:
-            raise RuntimeError("RS-Server URL is undefined")
-        return self.rs_server_href.rstrip("/")
+    ############################
+    # Call RS-Server endpoints #
+    ############################
 
-    def href(self) -> str:
-        """Return the RS-Server hostname and path where the child class endpoints (ADGS, CADIP, ...) are deployed."""
-        return ""  # not applicable by default
-
-    def station_name(self) -> str:
-        """Return the station name for CADIP ("INS", "MPS", ...) or just "ADGS" for ADGS."""
-        return ""  # not applicable by default
-
-    def check_status(self, filename, endpoint_timeout):
+    def staging_status(self, filename, timeout: int) -> EDownloadStatus:
         """Check the status of a file download from the specified rs-server endpoint.
 
         This function sends a GET request to the rs-server endpoint with the filename as a query parameter
@@ -115,9 +99,9 @@ class RsClient:
         # TODO: check the status for a certain timeout if http returns NOK ?
         try:
             response = requests.get(
-                f"{self.href()}/status",
+                self.href_status,
                 params={"name": filename},
-                timeout=endpoint_timeout,
+                timeout=timeout,
                 **self.apikey_headers,
             )
 
@@ -135,7 +119,7 @@ class RsClient:
 
         return EDownloadStatus.FAILED
 
-    def staging(self, filename, s3_path, tmp_download_path, staging_endpoint_timeout):
+    def staging(self, filename: str, timeout: int, s3_path: str = None, tmp_download_path: str = None):
         """Prefect task function to stage (=download/ingest) files.
 
         This prefect task function access the RS-Server endpoints that start the download of files and
@@ -164,9 +148,9 @@ class RsClient:
         try:
             # logger.debug(f"Calling  {endpoint} with payload {payload}")
             response = requests.get(
-                self.href(),
+                self.href_staging,
                 params=payload,
-                timeout=staging_endpoint_timeout,
+                timeout=timeout,
                 **self.apikey_headers,
             )
             self.logger.debug(f"Download start endpoint returned in {response.elapsed.total_seconds()}")
@@ -185,8 +169,9 @@ class RsClient:
         self,
         start_date: datetime,
         stop_date: datetime,
-        search_endpoint_timeout,
+        timeout: int,
         limit: Union[int, None] = None,
+        sortby: Union[str, None] = None,
     ) -> list:
         """Retrieve a list of files from the specified endpoint within the given time range.
 
@@ -199,6 +184,7 @@ class RsClient:
             endpoint (str): The URL endpoint to query for file information.
             start_date (datetime): The start date/time of the time range.
             stop_date (datetime, optional): The stop date/time of the time range.
+            sortby (str, optional): Sort by +/-fieldName (ascending/descending), default is "-datetime"
 
         Returns:
             files (list): A list of files (in stac format) available at the endpoint within the specified time range.
@@ -223,11 +209,13 @@ class RsClient:
         }
         if limit:
             payload["limit"] = str(limit)
+        if sortby:
+            payload["sortby"] = str(sortby)
         try:
             response = requests.get(
-                f"{self.href()}/search",
+                self.href_search,
                 params=payload,
-                timeout=search_endpoint_timeout,
+                timeout=timeout,
                 **self.apikey_headers,
             )
         except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:

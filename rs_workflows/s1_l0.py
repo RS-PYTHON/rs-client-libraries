@@ -241,7 +241,7 @@ def get_cadip_catalog_data(rs_client: RsClient, collection: str, session_id: str
     """
     logger = rs_client.logger
     logger.debug("Task get_cadip_catalog_data STARTED")
-    catalog_endpoint = rs_client.hostname_for("catalog") + "/catalog/search"
+    catalog_endpoint = rs_client.href_catalog + "/catalog/search"
 
     query = create_cql2_filter({"collection": f"{rs_client.owner_id}_{collection}", "cadip:session_id": session_id})
     # logger.debug(f"{url_catalog} | {username} | {collection} | {session_id} | {apikey}")
@@ -286,7 +286,7 @@ def get_adgs_catalog_data(rs_client: RsClient, collection: str, files: list):
     """
     logger = rs_client.logger
     logger.debug("Task get_adgs_catalog_data STARTED")
-    catalog_endpoint = rs_client.hostname_for("catalog") + "/catalog/search"
+    catalog_endpoint = rs_client.href_catalog + "/catalog/search"
 
     payload = {
         "collection": f"{rs_client.owner_id}_{collection}",
@@ -424,7 +424,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
     }
     logger.debug(f"Creating collection for the DPR products: {collection_name}")
     requests.post(
-        f"{config.rs_client.hostname_for('catalog')}/catalog/collections",
+        f"{config.rs_client.href_catalog}/catalog/collections",
         json=minimal_collection,
         timeout=CATALOG_REQUEST_TIMEOUT,
         **config.rs_client.apikey_headers,

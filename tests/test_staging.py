@@ -62,10 +62,10 @@ endpoints = {
         ("ADGS_PRODUCT_TEST.tst", ADGS),
     ],
 )
-def test_valid_check_status(filename, station):
-    """Unit test for the check_status function.
+def test_valid_staging_status(filename, station):
+    """Unit test for the staging_status function.
 
-    This test validates the behavior of the check_status function under a valid scenario
+    This test validates the behavior of the staging_status function under a valid scenario
     for different station types (CADIP, ADGS....).
 
     Args:
@@ -97,7 +97,7 @@ def test_valid_check_status(filename, station):
         status=200,
     )
 
-    assert rs_client.check_status(filename, timeout) == EDownloadStatus.NOT_STARTED
+    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.NOT_STARTED
 
     json_response["status"] = EDownloadStatus.IN_PROGRESS
     responses.add(
@@ -106,7 +106,7 @@ def test_valid_check_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert rs_client.check_status(filename, timeout) == EDownloadStatus.IN_PROGRESS
+    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.IN_PROGRESS
 
     json_response["status"] = EDownloadStatus.DONE
     responses.add(
@@ -115,7 +115,7 @@ def test_valid_check_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert rs_client.check_status(filename, timeout) == EDownloadStatus.DONE
+    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.DONE
 
 
 @pytest.mark.unit
@@ -127,10 +127,10 @@ def test_valid_check_status(filename, station):
         ("ADGS_PRODUCT_TEST.tst", ADGS),
     ],
 )
-def test_invalid_check_status(filename, station):
-    """Unit test for the check_status function in case of invalid response.
+def test_invalid_staging_status(filename, station):
+    """Unit test for the staging_status function in case of invalid response.
 
-    This test validates the behavior of the check_status function when receiving
+    This test validates the behavior of the staging_status function when receiving
     an invalid response from the endpoint, resulting in a FAILED status.
 
     Args:
@@ -138,7 +138,7 @@ def test_invalid_check_status(filename, station):
         station (str): The station type.
 
     Raises:
-        AssertionError: If the check_status function does not return EDownloadStatus.FAILED.
+        AssertionError: If the staging_status function does not return EDownloadStatus.FAILED.
 
     Returns:
         None: This test does not return any value.
@@ -162,7 +162,7 @@ def test_invalid_check_status(filename, station):
         status=404,
     )
 
-    assert rs_client.check_status(filename, timeout) == EDownloadStatus.FAILED
+    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.FAILED
 
 
 @pytest.mark.unit
