@@ -1,0 +1,55 @@
+# Copyright 2024 CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+general_configuration:
+  logging:
+    level: DEBUG
+  triggering__validate_run: true
+  triggering__use_default_filename: true
+  triggering__use_basic_logging: true
+  triggering__load_default_logging: false
+breakpoints:
+workflow:
+- step: 1
+  active: true
+  module: rs.dpr.mockup # string corresponding to the python path of the module
+  processing_unit: DprMockupProcessor # EOProcessingUnit class name
+  name: DprMockupProcessor # identifier for the processing unit
+  inputs:
+  - in1: CADU1
+  - in2: ADGS2
+  outputs:
+  - out0: S1SEWRAW
+  parameters:
+    product_types:
+    - S1SEWRAW
+I/O:
+  inputs_products:
+  - id: CADU1
+    path: s3://test-bucket/CADU.raw
+    store_params: {}
+    store_type: raw
+  - id: ADGS2
+    path: s3://test-bucket/AUX.EOF
+    store_params: {}
+    store_type: EOF
+  output_products:
+  - id: S1SEWRAW
+    path: s3://test-bucket/PRODUCTS/S1SEWRAW/
+    store_params: {}
+    store_type: zarr
+    type: folder|zip
+dask_context: {}
+logging: {}
+config: {}

@@ -1,0 +1,43 @@
+# Copyright 2024 CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+general_configuration:
+  logging:
+    level: DEBUG
+  triggering__validate_run: true
+  triggering__use_default_filename: true
+  triggering__use_basic_logging: true
+  triggering__load_default_logging: false
+breakpoints:
+workflow:
+- step: 1
+  active: true
+  module: rs.dpr.mockup # string corresponding to the python path of the module
+  processing_unit: DprMockupProcessor # EOProcessingUnit class name
+  name: DprMockupProcessor # identifier for the processing unit
+  inputs:
+  -
+  outputs:
+  -
+  parameters:
+    product_types: # List of EOPF product types we want to generate. In this example we simulate S1L0 processor that generates 4 products
+      -
+I/O:
+  inputs_products:
+   -
+  output_products:
+  -
+dask_context: {}
+logging: {}
+config: {}
