@@ -25,7 +25,7 @@ import responses
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
-from rs_common.config import ECadipStation, EDownloadStatus, EPlatform
+from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus, EPlatform
 from rs_common.logging import Logging
 from rs_workflows.staging import (
     PrefectFlowConfig,
@@ -556,8 +556,8 @@ def test_search_stations(station):
     )
 
     search_response = rs_client.search_stations(
-        datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
-        datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+        datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
+        datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
         timeout,
     )
     assert len(search_response) == 2
@@ -570,8 +570,8 @@ def test_search_stations(station):
         status=200,
     )
     search_response = rs_client.search_stations(
-        datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
-        datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+        datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
+        datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
         timeout,
         1,
     )
@@ -632,8 +632,8 @@ def test_err_ret_search_stations(station):
     )
     logger = Logging.default(__name__)
     search_response = rs_client.search_stations(
-        datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
-        datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+        datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
+        datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
         timeout,
         2,
     )
@@ -652,8 +652,8 @@ def test_err_ret_search_stations(station):
 
     with pytest.raises(RuntimeError) as runtime_exception:
         search_response = rs_client.search_stations(
-            datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
-            datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+            datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
+            datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
             timeout,
             2,
         )
@@ -713,8 +713,8 @@ def test_wrong_url_search_stations(station):
     # use a wrong endpoint
     with pytest.raises(RuntimeError) as runtime_exception:
         rs_client.search_stations(
-            datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
-            datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+            datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
+            datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
             timeout,
             2,
         )
@@ -861,7 +861,7 @@ def test_staging_flow(station):  # pylint: disable=too-many-locals
         local_path_for_dwn,
         obs,
         0,
-        datetime.strptime("2014-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ"),
-        datetime.strptime("2024-02-02T23:59:59Z", "%Y-%m-%dT%H:%M:%SZ"),
+        datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
+        datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
     )
     assert staging_flow(flow_config) is True

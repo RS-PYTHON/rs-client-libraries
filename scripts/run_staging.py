@@ -15,7 +15,7 @@ import requests
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
-from rs_common.config import ECadipStation
+from rs_common.config import DATETIME_FORMAT, ECadipStation
 from rs_workflows.staging import PrefectFlowConfig, create_collection_name, staging_flow
 
 s3_session = boto3.session.Session()
@@ -216,8 +216,8 @@ if __name__ == "__main__":
         args.location,
         args.s3_storage,
         args.max_tasks,
-        datetime.strptime(args.start_date, "%Y-%m-%dT%H:%M:%SZ"),
-        datetime.strptime(args.stop_date, "%Y-%m-%dT%H:%M:%SZ"),
+        datetime.strptime(args.start_date, DATETIME_FORMAT),
+        datetime.strptime(args.stop_date, DATETIME_FORMAT),
         None,
     )
 

@@ -7,7 +7,7 @@ from datetime import datetime
 import requests
 
 from rs_client.stac_client import StacClient
-from rs_common.config import ECadipStation, EPlatform
+from rs_common.config import DATETIME_FORMAT, ECadipStation, EPlatform
 
 
 class CadipClient(StacClient):
@@ -95,11 +95,11 @@ class CadipClient(StacClient):
         if session_ids:
             payload["id"] = ",".join(session_ids)
         if self.platforms:
-            payload["platform"] = ",".join(self.platforms)
+            payload["platform"] = ",".join([platform.value for platform in self.platforms])
         if start_date:
-            payload["start_date"] = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+            payload["start_date"] = start_date.strftime(DATETIME_FORMAT)
         if stop_date:
-            payload["stop_date"] = stop_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+            payload["stop_date"] = stop_date.strftime(DATETIME_FORMAT)
         try:
             response = requests.get(
                 self.href_session,

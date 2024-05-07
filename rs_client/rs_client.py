@@ -6,7 +6,7 @@ from typing import Union
 
 import requests
 
-from rs_common.config import ECadipStation, EDownloadStatus, EPlatform
+from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus, EPlatform
 from rs_common.logging import Logging
 
 
@@ -207,9 +207,9 @@ class RsClient:
         """
 
         payload = {
-            "datetime": start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+            "datetime": start_date.strftime(DATETIME_FORMAT)
             + "/"  # 2014-01-01T12:00:00Z/2023-12-30T12:00:00Z",
-            + stop_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            + stop_date.strftime(DATETIME_FORMAT),
         }
         if limit:
             payload["limit"] = str(limit)

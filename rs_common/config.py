@@ -2,8 +2,15 @@
 
 from enum import Enum
 
+#############
+# Constants #
+#############
+
+# datetime format used for HTTP requests
+DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
 #########
-# ENums #
+# Enums #
 #########
 
 
