@@ -52,6 +52,31 @@ def test_station_names():
     assert "CADIP" in CADIP_CLIENT.station_name
 
 
+def test_server_href(monkeypatch):
+    """Test that the Auxip, Cadip, Catalog service URLs can be passed by environment variable."""
+
+    rs_client = RsClient("", RS_SERVER_API_KEY, OWNER_ID)  # no global href
+
+    for env_var, client, get_href in [
+        ["RSPY_HOST_ADGS", rs_client.get_auxip_client(), "href_adgs"],
+        ["RSPY_HOST_CADIP", rs_client.get_cadip_client(CADIP_STATION, PLATFORMS), "href_cadip"],
+        ["RSPY_HOST_CATALOG", rs_client.get_stac_client(), "href_catalog"],
+    ]:
+        # Without the env var, we should have an error
+        with pytest.raises(RuntimeError):
+            getattr(client, get_href)
+
+        # If we set the global href, it should be returned
+        client.rs_server_href = RS_SERVER_HREF
+        assert getattr(client, get_href) == RS_SERVER_HREF
+
+        # It can be overriden by the env var
+        dummy_href = "DUMMY_HREF"
+        monkeypatch.setenv(env_var, dummy_href)
+        assert getattr(client, get_href) == dummy_href
+        monkeypatch.delenv(env_var)
+
+
 def test_cadip_sessions():
     """
     Test CadipClient.search_sessions
