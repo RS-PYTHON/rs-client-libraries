@@ -5,7 +5,7 @@ import os
 from rs_client.rs_client import RsClient
 
 
-class StacClient(RsClient):
+class StacClient(RsClient):  # pylint: disable=abstract-method
     """
     StacClient class implementation.
 

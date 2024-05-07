@@ -10,7 +10,7 @@ from prefect_dask.task_runners import DaskTaskRunner
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
-from rs_client.rs_client import RsClient
+from rs_client.stac_client import StacClient
 from rs_common.config import EDownloadStatus
 from rs_common.logging import Logging
 
@@ -44,7 +44,7 @@ def get_prefect_logger(general_logger_name):
 
 @task
 def update_stac_catalog(  # pylint: disable=too-many-arguments
-    rs_client: RsClient,
+    rs_client: StacClient,
     collection_name: str,
     stac_file_info: dict,
     obs: str,
@@ -238,14 +238,14 @@ def staging(config: PrefectTaskConfig):
 
 @task
 def filter_unpublished_files(
-    rs_client: RsClient,
+    rs_client: StacClient,
     collection_name: str,
     files_stac: list,
 ) -> list:
     """Check for unpublished files in the catalog.
 
     Args:
-        rs_client (RsClient): RsClient instance.
+        rs_client (StacClient): StacClient instance.
         collection_name (str): The name of the collection to be used.
         files_stac (list): List of files (dcitionary for each) to be checked for publication.
 

@@ -243,21 +243,16 @@ class RsClient:
     ##############################################
 
     @property
-    def href_catalog(self) -> str:
-        raise NotImplementedError
-
-    @property
     def href_search(self) -> str:
+        """Implemented by AuxipClient and CadipClient."""
         raise NotImplementedError
 
     @property
     def href_staging(self) -> str:
+        """Implemented by AuxipClient and CadipClient."""
         raise NotImplementedError
 
     @property
     def href_status(self) -> str:
-        raise NotImplementedError
-
-    @property
-    def station_name(self) -> str:
+        """Implemented by AuxipClient and CadipClient."""
         raise NotImplementedError

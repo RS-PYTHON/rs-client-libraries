@@ -78,7 +78,7 @@ class CadipClient(StacClient):
     def search_sessions(
         self,
         timeout: int,
-        session_ids: list[str] = [],
+        session_ids: list[str] | None = None,
         start_date: datetime | None = None,
         stop_date: datetime | None = None,
     ) -> list[dict]:  # TODO return pystac.ItemCollection instead

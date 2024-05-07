@@ -24,7 +24,7 @@ from prefect_dask.task_runners import DaskTaskRunner
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
-from rs_client.rs_client import RsClient
+from rs_client.stac_client import StacClient
 from rs_common.logging import Logging
 from rs_workflows.staging import (
     CATALOG_REQUEST_TIMEOUT,
@@ -228,11 +228,11 @@ def create_cql2_filter(properties: dict, op: str = "and"):
 
 
 @task
-def get_cadip_catalog_data(rs_client: RsClient, collection: str, session_id: str):
+def get_cadip_catalog_data(rs_client: StacClient, collection: str, session_id: str):
     """Task to retrieve catalog data from CADIP.
 
     Args:
-        rs_client (RsClient): RsClient instance
+        rs_client (StacClient): StacClient instance
         collection (str): Collection name.
         session_id (str): Session ID.
 
@@ -270,11 +270,11 @@ def get_cadip_catalog_data(rs_client: RsClient, collection: str, session_id: str
 
 
 @task
-def get_adgs_catalog_data(rs_client: RsClient, collection: str, files: list):
+def get_adgs_catalog_data(rs_client: StacClient, collection: str, files: list):
     """Task to retrieve catalog data from ADGS
 
     Args:
-        rs_client (RsClient): RsClient instance
+        rs_client (StacClient): StacClient instance
         collection (str): The collection name.
         files (list): A list of file IDs.
 
@@ -322,7 +322,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        rs_client: RsClient,
+        rs_client: StacClient,
         url_dpr: str,
         mission: str,
         cadip_session_id: str,
@@ -335,7 +335,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
         Initialize the PrefectS1L0FlowConfig object with provided parameters.
 
         Args:
-            rs_client (RsClient): RsClient instance
+            rs_client (StacClient): StacClient instance
             url_dpr (str): The URL of the dpr endpoint
             mission (str): The mission name.
             cadip_session_id (str): The CADIP session ID.
