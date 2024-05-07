@@ -18,6 +18,8 @@ on:
   push:
   pull_request:
     types: [opened, synchronize, reopened]
+    # run this worflow only for code/test related changes (avoid it for documentation)
+    paths: ['**.json', '**.lock', '**.py', '**.raw', '**.toml', '**.yaml', '**.yml']
   workflow_dispatch:
 
 env:
@@ -25,10 +27,27 @@ env:
   SONAR_PROJECT_KEY: RS-PYTHON_rs-client-libraries_AY5BRtidvquboa54OdgA
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      conf: ${{ steps.filter.outputs.conf }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code: ['**.py']
+            conf: ['**.lock', '**.json', '**.raw', '**.toml', '**.yaml', '**.yml']
 
   check-format:
     runs-on: ubuntu-latest
     name: Check format (pre-commit, black, isort)
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/install-python
@@ -37,11 +56,13 @@ jobs:
           ":information_source: This job checks that you have run \`pre-commit run --all-files\` in
           your local git repository before committing."
           >> $GITHUB_STEP_SUMMARY
-      - uses: pre-commit/action@v3.0.0
+      - uses: pre-commit/action@v3.0.1
 
   check-linting:
     runs-on: ubuntu-latest
     name: Check linting (pylint, flake8)
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     continue-on-error: true # run other jobs, resolve issues later
     steps:
       - uses: actions/checkout@v4
@@ -71,6 +92,8 @@ jobs:
   check-typing:
     runs-on: ubuntu-latest
     name: Check typing (mypy)
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     continue-on-error: true # run other jobs, resolve issues later
     steps:
       - uses: actions/checkout@v4
@@ -151,14 +174,14 @@ jobs:
           >> $GITHUB_STEP_SUMMARY
         shell: bash
 
-  run-unit-tests:
+  run-all-pytests:
     runs-on: ubuntu-latest
-    name: Run unit tests (pytest)
+    name: Run pytest # pytest unit and integration tests
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/poetry-install
 
-      - name: Run unit tests
+      - name: Run pytest
         run: |
           set -x && poetry run pytest $(find . -name tests) \
             --durations=0 \
@@ -177,45 +200,18 @@ jobs:
       - name: Save reports
         uses: actions/upload-artifact@v4
         with:
-          name: run-unit-tests
+          name: run-all-pytests
           path: |
             .coverage
             ./cov-report.xml
             ./junit-xml-report.xml
           retention-days: 1
 
-  # TODO: what the integration tests should be, what is the difference from the unit tests ?
-  # Should they be scheduled or run only when merging to the develop or main branch ?
-  # Note that in the code below, the integration tests will not be counted for the code coverage in sonarqube.
-  run-integration-tests:
-    runs-on: ubuntu-latest
-    name: Run integration tests (pytest)
-    if: ${{ false }} # don't run until implemented
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/poetry-install
-
-      - name: Run integration tests
-        run: |
-          set -x && poetry run pytest \
-            ./tests ./services/adgs/tests ./services/common/tests ./services/cadip/tests \
-            -m integration \
-            --durations=0 \
-            --error-for-skips \
-            --cov=./rs_server --cov=./services \
-            --cov-report=term \
-            --cov-report=xml:./coverage-integration.xml \
-        shell: bash
-
-      - name: Display code coverage summary in this console
-        uses: irongut/CodeCoverageSummary@v1.3.0
-        with:
-          filename: ./coverage-integration.xml
-
   generate-quality-report:
     runs-on: ubuntu-latest
     name: Quality report (sonarqube)
-    needs: [check-linting, check-security, run-unit-tests] # see actions/download-artifact below
+    needs: [changes, check-linting, check-security, run-all-pytests] # see actions/download-artifact below
+    if: ${{ needs.changes.outputs.code == 'true' }}
     permissions: write-all # write pull request comments
     # Mark the job as OK even if the sonarqube quality gate doesn't pass.
     # We will resolve these issues later.
@@ -232,11 +228,11 @@ jobs:
         with:
           name:
             check-security
-      - name: Download unit test reports
+      - name: Download pytest reports
         uses: actions/download-artifact@v4
         with:
           name:
-            run-unit-tests
+            run-all-pytests
 
         # The sonarqube step will run a container docker with volume mounting: -v $(pwd):/github/workspace
         # The coverage report files contain the hard-coded path to the current directory $(pwd).
@@ -252,8 +248,8 @@ jobs:
       - name: Get directory names
         id: dir_names
         run: |
-          echo sources=$(find . -type d -name "rs_server*" | paste -sd ",") >> $GITHUB_OUTPUT
-          echo tests=$(find . -type d -name "tests" | paste -sd ",") >> $GITHUB_OUTPUT
+          echo sources=./rs_client,./rs_common,./rs_workflows >> $GITHUB_OUTPUT
+          echo tests=./tests >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Run sonarqube
