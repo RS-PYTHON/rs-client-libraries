@@ -20,7 +20,10 @@ from datetime import datetime
 import pytest
 import responses
 
+from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
+from rs_client.rs_client import RsClient
+from rs_client.stac_client import StacClient
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EPlatform
 
 # Use dummy values
@@ -30,7 +33,23 @@ OWNER_ID = "OWNER_ID"
 CADIP_STATION = ECadipStation.CADIP
 PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 TIMEOUT = 3  # seconds
-CADIP_CLIENT = CadipClient(RS_SERVER_HREF, RS_SERVER_API_KEY, OWNER_ID, CADIP_STATION, PLATFORMS)
+
+RS_CLIENT = RsClient(RS_SERVER_HREF, RS_SERVER_API_KEY, OWNER_ID)
+AUXIP_CLIENT = RS_CLIENT.get_auxip_client()
+CADIP_CLIENT = RS_CLIENT.get_cadip_client(CADIP_STATION, PLATFORMS)
+
+
+def test_get_child_client():
+    """Test get_auxip_client, get_cadip_client, get_stac_client"""
+    assert isinstance(RS_CLIENT.get_auxip_client(), AuxipClient)
+    assert isinstance(RS_CLIENT.get_cadip_client(CADIP_STATION, PLATFORMS), CadipClient)
+    assert isinstance(RS_CLIENT.get_auxip_client(), StacClient)
+
+
+def test_station_names():
+    """Test the station name returned by the AuxipClient and CadipClient"""
+    assert "ADGS" in AUXIP_CLIENT.station_name
+    assert "CADIP" in CADIP_CLIENT.station_name
 
 
 def test_cadip_sessions():

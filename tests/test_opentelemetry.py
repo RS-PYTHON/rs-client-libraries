@@ -29,7 +29,9 @@ def test_opentelemetry(monkeypatch, mocker):
 
     # Avoid errors:
     # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:4317, retrying in 1s
-    mocker.patch("opentelemetry.exporter.otlp.proto.grpc.exporter.OTLPExporterMixin")._export.return_value = True
+    mocker.patch(  # pylint: disable=protected-access
+        "opentelemetry.exporter.otlp.proto.grpc.exporter.OTLPExporterMixin",
+    )._export.return_value = True
 
     Logging.default(__name__)
     opentelemetry.init_traces("pytest")
