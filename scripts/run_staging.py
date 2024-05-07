@@ -1,3 +1,5 @@
+"""Run the staging workflow."""
+
 import argparse
 import logging
 import os
@@ -25,9 +27,9 @@ s3_client = s3_session.client(
     region_name=os.environ["S3_REGION"],
 )
 
-buckets = ["rs-cluster-temp", "rs-cluster-catalog"]  # bucket names under S3_ENDPOINT
-bucket_dir = "stations"
-bucket_url = f"s3://{buckets[0]}/{bucket_dir}"
+BUCKETS = ["rs-cluster-temp", "rs-cluster-catalog"]  # bucket names under S3_ENDPOINT
+BUCKET_DIR = "stations"
+BUCKET_URL = f"s3://{BUCKETS[0]}/{BUCKET_DIR}"
 
 
 @dataclass
@@ -78,33 +80,35 @@ class Collection:
         }
 
 
-def create_collection(rs_client, collection_name):
-    catalog_endpoint = rs_client.href_catalog + "/catalog/collections"
-    collection_type = Collection(rs_client.owner_id, collection_name)
+def create_collection(_rs_client, collection_name):
+    """Create collection in catalog."""
+    catalog_endpoint = _rs_client.href_catalog + "/catalog/collections"
+    collection_type = Collection(_rs_client.owner_id, collection_name)
     logger.info(f"Endpoint used to insert the item info  within the catalog: {catalog_endpoint}")
-    response = requests.post(catalog_endpoint, data=None, json=collection_type.properties, **rs_client.apikey_headers)
-    logger.info("response = {} ".format(response))
+    response = requests.post(catalog_endpoint, data=None, json=collection_type.properties, **_rs_client.apikey_headers)
+    logger.info(f"response = {response}")
 
 
 if __name__ == "__main__":
+    # pylint: disable=pointless-string-statement
     """
     This is a demo which integrates the search and download from a CADIP server.
     It also checks the download status.
     """
 
     # If the bucket is already created, clear all files to start fresh for each demo.
-    for b in buckets:
+    for b in BUCKETS:
         try:
             s3_client.create_bucket(Bucket=b)
         except botocore.exceptions.ClientError as e:
             print(f"Bucket {b} error: {e}")
-    log_folder = "./demo/"
-    os.makedirs(log_folder, exist_ok=True)
+    LOG_FOLDER = "./demo/"
+    os.makedirs(LOG_FOLDER, exist_ok=True)
     log_formatter = logging.Formatter("[%(asctime)-20s] [%(name)-10s] [%(levelname)-6s] %(message)s")
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(log_formatter)
-    log_filename = log_folder + "s3_handler_" + time.strftime("%Y%m%d_%H%M%S") + ".log"
+    log_filename = LOG_FOLDER + "s3_handler_" + time.strftime("%Y%m%d_%H%M%S") + ".log"
     file_handler = logging.FileHandler(log_filename)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(log_formatter)
@@ -217,7 +221,7 @@ if __name__ == "__main__":
         None,
     )
 
-    dwn_flow_id = staging_flow(flowConfig)
+    DOWNLOAD_FLOW_ID = staging_flow(flowConfig)
     logger.info("EXIT !")
     # mission = "s1"
     # catalog_data = json.loads(
