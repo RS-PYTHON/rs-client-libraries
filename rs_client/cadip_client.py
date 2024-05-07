@@ -78,10 +78,10 @@ class CadipClient(StacClient):
     def search_sessions(
         self,
         timeout: int,
-        session_ids: list[str] = None,
+        session_ids: list[str] = [],
         start_date: datetime | None = None,
         stop_date: datetime | None = None,
-    ) -> dict:  # TODO return pystac.ItemCollection instead
+    ) -> list[dict]:  # TODO return pystac.ItemCollection instead
         """Endpoint to retrieve list of sessions from any CADIP station.
 
         Args:

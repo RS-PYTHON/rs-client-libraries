@@ -391,7 +391,7 @@ def staging_flow(config: PrefectFlowConfig):
         # check if the list with files returned from the station is not empty
         if len(files_stac) == 0:
             logger.warning(
-                f"The station {rs_client.station_name()} did not return any \
+                f"The station {rs_client.station_name} did not return any \
 element for time interval {config.start_datetime} - {config.stop_datetime}",
             )
             return True

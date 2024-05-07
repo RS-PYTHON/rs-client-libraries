@@ -190,7 +190,7 @@ if __name__ == "__main__":
 
     rs_client: AuxipClient | CadipClient | None = None
     if args.station == "ADGS":
-        rs_client = AuxipClient(args.url, args.apikey, args.user, [])
+        rs_client = AuxipClient(args.url, args.apikey, args.user)
     else:
         rs_client = CadipClient(args.url, args.apikey, args.user, ECadipStation.CADIP, [])
 

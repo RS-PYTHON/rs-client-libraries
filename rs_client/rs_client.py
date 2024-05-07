@@ -98,8 +98,8 @@ class RsClient:
 
         Returns:
             EDownloadStatus: The download status enum value based on the response from the endpoint.
-
         """
+
         # TODO: check the status for a certain timeout if http returns NOK ?
         try:
             response = requests.get(
@@ -123,7 +123,7 @@ class RsClient:
 
         return EDownloadStatus.FAILED
 
-    def staging(self, filename: str, timeout: int, s3_path: str = None, tmp_download_path: str = None):
+    def staging(self, filename: str, timeout: int, s3_path: str = "", tmp_download_path: str = ""):
         """Prefect task function to stage (=download/ingest) files.
 
         This prefect task function access the RS-Server endpoints that start the download of files and
@@ -237,3 +237,27 @@ class RsClient:
             raise RuntimeError("Wrong format of search endpoint answer") from e
 
         return files
+
+    ##############################################
+    # Methods to be implemented by child classes #
+    ##############################################
+
+    @property
+    def href_catalog(self) -> str:
+        raise NotImplementedError
+
+    @property
+    def href_search(self) -> str:
+        raise NotImplementedError
+
+    @property
+    def href_staging(self) -> str:
+        raise NotImplementedError
+
+    @property
+    def href_status(self) -> str:
+        raise NotImplementedError
+
+    @property
+    def station_name(self) -> str:
+        raise NotImplementedError
