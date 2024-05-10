@@ -30,7 +30,11 @@ class CadipClient(StacClient):
     ):
         """CadipClient class constructor."""
         super().__init__(rs_server_href, rs_server_api_key, owner_id, logger)
-        self.station: ECadipStation = station
+        try:
+            self.station: ECadipStation = ECadipStation[station]
+        except KeyError as e:
+            self.logger.exception(f"There is no such CADIP station: {station}")
+            raise RuntimeError(f"There is no such CADIP station: {station}") from e
         self.platforms: list[EPlatform] = platforms
 
     @property

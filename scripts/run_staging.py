@@ -13,10 +13,12 @@ import boto3
 import botocore
 import requests
 
-from rs_client.auxip_client import AuxipClient
-from rs_client.cadip_client import CadipClient
-from rs_common.config import DATETIME_FORMAT, ECadipStation
+from rs_client.rs_client import RsClient
+from rs_common.config import DATETIME_FORMAT
 from rs_workflows.staging import PrefectFlowConfig, create_collection_name, staging_flow
+
+# NOTE: for local mode, use export RSPY_HOST_CATALOG=http://127.0.0.1:8003
+
 
 s3_session = boto3.session.Session()
 s3_client = s3_session.client(
@@ -85,7 +87,14 @@ def create_collection(_rs_client, collection_name):
     catalog_endpoint = _rs_client.href_catalog + "/catalog/collections"
     collection_type = Collection(_rs_client.owner_id, collection_name)
     logger.info(f"Endpoint used to insert the item info  within the catalog: {catalog_endpoint}")
+    # try:
     response = requests.post(catalog_endpoint, data=None, json=collection_type.properties, **_rs_client.apikey_headers)
+    # except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+    #    logger.exception(f"Could not get the response from the session search endpoint: {e}")
+    #    return
+    # except urllib3.exceptions.IncompleteRead as e:
+    #    logger.exception(f"urllib exception: {e}")
+    #    return
     logger.info(f"response = {response}")
 
 
@@ -192,11 +201,18 @@ if __name__ == "__main__":
     if not args.apikey:
         args.apikey = os.environ.get("RSPY_APIKEY", None)
 
-    rs_client: AuxipClient | CadipClient | None = None
-    if args.station == "ADGS":
-        rs_client = AuxipClient(args.url, args.apikey, args.user)
+    generic_client = RsClient(args.url, args.apikey, args.user, logger=None)
+
+    if args.station.upper() == "ADGS":
+        rs_client = generic_client.get_auxip_client()
     else:
-        rs_client = CadipClient(args.url, args.apikey, args.user, ECadipStation.CADIP, [])
+        # the platforms is needed for sessions id search endpoint
+        # only, so let's use an empty list for time being
+        try:
+            rs_client = generic_client.get_cadip_client(args.station.upper(), [])
+        except RuntimeError as e:
+            logger.exception(f"Could not get the cadip client. Error: {e}")
+            sys.exit(-1)
 
     create_collection(rs_client, create_collection_name(rs_client, args.mission))
 
