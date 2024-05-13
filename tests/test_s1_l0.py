@@ -23,10 +23,7 @@ import pytest
 import responses
 import yaml
 
-from rs_client.auxip_client import AuxipClient
-from rs_client.cadip_client import CadipClient
 from rs_client.stac_client import StacClient
-from rs_common.config import ECadipStation
 from rs_common.logging import Logging
 from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     LOGGER_NAME,

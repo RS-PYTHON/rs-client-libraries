@@ -307,6 +307,7 @@ def filter_unpublished_files(
                 break
     return files_stac
 
+
 def create_collection_name(mission, station):
     """Create the name of the catalog collection
 
@@ -415,7 +416,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
         # create the collection name
 
         # filter those that are already existing
-        
+
         files_stac = filter_unpublished_files(  # type: ignore
             rs_client.get_stac_client(),
             create_collection_name(config.mission, rs_client.station_name),

@@ -22,8 +22,8 @@ import yaml
 from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
 
-from rs_common.config import ADGS_STATION, ECadipStation
 from rs_client.stac_client import StacClient
+from rs_common.config import ADGS_STATION, ECadipStation
 from rs_common.logging import Logging
 from rs_workflows.staging import (
     CATALOG_REQUEST_TIMEOUT,

@@ -195,9 +195,9 @@ def test_update_stac_catalog(response_is_valid, station):
 
     logger = Logging.default(__name__)
     href = "http://127.0.0.1:5000"
-        
+
     rs_client = RsClient(href, None, "testUser", logger).get_stac_client()
-    
+
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())
