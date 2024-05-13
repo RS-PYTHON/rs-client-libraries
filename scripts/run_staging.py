@@ -255,9 +255,9 @@ if __name__ == "__main__":
     # By default, save files into a local temp directory
     if args.location:
         location = args.location
-        temp_dir = None
+        temp_dir = None  # pylint: disable=invalid-name
     else:
-        temp_dir = tempfile.TemporaryDirectory()
+        temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         location = temp_dir.name
 
     flowConfig = PrefectFlowConfig(
