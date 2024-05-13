@@ -214,7 +214,7 @@ if __name__ == "__main__":
             logger.exception(f"Could not get the cadip client. Error: {e}")
             sys.exit(-1)
 
-    create_collection(rs_client, create_collection_name(rs_client, args.mission))
+    create_collection(rs_client.get_stac_client(), create_collection_name(rs_client, args.mission))
 
     # catalog_endpoint = args.url_catalog.rstrip("/") + "/catalog/collections"
     # collection_type = Collection(args.user, "s1_aux")
