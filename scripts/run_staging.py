@@ -1,9 +1,24 @@
+# Copyright 2024 CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Run the staging workflow."""
 
 import argparse
 import logging
 import os
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -15,7 +30,12 @@ import requests
 
 from rs_client.rs_client import RsClient
 from rs_common.config import DATETIME_FORMAT
-from rs_workflows.staging import PrefectFlowConfig, create_collection_name, staging_flow
+from rs_workflows.staging import (
+    CATALOG_REQUEST_TIMEOUT,
+    PrefectFlowConfig,
+    create_collection_name,
+    staging_flow,
+)
 
 # NOTE: for local mode, use export RSPY_HOST_CATALOG=http://127.0.0.1:8003
 
@@ -88,7 +108,13 @@ def create_collection(_rs_client, collection_name):
     collection_type = Collection(_rs_client.owner_id, collection_name)
     logger.info(f"Endpoint used to insert the item info  within the catalog: {catalog_endpoint}")
     # try:
-    response = requests.post(catalog_endpoint, data=None, json=collection_type.properties, **_rs_client.apikey_headers)
+    response = requests.post(
+        catalog_endpoint,
+        data=None,
+        json=collection_type.properties,
+        timeout=CATALOG_REQUEST_TIMEOUT,
+        **_rs_client.apikey_headers,
+    )
     # except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
     #    logger.exception(f"Could not get the response from the session search endpoint: {e}")
     #    return
@@ -165,7 +191,7 @@ if __name__ == "__main__":
         type=str,
         required=False,
         help="Location where the files are saved",
-        default="/tmp/cadu",
+        default=None,
     )
 
     parser.add_argument(
@@ -226,16 +252,28 @@ if __name__ == "__main__":
     # response = requests.post(catalog_endpoint, data=None, json=collection_type.properties, **apikey_headers)
     # logger.info("response = {} ".format(response))
 
+    # By default, save files into a local temp directory
+    if args.location:
+        location = args.location
+        temp_dir = None  # pylint: disable=invalid-name
+    else:
+        temp_dir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
+        location = temp_dir.name
+
     flowConfig = PrefectFlowConfig(
         rs_client,
         "s1",
-        args.location,
+        location,
         args.s3_storage,
         args.max_tasks,
         datetime.strptime(args.start_date, DATETIME_FORMAT),
         datetime.strptime(args.stop_date, DATETIME_FORMAT),
         None,
     )
+
+    # Clean temp directory
+    if temp_dir:
+        temp_dir.cleanup()
 
     DOWNLOAD_FLOW_ID = staging_flow(flowConfig)
     logger.info("EXIT !")
