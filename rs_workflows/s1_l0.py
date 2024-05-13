@@ -414,7 +414,9 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         logger.error("DPR did not processed anything")
         return
 
-    # Temp, to be fixed (?)
+    # The final collection where the processed products will be stored is assumed to be named "mission_dpr".
+    # However, it might be necessary to allow the users to input a specific collection name
+    # if they wish to do so. There is no established guide in the US for this matter.
     collection_name = f"{config.mission}_dpr"
     minimal_collection = {
         "id": collection_name,
@@ -436,7 +438,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
             (d for d in files_stac.result() if d["stac_discovery"]["properties"]["eopf:type"] in output_product),
             None,
         )
-        # To be removed, temp fix (?)
+
         matching_stac["stac_discovery"]["assets"] = {"file": {"href": ""}}
 
         # Update catalog (it moves the products from temporary bucket to the final one)
