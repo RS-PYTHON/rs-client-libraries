@@ -43,7 +43,7 @@ def test_get_child_client():
     """Test get_auxip_client, get_cadip_client, get_stac_client"""
     assert isinstance(RS_CLIENT.get_auxip_client(), AuxipClient)
     assert isinstance(RS_CLIENT.get_cadip_client(CADIP_STATION, PLATFORMS), CadipClient)
-    assert isinstance(RS_CLIENT.get_auxip_client(), StacClient)
+    assert isinstance(RS_CLIENT.get_stac_client(), StacClient)
 
 
 def test_station_names():
