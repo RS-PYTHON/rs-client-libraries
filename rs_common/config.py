@@ -23,6 +23,8 @@ from enum import Enum
 # datetime format used for HTTP requests
 DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
+ADGS_STATION = "ADGS"
+
 #########
 # Enums #
 #########

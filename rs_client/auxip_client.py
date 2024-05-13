@@ -16,10 +16,11 @@
 
 import os
 
-from rs_client.stac_client import StacClient
+from rs_client.rs_client import RsClient
+from rs_common.config import ADGS_STATION
 
 
-class AuxipClient(StacClient):
+class AuxipClient(RsClient):
     """
     AuxipClient class implementation.
 
@@ -57,4 +58,4 @@ class AuxipClient(StacClient):
     @property
     def station_name(self) -> str:
         """Return "ADGS"."""
-        return "ADGS"
+        return ADGS_STATION

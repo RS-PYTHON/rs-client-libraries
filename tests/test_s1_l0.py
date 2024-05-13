@@ -335,7 +335,7 @@ def test_get_cadip_catalog_data(endpoint, status):
             status=status,
         )
 
-    rs_client = CadipClient(endpoint, "", username, ECadipStation.CADIP, [])
+    rs_client = StacClient(endpoint, None, username)
     cadip_res = get_cadip_catalog_data.fn(rs_client, collection, cadip_session_id)
 
     if "bad_endpoint" not in endpoint:
@@ -389,7 +389,7 @@ def test_get_adgs_catalog_data(endpoint, status):
             status=status,
         )
 
-    rs_client = AuxipClient(endpoint, "", username)
+    rs_client = StacClient(endpoint, "", username)
     adgs_res = get_adgs_catalog_data.fn(rs_client, collection, files_list)
 
     if "bad_endpoint" not in endpoint:

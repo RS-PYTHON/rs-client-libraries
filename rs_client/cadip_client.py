@@ -20,11 +20,11 @@ from datetime import datetime
 
 import requests
 
-from rs_client.stac_client import StacClient
+from rs_client.rs_client import RsClient
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EPlatform
 
 
-class CadipClient(StacClient):
+class CadipClient(RsClient):
     """
     CadipClient class implementation.
 
@@ -87,7 +87,7 @@ class CadipClient(StacClient):
     @property
     def station_name(self) -> str:
         """Return the station name."""
-        return f"CADIP/{self.station.value}"  # TO BE DISCUSSED: maybe just return "CADIP"
+        return self.station.value  # TO BE DISCUSSED: maybe just return "CADIP"
 
     ############################
     # Call RS-Server endpoints #

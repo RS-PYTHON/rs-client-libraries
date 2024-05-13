@@ -25,6 +25,7 @@ import responses
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
+from rs_client.rs_client import RsClient
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus, EPlatform
 from rs_common.logging import Logging
 from rs_workflows.staging import (
@@ -194,13 +195,9 @@ def test_update_stac_catalog(response_is_valid, station):
 
     logger = Logging.default(__name__)
     href = "http://127.0.0.1:5000"
-
-    rs_client: AuxipClient | CadipClient | None = None
-    if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", logger)
-    else:
-        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
-
+        
+    rs_client = RsClient(href, None, "testUser", logger).get_stac_client()
+    
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
         files_stac = json.loads(files_stac_f.read())
@@ -208,7 +205,7 @@ def test_update_stac_catalog(response_is_valid, station):
     # set the response status
     response_status = 200 if response_is_valid else 400
     # mock the publish to catalog endpoint
-    collection_name = create_collection_name(rs_client, MISSION_NAME)
+    collection_name = create_collection_name(MISSION_NAME, station)
     responses.add(
         responses.POST,
         f"{href}/catalog/collections/testUser:{collection_name}/items/",
@@ -297,11 +294,7 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     logger = Logging.default(__name__)
     href = "http://127.0.0.1:5000"
 
-    rs_client: AuxipClient | CadipClient | None = None
-    if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", logger)
-    else:
-        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+    rs_client = RsClient(href, None, "testUser", logger).get_stac_client()
 
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
@@ -314,7 +307,7 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     for fs in files_stac:
         file_ids.append(fs["id"])
 
-    collection_name = create_collection_name(rs_client, MISSION_NAME)
+    collection_name = create_collection_name(MISSION_NAME, station)
 
     request_params = {"collection": collection_name, "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
 
@@ -412,7 +405,7 @@ def test_ok_staging(station):  # pylint: disable=too-many-locals
         rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
 
     # mock the publish to catalog endpoint
-    collection_name = create_collection_name(rs_client, MISSION_NAME)
+    collection_name = create_collection_name(MISSION_NAME, rs_client.station_name)
     endpoint = f"{href}/catalog/collections/testUser:{collection_name}/items/"
     responses.add(
         responses.POST,
@@ -486,7 +479,7 @@ def test_nok_staging(station):  # pylint: disable=too-many-locals
         rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
 
     # mock the publish to catalog endpoint
-    collection_name = create_collection_name(rs_client, MISSION_NAME)
+    collection_name = create_collection_name(MISSION_NAME, rs_client.station_name)
     endpoint = f"{href}/catalog/collections/testUser:{collection_name}/items/"
     responses.add(
         responses.POST,
@@ -745,25 +738,12 @@ def test_create_collection_name(station):
         None: This test does not return any value.
     """
 
-    logger = Logging.default(__name__)
-    href = "http://127.0.0.1:5000"
-
-    rs_client: AuxipClient | CadipClient | None = None
-    if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", logger)
-    elif station == CADIP:
-        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
-    else:
-        rs_client = None
-
     if station == "UNKNOWN":
         with pytest.raises(RuntimeError) as runtime_exception:
-            create_collection_name(rs_client, MISSION_NAME)
-        assert "Unknown station !" in str(runtime_exception.value)
+            create_collection_name(MISSION_NAME, station)
+        assert "Unknown station" in str(runtime_exception.value)
     else:
-        assert (
-            create_collection_name(rs_client, MISSION_NAME) == MISSION_NAME + "_aux" if station == "ADGS" else "_chunk"
-        )
+        assert create_collection_name(MISSION_NAME, station) == MISSION_NAME + "_aux" if station == "ADGS" else "_chunk"
 
 
 @pytest.mark.unit

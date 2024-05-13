@@ -25,7 +25,7 @@ from prefect_dask.task_runners import DaskTaskRunner
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
 from rs_client.stac_client import StacClient
-from rs_common.config import EDownloadStatus
+from rs_common.config import ADGS_STATION, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
 
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
@@ -224,8 +224,8 @@ def staging(config: PrefectTaskConfig):
             # TODO: either move the code from filter_unpublished_files to RsClient
             # or use the new PgstacClient ?
             if update_stac_catalog.fn(
-                rs_client,
-                create_collection_name(rs_client, config.mission),
+                rs_client.get_stac_client(),
+                create_collection_name(config.mission, rs_client.station_name),
                 file_stac,
                 config.s3_path,
             ):
@@ -307,8 +307,7 @@ def filter_unpublished_files(
                 break
     return files_stac
 
-
-def create_collection_name(rs_client, mission):
+def create_collection_name(mission, station):
     """Create the name of the catalog collection
 
     This function constructs and returns a specific name for the catalog collection .
@@ -318,8 +317,9 @@ def create_collection_name(rs_client, mission):
     For other values, a RuntimeError is raised.
 
     Args:
-        rs_client (AuxipClient | CadipClient | type): RsClient instance or type.
         mission (str): The name of the mission.
+        station (str): The type of station . Supported
+            values are "ADGS" and "CADIP", "INS", "MPS", "MTI", "NSG", "SGS".
 
     Returns:
         str: The name of the collection
@@ -328,11 +328,14 @@ def create_collection_name(rs_client, mission):
         RuntimeError: If the provided station type is not supported.
 
     """
-    if (rs_client == AuxipClient) or isinstance(rs_client, AuxipClient):
+    if station == ADGS_STATION:
         return f"{mission}_aux"
-    if (rs_client == CadipClient) or isinstance(rs_client, CadipClient):
+    # check CADIP
+    try:
+        ECadipStation(station)
         return f"{mission}_chunk"
-    raise RuntimeError("Unknown station !")
+    except ValueError as e:
+        raise RuntimeError(f"Unknown station: {station}") from e
 
 
 class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-methods
@@ -412,11 +415,10 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
         # create the collection name
 
         # filter those that are already existing
-        # TODO: either move the code from filter_unpublished_files to RsClient
-        # or use the new PgstacClient ?
+        
         files_stac = filter_unpublished_files(  # type: ignore
-            rs_client,
-            create_collection_name(rs_client, config.mission),
+            rs_client.get_stac_client(),
+            create_collection_name(config.mission, rs_client.station_name),
             files_stac,
             wait_for=[files_stac],
         )

@@ -22,8 +22,7 @@ import yaml
 from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
 
-from rs_client.auxip_client import AuxipClient
-from rs_client.cadip_client import CadipClient
+from rs_common.config import ADGS_STATION, ECadipStation
 from rs_client.stac_client import StacClient
 from rs_common.logging import Logging
 from rs_workflows.staging import (
@@ -367,8 +366,9 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
     """
     logger = get_prefect_logger(LOGGER_NAME)
 
-    cadip_collection = create_collection_name(CadipClient, config.mission)
-    adgs_collection = create_collection_name(AuxipClient, config.mission)
+    # TODO: the station for CADIP should come as an input
+    cadip_collection = create_collection_name(config.mission, ECadipStation["CADIP"])
+    adgs_collection = create_collection_name(config.mission, ADGS_STATION)
     logger.debug(f"Collections: {cadip_collection} | {adgs_collection}")
     # S1A_20200105072204051312
     # gather the data for cadip session id
