@@ -22,16 +22,15 @@ import yaml
 from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
 
-from rs_workflows.common import (
-    ADGS,
-    CADIP,
+from rs_client.stac_client import StacClient
+from rs_common.config import ADGS_STATION, ECadipStation
+from rs_common.logging import Logging
+from rs_workflows.staging import (
     CATALOG_REQUEST_TIMEOUT,
-    create_apikey_headers,
     create_collection_name,
     get_prefect_logger,
     update_stac_catalog,
 )
-from rs_workflows.utils.logging import Logging
 
 CONFIG_DIR = Path(osp.realpath(osp.dirname(__file__))) / "config"
 YAML_TEMPLATE_FILE = "dpr_config_template.yaml"
@@ -40,10 +39,11 @@ DPR_PROCESSING_TIMEOUT = 14400  # 4 hours
 
 
 @task
-def start_dpr(dpr_endpoint, yaml_dpr_input: dict):
+def start_dpr(dpr_endpoint: str, yaml_dpr_input: dict):
     """Starts the DPR processing with the given YAML input.
 
     Args:
+        dpr_endpoint (str): The endpoint of the DPR processor
         yaml_dpr_input (dict): The YAML input for DPR processing.
 
     Returns:
@@ -133,7 +133,7 @@ def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, product_type
 
 
 def gen_payload_inputs(cadu_list: list, adgs_list: list):
-    """Generates payload inputs for the EOPF triggering YAML file.
+    """Generate payload inputs for the EOPF triggering YAML file.
 
     Args:
         cadu_list (list): List of CADU file paths.
@@ -166,16 +166,18 @@ def gen_payload_inputs(cadu_list: list, adgs_list: list):
 
 
 def gen_payload_outputs(product_types, temp_s3_path: str):
-    """Generates payload outputs for the EOPF triggering YAML file.
+    """Generate payload outputs for product types.
+
+    This function generates composer and output_body payloads for a list of product types,
+    each associated with a temporary S3 path.
 
     Args:
-        temp_s3_path (str): The temporary S3 path.
+        product_types (list): A list of product types.
+        temp_s3_path (str): The temporary S3 path where the products will be stored.
 
     Returns:
-        dict: The updated YAML template.
+        Tuple[list, list]: A tuple containing composer and output_body payloads.
 
-    Raises:
-        None
     """
     composer = []
     output_body = []
@@ -197,7 +199,7 @@ def gen_payload_outputs(product_types, temp_s3_path: str):
 
 
 def get_yaml_outputs(template: dict):
-    """Extracts the paths of YAML outputs from the template.
+    """Extract the paths of YAML outputs from the template.
 
     Args:
         template (dict): The YAML template.
@@ -228,31 +230,34 @@ def create_cql2_filter(properties: dict, op: str = "and"):
 
 
 @task
-def get_cadip_catalog_data(url_catalog: str, username: str, collection: str, session_id: str, apikey: str):
-    """Task to retrieve catalog data from CADIP.
+def get_cadip_catalog_data(rs_client: StacClient, collection: str, session_id: str):
+    """Prefect task to retrieve CADIP catalog data for a specific collection and session ID.
+
+    This task retrieves CADIP catalog data by sending a request to the CADIP
+    catalog search endpoint with a filter based on the collection and session ID.
 
     Args:
-        url_catalog (str): URL of the catalog.
-        username (str): User name.
-        collection (str): Collection name.
-        session_id (str): Session ID.
-        apikey (str): API key.
+        rs_client (StacClient): The StacClient instance for accessing the CADIP catalog.
+        collection (str): The name of the collection.
+        session_id (str): The session ID associated with the collection.
 
     Returns:
-        dict: Catalog data from CADIP.
-    """
-    logger = Logging.default(LOGGER_NAME)
-    logger.debug("Task get_cadip_catalog_data STARTED")
-    catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
+        dict or None: The CADIP catalog data if retrieval is successful, otherwise None.
 
-    query = create_cql2_filter({"collection": f"{username}_{collection}", "cadip:session_id": session_id})
+    """
+
+    logger = rs_client.logger
+    logger.debug("Task get_cadip_catalog_data STARTED")
+    catalog_endpoint = rs_client.href_catalog + "/catalog/search"
+
+    query = create_cql2_filter({"collection": f"{rs_client.owner_id}_{collection}", "cadip:session_id": session_id})
     # logger.debug(f"{url_catalog} | {username} | {collection} | {session_id} | {apikey}")
     try:
         response = requests.post(
             catalog_endpoint,
             json=query,
             timeout=CATALOG_REQUEST_TIMEOUT,
-            **create_apikey_headers(apikey),
+            **rs_client.apikey_headers,
         )
         # logger.debug(f"stat = {response.status_code}")
         # logger.debug(f"json = {response.json()}")
@@ -272,27 +277,31 @@ def get_cadip_catalog_data(url_catalog: str, username: str, collection: str, ses
 
 
 @task
-def get_adgs_catalog_data(url_catalog: str, username: str, collection: str, files: list, apikey: str):
-    """Task to retrieve catalog data from ADGS
+def get_adgs_catalog_data(rs_client: StacClient, collection: str, files: list):
+    """Prefect task to retrieve ADGS catalog data for specific files in a collection.
+
+    This task retrieves ADGS catalog data by sending a request to the ADGS
+    catalog search endpoint with filters based on the collection and file IDs.
 
     Args:
-        url_catalog (str): The URL of the catalog.
-        username (str): The username.
-        collection (str): The collection name.
-        files (list): A list of file IDs.
-        apikey (str): The API key.
+        rs_client (StacClient): The StacClient instance for accessing the ADGS catalog.
+        collection (str): The name of the collection.
+        files (list): A list of file IDs to retrieve from the catalog.
 
     Returns:
-        dict or None: The catalog data in JSON format if successful, None otherwise.
+        dict or None: The ADGS catalog data if retrieval is successful, otherwise None.
 
-    Raises:
-        None
     """
-    logger = get_prefect_logger(LOGGER_NAME)
-    logger.debug("Task get_adgs_catalog_data STARTED")
-    catalog_endpoint = url_catalog.rstrip("/") + "/catalog/search"
 
-    payload = {"collection": f"{username}_{collection}", "ids": ",".join(files), "filter": f"owner_id='{username}'"}
+    logger = rs_client.logger
+    logger.debug("Task get_adgs_catalog_data STARTED")
+    catalog_endpoint = rs_client.href_catalog + "/catalog/search"
+
+    payload = {
+        "collection": f"{rs_client.owner_id}_{collection}",
+        "ids": ",".join(files),
+        "filter": f"owner_id='{rs_client.owner_id}'",
+    }
 
     logger.debug(f"payload = {payload}")
     try:
@@ -300,7 +309,7 @@ def get_adgs_catalog_data(url_catalog: str, username: str, collection: str, file
             catalog_endpoint,
             params=payload,
             timeout=CATALOG_REQUEST_TIMEOUT,
-            **create_apikey_headers(apikey),
+            **rs_client.apikey_headers,
         )
 
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
@@ -322,85 +331,77 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        user: str,
-        url_catalog: str,
+        rs_client: StacClient,
         url_dpr: str,
         mission: str,
         cadip_session_id: str,
         product_types: list,
+        adgs_files: list,
         s3_path: str,
         temp_s3_path: str,
-        apikey: str,
     ):
         """
         Initialize the PrefectS1L0FlowConfig object with provided parameters.
 
         Args:
-            user (str): The username.
-            url_catalog (str): The URL of the catalog.
+            rs_client (StacClient): StacClient instance
             url_dpr (str): The URL of the dpr endpoint
             mission (str): The mission name.
             cadip_session_id (str): The CADIP session ID.
             product_types (list): The list with the products types to be processed by the DPR
+            adgs_files (list): ADGS files in the catalog.
             s3_path (str): The S3 path.
             temp_s3_path (str): The temporary S3 path.
-            apikey (str): The API key.
         """
-        self.user = user
-        self.url_catalog = url_catalog
+        self.rs_client = rs_client
         self.url_dpr = url_dpr
         self.mission = mission
         self.cadip_session_id = cadip_session_id
         self.product_types = product_types
+        self.adgs_files = adgs_files
         self.s3_path = s3_path
         self.temp_s3_path = temp_s3_path
-        self.apikey = apikey
 
 
-@flow(task_runner=DaskTaskRunner())
+# At the time being, no more than 2 workers are required, because this flow runs at most 2 tasks in in parallel
+@flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 2, "threads_per_worker": 1}))
 def s1_l0_flow(config: PrefectS1L0FlowConfig):
-    """
-    Prefect flow for S1 Level 0 data processing.
+    """Constructs a Prefect Flow for Sentinel-1 Level 0 processing.
+
+    This flow orchestrates the processing of Sentinel-1 Level 0 data by executing
+    various tasks sequentially or in parallel, including retrieving catalog data (in parallel,
+    for both CADIP and ADGS stations), building YAML configuration (depends of the previous retrieving tasks),
+    starting the processing (depends of the YAML config), updating the STAC catalog (depends of the processing results),
+    and publishing the processed files (depends of the catalog update).
 
     Args:
         config (PrefectS1L0FlowConfig): Configuration for the flow.
 
     Returns:
-        None: If no data is found in the catalog.
+        None: If no data is found in the catalog or if DPR processing did not yield any results.
+
     """
     logger = get_prefect_logger(LOGGER_NAME)
 
-    cadip_collection = create_collection_name(config.mission, CADIP[0])
-    adgs_collection = create_collection_name(config.mission, ADGS)
+    # TODO: the station for CADIP should come as an input
+    cadip_collection = create_collection_name(config.mission, ECadipStation["CADIP"])
+    adgs_collection = create_collection_name(config.mission, ADGS_STATION)
     logger.debug(f"Collections: {cadip_collection} | {adgs_collection}")
     # S1A_20200105072204051312
     # gather the data for cadip session id
     logger.debug("Starting task get_cadip_catalog_data")
     cadip_catalog_data = get_cadip_catalog_data.submit(
-        config.url_catalog,
-        config.user,
+        config.rs_client,
         cadip_collection,
         config.cadip_session_id,
-        config.apikey,
     )
     logger.debug("Starting task get_adgs_catalog_data")
-    # gather the data from ADGS. Excerpt from the RSPY-120 user story:
-    # "3. search in the STAC collection rs-ops/s1_aux for the three required AUX
-    # items (given that RSPY-115 has filled the collection). As we don't know yet the
-    # rules that will be specified by DPR to retrieve the correct AUX data, we will for
-    # now hardcode the AUX file names as below:
-    adgs_files = [
-        "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
-        "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
-        "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
-    ]
     adgs_catalog_data = get_adgs_catalog_data.submit(
-        config.url_catalog,
-        config.user,
+        config.rs_client,
         adgs_collection,
-        adgs_files,
-        config.apikey,
+        config.adgs_files,
     )
+
     # the previous tasks may be launched in parallel. The next task depends on the results from these previous tasks
     if (
         not cadip_catalog_data.result()
@@ -430,21 +431,23 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         logger.error("DPR did not processed anything")
         return
 
-    # Temp, to be fixed
+    # The final collection where the processed products will be stored is assumed to be named "mission_dpr".
+    # However, it might be necessary to allow the users to input a specific collection name
+    # if they wish to do so. There is no established guide in the US for this matter.
     collection_name = f"{config.mission}_dpr"
     minimal_collection = {
         "id": collection_name,
         "type": "Collection",
         "description": "test_description",
         "stac_version": "1.0.0",
-        "owner": config.user,
+        "owner": config.rs_client.owner_id,
     }
     logger.debug(f"Creating collection for the DPR products: {collection_name}")
     requests.post(
-        f"{config.url_catalog}/catalog/collections",
+        f"{config.rs_client.href_catalog}/catalog/collections",
         json=minimal_collection,
         timeout=CATALOG_REQUEST_TIMEOUT,
-        **create_apikey_headers(config.apikey),
+        **config.rs_client.apikey_headers,
     )
     fin_res = []
     for output_product in get_yaml_outputs(yaml_dpr_input):
@@ -452,7 +455,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
             (d for d in files_stac.result() if d["stac_discovery"]["properties"]["eopf:type"] in output_product),
             None,
         )
-        # To be removed, temp fix
+
         matching_stac["stac_discovery"]["assets"] = {"file": {"href": ""}}
 
         # Update catalog (it moves the products from temporary bucket to the final one)
@@ -460,13 +463,10 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         fin_res.append(
             (
                 update_stac_catalog.submit(
-                    create_apikey_headers(config.apikey),
-                    config.url_catalog,
-                    config.user,
+                    config.rs_client,
                     collection_name,
                     matching_stac["stac_discovery"],
                     output_product,
-                    logger,
                     wait_for=[files_stac],
                 ),
                 output_product,

@@ -60,7 +60,7 @@ jobs:
           set -x
 
           # Generate rst files from docstrings
-          poetry run sphinx-apidoc -o docs/rs_workflows/generated/common rs_workflows/
+          poetry run sphinx-apidoc -o docs/rs_workflows/generated/staging rs_workflows/
 
           # Generate Python API html from rst files
           # TODO ?
