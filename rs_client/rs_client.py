@@ -105,7 +105,7 @@ class RsClient:
         key in the JSON response, the function returns the corresponding download status enum value. If the
         response is not successful or does not contain the 'status' key, the function returns a FAILED status.
 
-        Args:            
+        Args:
             filename (str): The name of the file for which to check the status.
             timeout (int): The timeout duration for the HTTP request.
 
@@ -153,7 +153,7 @@ class RsClient:
         Raises:
             RuntimeError: If an error occurs while staging the file.
 
-        """        
+        """
 
         # dictionary to be used for payload request
         payload = {}
@@ -193,32 +193,13 @@ class RsClient:
         limit: Union[int, None] = None,
         sortby: Union[str, None] = None,
     ) -> list:
-        """Search for stations within a specified time range.
-
-        This method searches for stations within the specified time range by sending a request
-        to the station search endpoint with optional parameters for limiting results and sorting.
-
-        Args:
-            start_date (datetime): The start date of the time range.
-            stop_date (datetime): The stop date of the time range.
-            timeout (int): The timeout duration for the HTTP request.
-            limit (int, optional): The maximum number of results to return. Defaults to None.
-            sortby (str, optional): The attribute to sort the results by. Defaults to None.
-
-        Returns:
-            list: A list of stations found within the specified time range.
-
-        Raises:
-            RuntimeError: If an error occurs while searching for stations.
-
-        """
-        """Retrieve a list of files from the specified endpoint within the given time range.
+        """Retrieve a list of files from the specified endpoint.
 
         This function queries the specified endpoint to retrieve a list of files available in the
-        station (CADIP, ADGS, LTA ...) within the provided time range, starting from 'start_date' up
-        to 'stop_date' (inclusive).
+        station (CADIP, ADGS, LTA ...) that were collected by the stalleite within the provided time range,
+        starting from 'start_date' up to 'stop_date' (inclusive).
 
-        Args:            
+        Args:
             start_date (datetime): The start date of the time range.
             stop_date (datetime): The stop date of the time range.
             timeout (int): The timeout duration for the HTTP request.

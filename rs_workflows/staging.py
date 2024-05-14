@@ -79,8 +79,8 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
 
     Returns:
         bool: True if the STAC catalog is successfully updated, False otherwise.
-    
-    """    
+
+    """
     # add the collection name
     stac_file_info["collection"] = collection_name
     # add the bucket location where the file has been saved
@@ -120,7 +120,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     return response.status_code == 200
 
 
-class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes,    
+class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes,
     """Common configuration for Prefect tasks and flows.
     Base class for configuration used in prefect task and flow
     used in staging the files from different stations (cadip, adgs...)
@@ -193,7 +193,7 @@ def staging(config: PrefectTaskConfig):
         List[Dict]: A list containing information about files that FAILED to be staged. The files within this
                     list don't appear in the catalog as published
 
-    """    
+    """
 
     logger = get_prefect_logger("task_dwn")
     rs_client = config.rs_client

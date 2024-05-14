@@ -178,7 +178,7 @@ def gen_payload_outputs(product_types, temp_s3_path: str):
     Returns:
         Tuple[list, list]: A tuple containing composer and output_body payloads.
 
-    """    
+    """
     composer = []
     output_body = []
 
@@ -245,7 +245,7 @@ def get_cadip_catalog_data(rs_client: StacClient, collection: str, session_id: s
         dict or None: The CADIP catalog data if retrieval is successful, otherwise None.
 
     """
-    
+
     logger = rs_client.logger
     logger.debug("Task get_cadip_catalog_data STARTED")
     catalog_endpoint = rs_client.href_catalog + "/catalog/search"
@@ -292,7 +292,7 @@ def get_adgs_catalog_data(rs_client: StacClient, collection: str, files: list):
         dict or None: The ADGS catalog data if retrieval is successful, otherwise None.
 
     """
-    
+
     logger = rs_client.logger
     logger.debug("Task get_adgs_catalog_data STARTED")
     catalog_endpoint = rs_client.href_catalog + "/catalog/search"
@@ -362,14 +362,15 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
         self.s3_path = s3_path
         self.temp_s3_path = temp_s3_path
 
+
 # At the time being, no more than 2 workers are required, because this flow runs at most 2 tasks in in parallel
 @flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 2, "threads_per_worker": 1}))
 def s1_l0_flow(config: PrefectS1L0FlowConfig):
     """Constructs a Prefect Flow for Sentinel-1 Level 0 processing.
 
     This flow orchestrates the processing of Sentinel-1 Level 0 data by executing
-    various tasks sequentially or in parallel, including retrieving catalog data (in parallel, 
-    for both CADIP and ADGS stations), building YAML configuration (depends of the previous retrieving tasks), 
+    various tasks sequentially or in parallel, including retrieving catalog data (in parallel,
+    for both CADIP and ADGS stations), building YAML configuration (depends of the previous retrieving tasks),
     starting the processing (depends of the YAML config), updating the STAC catalog (depends of the processing results),
     and publishing the processed files (depends of the catalog update).
 
@@ -378,16 +379,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
 
     Returns:
         None: If no data is found in the catalog or if DPR processing did not yield any results.
-    
-    """
-    """
-    Prefect flow for S1 Level 0 data processing.
 
-    Args:
-        config (PrefectS1L0FlowConfig): Configuration for the flow.
-
-    Returns:
-        None: If no data is found in the catalog.
     """
     logger = get_prefect_logger(LOGGER_NAME)
 
