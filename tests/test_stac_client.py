@@ -4,11 +4,71 @@ from rs_client.stac_client import StacClient
 
 
 def test_create_object_stac_client():  # pylint: disable=missing-function-docstring
+
+    #####################
+    # Loads the catalog #
+    #####################
     catalog = StacClient.open(
         "http://localhost:8003/catalog/",
-        rs_server_api_key="9856a269-3b7a-40b3-851c-aba7cf8eb8be",
-        rs_server_href="test",
-        owner_id="toto",
+        rs_server_api_key="e33bbe09-020a-4e03-a0e1-f44f5936e928",
+        rs_server_href="http://localhost:8003",
+        owner_id="pyteam",
     )
-    collection = catalog.get_collection("jgaucher:S1_L1")
-    print("hello")
+
+    ##################################################
+    # Get the collection S1_L1 from jgaucher catalog #
+    ##################################################
+    collection = catalog.get_collection(collection_id="S1_L1", owner_id="jgaucher")
+    assert collection.id == "S1_L1"
+
+    #######################################################
+    # Get all the collections accessible from pyteam user #
+    #######################################################
+    collections = catalog.get_collections()
+    for collection in collections:
+        print(collection)
+
+    #########################################################
+    # Create a new collection S2_L2 in the owner_id catalog ##############################
+    # If not specified, the default owner_id will be the value of the attribute owner_id #
+    ######################################################################################
+    new_collection = catalog.create_new_collection(
+        collection_id="S2_L2",
+        extent={
+            "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
+            "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
+        },
+    )
+    print(new_collection["id"])
+
+    ##########################################################
+    # Create a new collection S3_L3 specifying the owner id. #
+    ##########################################################
+    new_collection_jgaucher = catalog.create_new_collection(
+        collection_id="S3_L3",
+        extent={
+            "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
+            "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
+        },
+        description="This is the collection S3_L3 of the user jgaucher",
+        owner_id="jgaucher",
+    )
+    print(new_collection_jgaucher["id"])
+
+    ###########################################
+    # Publish a new collection in the catalog #
+    ###########################################
+    response = catalog.post_collection(new_collection)
+    assert response.status_code == 200
+
+    response = catalog.post_collection(new_collection_jgaucher)
+    assert response.status_code == 200
+
+    #######################
+    # Delete a collection #
+    #######################
+    response = catalog.delete_collection(collection_id="S2_L2")  # default owner_id is 'pyteam'
+    assert response.status_code == 200
+
+    response = catalog.delete_collection(collection_id="S3_L3", owner_id="jgaucher")
+    assert response.status_code == 200
