@@ -23,7 +23,7 @@ inputs:
     description: "'docker build' context path"
     required: true
   image_suffix:
-    description: Docker image name suffix e.g. _rs-workflows
+    description: Docker image name suffix
     required: true
   version_name:
     description: Version name e.g. 1.2.3a4.dev1a2b3c4d
