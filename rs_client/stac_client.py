@@ -18,6 +18,9 @@ from pystac_client.collection_client import CollectionClient
 from pystac import CatalogType, Collection
 from pystac.layout import HrefLayoutStrategy
 from requests import Request
+import json
+from starlette.responses import JSONResponse
+import requests
 
 
 class StacClient(Client):
@@ -32,9 +35,9 @@ class StacClient(Client):
     rs_server_href: str
     owner_id: str
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
-        id: str,
+        id: str,  # pylint: disable=redefined-builtin
         description: str,
         title: Optional[str] = None,
         stac_extensions: Optional[List[str]] = None,
@@ -95,9 +98,101 @@ class StacClient(Client):
         client.owner_id = owner_id
         return client
 
-    # @lru_cache()
-    # def get_collection(self, collection_id: str) -> Union[Collection, CollectionClient]:
-    #     owner_collection_regex = r".*:.*"
-    #     if not re.match(owner_collection_regex, collection_id):
-    #         collection_id = f"{self.owner_id}:{collection_id}"
-    #     return super().get_collection(collection_id)
+    @lru_cache()
+    def get_collection(self, collection_id: str, owner_id: str = None) -> Union[Collection, CollectionClient]:
+        if owner_id:
+            complete_collection_id = f"{owner_id}:{collection_id}"
+        else:
+            complete_collection_id = f"{self.owner_id}:{collection_id}"
+        return super().get_collection(complete_collection_id)
+
+    def create_new_collection(  # pylint: disable=too-many-arguments
+        self,
+        collection_id: str,
+        extent: dict,
+        href_license: str = "https://creativecommons.org/licenses/publicdomain/",
+        collection_license: str = "public-domain",
+        stac_version: str = "1.0.0",
+        description: str = None,
+        owner_id: str = None,
+    ) -> dict:
+        """Create a new collection.
+
+        Args:
+            collection_id (str): The Collection id.
+            extent (dict): Contains spatial and temporal coverage.
+            href_license (_type_, optional): The href of the license. Defaults to "https://creativecommons.org/licenses/publicdomain/".
+            collection_license (str, optional): The license name. Defaults to "public-domain".
+            stac_version (str, optional): The stac_version. Defaults to "1.0.0".
+            description (str, optional): The collection description. Defaults to "".
+            owner_id (str, optional): The owner id. Defaults to None.
+
+        Returns:
+            dict: A new collection.
+        """
+        owner_id = owner_id if owner_id else self.owner_id
+        description = description if description else f"This is the collection {collection_id} from user {owner_id}."
+        new_collection = {
+            "id": collection_id,
+            "type": "Collection",
+            "owner": owner_id,
+            "links": [
+                {
+                    "rel": "items",
+                    "type": "application/geo+json",
+                    "href": f"{self.rs_server_href}/collections/{collection_id}/items",
+                },
+                {"rel": "parent", "type": "application/json", "href": f"{self.rs_server_href}/"},
+                {"rel": "root", "type": "application/json", "href": f"{self.rs_server_href}/"},
+                {
+                    "rel": "self",
+                    "type": "application/json",
+                    "href": f"{self.rs_server_href}/collections/{collection_id}",
+                },
+                {
+                    "rel": "license",
+                    "href": href_license,
+                    "title": collection_license,
+                },
+            ],
+            "extent": extent,
+            "license": collection_license,
+            "description": description,
+            "stac_version": stac_version,
+        }
+        return new_collection
+
+    def post_collection(self, collection: json) -> JSONResponse:
+        """Create a new collection and post it in the Catalog.
+
+        Args:
+            collection (json): The collection to post.
+
+        Returns:
+            JSONResponse: The response of the request.
+        """
+        headers = {"x-api-key": self.rs_server_api_key}
+        return requests.post(f"{self.rs_server_href}/catalog/collections", json=collection, headers=headers, timeout=10)
+
+    def delete_collection(self, collection_id: str, owner_id: str = None) -> JSONResponse:
+        """Delete a collection.
+
+        Args:
+            collection_id (str): The collection id.
+            owner_id (str, optional): The owner id. Defaults to None.
+
+        Returns:
+            JSONResponse: The response of the request.
+        """
+        headers = {"x-api-key": self.rs_server_api_key}
+        if owner_id:
+            response = requests.delete(
+                f"{self.rs_server_href}/catalog/collection/{owner_id}:{collection_id}", headers=headers, timeout=10
+            )
+        else:
+            response = requests.delete(
+                f"{self.rs_server_href}/catalog/collections/{self.owner_id}:{collection_id}",
+                headers=headers,
+                timeout=10,
+            )
+        return response
