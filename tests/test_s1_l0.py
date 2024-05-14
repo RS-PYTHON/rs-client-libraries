@@ -18,6 +18,7 @@ import json
 import os
 import os.path as osp
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 import responses
@@ -397,6 +398,99 @@ def test_get_adgs_catalog_data(endpoint, status):
             assert adgs_res is None
     else:
         assert adgs_res is None
+
+
+@pytest.mark.unit
+@responses.activate
+def test_s1_l0_flow(monkeypatch):  # pylint: disable=too-many-locals
+    """Test for s1_l0 flow
+    NOTE: the mock for start_dpr does not produce any output. Thus, the
+    last part from the flow is not covered in this test
+    TODO: To be implemented in future
+    """
+    username = "TestUser"
+    mission = "s1"
+    cadip_session_id = "S1A_20200105072204051312"
+    product_types = ["S1SEWRAW"]
+    s3_storage = "s3://test_final"
+    temp_s3_storage = "s3://test_temp"
+    url_gen = "http://127.0.0.1:5000"
+    url_dpr = "http://127.0.0.1:5010"
+
+    # mock all the prefect tasks
+    cadip_catalog = RESOURCES / "cadip_catalog.json"
+    adgs_catalog = RESOURCES / "adgs_catalog.json"
+    with open(cadip_catalog, encoding="utf-8") as cadip_catalog_f:
+        file_loaded = json.loads(cadip_catalog_f.read())
+    cadip_mock = MagicMock(return_value=file_loaded)
+    monkeypatch.setattr(
+        "rs_workflows.s1_l0.get_cadip_catalog_data",
+        cadip_mock,
+    )
+    with open(adgs_catalog, encoding="utf-8") as adgs_catalog_f:
+        file_loaded = json.loads(adgs_catalog_f.read())
+    adgs_mock = MagicMock(return_value=file_loaded)
+    monkeypatch.setattr(
+        "rs_workflows.s1_l0.get_adgs_catalog_data",
+        adgs_mock,
+    )
+    yaml_input_path = RESOURCES / "dpr_config_test.yaml"
+    with open(yaml_input_path, encoding="utf-8") as yaml_file:
+        file_loaded = yaml.safe_load(yaml_file)
+    eopf_yaml_mock = MagicMock(return_value=file_loaded)
+    monkeypatch.setattr(
+        "rs_workflows.s1_l0.build_eopf_triggering_yaml",
+        eopf_yaml_mock,
+    )
+    # TODO: the following mock did not work. I also tried to mock the endpoint,
+    # but inside the prefect task is not seen
+    dpr_answer_path = RESOURCES / "dpr_answer.json"
+    with open(dpr_answer_path, encoding="utf-8") as dpr_answer_f:
+        file_loaded = json.loads(dpr_answer_f.read())
+
+    print(f"file_loaded = {file_loaded}")
+    dpr_mock = MagicMock(return_value=file_loaded)
+    monkeypatch.setattr(
+        "rs_workflows.s1_l0.start_dpr",
+        dpr_mock,
+    )
+    # responses.add(
+    #         responses.GET,
+    #         url_dpr + "/run",
+    #         json=file_loaded,
+    #         status=200,
+    #     )
+
+    # mock the endpoint for catalog creation
+    responses.add(
+        responses.POST,
+        url_gen + "/catalog/collections",
+        status=200,
+    )
+    update_catalog_mock = MagicMock(return_value=True)
+    monkeypatch.setattr(
+        "rs_workflows.staging.update_stac_catalog",
+        update_catalog_mock,
+    )
+    rs_client = StacClient(url_gen, None, username)
+    adgs_files = [
+        "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
+        "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
+        "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
+    ]
+
+    assert s1_l0_flow._run(  # pylint: disable=protected-access
+        PrefectS1L0FlowConfig(
+            rs_client,
+            url_dpr,
+            mission,
+            cadip_session_id,
+            product_types,
+            adgs_files,
+            s3_storage,
+            temp_s3_storage,
+        ),
+    ).is_completed()
 
 
 if __name__ == "__main__":
