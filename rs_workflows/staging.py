@@ -38,7 +38,7 @@ CATALOG_REQUEST_TIMEOUT = 20  # in seconds
 def get_prefect_logger(general_logger_name):
     """Get the prefect logger.
     It returns the prefect logger. If this can't be taken due to the missing
-    prefect context (i.e. the flow/task is run as single function, from tests for example),
+    prefect context (i.e. the flow/task is run as a single function, from pytests for example),
     the general logger is returned
 
     Args:
@@ -65,21 +65,25 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
 ):
     """Update the STAC catalog with file information.
 
+    This task updates the STAC catalog with the information of a file that has been processed
+    and saved to a specific location. It adds the collection name, the bucket location where
+    the file has been saved, and a fake geometry polygon covering the whole globe to the STAC
+    file information. Then, it sends a POST request to update the STAC catalog with the updated
+    file information.
+
     Args:
-        apikey_headers (dict): The apikey used for request (may be empty)
-        url (str): The URL of the catalog.
-        user (str): The user identifier.
-        collection_name (str): The name of the collection to be used.
-        stac_file_info (dict): Information in stac format about the downloaded file.
-        obs (str): The S3 bucket location where the file has been saved.
-        logger: The logger object for logging.
+        rs_client (StacClient): The client for accessing the STAC catalog.
+        collection_name (str): The name of the collection in the STAC catalog.
+        stac_file_info (dict): Information about the STAC file to be updated.
+        obs (str): The bucket location where the file has been saved.
 
     Returns:
-        bool: True if the file information is successfully updated in the catalog, False otherwise.
-    """
-    # add collection name
+        bool: True if the STAC catalog is successfully updated, False otherwise.
+    
+    """    
+    # add the collection name
     stac_file_info["collection"] = collection_name
-    # add bucket location where the file has been saved
+    # add the bucket location where the file has been saved
     stac_file_info["assets"]["file"]["href"] = f"{obs.rstrip('/')}/{stac_file_info['id']}"
     # add a fake geometry polygon (the whole globe)
     stac_file_info["geometry"] = {
@@ -116,15 +120,16 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     return response.status_code == 200
 
 
-class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes,
-    """Common configuration to Prefect tasks and flows.
-    Base class for configuration to prefect tasks and flows that ingest files from different stations (cadip, adgs...)
+class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes,    
+    """Common configuration for Prefect tasks and flows.
+    Base class for configuration used in prefect task and flow
+    used in staging the files from different stations (cadip, adgs...)
 
     Attributes:
-        rs_client (AuxipClient | CadipClient): RsClient instance
+        rs_client (AuxipClient | CadipClient): The client for accessing the Auxip or Cadip service.
         mission (str): The mission identifier.
-        tmp_download_path (str): The temporary download path.
-        s3_path (str): The S3 path for storing downloaded files.
+        tmp_download_path (str): The local path where temporary files will be downloaded.
+        s3_path (str): The S3 bucket path where the files will be stored.
     """
 
     def __init__(
@@ -141,17 +146,17 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-i
 
 
 class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-methods
-    """Configuration for Prefect tasks.
+    """Configuration class for Prefect tasks.
 
-    This class (inherits PrefectCommonConfig) encapsulates the configuration parameters needed for a Prefect task.
-    It includes information such as the user, rs-serve endpoint, list of files
-    to be downloaded from the station, in STAC format (to be used when insertion to STAC
-    endpoint is called), temporary download path (local to where the endpoint is hosted),
-    S3 path, and additional parameters like index and maximum retries.
+    This class extends the `PrefectCommonConfig` class and adds additional attributes
+    specific to Prefect tasks. It includes the configuration for the task, such as the
+    files to be processed by the task and the maximum number of retries allowed.
 
-    Attributes:
-        task_files_stac (list[dict]): List of files with stac info to be processed by the task.
-        max_retries (int): Maximum number of retries for the task.
+    Attributes: see :py:class:`PrefectCommonConfig`
+        task_files_stac (List[Dict]): A list of dictionaries containing information about the files to be processed
+                                      by the task. This info is in STAC format
+        max_retries (int): The maximum number of retries allowed for the task.
+
     """
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -174,20 +179,21 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
 
 @task
 def staging(config: PrefectTaskConfig):
-    """Prefect task function to stage (=download/ingest) files.
+    """Prefect task function to stage (=download/ingest) files from a specified station.
 
-    This prefect task function access the RS-Server endpoints that start the download of files and
-    check the status for the actions
+    This task function stages files for processing by calling the appropriate
+    rs-server endpoint for each requested file. It monitors the status of the file until it is
+    completely staged before initiating the next stage request.
 
     Args:
-        config (PrefectTaskConfig): Configuration object containing details about the files to be downloaded.
-
-    Raises:
-        None: This function does not raise any exceptions.
+        config (PrefectTaskConfig): The configuration object containing the necessary parameters
+                                    for staging the files.
 
     Returns:
-        failed_files: A list of files which could not be downloaded and / or uploaded to the s3.
-    """
+        List[Dict]: A list containing information about files that FAILED to be staged. The files within this
+                    list don't appear in the catalog as published
+
+    """    
 
     logger = get_prefect_logger("task_dwn")
     rs_client = config.rs_client
@@ -309,11 +315,11 @@ def filter_unpublished_files(
 
 
 def create_collection_name(mission, station):
-    """Create the name of the catalog collection
+    """Create the name of a catalog collection
 
-    This function constructs and returns a specific name for the catalog collection .
+    This function constructs and returns a specific name for the catalog collection.
     For ADGS station type should be "mission_name"_aux
-    For CADIP stations type should be "mission_name"_chunk
+    For CADIP stations types should be "mission_name"_chunk
 
     For other values, a RuntimeError is raised.
 
@@ -345,10 +351,11 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
     This class inherits the PrefectCommonConfig and represents the configuration for a
     Prefect flow
 
-    Attributes:
+    Attributes: see :py:class:`PrefectCommonConfig`
         max_workers (int): The maximum number of workers for the Prefect flow.
         start_datetime (datetime): The start datetime of the files that the station should return
         stop_datetime (datetime): The stop datetime of the files that the station should return
+        limit: The limit for the number of the files in the list retrieved from the ADGS/CADIP station (optional).
     """
 
     def __init__(  # pylint: disable=too-many-arguments

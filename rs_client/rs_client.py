@@ -105,10 +105,9 @@ class RsClient:
         key in the JSON response, the function returns the corresponding download status enum value. If the
         response is not successful or does not contain the 'status' key, the function returns a FAILED status.
 
-        Args:
-            apikey_headers (dict): The apikey used for request (may be empty)
-            endpoint (str): The rs-server endpoint URL to query for the file status.
+        Args:            
             filename (str): The name of the file for which to check the status.
+            timeout (int): The timeout duration for the HTTP request.
 
         Returns:
             EDownloadStatus: The download status enum value based on the response from the endpoint.
@@ -138,20 +137,23 @@ class RsClient:
         return EDownloadStatus.FAILED
 
     def staging(self, filename: str, timeout: int, s3_path: str = "", tmp_download_path: str = ""):
-        """Prefect task function to stage (=download/ingest) files.
+        """Stage a file for download.
 
-        This prefect task function access the RS-Server endpoints that start the download of files and
-        check the status for the actions
+        This method stages a file for download by sending a request to the staging endpoint
+        with optional parameters for S3 path and temporary download path.
 
         Args:
-            config (PrefectTaskConfig): Configuration object containing details about the files to be downloaded.
+            filename (str): The name of the file to be staged for download.
+            timeout (int): The timeout duration for the HTTP request.
+            s3_path (str, optional): The S3 path where the file will be stored after download.
+                Defaults to an empty string.
+            tmp_download_path (str, optional): The temporary download path for the file.
+                Defaults to an empty string.
 
         Raises:
-            None: This function does not raise any exceptions.
+            RuntimeError: If an error occurs while staging the file.
 
-        Returns:
-            failed_failes: A list of files which could not be downloaded and / or uploaded to the s3.
-        """
+        """        
 
         # dictionary to be used for payload request
         payload = {}
@@ -191,18 +193,37 @@ class RsClient:
         limit: Union[int, None] = None,
         sortby: Union[str, None] = None,
     ) -> list:
+        """Search for stations within a specified time range.
+
+        This method searches for stations within the specified time range by sending a request
+        to the station search endpoint with optional parameters for limiting results and sorting.
+
+        Args:
+            start_date (datetime): The start date of the time range.
+            stop_date (datetime): The stop date of the time range.
+            timeout (int): The timeout duration for the HTTP request.
+            limit (int, optional): The maximum number of results to return. Defaults to None.
+            sortby (str, optional): The attribute to sort the results by. Defaults to None.
+
+        Returns:
+            list: A list of stations found within the specified time range.
+
+        Raises:
+            RuntimeError: If an error occurs while searching for stations.
+
+        """
         """Retrieve a list of files from the specified endpoint within the given time range.
 
         This function queries the specified endpoint to retrieve a list of files available in the
         station (CADIP, ADGS, LTA ...) within the provided time range, starting from 'start_date' up
         to 'stop_date' (inclusive).
 
-        Args:
-            apikey_headers (dict): The apikey used for request (may be empty)
-            endpoint (str): The URL endpoint to query for file information.
-            start_date (datetime): The start date/time of the time range.
-            stop_date (datetime, optional): The stop date/time of the time range.
-            sortby (str, optional): Sort by +/-fieldName (ascending/descending), default is "-datetime"
+        Args:            
+            start_date (datetime): The start date of the time range.
+            stop_date (datetime): The stop date of the time range.
+            timeout (int): The timeout duration for the HTTP request.
+            limit (int, optional): The maximum number of results to return. Defaults to None.
+            sortby (str, optional): The attribute to sort the results by. Defaults to None.
 
         Returns:
             files (list): A list of files (in stac format) available at the endpoint within the specified time range.
@@ -215,9 +236,9 @@ class RsClient:
             available files.
             - It constructs a payload with the start and stop dates in ISO 8601 format and sends a GET
             request to the endpoint.
-            - The response is expected to be in JSON format, containing information about available files.
+            - The response is expected to be in JSON format with STAC, containing information about available files.
+                EODAG should return the information in STACH format through JSON
             - The function then extracts file information from the response and returns a list of files.
-
         """
 
         payload = {

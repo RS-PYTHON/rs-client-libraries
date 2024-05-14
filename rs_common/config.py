@@ -23,6 +23,7 @@ from enum import Enum
 # datetime format used for HTTP requests
 DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
+# name of the ADGS station, used in the same logic as the ECadipStation enum (see below)
 ADGS_STATION = "ADGS"
 
 #########

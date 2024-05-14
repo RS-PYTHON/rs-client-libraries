@@ -39,7 +39,6 @@ from rs_workflows.staging import (
 
 # NOTE: for local mode, use export RSPY_HOST_CATALOG=http://127.0.0.1:8003
 
-
 s3_session = boto3.session.Session()
 s3_client = s3_session.client(
     service_name="s3",
@@ -103,7 +102,7 @@ class Collection:
 
 
 def create_collection(_rs_client, collection_name):
-    """Create collection in catalog."""
+    """Create a collection in the catalog."""
     catalog_endpoint = _rs_client.href_catalog + "/catalog/collections"
     collection_type = Collection(_rs_client.owner_id, collection_name)
     logger.info(f"Endpoint used to insert the item info  within the catalog: {catalog_endpoint}")
