@@ -447,8 +447,7 @@ def test_s1_l0_flow(monkeypatch):  # pylint: disable=too-many-locals
     dpr_answer_path = RESOURCES / "dpr_answer.json"
     with open(dpr_answer_path, encoding="utf-8") as dpr_answer_f:
         file_loaded = json.loads(dpr_answer_f.read())
-
-    print(f"file_loaded = {file_loaded}")
+    
     dpr_mock = MagicMock(return_value=file_loaded)
     monkeypatch.setattr(
         "rs_workflows.s1_l0.start_dpr",

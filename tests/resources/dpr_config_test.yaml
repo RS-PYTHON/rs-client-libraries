@@ -12,76 +12,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-{
-    "general_configuration": {
-        "logging": {"level": "DEBUG"},
-        "triggering__validate_run": True,
-        "triggering__use_default_filename": True,
-        "triggering__use_basic_logging": True,
-        "triggering__load_default_logging": False,
-    },
-    "breakpoints": None,
-    "workflow": [
-        {
-            "step": 1,
-            "active": True,
-            "module": "rs.dpr.mockup",
-            "processing_unit": "DprMockupProcessor",
-            "name": "DprMockupProcessor",
-            "inputs": [
-                {"in1": "CADU1"},
-                {"in2": "CADU2"},
-                {"in2": "ADGS3"},
-                {"in2": "ADGS4"},
-            ],
-            "outputs": [{"out0": "S1SEWRAW"}],
-            "parameters": {"product_types": ["S1SEWRAW"]},
-        }
-    ],
-    "I/O": {
-        "inputs_products": [
-            {
-                "id": "CADU1",
-                "path": "s3://rs-cluster-catalog/stations/CADIP/CADU1.raw",
-                "store_type": "raw",
-                "store_params": {},
-            },
-            {
-                "id": "CADU2",
-                "path": "s3://rs-cluster-catalog/stations/CADIP/CADU2.raw",
-                "store_type": "raw",
-                "store_params": {},
-            },
-            {
-                "id": "ADGS3",
-                "path": "s3://rs-cluster-catalog/stations/ADGS/ADGS1.EOF",
-                "store_type": "EOF",
-                "store_params": {},
-            },
-            {
-                "id": "ADGS4",
-                "path": "s3://rs-cluster-catalog/stations/ADGS/ADGS2.EOF",
-                "store_type": "EOF",
-                "store_params": {},
-            },
-            {
-                "id": "ADGS63",
-                "path": "s3://rs-cluster-catalog/stations/ADGS/S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
-                "store_type": "SAFE",
-                "store_params": {},
-            },
-        ],
-        "output_products": [
-            {
-                "id": "S1SEWRAW",
-                "path": "s3://rs-cluster-temp/PRODUCTS/S1SEWRAW/",
-                "type": "folder|zip",
-                "store_type": "zarr",
-                "store_params": {},
-            }
-        ],
-    },
-    "dask_context": {},
-    "logging": {},
-    "config": {},
-}
+general_configuration:
+  logging:
+    level: DEBUG
+  triggering__validate_run: true
+  triggering__use_default_filename: true
+  triggering__use_basic_logging: true
+  triggering__load_default_logging: false
+breakpoints:
+workflow:
+- step: 1
+  active: true
+  module: rs.dpr.mockup # string corresponding to the python path of the module
+  processing_unit: DprMockupProcessor # EOProcessingUnit class name
+  name: DprMockupProcessor # identifier for the processing unit
+  inputs:
+  - in1: CADU1
+  - in2: ADGS2
+  outputs:
+  - out0: S1SEWRAW
+  parameters:
+    product_types:
+    - S1SEWRAW
+I/O:
+  inputs_products:
+  - id: CADU1
+    path: s3://test-bucket/CADU.raw
+    store_params: {}
+    store_type: raw
+  - id: ADGS2
+    path: s3://test-bucket/AUX.EOF
+    store_params: {}
+    store_type: EOF
+  output_products:
+  - id: S1SEWRAW
+    path: s3://test-bucket/PRODUCTS/S1SEWRAW/
+    store_params: {}
+    store_type: zarr
+    type: folder|zip
+dask_context: {}
+logging: {}
+config: {}
+
