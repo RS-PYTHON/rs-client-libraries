@@ -10,17 +10,19 @@ from typing import (
 )
 
 from functools import lru_cache
-import re
 from pystac_client import Client, Modifiable
 from pystac_client.stac_api_io import StacApiIO, Timeout
+
+import json
+from starlette.responses import JSONResponse
+import requests
 
 from pystac_client.collection_client import CollectionClient
 from pystac import CatalogType, Collection
 from pystac.layout import HrefLayoutStrategy
 from requests import Request
-import json
-from starlette.responses import JSONResponse
-import requests
+
+from starlette.status import HTTP_400_BAD_REQUEST
 
 
 class StacClient(Client):
@@ -98,6 +100,21 @@ class StacClient(Client):
         client.owner_id = owner_id
         return client
 
+    def validate_collection(self, collection: dict) -> bool:
+        """Check if a collection is STAC compliant.
+
+        Args:
+            collection (dict): The collection to be checked
+
+        Returns:
+            bool: True if the collection is conform, False otherwise
+        """
+        mandatory_elements = ["id", "description", "license", "extent", "links", "stac_version"]
+        for element in mandatory_elements:
+            if element not in collection:
+                return False
+        return True
+
     @lru_cache()
     def get_collection(self, collection_id: str, owner_id: str = None) -> Union[Collection, CollectionClient]:
         if owner_id:
@@ -113,15 +130,16 @@ class StacClient(Client):
         href_license: str = "https://creativecommons.org/licenses/publicdomain/",
         collection_license: str = "public-domain",
         stac_version: str = "1.0.0",
-        description: str = None,
-        owner_id: str = None,
+        description: str = "",
+        owner_id: str = "",
     ) -> dict:
         """Create a new collection.
 
         Args:
             collection_id (str): The Collection id.
             extent (dict): Contains spatial and temporal coverage.
-            href_license (_type_, optional): The href of the license. Defaults to "https://creativecommons.org/licenses/publicdomain/".
+            href_license (_type_, optional): The href of the license.
+            Defaults to "https://creativecommons.org/licenses/publicdomain/".
             collection_license (str, optional): The license name. Defaults to "public-domain".
             stac_version (str, optional): The stac_version. Defaults to "1.0.0".
             description (str, optional): The collection description. Defaults to "".
@@ -171,10 +189,12 @@ class StacClient(Client):
         Returns:
             JSONResponse: The response of the request.
         """
+        if not self.validate_collection(collection):
+            return JSONResponse(content="Collection format is Invalid", status_code=HTTP_400_BAD_REQUEST)
         headers = {"x-api-key": self.rs_server_api_key}
         return requests.post(f"{self.rs_server_href}/catalog/collections", json=collection, headers=headers, timeout=10)
 
-    def delete_collection(self, collection_id: str, owner_id: str = None) -> JSONResponse:
+    def delete_collection(self, collection_id: str, owner_id: str = "") -> JSONResponse:
         """Delete a collection.
 
         Args:
@@ -187,7 +207,7 @@ class StacClient(Client):
         headers = {"x-api-key": self.rs_server_api_key}
         if owner_id:
             response = requests.delete(
-                f"{self.rs_server_href}/catalog/collection/{owner_id}:{collection_id}", headers=headers, timeout=10
+                f"{self.rs_server_href}/catalog/collections/{owner_id}:{collection_id}", headers=headers, timeout=10
             )
         else:
             response = requests.delete(
