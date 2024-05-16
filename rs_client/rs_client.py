@@ -67,21 +67,19 @@ class RsClient:
 
     def get_cadip_client(
         self,
-        station: ECadipStation,
-        platforms: list[EPlatform],
+        station: ECadipStation,        
     ) -> "CadipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class CadipClient, with the same attributes as this "self" instance.
 
         Args:
-            station (ECadipStation): Cadip station
-            platforms (list[PlatformEnum]): platform list.
+            station (ECadipStation): Cadip station            
         """
         from rs_client.cadip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             CadipClient,
         )
 
-        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, platforms, self.logger)
+        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger)
 
     def get_stac_client(self) -> "StacClient":  # type: ignore # noqa: F821
         """

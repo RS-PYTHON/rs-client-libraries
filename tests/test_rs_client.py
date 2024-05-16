@@ -36,13 +36,13 @@ TIMEOUT = 3  # seconds
 
 RS_CLIENT = RsClient(RS_SERVER_HREF, RS_SERVER_API_KEY, OWNER_ID)
 AUXIP_CLIENT = RS_CLIENT.get_auxip_client()
-CADIP_CLIENT = RS_CLIENT.get_cadip_client(CADIP_STATION, PLATFORMS)
+CADIP_CLIENT = RS_CLIENT.get_cadip_client(CADIP_STATION)
 
 
 def test_get_child_client():
     """Test get_auxip_client, get_cadip_client, get_stac_client"""
     assert isinstance(RS_CLIENT.get_auxip_client(), AuxipClient)
-    assert isinstance(RS_CLIENT.get_cadip_client(CADIP_STATION, PLATFORMS), CadipClient)
+    assert isinstance(RS_CLIENT.get_cadip_client(CADIP_STATION), CadipClient)
     assert isinstance(RS_CLIENT.get_stac_client(), StacClient)
 
 
@@ -59,7 +59,7 @@ def test_server_href(monkeypatch):
 
     for env_var, client, get_href in [
         ["RSPY_HOST_ADGS", rs_client.get_auxip_client(), "href_adgs"],
-        ["RSPY_HOST_CADIP", rs_client.get_cadip_client(CADIP_STATION, PLATFORMS), "href_cadip"],
+        ["RSPY_HOST_CADIP", rs_client.get_cadip_client(CADIP_STATION), "href_cadip"],
         ["RSPY_HOST_CATALOG", rs_client.get_stac_client(), "href_catalog"],
     ]:
         # Without the env var, we should have an error
@@ -87,11 +87,11 @@ def test_cadip_sessions():
     # Dummy values
     session_ids = ["id1", "id2"]
     start_date = datetime(2000, 1, 1)
-    stop_date = datetime(2001, 1, 1)
+    stop_date = datetime(2001, 1, 1)    
 
     # Test the connection error with the dummy server
     with pytest.raises(RuntimeError) as error:
-        CADIP_CLIENT.search_sessions(TIMEOUT, session_ids, start_date, stop_date)
+        CADIP_CLIENT.search_sessions(TIMEOUT, session_ids, start_date, stop_date, PLATFORMS)
     assert "ConnectionError" in str(error.getrepr())
 
     # Mock the response, now the call should work
@@ -109,17 +109,17 @@ def test_cadip_sessions():
     with pytest.raises(RuntimeError) as error:
         with responses.RequestsMock() as resp:
             resp.get(url=mock_url, json={}, status=200)
-            CADIP_CLIENT.search_sessions(TIMEOUT, session_ids, start_date, stop_date)
+            CADIP_CLIENT.search_sessions(TIMEOUT, session_ids, start_date, stop_date, PLATFORMS)
     assert "KeyError" in str(error.getrepr())
 
     # Test a bad response status code
     with responses.RequestsMock() as resp:
         resp.get(url=mock_url, json=content, status=500)
-        sessions = CADIP_CLIENT.search_sessions(TIMEOUT, session_ids, start_date, stop_date)
+        sessions = CADIP_CLIENT.search_sessions(TIMEOUT, session_ids, start_date, stop_date, PLATFORMS)
         assert not sessions
 
     # Test the nominal case
     with responses.RequestsMock() as resp:
         resp.get(url=mock_url, json=content, status=200)
-        sessions = CADIP_CLIENT.search_sessions(TIMEOUT, session_ids, start_date, stop_date)
+        sessions = CADIP_CLIENT.search_sessions(TIMEOUT, session_ids, start_date, stop_date, PLATFORMS)
         assert sessions == features

@@ -87,7 +87,7 @@ def test_valid_staging_status(filename, station):
     if station == ADGS:
         rs_client = AuxipClient(href, None, "test_user", logger)
     else:
-        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
+        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, logger)
     endpoint = href + endpoints[station]["status"]
     json_response = {"name": filename, "status": EDownloadStatus.NOT_STARTED}
 
@@ -152,7 +152,7 @@ def test_invalid_staging_status(filename, station):
     if station == ADGS:
         rs_client = AuxipClient(href, None, "test_user", logger)
     else:
-        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
+        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, logger)
     endpoint = href + endpoints[station]["status"]
 
     json_response = {"detail": "Not Found"}
@@ -402,7 +402,7 @@ def test_ok_staging(station):  # pylint: disable=too-many-locals
     if station == ADGS:
         rs_client = AuxipClient(href, None, "testUser", logger)
     else:
-        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, logger)
 
     # mock the publish to catalog endpoint
     collection_name = create_collection_name(MISSION_NAME, rs_client.station_name)
@@ -476,7 +476,7 @@ def test_nok_staging(station):  # pylint: disable=too-many-locals
     if station == ADGS:
         rs_client = AuxipClient(href, None, "testUser", logger)
     else:
-        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, logger)
 
     # mock the publish to catalog endpoint
     collection_name = create_collection_name(MISSION_NAME, rs_client.station_name)
@@ -535,7 +535,7 @@ def test_search_stations(station):
     if station == ADGS:
         rs_client = AuxipClient(href, None, "test_user", logger)
     else:
-        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
+        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, logger)
 
     # mock the search endpoint
     endpoint = href + endpoints[station]["search"]
@@ -611,7 +611,7 @@ def test_err_ret_search_stations(station):
     if station == ADGS:
         rs_client = AuxipClient(href, None, "test_user", logger)
     else:
-        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, [EPlatform.S1A], logger)
+        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, logger)
 
     # mock the search endpoint
     endpoint = href + endpoints[station]["search"]
@@ -690,7 +690,7 @@ def test_wrong_url_search_stations(station):
     if station == ADGS:
         rs_client = AuxipClient(bad_href, None, "testUser", logger)
     else:
-        rs_client = CadipClient(bad_href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+        rs_client = CadipClient(bad_href, None, "testUser", ECadipStation.CADIP, logger)
 
     # mock the search endpoint
     endpoint = href + endpoints[station]["search"]
@@ -833,7 +833,7 @@ def test_staging_flow(station):  # pylint: disable=too-many-locals
     if station == ADGS:
         rs_client = AuxipClient(href, None, "testUser", logger)
     else:
-        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, [EPlatform.S1A], logger)
+        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, logger)
 
     flow_config = PrefectFlowConfig(
         rs_client,
