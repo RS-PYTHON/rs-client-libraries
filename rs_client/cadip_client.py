@@ -30,7 +30,6 @@ class CadipClient(RsClient):
 
     Attributes: see :py:class:`RsClient`
         station (ECadipStation): Cadip station
-        platforms (list[PlatformEnum]): platform list.
     """
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -39,7 +38,6 @@ class CadipClient(RsClient):
         rs_server_api_key: str | None,
         owner_id: str,
         station: ECadipStation,
-        platforms: list[EPlatform],
         logger: logging.Logger | None = None,
     ):
         """CadipClient class constructor."""
@@ -49,7 +47,6 @@ class CadipClient(RsClient):
         except KeyError as e:
             self.logger.exception(f"There is no such CADIP station: {station}")
             raise RuntimeError(f"There is no such CADIP station: {station}") from e
-        self.platforms: list[EPlatform] = platforms
 
     @property
     def href_cadip(self) -> str:
@@ -93,12 +90,13 @@ class CadipClient(RsClient):
     # Call RS-Server endpoints #
     ############################
 
-    def search_sessions(
+    def search_sessions(  # pylint: disable=too-many-arguments
         self,
         timeout: int,
         session_ids: list[str] | None = None,
         start_date: datetime | None = None,
         stop_date: datetime | None = None,
+        platforms: list[EPlatform] | None = None,
     ) -> list[dict]:  # TODO return pystac.ItemCollection instead
         """Endpoint to retrieve list of sessions from any CADIP station.
 
@@ -107,13 +105,14 @@ class CadipClient(RsClient):
                 (eg: ["S1A_20170501121534062343"] or ["S1A_20170501121534062343, S1A_20240328185208053186"])
             start_date (datetime): Start date of the time interval
             stop_date (datetime): Stop date of the time interval
+            platforms (list[PlatformEnum]): platform list
         """
 
         payload = {}
         if session_ids:
             payload["id"] = ",".join(session_ids)
-        if self.platforms:
-            payload["platform"] = ",".join([platform.value for platform in self.platforms])
+        if platforms:
+            payload["platform"] = ",".join([platform.value for platform in platforms])
         if start_date:
             payload["start_date"] = start_date.strftime(DATETIME_FORMAT)
         if stop_date:

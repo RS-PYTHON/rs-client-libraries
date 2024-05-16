@@ -234,7 +234,7 @@ if __name__ == "__main__":
         # the platforms is needed for sessions id search endpoint
         # only, so let's use an empty list for time being
         try:
-            rs_client = generic_client.get_cadip_client(args.station.upper(), [])
+            rs_client = generic_client.get_cadip_client(args.station.upper())
         except RuntimeError as e:
             logger.exception(f"Could not get the cadip client. Error: {e}")
             sys.exit(-1)

@@ -226,6 +226,9 @@ def create_cql2_filter(properties: dict, op: str = "and"):
     """
     args = [{"op": "=", "args": [{"property": field}, value]} for field, value in properties.items()]
     # args.append("collecttion=test_user_s1_chunk")
+    # this filter is used for getting the files for one CADIP seesion id
+    # There can't be more than 60 files for a cadip session, so a hardcoded limit of 1000 seems
+    # to be ok for the time being
     return {"filter-lang": "cql2-json", "limit": "1000", "filter": {"op": op, "args": args}}
 
 
@@ -395,6 +398,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         cadip_collection,
         config.cadip_session_id,
     )
+    # logger.debug(f"cadip_catalog_data = {cadip_catalog_data} | {cadip_catalog_data.result()}")
     logger.debug("Starting task get_adgs_catalog_data")
     adgs_catalog_data = get_adgs_catalog_data.submit(
         config.rs_client,
@@ -413,7 +417,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         return
 
     logger.debug("Starting task build_eopf_triggering_yaml ")
-    yaml_dpr_input = build_eopf_triggering_yaml(
+    yaml_dpr_input = build_eopf_triggering_yaml.submit(
         cadip_catalog_data.result(),
         adgs_catalog_data.result(),
         config.product_types,
@@ -425,7 +429,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
 
     # this task depends on the result from the previous task
     logger.debug("Starting task start_dpr")
-    files_stac = start_dpr.submit(config.url_dpr, yaml_dpr_input, wait_for=[yaml_dpr_input])
+    files_stac = start_dpr.submit(config.url_dpr, yaml_dpr_input.result(), wait_for=[yaml_dpr_input])
 
     if not files_stac.result():
         logger.error("DPR did not processed anything")
@@ -450,7 +454,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         **config.rs_client.apikey_headers,
     )
     fin_res = []
-    for output_product in get_yaml_outputs(yaml_dpr_input):
+    for output_product in get_yaml_outputs(yaml_dpr_input.result()):
         matching_stac = next(
             (d for d in files_stac.result() if d["stac_discovery"]["properties"]["eopf:type"] in output_product),
             None,
