@@ -87,7 +87,7 @@ def test_cadip_sessions():
     # Dummy values
     session_ids = ["id1", "id2"]
     start_date = datetime(2000, 1, 1)
-    stop_date = datetime(2001, 1, 1)    
+    stop_date = datetime(2001, 1, 1)
 
     # Test the connection error with the dummy server
     with pytest.raises(RuntimeError) as error:

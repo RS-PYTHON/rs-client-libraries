@@ -20,7 +20,7 @@ from typing import Union
 
 import requests
 
-from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus, EPlatform
+from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
 
 
@@ -67,13 +67,13 @@ class RsClient:
 
     def get_cadip_client(
         self,
-        station: ECadipStation,        
+        station: ECadipStation,
     ) -> "CadipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class CadipClient, with the same attributes as this "self" instance.
 
         Args:
-            station (ECadipStation): Cadip station            
+            station (ECadipStation): Cadip station
         """
         from rs_client.cadip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             CadipClient,

@@ -29,7 +29,7 @@ class CadipClient(RsClient):
     CadipClient class implementation.
 
     Attributes: see :py:class:`RsClient`
-        station (ECadipStation): Cadip station        
+        station (ECadipStation): Cadip station
     """
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -37,7 +37,7 @@ class CadipClient(RsClient):
         rs_server_href: str | None,
         rs_server_api_key: str | None,
         owner_id: str,
-        station: ECadipStation,        
+        station: ECadipStation,
         logger: logging.Logger | None = None,
     ):
         """CadipClient class constructor."""
@@ -46,7 +46,7 @@ class CadipClient(RsClient):
             self.station: ECadipStation = ECadipStation[station]
         except KeyError as e:
             self.logger.exception(f"There is no such CADIP station: {station}")
-            raise RuntimeError(f"There is no such CADIP station: {station}") from e        
+            raise RuntimeError(f"There is no such CADIP station: {station}") from e
 
     @property
     def href_cadip(self) -> str:
@@ -90,7 +90,7 @@ class CadipClient(RsClient):
     # Call RS-Server endpoints #
     ############################
 
-    def search_sessions(
+    def search_sessions(  # pylint: disable=too-many-arguments
         self,
         timeout: int,
         session_ids: list[str] | None = None,

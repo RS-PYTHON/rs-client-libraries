@@ -18,7 +18,6 @@ import json
 import os
 import os.path as osp
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 import responses
@@ -402,7 +401,7 @@ def test_get_adgs_catalog_data(endpoint, status):
 
 @pytest.mark.unit
 @responses.activate
-def test_s1_l0_flow(monkeypatch):  # pylint: disable=too-many-locals
+def test_s1_l0_flow(mocker):  # pylint: disable=too-many-locals
     """Test for s1_l0 flow
     NOTE: the mock for start_dpr does not produce any output. Thus, the
     last part from the flow is not covered in this test
@@ -422,25 +421,25 @@ def test_s1_l0_flow(monkeypatch):  # pylint: disable=too-many-locals
     adgs_catalog = RESOURCES / "adgs_catalog.json"
     with open(cadip_catalog, encoding="utf-8") as cadip_catalog_f:
         file_loaded = json.loads(cadip_catalog_f.read())
-    cadip_mock = MagicMock(return_value=file_loaded)
-    monkeypatch.setattr(
+
+    mocker.patch(
         "rs_workflows.s1_l0.get_cadip_catalog_data",
-        cadip_mock,
+        return_value=file_loaded,
     )
     with open(adgs_catalog, encoding="utf-8") as adgs_catalog_f:
         file_loaded = json.loads(adgs_catalog_f.read())
-    adgs_mock = MagicMock(return_value=file_loaded)
-    monkeypatch.setattr(
+
+    mocker.patch(
         "rs_workflows.s1_l0.get_adgs_catalog_data",
-        adgs_mock,
+        return_value=file_loaded,
     )
     yaml_input_path = RESOURCES / "dpr_config_test.yaml"
     with open(yaml_input_path, encoding="utf-8") as yaml_file:
         file_loaded = yaml.safe_load(yaml_file)
-    eopf_yaml_mock = MagicMock(return_value=file_loaded)
-    monkeypatch.setattr(
+
+    mocker.patch(
         "rs_workflows.s1_l0.build_eopf_triggering_yaml",
-        eopf_yaml_mock,
+        return_value=file_loaded,
     )
     # TODO: the following mock did not work. I also tried to mock the endpoint,
     # but inside the prefect task is not seen
@@ -448,10 +447,9 @@ def test_s1_l0_flow(monkeypatch):  # pylint: disable=too-many-locals
     with open(dpr_answer_path, encoding="utf-8") as dpr_answer_f:
         file_loaded = json.loads(dpr_answer_f.read())
 
-    dpr_mock = MagicMock(return_value=file_loaded)
-    monkeypatch.setattr(
+    mocker.patch(
         "rs_workflows.s1_l0.start_dpr",
-        dpr_mock,
+        return_value=file_loaded,
     )
     # responses.add(
     #         responses.GET,
@@ -466,10 +464,10 @@ def test_s1_l0_flow(monkeypatch):  # pylint: disable=too-many-locals
         url_gen + "/catalog/collections",
         status=200,
     )
-    update_catalog_mock = MagicMock(return_value=True)
-    monkeypatch.setattr(
+
+    mocker.patch(
         "rs_workflows.staging.update_stac_catalog",
-        update_catalog_mock,
+        return_value=True,
     )
     rs_client = StacClient(url_gen, None, username)
     adgs_files = [

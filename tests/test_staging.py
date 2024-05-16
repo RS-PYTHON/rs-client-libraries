@@ -26,7 +26,7 @@ import responses
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
 from rs_client.rs_client import RsClient
-from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus, EPlatform
+from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
 from rs_workflows.staging import (
     PrefectFlowConfig,
