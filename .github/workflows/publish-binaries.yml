@@ -86,10 +86,10 @@ jobs:
   # Publish wheels #
   ##################
 
-  rs-workflows-whl:
+  publish-whl:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
-    name: "'rs_workflows' wheel"
+    name: "Publish wheel"
     outputs:
       version_name: ${{ steps.publish-wheel.outputs.version_name }}
       package_name: ${{ steps.publish-wheel.outputs.package_name }}
@@ -99,18 +99,18 @@ jobs:
       - id: publish-wheel
         uses: ./.github/actions/publish-wheel
         with:
-          package_directory: . # rs_workflows
+          package_directory: .
 
 
   #########################
   # Publish Docker images #
   #########################
 
-  rs-workflows-img:
+  publish-docker-store:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
-    name: "'rs_workflows' Docker image"
-    needs: [set-env, rs-workflows-whl]
+    name: "Docker image for wheel storage"
+    needs: [set-env, publish-whl]
     permissions: write-all
     outputs:
       docker_image: ${{ steps.publish-docker.outputs.docker_image}}
@@ -121,16 +121,44 @@ jobs:
       - name: Download .whl dependencies
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.rs-workflows-whl.outputs.package_name }}
+          name: ${{ needs.publish-whl.outputs.package_name }}
           path: ./whl
 
       - id: publish-docker
         uses: ./.github/actions/publish-docker
         with:
-          dockerfile: ./rs_workflows/.github/Dockerfile
+          dockerfile: ./.github/dockerfiles/Dockerfile.store
           build_context_path: ./whl
-          image_suffix: -rs_workflows
-          version_name: ${{ needs.rs-workflows-whl.outputs.version_name }}
+          image_suffix: _store
+          version_name: ${{ needs.publish-whl.outputs.version_name }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          docker_tag: ${{ needs.set-env.outputs.docker_tag }}
+
+  publish-docker-jupyter:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    name: "Docker image for Jupyter"
+    needs: [set-env, publish-whl]
+    permissions: write-all
+    outputs:
+      docker_image: ${{ steps.publish-docker.outputs.docker_image}}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download .whl files into ./whl/
+      - name: Download .whl dependencies
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.publish-whl.outputs.package_name }}
+          path: ./whl
+
+      - id: publish-docker
+        uses: ./.github/actions/publish-docker
+        with:
+          dockerfile: ./.github/dockerfiles/Dockerfile.jupyter
+          build_context_path: ./whl
+          image_suffix: _jupyter
+          version_name: ${{ needs.publish-whl.outputs.version_name }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_tag: ${{ needs.set-env.outputs.docker_tag }}
 
@@ -143,7 +171,7 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     name: "Test rs-demo"
-    needs: [set-env, rs-workflows-img]
+    needs: [set-env, publish-docker-jupyter]
     steps:
       - name: Log into Docker registry
         uses: docker/login-action@v3
@@ -176,6 +204,6 @@ jobs:
           docker_tag="${docker_tag:-latest}" # latest by default
           ./test-docker-tag.sh "$docker_tag"
           docker compose -f docker-compose-test-tag.yml up -d
-          ./run-notebooks.sh
+          ./run-notebooks.sh "$docker_tag"
 
         shell: bash
