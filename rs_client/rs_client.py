@@ -14,14 +14,22 @@
 
 """RsClient class implementation."""
 
+import getpass
 import logging
+import os
+import re
+import sys
 from datetime import datetime
 from typing import Union
 
 import requests
+from cachetools import TTLCache, cached
 
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
+
+# Timeout in seconds
+TIMEOUT = 30
 
 
 class RsClient:
@@ -29,18 +37,22 @@ class RsClient:
     RsClient class implementation.
 
     Attributes:
-        rs_server_href (str): RS-Server URL.
+        rs_server_href (str): RS-Server URL. In local mode, pass None.
         rs_server_api_key (str): API key for RS-Server authentication.
-        owner_id (str): Owner of the catalog collections. The API key must give us the right to read/write this owner
-                        collections in the catalog. This owner ID is also used in the RS-Client logging.
+        owner_id (str): Owner of the catalog collections (no special characters allowoed).
+        The API key must give us the right to read/write this owner collections in the catalog.
+        This owner ID is also used in the RS-Client logging.
+        If missing, in hybrid/cluster mode, we use the API key owner; in local mode, we use the local system username.
         logger (logging.Logger): Logging instance.
+        local_mode (bool): Local mode or hybrid/cluster mode.
+        apikey_headers (dict): API key in a dict, ready-to-use in HTTP request headers.
     """
 
     def __init__(
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None,
-        owner_id: str,
+        owner_id: str = "",
         logger: logging.Logger | None = None,
     ):
         """RsClient class constructor."""
@@ -49,7 +61,80 @@ class RsClient:
         self.owner_id: str = owner_id
         self.logger: logging.Logger = logger or Logging.default(__name__)
 
-        self.apikey_headers: dict = {"headers": {"x-api-key": rs_server_api_key}} if rs_server_api_key else {}
+        # Remove trailing / character(s) from the URL
+        if self.rs_server_href:
+            self.rs_server_href = self.rs_server_href.strip().rstrip("/").strip()
+
+        # We are in local mode if the URL is undefined.
+        # Env vars are used instead to determine the different services URL.
+        self.local_mode = not bool(self.rs_server_href)
+
+        if (not self.local_mode) and (not self.rs_server_api_key):
+            raise RuntimeError("API key is mandatory for RS-Server authentication")
+
+        # For HTTP request headers
+        self.apikey_headers: dict = {"headers": {"x-api-key": self.rs_server_api_key}} if self.rs_server_api_key else {}
+
+        # Determine automatically the owner id
+        if not self.owner_id:
+            # In local mode, we use the local system username
+            if self.local_mode:
+                self.owner_id = getpass.getuser()
+
+            # In hybrid/cluster mode, we retrieve the API key username
+            else:
+                _, _, self.owner_id = self.apikey_security()
+
+        # Remove special characters
+        self.owner_id = re.sub(r"[^a-zA-Z0-9]+", "", self.owner_id)
+
+        if not self.owner_id:
+            raise RuntimeError("The owner ID is empty or only contains special characters")
+
+        self.logger.debug(f"Owner ID: {self.owner_id!r}")
+
+    # The following variable is needed for the tests to pass
+    apikey_security_cache: TTLCache = TTLCache(maxsize=sys.maxsize, ttl=120)
+
+    @cached(cache=apikey_security_cache)
+    def apikey_security(self) -> tuple[list, dict, dict]:
+        """
+        Check the api key validity. Cache an infinite (sys.maxsize) number of results for 120 seconds.
+
+        Returns:
+            Tuple of (IAM roles, config, user login) information from the keycloak server, associated with the api key.
+        """
+
+        self.logger.warning(
+            f"TODO: use {self.rs_server_href}/apikeymanager/check/api_key instead, see: "
+            "https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-257",
+        )
+        check_url = os.environ["RSPY_UAC_CHECK_URL"]
+
+        # Request the API key manager, pass user-defined api key in http header
+        # check_url = f"{self.rs_server_href}/apikeymanager/check/api_key"
+        self.logger.debug(f"Call the API key manager")
+        response = requests.get(check_url, **self.apikey_headers, timeout=TIMEOUT)
+
+        # Read the api key info
+        if response.ok:
+            contents = response.json()
+            # Note: for now, config is an empty dict
+            return contents["iam_roles"], contents["config"], contents["user_login"]
+
+        # Try to read the response detail or error
+        try:
+            json = response.json()
+            if "detail" in json:
+                detail = json["detail"]
+            else:
+                detail = json["error"]
+
+        # If this fail, get the full response content
+        except Exception:  # pylint: disable=broad-exception-caught
+            detail = response.read().decode("utf-8")
+
+        raise RuntimeError(f"API key manager status code {response.status_code}: {detail}")
 
     #############################
     # Get child class instances #
