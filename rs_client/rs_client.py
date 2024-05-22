@@ -208,7 +208,7 @@ class RsClient:
             files (list): A list of files (in stac format) available at the endpoint within the specified time range.
 
         Raises:
-            - RuntimeError if the endpoint can't be reached
+            RuntimeError: if the endpoint can't be reached
 
         Notes:
             - This function queries the specified endpoint with a time range to retrieve information about
