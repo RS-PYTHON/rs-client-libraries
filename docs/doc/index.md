@@ -1,9 +1,8 @@
-= RS server libraries technical documentation
+RS Client Libraries
+===================
 
-== User manual
 
-== Developer manual
 
-Documentation for prefect workflows functions
+![Python Components](../../images/python-components.png)
 
-${include("rs_workflows/index.adoc")}
+![Python RS Client](../../images/python-rs-client.png)
