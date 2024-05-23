@@ -13,8 +13,8 @@
 # limitations under the License.
 
 """Prefect flow for processing a S1 L0 product"""
+import json
 import os.path as osp
-import pprint
 from pathlib import Path
 
 import requests
@@ -23,7 +23,7 @@ from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
 
 from rs_client.stac_client import StacClient
-from rs_common.config import ADGS_STATION, ECadipStation
+from rs_common.config import AUXIP_STATION, ECadipStation
 from rs_common.logging import Logging
 from rs_workflows.staging import (
     CATALOG_REQUEST_TIMEOUT,
@@ -71,9 +71,8 @@ def start_dpr(dpr_endpoint: str, yaml_dpr_input: dict):
         return None
 
     logger.debug("DPR processor results: \n\n")
-    pp = pprint.PrettyPrinter(indent=4)
     for attr in response.json():
-        pp.pprint(attr)
+        logger.debug(json.dumps(attr, indent=2))
     logger.debug("Task start_dpr FINISHED")
     return response.json()
 
@@ -388,7 +387,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
 
     # TODO: the station for CADIP should come as an input
     cadip_collection = create_collection_name(config.mission, ECadipStation["CADIP"])
-    adgs_collection = create_collection_name(config.mission, ADGS_STATION)
+    adgs_collection = create_collection_name(config.mission, AUXIP_STATION)
     logger.debug(f"Collections: {cadip_collection} | {adgs_collection}")
     # S1A_20200105072204051312
     # gather the data for cadip session id

@@ -25,7 +25,7 @@ from prefect_dask.task_runners import DaskTaskRunner
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
 from rs_client.stac_client import StacClient
-from rs_common.config import ADGS_STATION, ECadipStation, EDownloadStatus
+from rs_common.config import AUXIP_STATION, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
 
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
@@ -335,7 +335,7 @@ def create_collection_name(mission, station):
         RuntimeError: If the provided station type is not supported.
 
     """
-    if station == ADGS_STATION:
+    if station == AUXIP_STATION:
         return f"{mission}_aux"
     # check CADIP
     try:
