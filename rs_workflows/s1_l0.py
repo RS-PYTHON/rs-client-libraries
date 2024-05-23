@@ -47,10 +47,7 @@ def start_dpr(dpr_endpoint: str, yaml_dpr_input: dict):
         yaml_dpr_input (dict): The YAML input for DPR processing.
 
     Returns:
-        dict: The response JSON from the DPR simulator if successful, else None.
-
-    Raises:
-        None
+        response (dict): The response JSON from the DPR simulator if successful, else None.
     """
     logger = Logging.default(LOGGER_NAME)
     logger.debug("Task start_dpr STARTED")
@@ -89,10 +86,7 @@ def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, product_type
         temp_s3_path (str): Temporary S3 path.
 
     Returns:
-        dict: The generated YAML template with updated inputs and I/O products, or None if unsuccessful.
-
-    Raises:
-        None
+        response (dict): The generated YAML template with updated inputs and I/O products, or None if unsuccessful.
     """
     logger = Logging.default(LOGGER_NAME)
     logger.debug("Task build_eopf_triggering_yaml STARTED")
@@ -140,10 +134,7 @@ def gen_payload_inputs(cadu_list: list, adgs_list: list):
         adgs_list (list): List of ADGS file paths.
 
     Returns:
-        tuple: A tuple containing the composer dictionary and the YAML content list.
-
-    Raises:
-        None
+        tuple ([list, list]): A tuple containing the composer dictionary and the YAML content list.
     """
     input_body = []
     composer = []
@@ -176,7 +167,7 @@ def gen_payload_outputs(product_types, temp_s3_path: str):
         temp_s3_path (str): The temporary S3 path where the products will be stored.
 
     Returns:
-        Tuple[list, list]: A tuple containing composer and output_body payloads.
+        Tuple ([list, list]): A tuple containing composer and output_body payloads.
 
     """
     composer = []
@@ -205,10 +196,7 @@ def get_yaml_outputs(template: dict):
         template (dict): The YAML template.
 
     Returns:
-        list: A list of paths for YAML outputs.
-
-    Raises:
-        None
+        list (list): A list of paths for YAML outputs.
     """
     return [out["path"] for out in template["I/O"]["output_products"]]
 
@@ -222,7 +210,7 @@ def create_cql2_filter(properties: dict, op: str = "and"):
         op (str, optional): Logical operator to combine filter conditions. Defaults to "and".
 
     Returns:
-        dict: CQL2 filter.
+        ret (dict): CQL2 filter.
     """
     args = [{"op": "=", "args": [{"property": field}, value]} for field, value in properties.items()]
     # args.append("collecttion=test_user_s1_chunk")
@@ -245,7 +233,7 @@ def get_cadip_catalog_data(rs_client: StacClient, collection: str, session_id: s
         session_id (str): The session ID associated with the collection.
 
     Returns:
-        dict or None: The CADIP catalog data if retrieval is successful, otherwise None.
+        response (dict): The CADIP catalog data if retrieval is successful, otherwise None.
 
     """
 
@@ -292,7 +280,7 @@ def get_adgs_catalog_data(rs_client: StacClient, collection: str, files: list):
         files (list): A list of file IDs to retrieve from the catalog.
 
     Returns:
-        dict or None: The ADGS catalog data if retrieval is successful, otherwise None.
+        response (dict): The ADGS catalog data if retrieval is successful, otherwise None.
 
     """
 
@@ -379,9 +367,6 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
 
     Args:
         config (PrefectS1L0FlowConfig): Configuration for the flow.
-
-    Returns:
-        None: If no data is found in the catalog or if DPR processing did not yield any results.
 
     """
     logger = get_prefect_logger(LOGGER_NAME)

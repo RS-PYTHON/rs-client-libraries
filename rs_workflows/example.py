@@ -23,13 +23,7 @@ def print_hello(name: str):
     This prefect task may be used as start point in creating your own prefect tasks
 
     Args:
-        name (str): Username to be printed
-
-    Returns:
-        None
-
-    Raises:
-        None
+        name (str): Username to be printed        
     """
     print(f"Hello {name}!")
 
@@ -44,12 +38,6 @@ def hello_world(name="COPERNICUS", tasks_number=2):
     Args:
         name (str): Username to be printed. Default COPERNICUS
         tasks_number (int): Number of tasks to be run. Default 2
-
-    Returns:
-        None
-
-    Raises:
-        None
     """
     for idx in range(0, tasks_number):
         print_hello(name + "_" + str(idx))

@@ -45,7 +45,7 @@ def get_prefect_logger(general_logger_name):
         general_logger_name (str): The name of the general logger in case the prefect logger can't be returned.
 
     Returns:
-        logging.Logger: A prefect logger instance or a general logger instance.
+        logging.Logger (logger): A prefect logger instance or a general logger instance.
     """
     try:
         logger = get_run_logger()
@@ -78,7 +78,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
         obs (str): The bucket location where the file has been saved.
 
     Returns:
-        bool: True if the STAC catalog is successfully updated, False otherwise.
+        bool (bool): True if the STAC catalog is successfully updated, False otherwise.
 
     """
     # add the collection name
@@ -190,7 +190,7 @@ def staging(config: PrefectTaskConfig):
                                     for staging the files.
 
     Returns:
-        List[Dict]: A list containing information about files that FAILED to be staged. The files within this
+        List ([dict]): A list containing information about files that FAILED to be staged. The files within this
                     list don't appear in the catalog as published
 
     """
@@ -329,7 +329,7 @@ def create_collection_name(mission, station):
             values are "ADGS" and "CADIP", "INS", "MPS", "MTI", "NSG", "SGS".
 
     Returns:
-        str: The name of the collection
+        str (str): The name of the collection
 
     Raises:
         RuntimeError: If the provided station type is not supported.
@@ -390,7 +390,7 @@ def staging_flow(config: PrefectFlowConfig):
         config (PrefectFlowConfig): Configuration object containing details about the download flow.
 
     Returns:
-        bool: True if the flow execution is successful, False otherwise.
+        bool (bool): True if the flow execution is successful, False otherwise.
 
     Raises:
         None: This function does not raise any exceptions.
