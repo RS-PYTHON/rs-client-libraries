@@ -45,7 +45,7 @@ def get_prefect_logger(general_logger_name):
         general_logger_name (str): The name of the general logger in case the prefect logger can't be returned.
 
     Returns:
-        logging.Logger (logger): A prefect logger instance or a general logger instance.
+        logger (logger): A prefect logger instance or a general logger instance.
     """
     try:
         logger = get_run_logger()
