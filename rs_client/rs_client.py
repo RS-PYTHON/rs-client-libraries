@@ -39,10 +39,11 @@ class RsClient:
     Attributes:
         rs_server_href (str): RS-Server URL. In local mode, pass None.
         rs_server_api_key (str): API key for RS-Server authentication.
-        owner_id (str): Owner of the catalog collections (no special characters allowoed).
-        The API key must give us the right to read/write this owner collections in the catalog.
+        owner_id (str): ID of the owner of the STAC catalog collections (no special characters allowoed).
+        By default, this is the user login from the keycloak account, associated with the API key.
+        Or, in local mode, this is the local system username.
+        Else, your API Key must give you the rights to read/write on this catalog owner.
         This owner ID is also used in the RS-Client logging.
-        If missing, in hybrid/cluster mode, we use the API key owner; in local mode, we use the local system username.
         logger (logging.Logger): Logging instance.
         local_mode (bool): Local mode or hybrid/cluster mode.
         apikey_headers (dict): API key in a dict, ready-to-use in HTTP request headers.
@@ -102,8 +103,12 @@ class RsClient:
         Check the api key validity. Cache an infinite (sys.maxsize) number of results for 120 seconds.
 
         Returns:
-            Tuple of (IAM roles, config, user login) information from the keycloak server, associated with the api key.
+            Tuple of (IAM roles, config, user login) information from the keycloak account, associated with the api key.
         """
+
+        # In local mode, we have no API key, so return empty results
+        if self.local_mode:
+            return [], {}, ""
 
         # self.logger.warning(
         #     f"TODO: use {self.rs_server_href}/apikeymanager/check/api_key instead, see: "
@@ -139,17 +144,17 @@ class RsClient:
 
     @property
     def apikey_iam_roles(self) -> list[str]:
-        """Return the IAM roles from the keycloak server, associated with the api key."""
+        """Return the IAM roles from the keycloak account, associated with the api key."""
         return self.apikey_security()[0]
 
     @property
     def apikey_config(self) -> dict:
-        """Return the config from the keycloak server, associated with the api key."""
+        """Return the config from the keycloak account, associated with the api key."""
         return self.apikey_security()[1]
 
     @property
     def apikey_user_login(self) -> list[str]:
-        """Return the user login from the keycloak server, associated with the api key."""
+        """Return the user login from the keycloak account, associated with the api key."""
         return self.apikey_security()[2]
 
     #############################
