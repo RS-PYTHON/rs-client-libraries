@@ -81,9 +81,9 @@ class RsClient:
             if self.local_mode:
                 self.owner_id = getpass.getuser()
 
-            # In hybrid/cluster mode, we retrieve the API key username
+            # In hybrid/cluster mode, we retrieve the API key login
             else:
-                _, _, self.owner_id = self.apikey_security()
+                self.owner_id = self.apikey_login
 
         # Remove special characters
         self.owner_id = re.sub(r"[^a-zA-Z0-9]+", "", self.owner_id)
@@ -97,7 +97,7 @@ class RsClient:
     apikey_security_cache: TTLCache = TTLCache(maxsize=sys.maxsize, ttl=120)
 
     @cached(cache=apikey_security_cache)
-    def apikey_security(self) -> tuple[list, dict, dict]:
+    def apikey_security(self) -> tuple[list[str], dict, str]:
         """
         Check the api key validity. Cache an infinite (sys.maxsize) number of results for 120 seconds.
 
@@ -105,10 +105,11 @@ class RsClient:
             Tuple of (IAM roles, config, user login) information from the keycloak server, associated with the api key.
         """
 
-        self.logger.warning(
-            f"TODO: use {self.rs_server_href}/apikeymanager/check/api_key instead, see: "
-            "https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-257",
-        )
+        # self.logger.warning(
+        #     f"TODO: use {self.rs_server_href}/apikeymanager/check/api_key instead, see: "
+        #     "https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-257",
+        # )
+        # Does not work in hybrid mode for now because this URL is not exposed.
         check_url = os.environ["RSPY_UAC_CHECK_URL"]
 
         # Request the API key manager, pass user-defined api key in http header
@@ -135,6 +136,21 @@ class RsClient:
             detail = response.read().decode("utf-8")
 
         raise RuntimeError(f"API key manager status code {response.status_code}: {detail}")
+
+    @property
+    def apikey_iam_roles(self) -> list[str]:
+        """Return the IAM roles from the keycloak server, associated with the api key."""
+        return self.apikey_security()[0]
+
+    @property
+    def apikey_config(self) -> dict:
+        """Return the config from the keycloak server, associated with the api key."""
+        return self.apikey_security()[1]
+
+    @property
+    def apikey_user_login(self) -> list[str]:
+        """Return the user login from the keycloak server, associated with the api key."""
+        return self.apikey_security()[2]
 
     #############################
     # Get child class instances #
