@@ -385,11 +385,19 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
     """
     logger = get_prefect_logger(LOGGER_NAME)
 
+    # Check the product types
+    ok_types = ["S1SEWRAW", "S1SIWRAW", "S1SSMRAW", "S1SWVRAW"]
+    for product_type in config.product_types:
+        if not product_type in ok_types:
+            raise RuntimeError(
+                f"Unrecognized product type: {product_type}\n" "It should be one of: \n" + "\n".join(ok_types),
+            )
+
     # TODO: the station for CADIP should come as an input
     cadip_collection = create_collection_name(config.mission, ECadipStation["CADIP"])
     adgs_collection = create_collection_name(config.mission, AUXIP_STATION)
     logger.debug(f"Collections: {cadip_collection} | {adgs_collection}")
-    # S1A_20200105072204051312
+
     # gather the data for cadip session id
     logger.debug("Starting task get_cadip_catalog_data")
     cadip_catalog_data = get_cadip_catalog_data.submit(
@@ -406,13 +414,12 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
     )
 
     # the previous tasks may be launched in parallel. The next task depends on the results from these previous tasks
-    if (
-        not cadip_catalog_data.result()
-        or not adgs_catalog_data.result()
-        or int(cadip_catalog_data.result()["context"]["returned"]) == 0
-        or int(adgs_catalog_data.result()["context"]["returned"]) == 0
-    ):
-        logger.error("No data found in catalog")
+    if not cadip_catalog_data.result() or int(cadip_catalog_data.result()["context"]["returned"]) == 0:
+        logger.error(f"No Cadip files were found in the catalog for Cadip session ID: {config.cadip_session_id!r}")
+        return
+
+    if not adgs_catalog_data.result() or int(adgs_catalog_data.result()["context"]["returned"]) == 0:
+        logger.error("None of these Auxip files were found in the catalog:\n" + "\n".join(config.adgs_files))
         return
 
     logger.debug("Starting task build_eopf_triggering_yaml ")
