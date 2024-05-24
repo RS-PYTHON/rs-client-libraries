@@ -48,7 +48,7 @@ def test_get_child_client():
 
 def test_station_names():
     """Test the station name returned by the AuxipClient and CadipClient"""
-    assert "ADGS" in AUXIP_CLIENT.station_name
+    assert "AUXIP" in AUXIP_CLIENT.station_name
     assert "CADIP" in CADIP_CLIENT.station_name
 
 
