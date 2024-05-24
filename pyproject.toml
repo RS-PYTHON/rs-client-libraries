@@ -52,7 +52,7 @@ flake8-pyproject = "^1.2.3"
 responses = "^0.25.0"
 
 [tool.poetry.group.demo.dependencies] # for hybrid mode
-jupyterlab = "^4.1.6"
+jupyterlab = "^4.2.1"
 boto3 = "^1.34.91"
 
 [tool.poetry-dynamic-versioning] # needs: poetry self add "poetry-dynamic-versioning[plugin]"
