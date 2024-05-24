@@ -18,7 +18,7 @@ from rs_common import opentelemetry
 from rs_common.logging import Logging
 
 
-def test_opentelemetry(monkeypatch, mocker):
+def test_opentelemetry(mocker):
     """
     For now, just test that the otel init code passes without errors.
     Don't check the generated logs, traces and metrics.

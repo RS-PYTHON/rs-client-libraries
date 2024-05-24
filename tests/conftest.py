@@ -42,5 +42,3 @@ def before_and_after(session_mocker):
     ###################
     # After all tests #
     ###################
-
-    pass
