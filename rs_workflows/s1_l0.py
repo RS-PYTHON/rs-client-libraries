@@ -367,7 +367,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
 
 # At the time being, no more than 2 workers are required, because this flow runs at most 2 tasks in in parallel
 @flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 2, "threads_per_worker": 1}))
-def s1_l0_flow(config: PrefectS1L0FlowConfig):
+def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-locals
     """Constructs a Prefect Flow for Sentinel-1 Level 0 processing.
 
     This flow orchestrates the processing of Sentinel-1 Level 0 data by executing
@@ -388,7 +388,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
     # Check the product types
     ok_types = ["S1SEWRAW", "S1SIWRAW", "S1SSMRAW", "S1SWVRAW"]
     for product_type in config.product_types:
-        if not product_type in ok_types:
+        if product_type not in ok_types:
             raise RuntimeError(
                 f"Unrecognized product type: {product_type}\n" "It should be one of: \n" + "\n".join(ok_types),
             )
@@ -419,7 +419,9 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):
         return
 
     if not adgs_catalog_data.result() or int(adgs_catalog_data.result()["context"]["returned"]) == 0:
-        logger.error("None of these Auxip files were found in the catalog:\n" + "\n".join(config.adgs_files))
+        logger.error(  # pylint: disable=logging-not-lazy
+            "None of these Auxip files were found in the catalog:\n" + "\n".join(config.adgs_files),
+        )
         return
 
     logger.debug("Starting task build_eopf_triggering_yaml ")

@@ -119,7 +119,7 @@ class RsClient:
 
         # Request the API key manager, pass user-defined api key in http header
         # check_url = f"{self.rs_server_href}/apikeymanager/check/api_key"
-        self.logger.debug(f"Call the API key manager")
+        self.logger.debug("Call the API key manager")
         response = requests.get(check_url, **self.apikey_headers, timeout=TIMEOUT)
 
         # Read the api key info
