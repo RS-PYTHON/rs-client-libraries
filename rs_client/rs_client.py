@@ -138,7 +138,7 @@ class RsClient:
 
         # If this fail, get the full response content
         except Exception:  # pylint: disable=broad-exception-caught
-            detail = response.read().decode("utf-8")
+            detail = response.content
 
         raise RuntimeError(f"API key manager status code {response.status_code}: {detail}")
 
@@ -156,7 +156,7 @@ class RsClient:
         return self.apikey_security()[1]
 
     @property
-    def apikey_user_login(self) -> list[str]:
+    def apikey_user_login(self) -> str:
         """Return the user login from the keycloak account, associated to the api key."""
         return self.apikey_security()[2]
 
