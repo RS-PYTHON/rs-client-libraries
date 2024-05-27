@@ -83,7 +83,7 @@ class RsClient:
 
         return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger)
 
-    def get_stac_client(self) -> "StacClient":  # type: ignore # noqa: F821
+    def get_stac_client(self, *args, **kwargs) -> "StacClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class StacClient, with the same attributes as this "self" instance.
         """
@@ -91,7 +91,7 @@ class RsClient:
             StacClient,
         )
 
-        return StacClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
+        return StacClient.open(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger, *args, **kwargs)
 
     ############################
     # Call RS-Server endpoints #

@@ -332,7 +332,7 @@ def test_get_cadip_catalog_data(endpoint, status):
             status=status,
         )
 
-    rs_client = StacClient(endpoint, None, username)
+    rs_client = StacClient.open(endpoint, None, username)
     cadip_res = get_cadip_catalog_data.fn(rs_client, collection, cadip_session_id)
 
     if "bad_endpoint" not in endpoint:
@@ -386,7 +386,7 @@ def test_get_adgs_catalog_data(endpoint, status):
             status=status,
         )
 
-    rs_client = StacClient(endpoint, "", username)
+    rs_client = StacClient.open(endpoint, "", username)
     adgs_res = get_adgs_catalog_data.fn(rs_client, collection, files_list)
 
     if "bad_endpoint" not in endpoint:
@@ -469,7 +469,7 @@ def test_s1_l0_flow(mocker):  # pylint: disable=too-many-locals
         "rs_workflows.staging.update_stac_catalog",
         return_value=True,
     )
-    rs_client = StacClient(url_gen, None, username)
+    rs_client = StacClient.open(url_gen, None, username)
     adgs_files = [
         "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
         "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
@@ -550,7 +550,7 @@ if __name__ == "__main__":
     if not args.apikey:
         args.apikey = os.environ.get("RSPY_APIKEY", None)
 
-    _rs_client = StacClient(args.url_catalog, args.apikey, args.user, logger)
+    _rs_client = StacClient.open(args.url_catalog, args.apikey, args.user, logger)
 
     # TODO: use "real" values ?
     _adgs_files = [

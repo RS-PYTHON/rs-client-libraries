@@ -59,7 +59,7 @@ class StacClient(RsClient, Client):
     ):
         """
         Constructor. Called only by pystac.
-        As an user: don't use this directly, call the open(...) class method instead.
+        As an user: don't use this directly, call the open(...) class method instead or RsClient.get_stac_client(...).
         """
 
         # Call manually the parent pystac Client constructor.
@@ -81,10 +81,12 @@ class StacClient(RsClient, Client):
     @classmethod
     def open(  # pylint: disable=arguments-renamed, too-many-arguments
         cls,
+        # RsClient parameters
         rs_server_href: str | None,
         rs_server_api_key: str | None,
         owner_id: str | None,
         logger: logging.Logger | None = None,
+        # pystac Client parameters
         headers: Optional[Dict[str, str]] = None,
         parameters: Optional[Dict[str, Any]] = None,
         ignore_conformance: Optional[bool] = None,
