@@ -27,6 +27,9 @@ prefect-dask = "^0.2.6"
 opentelemetry-distro = "^0.45b0" # then run 'poetry run opentelemetry-bootstrap -a install'
 opentelemetry-exporter-otlp = "^1.24.0"
 python-logging-loki = "^0.3.1"
+pystac = "^1.10.1"
+pystac-client = "^0.8.1"
+starlette = "^0.37.2"
 
 [tool.poetry.group.dev]
 optional = true
