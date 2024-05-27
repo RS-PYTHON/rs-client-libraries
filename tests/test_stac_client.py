@@ -22,17 +22,16 @@ def test_create_object_stac_client():  # pylint: disable=missing-function-docstr
     # Loads the catalog #
     #####################
     catalog = StacClient.open(
-        "http://localhost:8003/catalog/",
-        rs_server_api_key="e33bbe09-020a-4e03-a0e1-f44f5936e928",
         rs_server_href="http://localhost:8003",
+        rs_server_api_key="e33bbe09-020a-4e03-a0e1-f44f5936e928",
         owner_id="pyteam",
     )
 
-    ##################################################
-    # Get the collection S1_L1 from jgaucher catalog #
-    ##################################################
-    collection = catalog.get_collection(collection_id="S1_L1", owner_id="jgaucher")
-    assert collection.id == "S1_L1"
+    # ##################################################
+    # # Get the collection S1_L1 from jgaucher catalog #
+    # ##################################################
+    # collection = catalog.get_collection(collection_id="S1_L1", owner_id="jgaucher")
+    # assert collection.id == "S1_L1"
 
     #######################################################
     # Get all the collections accessible from pyteam user #

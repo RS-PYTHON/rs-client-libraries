@@ -23,6 +23,8 @@ import requests
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
 
+APIKEY_HEADER = "x-api-key"
+
 
 class RsClient:
     """
@@ -40,16 +42,16 @@ class RsClient:
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None,
-        owner_id: str,
+        owner_id: str | None,
         logger: logging.Logger | None = None,
     ):
         """RsClient class constructor."""
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
-        self.owner_id: str = owner_id
+        self.owner_id: str | None = owner_id
         self.logger: logging.Logger = logger or Logging.default(__name__)
 
-        self.apikey_headers: dict = {"headers": {"x-api-key": rs_server_api_key}} if rs_server_api_key else {}
+        self.apikey_headers: dict = {"headers": {APIKEY_HEADER: rs_server_api_key}} if rs_server_api_key else {}
 
     #############################
     # Get child class instances #

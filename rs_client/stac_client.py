@@ -14,7 +14,10 @@
 
 """Implement the class StacCLient that inherits from pystact_client Client."""
 
+from __future__ import annotations
+
 import json
+import logging
 import os
 from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -29,18 +32,16 @@ from requests import Request
 from starlette.responses import JSONResponse
 from starlette.status import HTTP_400_BAD_REQUEST
 
+from rs_client.rs_client import APIKEY_HEADER, RsClient
 
-class StacClient(Client):
+
+class StacClient(RsClient, Client):
     """StacClient inherits from pystac_client.Client. The goal of this class is to
     allow an user to use RS-Server services more easily than calling REST endpoints directly.
 
     Args:
         Client : The pystac_client that StacClient inherits from.
     """
-
-    rs_server_api_key: str
-    rs_server_href: str
-    owner_id: str
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
@@ -56,7 +57,15 @@ class StacClient(Client):
         modifier: Optional[Callable[[Modifiable], None]] = None,
         **kwargs: Dict[str, Any],
     ):
-        super().__init__(
+        """
+        Constructor. Called only by pystac.
+        As an user: don't use this directly, call the open(...) class method instead.
+        """
+
+        # Call manually the parent pystac Client constructor.
+        # The RsClient constructor will be called manually later.
+        Client.__init__(
+            self,
             id=id,
             description=description,
             title=title,
@@ -72,10 +81,10 @@ class StacClient(Client):
     @classmethod
     def open(  # pylint: disable=arguments-renamed, too-many-arguments
         cls,
-        url: str,
-        rs_server_api_key: str,
-        rs_server_href: str,
-        owner_id: str,
+        rs_server_href: str | None,
+        rs_server_api_key: str | None,
+        owner_id: str | None,
+        logger: logging.Logger | None = None,
         headers: Optional[Dict[str, str]] = None,
         parameters: Optional[Dict[str, Any]] = None,
         ignore_conformance: Optional[bool] = None,
@@ -83,14 +92,16 @@ class StacClient(Client):
         request_modifier: Optional[Callable[[Request], Union[Request, None]]] = None,
         stac_io: Optional[StacApiIO] = None,
         timeout: Optional[Timeout] = None,
-    ) -> "StacClient":
-        if headers is None:
-            headers = {"x-api-key": rs_server_api_key}
-        else:
-            headers["x-api-key"] = rs_server_api_key
+    ) -> StacClient:
+        """Create a new StacClient instance."""
+
+        if rs_server_api_key:
+            if headers is None:
+                headers = {}
+            headers[APIKEY_HEADER] = rs_server_api_key
 
         client: StacClient = super().open(
-            url,
+            cls.__href_catalog(rs_server_href) + "/catalog/",
             headers,
             parameters,
             ignore_conformance,
@@ -99,9 +110,16 @@ class StacClient(Client):
             stac_io,
             timeout,
         )
-        client.rs_server_api_key = rs_server_api_key
-        client.rs_server_href = rs_server_href
-        client.owner_id = owner_id
+
+        # Manual call to the parent RsClient constructor
+        RsClient.__init__(
+            client,
+            rs_server_href=rs_server_href,
+            rs_server_api_key=rs_server_api_key,
+            owner_id=owner_id,
+            logger=logger,
+        )
+
         return client
 
     def validate_collection(self, collection: dict) -> bool:
@@ -230,8 +248,12 @@ class StacClient(Client):
         This URL can be overwritten using the RSPY_HOST_CATALOG env variable (used e.g. for local mode).
         Either it should just be the RS-Server URL.
         """
+        return self.__href_catalog(self.rs_server_href)
+
+    @staticmethod
+    def __href_catalog(rs_server_href) -> str:
         if from_env := os.getenv("RSPY_HOST_CATALOG", None):
             return from_env
-        if not self.rs_server_href:
+        if not rs_server_href:
             raise RuntimeError("RS-Server URL is undefined")
-        return self.rs_server_href.rstrip("/")
+        return rs_server_href.rstrip("/")
