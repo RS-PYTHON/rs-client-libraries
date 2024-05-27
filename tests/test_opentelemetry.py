@@ -18,20 +18,14 @@ from rs_common import opentelemetry
 from rs_common.logging import Logging
 
 
-def test_opentelemetry(monkeypatch, mocker):
+def test_opentelemetry(mocker):
     """
     For now, just test that the otel init code passes without errors.
     Don't check the generated logs, traces and metrics.
     """
 
-    monkeypatch.setenv("LOKI_ENDPOINT", "http://dummy:1234")
-    monkeypatch.setenv("TEMPO_ENDPOINT", "http://dummy:1234")
-
-    # Avoid errors:
-    # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:4317, retrying in 1s
-    mocker.patch(  # pylint: disable=protected-access
-        "opentelemetry.exporter.otlp.proto.grpc.exporter.OTLPExporterMixin",
-    )._export.return_value = True
+    # Patch the global variables. See: https://stackoverflow.com/a/69685866
+    mocker.patch("rs_common.opentelemetry.FROM_PYTEST", new=True, autospec=False)
 
     Logging.default(__name__)
     opentelemetry.init_traces("pytest")
