@@ -4,7 +4,6 @@ from rs_client.stac_client import StacClient
 
 
 def test_create_object_stac_client():  # pylint: disable=missing-function-docstring
-
     #####################
     # Loads the catalog #
     #####################

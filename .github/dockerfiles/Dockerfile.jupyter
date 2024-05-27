@@ -1,0 +1,35 @@
+# Copyright 2024 CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+#
+# This docker installs the rs-client-libraries wheel
+# into the jupyter docker image that is used by rs-demo in local mode.
+#
+
+FROM jupyter/minimal-notebook:latest
+
+# The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
+# so the .whl files are under ./*.whl
+RUN mkdir -p /tmp/whl
+ADD ./*.whl /tmp/whl
+
+# Install the wheel and opentelemetry instrumentation packages for dependencies
+RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
+
+# Install other useful dependencies for rs-demo in local mode
+RUN pip install boto3
+
+# Clean everything
+RUN rm -rf /tmp/whl ~/.cache/pip

@@ -1,27 +1,31 @@
-""" contains the class StacCLient that inherits from pystact_client Client."""
+# Copyright 2024 CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Union,
-)
-
-from functools import lru_cache
-from pystac_client import Client, Modifiable
-from pystac_client.stac_api_io import StacApiIO, Timeout
+"""Implement the class StacCLient that inherits from pystact_client Client."""
 
 import json
-from starlette.responses import JSONResponse
-import requests
+from functools import lru_cache
+from typing import Any, Callable, Dict, List, Optional, Union
 
-from pystac_client.collection_client import CollectionClient
+import requests
 from pystac import CatalogType, Collection
 from pystac.layout import HrefLayoutStrategy
+from pystac_client import Client, Modifiable
+from pystac_client.collection_client import CollectionClient
+from pystac_client.stac_api_io import StacApiIO, Timeout
 from requests import Request
-
+from starlette.responses import JSONResponse
 from starlette.status import HTTP_400_BAD_REQUEST
 
 
@@ -79,7 +83,6 @@ class StacClient(Client):
         stac_io: Optional[StacApiIO] = None,
         timeout: Optional[Timeout] = None,
     ) -> "StacClient":
-
         if headers is None:
             headers = {"x-api-key": rs_server_api_key}
         else:
@@ -207,7 +210,9 @@ class StacClient(Client):
         headers = {"x-api-key": self.rs_server_api_key}
         if owner_id:
             response = requests.delete(
-                f"{self.rs_server_href}/catalog/collections/{owner_id}:{collection_id}", headers=headers, timeout=10
+                f"{self.rs_server_href}/catalog/collections/{owner_id}:{collection_id}",
+                headers=headers,
+                timeout=10,
             )
         else:
             response = requests.delete(
@@ -216,3 +221,16 @@ class StacClient(Client):
                 timeout=10,
             )
         return response
+
+    @property
+    def href_catalog(self) -> str:
+        """
+        Return the RS-Server catalog URL hostname.
+        This URL can be overwritten using the RSPY_HOST_CATALOG env variable (used e.g. for local mode).
+        Either it should just be the RS-Server URL.
+        """
+        if from_env := os.getenv("RSPY_HOST_CATALOG", None):
+            return from_env
+        if not self.rs_server_href:
+            raise RuntimeError("RS-Server URL is undefined")
+        return self.rs_server_href.rstrip("/")
