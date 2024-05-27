@@ -15,6 +15,7 @@
 """Implement the class StacCLient that inherits from pystact_client Client."""
 
 import json
+import os
 from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Union
 
