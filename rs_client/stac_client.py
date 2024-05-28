@@ -23,7 +23,7 @@ from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import requests
-from pystac import CatalogType, Collection
+from pystac import CatalogType, Collection, Item
 from pystac.layout import HrefLayoutStrategy
 from pystac_client import Client, Modifiable
 from pystac_client.collection_client import CollectionClient
@@ -32,7 +32,7 @@ from requests import Request
 from starlette.responses import JSONResponse
 from starlette.status import HTTP_400_BAD_REQUEST
 
-from rs_client.rs_client import APIKEY_HEADER, RsClient
+from rs_client.rs_client import APIKEY_HEADER, TIMEOUT, RsClient
 
 
 class StacClient(RsClient, Client):
@@ -42,6 +42,10 @@ class StacClient(RsClient, Client):
     Args:
         Client : The pystac_client that StacClient inherits from.
     """
+
+    ##################
+    # Initialisation #
+    ##################
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
@@ -93,7 +97,7 @@ class StacClient(RsClient, Client):
         modifier: Optional[Callable[[Modifiable], None]] = None,
         request_modifier: Optional[Callable[[Request], Union[Request, None]]] = None,
         stac_io: Optional[StacApiIO] = None,
-        timeout: Optional[Timeout] = None,
+        timeout: Optional[Timeout] = TIMEOUT,
     ) -> StacClient:
         """Create a new StacClient instance."""
 
@@ -124,6 +128,31 @@ class StacClient(RsClient, Client):
 
         return client
 
+    ##############
+    # Properties #
+    ##############
+
+    @property
+    def href_catalog(self) -> str:
+        """
+        Return the RS-Server catalog URL hostname.
+        This URL can be overwritten using the RSPY_HOST_CATALOG env variable (used e.g. for local mode).
+        Either it should just be the RS-Server URL.
+        """
+        return self.__href_catalog(self.rs_server_href)
+
+    @staticmethod
+    def __href_catalog(rs_server_href) -> str:
+        if from_env := os.getenv("RSPY_HOST_CATALOG", None):
+            return from_env
+        if not rs_server_href:
+            raise RuntimeError("RS-Server URL is undefined")
+        return rs_server_href.rstrip("/")
+
+    ################################
+    # Specific STAC implementation #
+    ################################
+
     def validate_collection(self, collection: dict) -> bool:
         """Check if a collection is STAC compliant.
 
@@ -141,10 +170,7 @@ class StacClient(RsClient, Client):
 
     @lru_cache()
     def get_collection(self, collection_id: str, owner_id: str = None) -> Union[Collection, CollectionClient]:
-        if owner_id:
-            complete_collection_id = f"{owner_id}:{collection_id}"
-        else:
-            complete_collection_id = f"{self.owner_id}:{collection_id}"
+        complete_collection_id = f"{owner_id or self.owner_id}:{collection_id}"
         return super().get_collection(complete_collection_id)
 
     def create_new_collection(  # pylint: disable=too-many-arguments
@@ -182,14 +208,14 @@ class StacClient(RsClient, Client):
                 {
                     "rel": "items",
                     "type": "application/geo+json",
-                    "href": f"{self.rs_server_href}/collections/{collection_id}/items",
+                    "href": f"{self.href_catalog}/collections/{collection_id}/items",
                 },
-                {"rel": "parent", "type": "application/json", "href": f"{self.rs_server_href}/"},
-                {"rel": "root", "type": "application/json", "href": f"{self.rs_server_href}/"},
+                {"rel": "parent", "type": "application/json", "href": f"{self.href_catalog}/"},
+                {"rel": "root", "type": "application/json", "href": f"{self.href_catalog}/"},
                 {
                     "rel": "self",
                     "type": "application/json",
-                    "href": f"{self.rs_server_href}/collections/{collection_id}",
+                    "href": f"{self.href_catalog}/collections/{collection_id}",
                 },
                 {
                     "rel": "license",
@@ -204,7 +230,7 @@ class StacClient(RsClient, Client):
         }
         return new_collection
 
-    def post_collection(self, collection: json, timeout: int) -> JSONResponse:
+    def post_collection(self, collection: json, timeout: int = TIMEOUT) -> JSONResponse:
         """Create a new collection and post it in the Catalog.
 
         Args:
@@ -217,50 +243,48 @@ class StacClient(RsClient, Client):
         if not self.validate_collection(collection):
             return JSONResponse(content="Collection format is Invalid", status_code=HTTP_400_BAD_REQUEST)
         return requests.post(
-            f"{self.rs_server_href}/catalog/collections",
+            f"{self.href_catalog}/catalog/collections",
             json=collection,
             **self.apikey_headers,
             timeout=timeout,
         )
 
-    def delete_collection(self, collection_id: str, timeout: int, owner_id: str = "") -> JSONResponse:
+    def delete_collection(self, collection_id: str, owner_id: str = "", timeout: int = TIMEOUT) -> JSONResponse:
         """Delete a collection.
 
         Args:
             collection_id (str): The collection id.
-            timeout (int): The timeout duration for the HTTP request.
             owner_id (str, optional): The owner id. Defaults to None.
+            timeout (int): The timeout duration for the HTTP request.
 
         Returns:
             JSONResponse: The response of the request.
         """
-        if owner_id:
-            response = requests.delete(
-                f"{self.rs_server_href}/catalog/collections/{owner_id}:{collection_id}",
-                **self.apikey_headers,
-                timeout=timeout,
-            )
-        else:
-            response = requests.delete(
-                f"{self.rs_server_href}/catalog/collections/{self.owner_id}:{collection_id}",
-                **self.apikey_headers,
-                timeout=timeout,
-            )
-        return response
+        return requests.delete(
+            f"{self.href_catalog}/catalog/collections/{owner_id or self.owner_id}:{collection_id}",
+            **self.apikey_headers,
+            timeout=timeout,
+        )
 
-    @property
-    def href_catalog(self) -> str:
-        """
-        Return the RS-Server catalog URL hostname.
-        This URL can be overwritten using the RSPY_HOST_CATALOG env variable (used e.g. for local mode).
-        Either it should just be the RS-Server URL.
-        """
-        return self.__href_catalog(self.rs_server_href)
+    def add_item(self, collection: Collection, item: Item, owner_id: str = "", timeout: int = TIMEOUT) -> JSONResponse:
+        """Update the item links then post the item to the catalog.
 
-    @staticmethod
-    def __href_catalog(rs_server_href) -> str:
-        if from_env := os.getenv("RSPY_HOST_CATALOG", None):
-            return from_env
-        if not rs_server_href:
-            raise RuntimeError("RS-Server URL is undefined")
-        return rs_server_href.rstrip("/")
+        Args:
+            collection (Collection): STAC collection
+            item (Item): STAC item to update and post
+            owner_id (str, optional): The owner id. Defaults to None.
+            timeout (int): The timeout duration for the HTTP request.
+
+        Returns:
+            JSONResponse: The response of the request.
+        """
+        # Update the item
+        collection.add_item(item)
+
+        # Post to the catalog
+        return requests.post(
+            f"{self.href_catalog}/catalog/collections/{owner_id or self.owner_id}:{collection.id}/items",
+            json=item.to_dict(),
+            **self.apikey_headers,
+            timeout=timeout,
+        )
