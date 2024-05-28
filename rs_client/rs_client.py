@@ -97,7 +97,7 @@ class RsClient:
     # Call RS-Server endpoints #
     ############################
 
-    def staging_status(self, filename, timeout: int) -> EDownloadStatus:
+    def staging_status(self, filename, timeout: int = TIMEOUT) -> EDownloadStatus:
         """Check the status of a file download from the specified rs-server endpoint.
 
         This function sends a GET request to the rs-server endpoint with the filename as a query parameter
@@ -136,7 +136,7 @@ class RsClient:
 
         return EDownloadStatus.FAILED
 
-    def staging(self, filename: str, timeout: int, s3_path: str = "", tmp_download_path: str = ""):
+    def staging(self, filename: str, s3_path: str = "", tmp_download_path: str = "", timeout: int = TIMEOUT):
         """Stage a file for download.
 
         This method stages a file for download by sending a request to the staging endpoint
@@ -189,9 +189,9 @@ class RsClient:
         self,
         start_date: datetime,
         stop_date: datetime,
-        timeout: int,
         limit: Union[int, None] = None,
         sortby: Union[str, None] = None,
+        timeout: int = TIMEOUT,
     ) -> list:
         """Retrieve a list of files from the specified endpoint.
 

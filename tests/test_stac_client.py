@@ -25,13 +25,13 @@ def test_create_object_stac_client(mocked_stac_catalog_url):  # pylint: disable=
     #####################
     # Loads the catalog #
     #####################
-    catalog = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
-    # ##################################################
-    # # Get the collection S1_L1 from jgaucher catalog #
-    # ##################################################
-    # collection = catalog.get_collection(collection_id="S1_L1", owner_id="jgaucher")
-    # assert collection.id == "S1_L1"
+    ##################################################
+    # Get the collection S1_L1 from jgaucher catalog #
+    ##################################################
+    collection = catalog.get_collection(collection_id="S1_L1", owner_id="jgaucher")
+    assert collection.id == "S1_L1"
 
     #######################################################
     # Get all the collections accessible from pyteam user #

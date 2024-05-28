@@ -20,7 +20,7 @@ from datetime import datetime
 
 import requests
 
-from rs_client.rs_client import RsClient
+from rs_client.rs_client import TIMEOUT, RsClient
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EPlatform
 
 
@@ -92,11 +92,11 @@ class CadipClient(RsClient):
 
     def search_sessions(  # pylint: disable=too-many-arguments
         self,
-        timeout: int,
         session_ids: list[str] | None = None,
         start_date: datetime | None = None,
         stop_date: datetime | None = None,
         platforms: list[EPlatform] | None = None,
+        timeout: int = TIMEOUT,
     ) -> list[dict]:  # TODO return pystac.ItemCollection instead
         """Endpoint to retrieve list of sessions from any CADIP station.
 
