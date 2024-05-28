@@ -28,6 +28,8 @@ from cachetools import TTLCache, cached
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
 
+APIKEY_HEADER = "x-api-key"
+
 # Timeout in seconds
 TIMEOUT = 30
 
@@ -53,13 +55,13 @@ class RsClient:
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None,
-        owner_id: str = "",
+        owner_id: str | None = None,
         logger: logging.Logger | None = None,
     ):
         """RsClient class constructor."""
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
-        self.owner_id: str = owner_id
+        self.owner_id: str | None = owner_id
         self.logger: logging.Logger = logger or Logging.default(__name__)
 
         # Remove trailing / character(s) from the URL
@@ -74,7 +76,9 @@ class RsClient:
             raise RuntimeError("API key is mandatory for RS-Server authentication")
 
         # For HTTP request headers
-        self.apikey_headers: dict = {"headers": {"x-api-key": self.rs_server_api_key}} if self.rs_server_api_key else {}
+        self.apikey_headers: dict = (
+            {"headers": {APIKEY_HEADER: self.rs_server_api_key}} if self.rs_server_api_key else {}
+        )
 
         # Determine automatically the owner id
         if not self.owner_id:
@@ -190,7 +194,7 @@ class RsClient:
 
         return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger)
 
-    def get_stac_client(self) -> "StacClient":  # type: ignore # noqa: F821
+    def get_stac_client(self, *args, **kwargs) -> "StacClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class StacClient, with the same attributes as this "self" instance.
         """
@@ -198,7 +202,7 @@ class RsClient:
             StacClient,
         )
 
-        return StacClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
+        return StacClient.open(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger, *args, **kwargs)
 
     ############################
     # Call RS-Server endpoints #
