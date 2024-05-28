@@ -204,42 +204,47 @@ class StacClient(RsClient, Client):
         }
         return new_collection
 
-    def post_collection(self, collection: json) -> JSONResponse:
+    def post_collection(self, collection: json, timeout: int) -> JSONResponse:
         """Create a new collection and post it in the Catalog.
 
         Args:
             collection (json): The collection to post.
+            timeout (int): The timeout duration for the HTTP request.
 
         Returns:
             JSONResponse: The response of the request.
         """
         if not self.validate_collection(collection):
             return JSONResponse(content="Collection format is Invalid", status_code=HTTP_400_BAD_REQUEST)
-        headers = {"x-api-key": self.rs_server_api_key}
-        return requests.post(f"{self.rs_server_href}/catalog/collections", json=collection, headers=headers, timeout=10)
+        return requests.post(
+            f"{self.rs_server_href}/catalog/collections",
+            json=collection,
+            **self.apikey_headers,
+            timeout=timeout,
+        )
 
-    def delete_collection(self, collection_id: str, owner_id: str = "") -> JSONResponse:
+    def delete_collection(self, collection_id: str, timeout: int, owner_id: str = "") -> JSONResponse:
         """Delete a collection.
 
         Args:
             collection_id (str): The collection id.
+            timeout (int): The timeout duration for the HTTP request.
             owner_id (str, optional): The owner id. Defaults to None.
 
         Returns:
             JSONResponse: The response of the request.
         """
-        headers = {"x-api-key": self.rs_server_api_key}
         if owner_id:
             response = requests.delete(
                 f"{self.rs_server_href}/catalog/collections/{owner_id}:{collection_id}",
-                headers=headers,
-                timeout=10,
+                **self.apikey_headers,
+                timeout=timeout,
             )
         else:
             response = requests.delete(
                 f"{self.rs_server_href}/catalog/collections/{self.owner_id}:{collection_id}",
-                headers=headers,
-                timeout=10,
+                **self.apikey_headers,
+                timeout=timeout,
             )
         return response
 

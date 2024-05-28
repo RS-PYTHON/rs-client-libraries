@@ -218,7 +218,6 @@ def test_update_stac_catalog(response_is_valid, station):
 
 
 @pytest.mark.unit
-@responses.activate
 @pytest.mark.parametrize(
     "station, mock_files_in_catalog",
     [
@@ -276,7 +275,7 @@ def test_update_stac_catalog(response_is_valid, station):
         ),
     ],
 )
-def test_filter_unpublished_files(station, mock_files_in_catalog):
+def test_filter_unpublished_files(station, mock_files_in_catalog, mocked_stac_catalog_url):
     """Test the filter_unpublished_files function.
 
     Args:
@@ -292,7 +291,7 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     """
 
     logger = Logging.default(__name__)
-    href = "http://127.0.0.1:5000"
+    href = mocked_stac_catalog_url
 
     rs_client = RsClient(href, None, "testUser", logger).get_stac_client()
 
@@ -314,29 +313,30 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     # mock the publish to catalog endpoint
     endpoint = f"{href}/catalog/search?" + urllib.parse.urlencode(request_params)
 
-    responses.add(
-        responses.GET,
-        endpoint,
-        json=mock_files_in_catalog,
-        status=200,
-    )
-    logger = Logging.default(__name__)
+    with responses.RequestsMock() as resp:
+        resp.add(
+            responses.GET,
+            endpoint,
+            json=mock_files_in_catalog,
+            status=200,
+        )
+        logger = Logging.default(__name__)
 
-    files_stac = filter_unpublished_files.fn(
-        rs_client,
-        collection_name,
-        files_stac,
-    )
+        files_stac = filter_unpublished_files.fn(
+            rs_client,
+            collection_name,
+            files_stac,
+        )
 
-    logger.debug(f"AFTER filtering ! FS = {files_stac} || ex = {mock_files_in_catalog}")
+        logger.debug(f"AFTER filtering ! FS = {files_stac} || ex = {mock_files_in_catalog}")
 
-    assert len(files_stac) == initial_len - mock_files_in_catalog["numberReturned"]
-    file_ids = []
-    for fs in files_stac:
-        file_ids.append(fs["id"])
+        assert len(files_stac) == initial_len - mock_files_in_catalog["numberReturned"]
+        file_ids = []
+        for fs in files_stac:
+            file_ids.append(fs["id"])
 
-    for fn in mock_files_in_catalog["features"]:
-        assert fn["id"] not in file_ids
+        for fn in mock_files_in_catalog["features"]:
+            assert fn["id"] not in file_ids
 
 
 @pytest.mark.unit

@@ -14,18 +14,18 @@
 
 """All tests for the Stac Client."""
 
+from rs_client.rs_client import RsClient
 from rs_client.stac_client import StacClient
 
+RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
+OWNER_ID = "OWNER_ID"
 
-def test_create_object_stac_client():  # pylint: disable=missing-function-docstring
+
+def test_create_object_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
     #####################
     # Loads the catalog #
     #####################
-    catalog = StacClient.open(
-        rs_server_href="http://localhost:8003",
-        rs_server_api_key="e33bbe09-020a-4e03-a0e1-f44f5936e928",
-        owner_id="pyteam",
-    )
+    catalog = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
     # ##################################################
     # # Get the collection S1_L1 from jgaucher catalog #
