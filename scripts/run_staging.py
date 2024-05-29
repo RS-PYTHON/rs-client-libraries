@@ -101,11 +101,11 @@ class Collection:
         }
 
 
-def create_collection(_rs_client, collection_name):
+def create_collection(_rs_client, collection_name, _logger):
     """Create a collection in the catalog."""
     catalog_endpoint = _rs_client.href_catalog + "/catalog/collections"
     collection_type = Collection(_rs_client.owner_id, collection_name)
-    logger.info(f"Endpoint used to insert the item info  within the catalog: {catalog_endpoint}")
+    _logger.info(f"Endpoint used to insert the item info  within the catalog: {catalog_endpoint}")
     # try:
     response = requests.post(
         catalog_endpoint,
@@ -115,12 +115,12 @@ def create_collection(_rs_client, collection_name):
         **_rs_client.apikey_headers,
     )
     # except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-    #    logger.exception(f"Could not get the response from the session search endpoint: {e}")
+    #    _logger.exception(f"Could not get the response from the session search endpoint: {e}")
     #    return
     # except urllib3.exceptions.IncompleteRead as e:
-    #    logger.exception(f"urllib exception: {e}")
+    #    _logger.exception(f"urllib exception: {e}")
     #    return
-    logger.info(f"response = {response}")
+    _logger.info(f"response = {response}")
 
 
 if __name__ == "__main__":
@@ -239,7 +239,7 @@ if __name__ == "__main__":
             logger.exception(f"Could not get the cadip client. Error: {e}")
             sys.exit(-1)
 
-    create_collection(rs_client.get_stac_client(), create_collection_name(args.mission, rs_client.station_name))
+    create_collection(rs_client.get_stac_client(), create_collection_name(args.mission, rs_client.station_name), logger)
 
     # catalog_endpoint = args.url_catalog.rstrip("/") + "/catalog/collections"
     # collection_type = Collection(args.user, "s1_aux")

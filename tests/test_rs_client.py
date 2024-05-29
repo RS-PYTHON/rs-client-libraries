@@ -28,6 +28,7 @@ from rs_client.stac_client import StacClient
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EPlatform
 
 # Use dummy values
+RSPY_UAC_CHECK_URL = "http://www.rspy-uac-manager.com"
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = "OWNER_ID"
 CADIP_STATION = ECadipStation.CADIP
@@ -64,7 +65,7 @@ def test_get_child_client(auxip_client, cadip_client, stac_client):
 
 def test_station_names(auxip_client, cadip_client):
     """Test the station name returned by the AuxipClient and CadipClient"""
-    assert "ADGS" in auxip_client.station_name
+    assert "AUXIP" in auxip_client.station_name
     assert "CADIP" in cadip_client.station_name
 
 
@@ -155,3 +156,50 @@ def test_cadip_sessions():
         resp.get(url=mock_url, json=content, status=200)
         sessions = cadip_client.search_sessions(TIMEOUT, session_ids, start_date, stop_date, PLATFORMS)
         assert sessions == features
+
+
+@responses.activate
+def test_cached_apikey_security(monkeypatch):
+    """
+    Test that we are caching the call results to the apikey_security function, that calls the
+    apikey manager service and keycloak to check the apikey validity and information.
+    """
+
+    # Mock the uac manager url
+    monkeypatch.setenv("RSPY_UAC_CHECK_URL", RSPY_UAC_CHECK_URL)
+
+    # Initial response expected from the function
+    initial_response = {
+        "iam_roles": ["initial", "roles"],
+        "config": {"initial": "config"},
+        "user_login": "initial_login",
+    }
+
+    # Clear the cached response and mock the uac manager response
+    RsClient.apikey_security_cache.clear()
+    responses.get(url=RSPY_UAC_CHECK_URL, status=200, json=initial_response)
+
+    # Check the apikey_security result
+    assert RS_CLIENT.apikey_iam_roles == initial_response["iam_roles"]
+    assert RS_CLIENT.apikey_config == initial_response["config"]
+    assert RS_CLIENT.apikey_user_login == initial_response["user_login"]
+
+    # If the UAC manager response changes, we won't see it because the previous result was cached
+    modified_response = {
+        "iam_roles": ["modified", "roles"],
+        "config": {"modified": "config"},
+        "user_login": "modified_login",
+    }
+    responses.get(url=RSPY_UAC_CHECK_URL, status=200, json=modified_response)
+
+    # Still the initial response !
+    for _ in range(100):
+        assert RS_CLIENT.apikey_iam_roles == initial_response["iam_roles"]
+        assert RS_CLIENT.apikey_config == initial_response["config"]
+        assert RS_CLIENT.apikey_user_login == initial_response["user_login"]
+
+    # We have to clear the cache to obtain the modified response
+    RsClient.apikey_security_cache.clear()
+    assert RS_CLIENT.apikey_iam_roles == modified_response["iam_roles"]
+    assert RS_CLIENT.apikey_config == modified_response["config"]
+    assert RS_CLIENT.apikey_user_login == modified_response["user_login"]
