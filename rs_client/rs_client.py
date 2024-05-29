@@ -194,7 +194,7 @@ class RsClient:
         """Retrieve a list of files from the specified endpoint.
 
         This function queries the specified endpoint to retrieve a list of files available in the
-        station (CADIP, ADGS, LTA ...) that were collected by the stalleite within the provided time range,
+        station (CADIP, ADGS, LTA ...) that were collected by the satellite within the provided time range,
         starting from 'start_date' up to 'stop_date' (inclusive).
 
         Args:
@@ -205,7 +205,7 @@ class RsClient:
             sortby (str, optional): The attribute to sort the results by. Defaults to None.
 
         Returns:
-            files (list): A list of files (in stac format) available at the endpoint within the specified time range.
+            files (list): The list of files available at the station within the specified time range.
 
         Raises:
             RuntimeError: if the endpoint can't be reached
@@ -215,9 +215,9 @@ class RsClient:
             available files.
             - It constructs a payload with the start and stop dates in ISO 8601 format and sends a GET
             request to the endpoint.
-            - The response is expected to be in JSON format with STAC, containing information about available files.
-                EODAG should return the information in STACH format through JSON
-            - The function then extracts file information from the response and returns a list of files.
+            - The response is expected to be a STAC Compatible formatted JSONResponse, containing information about
+             available files.
+            - The function converts a STAC FeatureCollection to a Python list.
         """
 
         payload = {

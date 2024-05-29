@@ -36,16 +36,16 @@ CATALOG_REQUEST_TIMEOUT = 20  # in seconds
 
 
 def get_prefect_logger(general_logger_name):
-    """Get the prefect logger.
-    It returns the prefect logger. If this can't be taken due to the missing
-    prefect context (i.e. the flow/task is run as a single function, from pytests for example),
+    """
+    It returns the Prefect logger. If this can't be taken due to the missing
+    Prefect context (i.e. the flow/task is executed as a single function, from Pytest for example),
     the general logger is returned
 
     Args:
-        general_logger_name (str): The name of the general logger in case the prefect logger can't be returned.
+        general_logger_name (str): The name of the general logger if Prefect logger can't be returned.
 
     Returns:
-        logger (logger): A prefect logger instance or a general logger instance.
+        logger (logger): A Prefect logger instance or a general logger instance.
     """
     try:
         logger = get_run_logger()
@@ -66,10 +66,8 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     """Update the STAC catalog with file information.
 
     This task updates the STAC catalog with the information of a file that has been processed
-    and saved to a specific location. It adds the collection name, the bucket location where
-    the file has been saved, and a fake geometry polygon covering the whole globe to the STAC
-    file information. Then, it sends a POST request to update the STAC catalog with the updated
-    file information.
+    and saved to a specific location. It adds the mandatory fields such as geometry, collection name and object storage
+    href. It sends a POST request to add the newly composed item into the STAC catalog.
 
     Args:
         rs_client (StacClient): The client for accessing the STAC catalog.
@@ -122,7 +120,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
 
 class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes,
     """Common configuration for Prefect tasks and flows.
-    Base class for configuration used in prefect task and flow
+    Base class for configuration used in Prefect task and flow
     used in staging the files from different stations (cadip, adgs...)
 
     Attributes:
@@ -148,7 +146,7 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-i
 class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-methods
     """Configuration class for Prefect tasks.
 
-    This class extends the `PrefectCommonConfig` class and adds additional attributes
+    This class extends the `PrefectCommonConfig` class with additional attributes
     specific to Prefect tasks. It includes the configuration for the task, such as the
     files to be processed by the task and the maximum number of retries allowed.
 
@@ -262,15 +260,35 @@ def filter_unpublished_files(
     collection_name: str,
     files_stac: list,
 ) -> list:
-    """Check for unpublished files in the catalog.
+    """
+    Check for unpublished files in the STAC catalog.
 
-    Args:
-        rs_client (StacClient): StacClient instance.
-        collection_name (str): The name of the collection to be used.
-        files_stac (list): List of files (dcitionary for each) to be checked for publication.
+    This function takes a list of files and checks if they are already published in a specified
+    STAC (SpatioTemporal Asset Catalog) collection. It returns a list of files that are not yet published.
 
-    Returns:
-        list: List of files that are not yet published in the catalog.
+    Parameters
+    ----------
+    rs_client : StacClient
+        An instance of `StacClient` to interact with the STAC catalog.
+    collection_name : str
+        The name of the collection in which the search is performed.
+    files_stac : list of dict
+        A list of files to be checked for publication. Each file is represented as a dictionary
+        with at least an "id" key.
+
+    Returns
+    -------
+    list of dict
+        A list of files that are not yet published in the catalog. Each file is represented as a dictionary.
+
+    Examples
+    --------
+    >>> rs_client = StacClient(...)
+    >>> collection_name = "example_collection"
+    >>> files_stac = [{"id": "file1.raw"}, {"id": "file2.raw"}]
+    >>> unpublished_files = filter_unpublished_files(rs_client, collection_name, files_stac)
+    >>> print(unpublished_files)
+    [{"id": "file1.raw"}]
     """
 
     ids = []
@@ -314,7 +332,7 @@ def filter_unpublished_files(
     return files_stac
 
 
-def create_collection_name(mission, station):
+def create_collection_name(mission: str, station: str) -> str:
     """Create the name of a catalog collection
 
     This function constructs and returns a specific name for the catalog collection.
@@ -326,7 +344,7 @@ def create_collection_name(mission, station):
     Args:
         mission (str): The name of the mission.
         station (str): The type of station . Supported
-            values are "ADGS" and "CADIP", "INS", "MPS", "MTI", "NSG", "SGS".
+            values are "AUX" and "CADIP", "INS", "MPS", "MTI", "NSG", "SGS".
 
     Returns:
         str (str): The name of the collection
@@ -381,13 +399,15 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
 
 @flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 15, "threads_per_worker": 1}))
 def staging_flow(config: PrefectFlowConfig):
-    """Prefect flow for staging (=download/ingest) files from a station.
+    """
+    Prefect flow for staging (downloading/ingesting) files from a station.
 
     This flow orchestrates the download process by obtaining the list of files from the search endpoint (provided
     station), splitting the list into tasks based on the number of workers, and submitting tasks for ingestion.
 
     Args:
-        config (PrefectFlowConfig): Configuration object containing details about the download flow.
+        config (PrefectFlowConfig): Configuration object containing details about the download flow, such as
+            start and stop datetime, limit, rs_client, mission, temporary download path, S3 path, and max_workers.
 
     Returns:
         bool (bool): True if the flow execution is successful, False otherwise.

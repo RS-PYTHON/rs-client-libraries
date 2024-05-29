@@ -101,6 +101,7 @@ class CadipClient(RsClient):
         """Endpoint to retrieve list of sessions from any CADIP station.
 
         Args:
+            timeout (int): Period after HTTP request expires.
             session_ids (list[str]): Session identifiers
                 (eg: ["S1A_20170501121534062343"] or ["S1A_20170501121534062343, S1A_20240328185208053186"])
             start_date (datetime): Start date of the time interval

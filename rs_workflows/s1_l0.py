@@ -87,6 +87,10 @@ def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, product_type
 
     Returns:
         response (dict): The generated YAML template with updated inputs and I/O products, or None if unsuccessful.
+    Raises:
+        FileNotFoundError: If the YAML template file is not found.
+        yaml.YAMLError: If there is an error loading the YAML template file.
+        IOError: If there is an input/output error while accessing the YAML template file.
     """
     logger = Logging.default(LOGGER_NAME)
     logger.debug("Task build_eopf_triggering_yaml STARTED")
@@ -359,11 +363,10 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
 def s1_l0_flow(config: PrefectS1L0FlowConfig):
     """Constructs a Prefect Flow for Sentinel-1 Level 0 processing.
 
-    This flow orchestrates the processing of Sentinel-1 Level 0 data by executing
-    various tasks sequentially or in parallel, including retrieving catalog data (in parallel,
-    for both CADIP and ADGS stations), building YAML configuration (depends of the previous retrieving tasks),
-    starting the processing (depends of the YAML config), updating the STAC catalog (depends of the processing results),
-    and publishing the processed files (depends of the catalog update).
+    This flow oversees the execution of tasks involved in processing Sentinel-1 Level 0 data. It coordinates sequential
+    and parallel tasks, including retrieving catalog data concurrently from CADIP and ADGS stations, generating YAML
+    configuration based on the retrieved data, initiating the processing based on the YAML configuration, updating the
+    STAC catalog according to processing results, and publishing the processed files contingent upon catalog updates.
 
     Args:
         config (PrefectS1L0FlowConfig): Configuration for the flow.
