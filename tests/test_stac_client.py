@@ -30,7 +30,7 @@ def test_create_object_stac_client(mocked_stac_catalog_url):  # pylint: disable=
     ##################################################
     # Get the collection S1_L1 from jgaucher catalog #
     ##################################################
-    collection = catalog.get_collection(collection_id="S1_L1", owner_id="jgaucher")
+    collection = catalog.get_collection(collection_id="S1_L1", owner_id="toto")
     assert collection.id == "S1_L1"
 
     #######################################################
@@ -39,6 +39,13 @@ def test_create_object_stac_client(mocked_stac_catalog_url):  # pylint: disable=
     collections = catalog.get_collections()
     for collection in collections:
         print(collection)
+
+    # get items
+    items = collection.get_all_items()
+    for item in items:
+        print(item)
+
+    # search
 
     #########################################################
     # Create a new collection S2_L2 in the owner_id catalog ##############################
