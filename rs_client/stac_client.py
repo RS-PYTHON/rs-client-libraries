@@ -16,21 +16,20 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Union
 
+import pystac
 import requests
-from pystac import CatalogType, Collection, Item
+from pystac import CatalogType, Collection, Item, Link, RelType
 from pystac.layout import HrefLayoutStrategy
 from pystac_client import Client, Modifiable
 from pystac_client.collection_client import CollectionClient
 from pystac_client.stac_api_io import StacApiIO, Timeout
 from requests import Request
 from starlette.responses import JSONResponse
-from starlette.status import HTTP_400_BAD_REQUEST
 
 from rs_client.rs_client import APIKEY_HEADER, TIMEOUT, RsClient
 
@@ -149,142 +148,178 @@ class StacClient(RsClient, Client):
             raise RuntimeError("RS-Server URL is undefined")
         return rs_server_href.rstrip("/")
 
+    def full_collection_id(self, owner_id: str | None, collection_id: str):
+        """
+        Return the full collection name as: <owner_id>:<collection_id>
+
+        Args:
+            owner_id (str): Collection owner ID. If missing, we use self.owner_id.
+            collection_id (str): Collection name
+        """
+        return f"{owner_id or self.owner_id}:{collection_id}"
+
     ################################
     # Specific STAC implementation #
     ################################
 
-    def validate_collection(self, collection: dict) -> bool:
-        """Check if a collection is STAC compliant.
-
-        Args:
-            collection (dict): The collection to be checked
-
-        Returns:
-            bool: True if the collection is conform, False otherwise
-        """
-        mandatory_elements = ["id", "description", "license", "extent", "links", "stac_version"]
-        for element in mandatory_elements:
-            if element not in collection:
-                return False
-        return True
-
     @lru_cache()
-    def get_collection(self, collection_id: str, owner_id: str = None) -> Union[Collection, CollectionClient]:
-        complete_collection_id = f"{owner_id or self.owner_id}:{collection_id}"
-        return super().get_collection(complete_collection_id)
+    def get_collection(self, collection_id: str, owner_id: str | None = None) -> Union[Collection, CollectionClient]:
+        """Get the requested collection as <owner_id>:<collection_id>"""
+        full_collection_id = self.full_collection_id(owner_id, collection_id)
+        return Client.get_collection(self, full_collection_id)
 
-    def create_new_collection(  # pylint: disable=too-many-arguments
+    def add_collection(
         self,
-        collection_id: str,
-        extent: dict,
-        href_license: str = "https://creativecommons.org/licenses/publicdomain/",
-        collection_license: str = "public-domain",
-        stac_version: str = "1.0.0",
-        description: str = "",
-        owner_id: str = "",
-    ) -> dict:
-        """Create a new collection.
-
-        Args:
-            collection_id (str): The Collection id.
-            extent (dict): Contains spatial and temporal coverage.
-            href_license (_type_, optional): The href of the license.
-            Defaults to "https://creativecommons.org/licenses/publicdomain/".
-            collection_license (str, optional): The license name. Defaults to "public-domain".
-            stac_version (str, optional): The stac_version. Defaults to "1.0.0".
-            description (str, optional): The collection description. Defaults to "".
-            owner_id (str, optional): The owner id. Defaults to None.
-
-        Returns:
-            dict: A new collection.
-        """
-        owner_id = owner_id if owner_id else self.owner_id
-        description = description if description else f"This is the collection {collection_id} from user {owner_id}."
-        new_collection = {
-            "id": collection_id,
-            "type": "Collection",
-            "owner": owner_id,
-            "links": [
-                {
-                    "rel": "items",
-                    "type": "application/geo+json",
-                    "href": f"{self.href_catalog}/collections/{collection_id}/items",
-                },
-                {"rel": "parent", "type": "application/json", "href": f"{self.href_catalog}/"},
-                {"rel": "root", "type": "application/json", "href": f"{self.href_catalog}/"},
-                {
-                    "rel": "self",
-                    "type": "application/json",
-                    "href": f"{self.href_catalog}/collections/{collection_id}",
-                },
-                {
-                    "rel": "license",
-                    "href": href_license,
-                    "title": collection_license,
-                },
-            ],
-            "extent": extent,
-            "license": collection_license,
-            "description": description,
-            "stac_version": stac_version,
-        }
-        return new_collection
-
-    def post_collection(self, collection: json, timeout: int = TIMEOUT) -> JSONResponse:
-        """Create a new collection and post it in the Catalog.
-
-        Args:
-            collection (json): The collection to post.
-            timeout (int): The timeout duration for the HTTP request.
-
-        Returns:
-            JSONResponse: The response of the request.
-        """
-        if not self.validate_collection(collection):
-            return JSONResponse(content="Collection format is Invalid", status_code=HTTP_400_BAD_REQUEST)
-        return requests.post(
-            f"{self.href_catalog}/catalog/collections",
-            json=collection,
-            **self.apikey_headers,
-            timeout=timeout,
-        )
-
-    def delete_collection(self, collection_id: str, owner_id: str = "", timeout: int = TIMEOUT) -> JSONResponse:
-        """Delete a collection.
-
-        Args:
-            collection_id (str): The collection id.
-            owner_id (str, optional): The owner id. Defaults to None.
-            timeout (int): The timeout duration for the HTTP request.
-
-        Returns:
-            JSONResponse: The response of the request.
-        """
-        return requests.delete(
-            f"{self.href_catalog}/catalog/collections/{owner_id or self.owner_id}:{collection_id}",
-            **self.apikey_headers,
-            timeout=timeout,
-        )
-
-    def add_item(self, collection: Collection, item: Item, owner_id: str = "", timeout: int = TIMEOUT) -> JSONResponse:
-        """Update the item links then post the item to the catalog.
+        collection: Collection,
+        add_public_license: bool = True,
+        owner_id: str | None = None,
+        timeout: int = TIMEOUT,
+    ):
+        """Update the collection links, then post the collection into the catalog.
 
         Args:
             collection (Collection): STAC collection
-            item (Item): STAC item to update and post
-            owner_id (str, optional): The owner id. Defaults to None.
+            add_public_license (bool) If True, add a public domain license field and link.
+            owner_id (str, optional): Collection owner ID. If missing, we use self.owner_id.
             timeout (int): The timeout duration for the HTTP request.
 
         Returns:
             JSONResponse: The response of the request.
         """
-        # Update the item
+        full_owner_id = owner_id or self.owner_id
+
+        # Use owner_id:collection_id instead of just the collection ID, before adding the links,
+        # so the links contain the full owner_id:collection_id
+        short_collection_id = collection.id
+        full_collection_id = self.full_collection_id(owner_id, short_collection_id)
+        collection.id = full_collection_id
+
+        # Default description
+        if not collection.description:
+            collection.description = f"This is the collection {short_collection_id} from user {full_owner_id}."
+
+        # Add the owner_id as an extra field
+        collection.extra_fields["owner"] = full_owner_id
+
+        # Add public domain license
+        if add_public_license:
+            collection.license = "public-domain"
+            collection.add_link(
+                Link(
+                    rel=RelType.LICENSE,
+                    target="https://creativecommons.org/licenses/publicdomain/",
+                    title="public-domain",
+                ),
+            )
+
+        # Update the links
+        self.add_child(collection)
+
+        # Restore the short collection_id at the root of the collection
+        collection.id = short_collection_id
+
+        # Check that the collection is compliant to STAC
+        collection.validate_all()
+
+        # Post the item to the catalog
+        return requests.post(
+            f"{self.href_catalog}/catalog/collections",
+            json=collection.to_dict(),
+            **self.apikey_headers,
+            timeout=timeout,
+        )
+
+    def remove_collection(
+        self,
+        collection_id: str,
+        owner_id: str | None = None,
+        timeout: int = TIMEOUT,
+    ) -> JSONResponse:
+        """Remove/delete a collection from the catalog.
+
+        Args:
+            collection_id (str): The collection id.
+            owner_id (str, optional): Collection owner ID. If missing, we use self.owner_id.
+            timeout (int): The timeout duration for the HTTP request.
+
+        Returns:
+            JSONResponse: The response of the request.
+        """
+        # owner_id:collection_id
+        full_collection_id = self.full_collection_id(owner_id, collection_id)
+
+        # Remove the collection from the "child" links of the local catalog instance
+        collection_link = f"{self.self_href.rstrip('/')}/collections/{full_collection_id}"
+        self.links = [
+            link for link in self.links if not ((link.rel == pystac.RelType.CHILD) and (link.href == collection_link))
+        ]
+
+        # Remove the collection from the server catalog
+        return requests.delete(
+            f"{self.href_catalog}/catalog/collections/{full_collection_id}",
+            **self.apikey_headers,
+            timeout=timeout,
+        )
+
+    def add_item(
+        self,
+        collection_id: str,
+        item: Item,
+        owner_id: str | None = None,
+        timeout: int = TIMEOUT,
+    ) -> JSONResponse:
+        """Update the item links, then post the item into the catalog.
+
+        Args:
+            collection_id (str): The collection id.
+            item (Item): STAC item to update and post
+            owner_id (str, optional): Collection owner ID. If missing, we use self.owner_id.
+            timeout (int): The timeout duration for the HTTP request.
+
+        Returns:
+            JSONResponse: The response of the request.
+        """
+        # owner_id:collection_id
+        full_collection_id = self.full_collection_id(owner_id, collection_id)
+
+        # Get the collection from the catalog
+        collection = self.get_collection(collection_id, owner_id)
+
+        # Update the item  contents
         collection.add_item(item)
 
-        # Post to the catalog
+        # Post the item to the catalog
         return requests.post(
-            f"{self.href_catalog}/catalog/collections/{owner_id or self.owner_id}:{collection.id}/items",
+            f"{self.href_catalog}/catalog/collections/{full_collection_id}/items",
             json=item.to_dict(),
+            **self.apikey_headers,
+            timeout=timeout,
+        )
+
+    def remove_item(
+        self,
+        collection_id: str,
+        item_id: str,
+        owner_id: str | None = None,
+        timeout: int = TIMEOUT,
+    ) -> JSONResponse:
+        """Remove/delete an item from a collection.
+
+        Args:
+            collection_id (str): The collection id.
+            item_id (str): The item id.
+            owner_id (str, optional): Collection owner ID. If missing, we use self.owner_id.
+            timeout (int): The timeout duration for the HTTP request.
+
+        Returns:
+            JSONResponse: The response of the request.
+        """
+        # owner_id:collection_id
+        full_collection_id = self.full_collection_id(owner_id, collection_id)
+
+        # Remove the collection from the server catalog
+        return requests.delete(
+            f"{self.href_catalog}/catalog/collections/{full_collection_id}/items/{item_id}",
             **self.apikey_headers,
             timeout=timeout,
         )
