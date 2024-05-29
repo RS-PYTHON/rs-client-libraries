@@ -206,7 +206,7 @@ def staging(config: PrefectTaskConfig):
     for i, file_stac in enumerate(config.task_files_stac):
         # update the filename to be ingested
         try:
-            rs_client.staging(file_stac["id"], ENDPOINT_TIMEOUT, config.s3_path, config.tmp_download_path)
+            rs_client.staging(file_stac["id"], config.s3_path, config.tmp_download_path, timeout=ENDPOINT_TIMEOUT)
         except RuntimeError as e:
             # TODO: Continue? Stop ?
             logger.exception(f"Could not stage file %s. Exception: {e}")
@@ -224,7 +224,7 @@ def staging(config: PrefectTaskConfig):
             )
             time.sleep(1)
             timeout -= 1
-            status = rs_client.staging_status(file_stac["id"], ENDPOINT_TIMEOUT)
+            status = rs_client.staging_status(file_stac["id"], timeout=ENDPOINT_TIMEOUT)
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...", file_stac["id"])
             # TODO: either move the code from filter_unpublished_files to RsClient
@@ -406,8 +406,8 @@ def staging_flow(config: PrefectFlowConfig):
             files_stac = rs_client.search_stations(
                 config.start_datetime,
                 config.stop_datetime,
-                SEARCH_ENDPOINT_TIMEOUT,
                 config.limit,
+                timeout=SEARCH_ENDPOINT_TIMEOUT,
             )
         except RuntimeError as e:
             logger.exception(f"Unable to get the list with files for staging: {e}")
