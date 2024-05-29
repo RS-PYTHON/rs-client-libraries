@@ -260,35 +260,28 @@ def filter_unpublished_files(
     collection_name: str,
     files_stac: list,
 ) -> list:
-    """
-    Check for unpublished files in the STAC catalog.
+    """Checks for unpublished files in the STAC catalog.
 
     This function takes a list of files and checks if they are already published in a specified
     STAC (SpatioTemporal Asset Catalog) collection. It returns a list of files that are not yet published.
 
-    Parameters
-    ----------
-    rs_client : StacClient
-        An instance of `StacClient` to interact with the STAC catalog.
-    collection_name : str
-        The name of the collection in which the search is performed.
-    files_stac : list of dict
-        A list of files to be checked for publication. Each file is represented as a dictionary
-        with at least an "id" key.
+    Parameters:
+        rs_client (StacClient): An instance of `StacClient` to interact with the STAC catalog.
+        collection_name (str): The name of the collection in which the search is performed.
+        files_stac (list of dict): A list of files to be checked for publication. Each file is represented as a
+        dictionary with at least an "id" key.
 
-    Returns
-    -------
-    list of dict
-        A list of files that are not yet published in the catalog. Each file is represented as a dictionary.
+    Returns:
+        list of dict: A list of files that are not yet published in the catalog. Each file is represented as a
+        dictionary.
 
-    Examples
-    --------
-    >>> rs_client = StacClient(...)
-    >>> collection_name = "example_collection"
-    >>> files_stac = [{"id": "file1.raw"}, {"id": "file2.raw"}]
-    >>> unpublished_files = filter_unpublished_files(rs_client, collection_name, files_stac)
-    >>> print(unpublished_files)
-    [{"id": "file1.raw"}]
+    Examples:
+        >>> rs_client = StacClient(...)
+        >>> collection_name = "example_collection"
+        >>> files_stac = [{"id": "file1.raw"}, {"id": "file2.raw"}]
+        >>> unpublished_files = filter_unpublished_files(rs_client, collection_name, files_stac)
+        >>> print(unpublished_files)
+        [{"id": "file1.raw"}]
     """
 
     ids = []

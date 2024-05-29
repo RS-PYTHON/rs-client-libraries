@@ -23,7 +23,7 @@ def print_hello(name: str):
     This prefect task may be used as start point in creating your own prefect tasks
 
     Args:
-        name (str): Username to be printed        
+        name (str): Username to be printed
     """
     print(f"Hello {name}!")
 
