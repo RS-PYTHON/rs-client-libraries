@@ -16,6 +16,8 @@
 
 from rs_client.rs_client import RsClient
 from rs_client.stac_client import StacClient
+from pystac import CatalogType, Collection, Item, Link, RelType, Extent, SpatialExtent, TemporalExtent
+from datetime import datetime
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = "OWNER_ID"
@@ -66,66 +68,40 @@ def test_get_items_stac_client(mocked_stac_catalog_url):  # pylint: disable=miss
         print(item)
 
 
-def test_create_new_collection_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
-    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+def test_create_new_collection_stac_client():  # pylint: disable=missing-function-docstring
+    spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
+    date_strings = ["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]
+    date_objects = [datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ") for date_str in date_strings]
+    temporal = TemporalExtent(intervals=date_objects)
+    extent = Extent(spatial=spatial, temporal=temporal)
+    new_collection = Collection(id="S2_L2", description="S2_L2 collection.", extent=extent)
 
-    #########################################################
-    # Create a new collection S2_L2 in the owner_id catalog ##############################
-    # If not specified, the default owner_id will be the value of the attribute owner_id #
-    ######################################################################################
-    new_collection = catalog.create_new_collection(
-        collection_id="S2_L2",
-        extent={
-            "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
-            "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
-        },
-    )
-    assert new_collection["id"] == "S2_L2"
+    new_collection_jgaucher = Collection(id="S3_L3", description="S3_L3 collection.", extent=extent)
 
-    ##########################################################
-    # Create a new collection S3_L3 specifying the owner id. #
-    ##########################################################
-    new_collection_jgaucher = catalog.create_new_collection(
-        collection_id="S3_L3",
-        extent={
-            "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
-            "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
-        },
-        description="This is the collection S3_L3 of the user jgaucher",
-        owner_id="jgaucher",
-    )
-
-    assert new_collection_jgaucher["id"] == "S3_L3"
+    assert new_collection.id == "S2_L2"
+    assert new_collection_jgaucher.id == "S3_L3"
 
 
 def test_add_collection_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
     catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
-    new_collection = catalog.create_new_collection(
-        collection_id="S2_L2",
-        extent={
-            "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
-            "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
-        },
-    )
+    spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
+    date_strings = ["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]
+    date_objects = [datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ") for date_str in date_strings]
+    temporal = TemporalExtent(intervals=date_objects)
+    extent = Extent(spatial=spatial, temporal=temporal)
+    new_collection = Collection(id="S2_L2", description="S2_L2 collection.", extent=extent)
 
-    new_collection_jgaucher = catalog.create_new_collection(
-        collection_id="S3_L3",
-        extent={
-            "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
-            "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
-        },
-        description="This is the collection S3_L3 of the user jgaucher",
-        owner_id="jgaucher",
-    )
+    new_collection_jgaucher = Collection(id="S3_L3", description="S3_L3 collection.", extent=extent)
+
     ###########################################
     # Publish a new collection in the catalog #
     ###########################################
 
-    response = catalog.post_collection(new_collection)
+    response = catalog.add_collection(new_collection)
     assert response.status_code == 200
 
-    response = catalog.post_collection(new_collection_jgaucher)
+    response = catalog.add_collection(new_collection_jgaucher)
     assert response.status_code == 200
 
 
@@ -138,3 +114,37 @@ def test_delete_collection_stac_client(mocked_stac_catalog_url):  # pylint: disa
 
     response = catalog.delete_collection(collection_id="S1_L1", owner_id="toto")  # default owner_id is 'pyteam'
     assert response.status_code == 200
+
+
+def test_add_item_stac_client(mocked_stac_catalog_url):
+    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+
+    collection = catalog.get_collection(collection_id="S1_L1", owner_id="toto")
+
+    # Add a new item from toto:S1_L1 collection
+
+    geometry = {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [-94.6334839, 37.0595608],
+                [-94.6334839, 37.0332547],
+                [-94.6005249, 37.0332547],
+                [-94.6005249, 37.0595608],
+                [-94.6334839, 37.0595608],
+            ]
+        ],
+    }
+    properties = {
+        "gsd": 0.5971642834779395,
+        "owner": "jgaucher",
+        "width": 2500,
+        "height": 2500,
+        "datetime": "2000-02-02T00:00:00Z",
+        "proj:epsg": 3857,
+        "orientation": "nadir",
+    }
+    item = Item(id="item_0", geometry=geometry, bbox=[0], datetime=datetime.now(), properties=properties)
+    response = catalog.add_item(collection_id="S1_L1", item=item, owner_id="toto")
+
+    print(response)

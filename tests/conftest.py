@@ -60,26 +60,6 @@ def mocked_stac_catalog_url():
             "title": "stac-fastapi",
             "description": "stac-fastapi",
             "stac_version": "1.0.0",
-            "conformsTo": [
-                "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/core",
-                "https://api.stacspec.org/v1.0.0-rc.2/item-search#context",
-                "https://api.stacspec.org/v1.0.0/core",
-                "https://api.stacspec.org/v1.0.0/collections",
-                "https://api.stacspec.org/v1.0.0/ogcapi-features",
-                "https://api.stacspec.org/v1.0.0/item-search#query",
-                "https://api.stacspec.org/v1.0.0/item-search#sort",
-                "https://api.stacspec.org/v1.0.0/item-search#fields",
-                "https://api.stacspec.org/v1.0.0/item-search",
-                "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/geojson",
-                "http://www.opengis.net/spec/ogcapi-features-3/1.0/conf/filter",
-                "https://api.stacspec.org/v1.0.0-rc.3/ogcapi-features/extensions/transaction",
-                "http://www.opengis.net/spec/ogcapi-features-3/1.0/conf/features-filter",
-                "https://api.stacspec.org/v1.0.0-rc.2/item-search#filter",
-                "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/oas30",
-                "http://www.opengis.net/spec/cql2/1.0/conf/basic-cql2",
-                "http://www.opengis.net/spec/cql2/1.0/conf/cql2-json",
-                "http://www.opengis.net/spec/cql2/1.0/conf/cql2-text",
-            ],
             "links": [
                 {"rel": "self", "type": "application/json", "href": f"{url}/catalog/"},
                 {"rel": "root", "type": "application/json", "href": f"{url}/catalog/"},
@@ -336,5 +316,8 @@ def mocked_stac_catalog_url():
 
         json_delete_collection = {"status": "200"}
         resp.add("DELETE", url=url + "/catalog/collections/toto:S1_L1", json=json_delete_collection, status=200)
+
+        json_add_item = {"status": "200"}
+        resp.add("POST", url=url + "/catalog/collections/toto:S1_L1/items", json=json_add_item, status=200)
 
         yield url
