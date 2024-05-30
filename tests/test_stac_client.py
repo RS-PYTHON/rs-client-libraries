@@ -26,26 +26,110 @@ def test_create_object_stac_client(mocked_stac_catalog_url):  # pylint: disable=
     # Loads the catalog #
     #####################
     catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+    assert catalog.id == "stac-fastapi"
+    ##################################################
+    # Get the collection S1_L1 from jgaucher catalog #
+    ##################################################
+    # collection = catalog.get_collection(collection_id="S1_L1", owner_id="toto")
+    # assert collection.id == "S1_L1"
+
+    # #######################################################
+    # # Get all the collections accessible from pyteam user #
+    # #######################################################
+    # collections = catalog.get_collections()
+    # for collection in collections:
+    #     print(collection)
+
+    # # get items
+    # items = collection.get_all_items()
+    # for item in items:
+    #     print(item)
+
+    # #########################################################
+    # # Create a new collection S2_L2 in the owner_id catalog ##############################
+    # # If not specified, the default owner_id will be the value of the attribute owner_id #
+    # ######################################################################################
+    # new_collection = catalog.create_new_collection(
+    #     collection_id="S2_L2",
+    #     extent={
+    #         "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
+    #         "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
+    #     },
+    # )
+    # print(new_collection["id"])
+
+    # ##########################################################
+    # # Create a new collection S3_L3 specifying the owner id. #
+    # ##########################################################
+    # new_collection_jgaucher = catalog.create_new_collection(
+    #     collection_id="S3_L3",
+    #     extent={
+    #         "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
+    #         "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
+    #     },
+    #     description="This is the collection S3_L3 of the user jgaucher",
+    #     owner_id="jgaucher",
+    # )
+    # print(new_collection_jgaucher["id"])
+
+    # ###########################################
+    # # Publish a new collection in the catalog #
+    # ###########################################
+    # response = catalog.post_collection(new_collection)
+    # assert response.status_code == 200
+
+    # response = catalog.post_collection(new_collection_jgaucher)
+    # assert response.status_code == 200
+
+    # #######################
+    # # Delete a collection #
+    # #######################
+    # response = catalog.delete_collection(collection_id="S2_L2")  # default owner_id is 'pyteam'
+    # assert response.status_code == 200
+
+    # response = catalog.delete_collection(collection_id="S3_L3", owner_id="jgaucher")
+    # assert response.status_code == 200
+
+
+def test_get_collection_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
     ##################################################
     # Get the collection S1_L1 from jgaucher catalog #
     ##################################################
+
     collection = catalog.get_collection(collection_id="S1_L1", owner_id="toto")
     assert collection.id == "S1_L1"
+
+
+def test_all_collections_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
     #######################################################
     # Get all the collections accessible from pyteam user #
     #######################################################
+
     collections = catalog.get_collections()
     for collection in collections:
-        print(collection)
+        assert collection is not None
 
-    # get items
+
+def test_get_items_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+
+    ###################################################
+    # Get all the item from the collection toto:S1_L1 #
+    ###################################################
+
+    collection = catalog.get_collection(collection_id="S1_L1", owner_id="toto")
+
     items = collection.get_all_items()
     for item in items:
         print(item)
 
-    # search
+
+def test_create_new_collection_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
     #########################################################
     # Create a new collection S2_L2 in the owner_id catalog ##############################
@@ -58,7 +142,7 @@ def test_create_object_stac_client(mocked_stac_catalog_url):  # pylint: disable=
             "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
         },
     )
-    print(new_collection["id"])
+    assert new_collection["id"] == "S2_L2"
 
     ##########################################################
     # Create a new collection S3_L3 specifying the owner id. #
@@ -72,22 +156,5 @@ def test_create_object_stac_client(mocked_stac_catalog_url):  # pylint: disable=
         description="This is the collection S3_L3 of the user jgaucher",
         owner_id="jgaucher",
     )
-    print(new_collection_jgaucher["id"])
 
-    ###########################################
-    # Publish a new collection in the catalog #
-    ###########################################
-    response = catalog.post_collection(new_collection)
-    assert response.status_code == 200
-
-    response = catalog.post_collection(new_collection_jgaucher)
-    assert response.status_code == 200
-
-    #######################
-    # Delete a collection #
-    #######################
-    response = catalog.delete_collection(collection_id="S2_L2")  # default owner_id is 'pyteam'
-    assert response.status_code == 200
-
-    response = catalog.delete_collection(collection_id="S3_L3", owner_id="jgaucher")
-    assert response.status_code == 200
+    assert new_collection_jgaucher["id"] == "S3_L3"
