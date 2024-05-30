@@ -15,12 +15,14 @@
 """Prefect flow for processing a S1 L0 product"""
 import json
 import os.path as osp
+from datetime import datetime
 from pathlib import Path
 
 import requests
 import yaml
 from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
+from pystac import Collection, Extent, SpatialExtent, TemporalExtent
 
 from rs_client.stac_client import StacClient
 from rs_common.config import AUXIP_STATION, ECadipStation
@@ -452,20 +454,17 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
     # However, it might be necessary to allow the users to input a specific collection name
     # if they wish to do so. There is no established guide in the US for this matter.
     collection_name = f"{config.mission}_dpr"
-    minimal_collection = {
-        "id": collection_name,
-        "type": "Collection",
-        "description": "test_description",
-        "stac_version": "1.0.0",
-        "owner": config.rs_client.owner_id,
-    }
-    logger.debug(f"Creating collection for the DPR products: {collection_name}")
-    requests.post(
-        f"{config.rs_client.href_catalog}/catalog/collections",
-        json=minimal_collection,
-        timeout=CATALOG_REQUEST_TIMEOUT,
-        **config.rs_client.apikey_headers,
+    config.rs_client.add_collection(
+        Collection(
+            id=collection_name,
+            description=None,  # rs-client will provide a default description for us
+            extent=Extent(
+                spatial=SpatialExtent(bboxes=[-180.0, -90.0, 180.0, 90.0]),
+                temporal=TemporalExtent([datetime.now(), datetime.now()]),
+            ),
+        ),
     )
+
     fin_res = []
     for output_product in get_yaml_outputs(yaml_dpr_input.result()):
         matching_stac = next(
