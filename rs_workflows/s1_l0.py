@@ -15,17 +15,19 @@
 """Prefect flow for processing a S1 L0 product"""
 import json
 import os.path as osp
+from datetime import datetime
 from pathlib import Path
 
 import requests
 import yaml
 from prefect import flow, task
 from prefect_dask.task_runners import DaskTaskRunner
+from pystac import Collection, Extent, SpatialExtent, TemporalExtent
 
 from rs_client.stac_client import StacClient
 from rs_common.config import AUXIP_STATION, ECadipStation
 from rs_common.logging import Logging
-from rs_workflows.serialization import RsClientSerialization
+from rs_common.serialization import RsClientSerialization
 from rs_workflows.staging import (
     CATALOG_REQUEST_TIMEOUT,
     create_collection_name,
@@ -111,8 +113,8 @@ def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, product_type
         return None
 
     # Extract paths for CADIP and ADGS files
-    cadip_paths = [file_prop["assets"]["file"]["alternate"]["s3"]["href"] for file_prop in cadip_files["features"]]
-    adgs_paths = [file_prop["assets"]["file"]["alternate"]["s3"]["href"] for file_prop in adgs_files["features"]]
+    cadip_paths = [file_prop["assets"]["file"]["alternate"]["s3"]["href"] for file_prop in cadip_files]
+    adgs_paths = [file_prop["assets"]["file"]["alternate"]["s3"]["href"] for file_prop in adgs_files]
     # create the dictionaries to insert within the yaml template
 
     # Update the YAML template with inputs and I/O products
@@ -215,7 +217,8 @@ def get_yaml_outputs(template: dict):
 
 def create_cql2_filter(properties: dict, op: str = "and"):
     """
-    Create a CQL2 filter based on provided properties.
+    Create a CQL2 filter based on provided properties,
+    see: https://pystac-client.readthedocs.io/en/stable/tutorials/cql2-filter.html
 
     Args:
         properties (dict): Dictionary containing field-value pairs for filtering.
@@ -233,14 +236,18 @@ def create_cql2_filter(properties: dict, op: str = "and"):
 
 
 @task
-def get_cadip_catalog_data(rs_client: StacClient, collection: str, session_id: str):
+def get_cadip_catalog_data(
+    stac_client: StacClient,  # NOTE: maybe use RsClientSerialization instead
+    collection: str,
+    session_id: str,
+):
     """Prefect task to retrieve CADIP catalog data for a specific collection and session ID.
 
     This task retrieves CADIP catalog data by sending a request to the CADIP
     catalog search endpoint with a filter based on the collection and session ID.
 
     Args:
-        rs_client (StacClient): The StacClient instance for accessing the CADIP catalog.
+        stac_client (StacClient): The StacClient instance for accessing the CADIP catalog.
         collection (str): The name of the collection.
         session_id (str): The session ID associated with the collection.
 
@@ -249,45 +256,34 @@ def get_cadip_catalog_data(rs_client: StacClient, collection: str, session_id: s
 
     """
 
-    logger = rs_client.logger
+    logger = stac_client.logger
     logger.debug("Task get_cadip_catalog_data STARTED")
-    catalog_endpoint = rs_client.href_catalog + "/catalog/search"
 
-    query = create_cql2_filter({"collection": f"{rs_client.owner_id}_{collection}", "cadip:session_id": session_id})
-    # logger.debug(f"{url_catalog} | {username} | {collection} | {session_id} | {apikey}")
-    try:
-        response = requests.post(
-            catalog_endpoint,
-            json=query,
-            timeout=CATALOG_REQUEST_TIMEOUT,
-            **rs_client.apikey_headers,
-        )
-        # logger.debug(f"stat = {response.status_code}")
-        # logger.debug(f"json = {response.json()}")
-    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-        logger.exception("Request exception caught: %s", e)
-        return None
-
-    if int(response.status_code) != 200:
-        logger.error(f"The request response failed: {response.status_code}")
-        return None
+    filter = create_cql2_filter({"collection": f"{stac_client.owner_id}_{collection}", "cadip:session_id": session_id})
 
     try:
+        search = stac_client.search(filter=filter)
+        data = list(search.items_as_dicts())
         logger.debug("Task get_cadip_catalog_data FINISHED")
-        return response.json()
-    except requests.exceptions.JSONDecodeError:
+        return data
+    except Exception as e:
+        logger.exception("Search exception caught: %s", e)
         return None
 
 
 @task
-def get_adgs_catalog_data(rs_client: StacClient, collection: str, files: list):
+def get_adgs_catalog_data(
+    stac_client: StacClient,  # NOTE: maybe use RsClientSerialization instead
+    collection: str,
+    files: list,
+):
     """Prefect task to retrieve ADGS catalog data for specific files in a collection.
 
     This task retrieves ADGS catalog data by sending a request to the ADGS
     catalog search endpoint with filters based on the collection and file IDs.
 
     Args:
-        rs_client (StacClient): The StacClient instance for accessing the ADGS catalog.
+        stac_client (StacClient): The StacClient instance for accessing the ADGS catalog.
         collection (str): The name of the collection.
         files (list): A list of file IDs to retrieve from the catalog.
 
@@ -296,36 +292,24 @@ def get_adgs_catalog_data(rs_client: StacClient, collection: str, files: list):
 
     """
 
-    logger = rs_client.logger
+    logger = stac_client.logger
     logger.debug("Task get_adgs_catalog_data STARTED")
-    catalog_endpoint = rs_client.href_catalog + "/catalog/search"
 
-    payload = {
-        "collection": f"{rs_client.owner_id}_{collection}",
-        "ids": ",".join(files),
-        "filter": f"owner_id='{rs_client.owner_id}'",
+    filter = {
+        "op": "and",
+        "args": [
+            {"op": "=", "args": [{"property": "collection"}, f"{stac_client.owner_id}_{collection}"]},
+            {"op": "=", "args": [{"property": "owner"}, stac_client.owner_id]},
+            {"op": "in", "args": [{"property": "id"}, files]},
+        ],
     }
-
-    logger.debug(f"payload = {payload}")
     try:
-        response = requests.get(
-            catalog_endpoint,
-            params=payload,
-            timeout=CATALOG_REQUEST_TIMEOUT,
-            **rs_client.apikey_headers,
-        )
-
-    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-        logger.exception("Request exception caught: %s", e)
-        return None
-
-    if int(response.status_code) != 200:
-        logger.error(f"The request response failed: {response}")
-        return None
-    try:
+        search = stac_client.search(filter=filter)
+        data = list(search.items_as_dicts())
         logger.debug("Task get_adgs_catalog_data FINISHED")
-        return response.json()
-    except requests.exceptions.JSONDecodeError:
+        return data
+    except Exception as e:
+        logger.exception("Search exception caught: %s", e)
         return None
 
 
@@ -334,7 +318,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        rs_client: StacClient,
+        stac_client: StacClient,
         url_dpr: str,
         mission: str,
         cadip_session_id: str,
@@ -347,7 +331,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
         Initialize the PrefectS1L0FlowConfig object with provided parameters.
 
         Args:
-            rs_client (StacClient): StacClient instance
+            stac_client (StacClient): StacClient instance
             url_dpr (str): The URL of the dpr endpoint
             mission (str): The mission name.
             cadip_session_id (str): The CADIP session ID.
@@ -356,8 +340,8 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
             s3_path (str): The S3 path.
             temp_s3_path (str): The temporary S3 path.
         """
-        self.rs_client = None  # don't save this instance
-        self.rs_client_serialization = RsClientSerialization(rs_client)  # save the serialization parameters instead
+        self.stac_client = None  # don't save this instance
+        self.rs_client_serialization = RsClientSerialization(stac_client)  # save the serialization parameters instead
         self.url_dpr = url_dpr
         self.mission = mission
         self.cadip_session_id = cadip_session_id
@@ -368,6 +352,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
 
 
 # At the time being, no more than 2 workers are required, because this flow runs at most 2 tasks in in parallel
+# @flow # TO DEBUG THE CODE, JUST USE @flow
 @flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 2, "threads_per_worker": 1}))
 def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-locals
     """Constructs a Prefect Flow for Sentinel-1 Level 0 processing.
@@ -388,7 +373,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
     logger = get_prefect_logger(LOGGER_NAME)
 
     # Deserialize the RsClient instance
-    config.rs_client = config.rs_client_serialization.deserialize(logger)
+    config.stac_client = config.rs_client_serialization.deserialize(logger)
 
     # Check the product types
     ok_types = ["S1SEWRAW", "S1SIWRAW", "S1SSMRAW", "S1SWVRAW"]
@@ -406,24 +391,24 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
     # gather the data for cadip session id
     logger.debug("Starting task get_cadip_catalog_data")
     cadip_catalog_data = get_cadip_catalog_data.submit(
-        config.rs_client,
+        config.stac_client,  # NOTE: maybe use RsClientSerialization instead
         cadip_collection,
         config.cadip_session_id,
     )
     # logger.debug(f"cadip_catalog_data = {cadip_catalog_data} | {cadip_catalog_data.result()}")
     logger.debug("Starting task get_adgs_catalog_data")
     adgs_catalog_data = get_adgs_catalog_data.submit(
-        config.rs_client,
+        config.stac_client,  # NOTE: maybe use RsClientSerialization instead
         adgs_collection,
         config.adgs_files,
     )
 
     # the previous tasks may be launched in parallel. The next task depends on the results from these previous tasks
-    if not cadip_catalog_data.result() or int(cadip_catalog_data.result()["context"]["returned"]) == 0:
+    if not cadip_catalog_data.result():
         logger.error(f"No Cadip files were found in the catalog for Cadip session ID: {config.cadip_session_id!r}")
         return
 
-    if not adgs_catalog_data.result() or int(adgs_catalog_data.result()["context"]["returned"]) == 0:
+    if not adgs_catalog_data.result():
         logger.error(  # pylint: disable=logging-not-lazy
             "None of these Auxip files were found in the catalog:\n" + "\n".join(config.adgs_files),
         )
@@ -452,20 +437,18 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
     # However, it might be necessary to allow the users to input a specific collection name
     # if they wish to do so. There is no established guide in the US for this matter.
     collection_name = f"{config.mission}_dpr"
-    minimal_collection = {
-        "id": collection_name,
-        "type": "Collection",
-        "description": "test_description",
-        "stac_version": "1.0.0",
-        "owner": config.rs_client.owner_id,
-    }
-    logger.debug(f"Creating collection for the DPR products: {collection_name}")
-    requests.post(
-        f"{config.rs_client.href_catalog}/catalog/collections",
-        json=minimal_collection,
-        timeout=CATALOG_REQUEST_TIMEOUT,
-        **config.rs_client.apikey_headers,
+    now = datetime.now()
+    config.stac_client.add_collection(
+        Collection(
+            id=collection_name,
+            description=None,  # rs-client will provide a default description for us
+            extent=Extent(
+                spatial=SpatialExtent(bboxes=[-180.0, -90.0, 180.0, 90.0]),
+                temporal=TemporalExtent([now, now]),
+            ),
+        ),
     )
+
     fin_res = []
     for output_product in get_yaml_outputs(yaml_dpr_input.result()):
         matching_stac = next(
@@ -480,7 +463,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
         fin_res.append(
             (
                 update_stac_catalog.submit(
-                    config.rs_client,
+                    config.stac_client,  # NOTE: maybe use RsClientSerialization instead
                     collection_name,
                     matching_stac["stac_discovery"],
                     output_product,
