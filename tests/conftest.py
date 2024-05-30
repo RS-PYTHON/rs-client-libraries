@@ -335,6 +335,6 @@ def mocked_stac_catalog_url():
         resp.add("POST", url=url + "/catalog/collections", json=json_post_collection, status=200)
 
         json_delete_collection = {"status": "200"}
-        resp.add("DELETE", url=url + "/catalog/collection/")
+        resp.add("DELETE", url=url + "/catalog/collections/toto:S1_L1", json=json_delete_collection, status=200)
 
         yield url

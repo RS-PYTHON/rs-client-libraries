@@ -158,3 +158,45 @@ def test_create_new_collection_stac_client(mocked_stac_catalog_url):  # pylint: 
     )
 
     assert new_collection_jgaucher["id"] == "S3_L3"
+
+
+def test_add_collection_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+
+    new_collection = catalog.create_new_collection(
+        collection_id="S2_L2",
+        extent={
+            "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
+            "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
+        },
+    )
+
+    new_collection_jgaucher = catalog.create_new_collection(
+        collection_id="S3_L3",
+        extent={
+            "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
+            "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
+        },
+        description="This is the collection S3_L3 of the user jgaucher",
+        owner_id="jgaucher",
+    )
+    ###########################################
+    # Publish a new collection in the catalog #
+    ###########################################
+
+    response = catalog.post_collection(new_collection)
+    assert response.status_code == 200
+
+    response = catalog.post_collection(new_collection_jgaucher)
+    assert response.status_code == 200
+
+
+def test_delete_collection_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+
+    #######################
+    # Delete a collection #
+    #######################
+
+    response = catalog.delete_collection(collection_id="S1_L1", owner_id="toto")  # default owner_id is 'pyteam'
+    assert response.status_code == 200
