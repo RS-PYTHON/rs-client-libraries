@@ -99,7 +99,7 @@ def test_valid_staging_status(filename, station):
         status=200,
     )
 
-    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.NOT_STARTED
+    assert rs_client.staging_status(filename, timeout=timeout) == EDownloadStatus.NOT_STARTED
 
     json_response["status"] = EDownloadStatus.IN_PROGRESS
     responses.add(
@@ -108,7 +108,7 @@ def test_valid_staging_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.IN_PROGRESS
+    assert rs_client.staging_status(filename, timeout=timeout) == EDownloadStatus.IN_PROGRESS
 
     json_response["status"] = EDownloadStatus.DONE
     responses.add(
@@ -117,7 +117,7 @@ def test_valid_staging_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.DONE
+    assert rs_client.staging_status(filename, timeout=timeout) == EDownloadStatus.DONE
 
 
 @pytest.mark.unit
@@ -164,7 +164,7 @@ def test_invalid_staging_status(filename, station):
         status=404,
     )
 
-    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.FAILED
+    assert rs_client.staging_status(filename, timeout=timeout) == EDownloadStatus.FAILED
 
 
 @pytest.mark.unit
@@ -552,7 +552,7 @@ def test_search_stations(station):
     search_response = rs_client.search_stations(
         datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
         datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
-        timeout,
+        timeout=timeout,
     )
     assert len(search_response) == 2
     del files_stac[station]["features"][1]
@@ -566,8 +566,8 @@ def test_search_stations(station):
     search_response = rs_client.search_stations(
         datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
         datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
-        timeout,
         1,
+        timeout=timeout,
     )
     assert len(search_response) == 1
 
@@ -628,8 +628,8 @@ def test_err_ret_search_stations(station):
     search_response = rs_client.search_stations(
         datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
         datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
-        timeout,
         2,
+        timeout=timeout,
     )
     assert len(search_response) == 0
 
@@ -648,8 +648,8 @@ def test_err_ret_search_stations(station):
         search_response = rs_client.search_stations(
             datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
             datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
-            timeout,
             2,
+            timeout=timeout,
         )
     assert "Wrong format of search endpoint answer" in str(runtime_exception.value)
 
@@ -709,8 +709,8 @@ def test_wrong_url_search_stations(station):
         rs_client.search_stations(
             datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
             datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
-            timeout,
             2,
+            timeout=timeout,
         )
     assert "Could not get the response from the station search endpoint" in str(runtime_exception.value)
 

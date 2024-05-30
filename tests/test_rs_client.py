@@ -33,7 +33,6 @@ RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = "OWNER_ID"
 CADIP_STATION = ECadipStation.CADIP
 PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
-TIMEOUT = 3  # seconds
 
 
 @pytest.fixture
@@ -124,7 +123,7 @@ def test_cadip_sessions():
 
     # Test the connection error with the dummy server
     with pytest.raises(RuntimeError) as error:
-        cadip_client.search_sessions(TIMEOUT, session_ids, start_date, stop_date, PLATFORMS)
+        cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
     assert "ConnectionError" in str(error.getrepr())
 
     # Mock the response, now the call should work
@@ -142,19 +141,19 @@ def test_cadip_sessions():
     with pytest.raises(RuntimeError) as error:
         with responses.RequestsMock() as resp:
             resp.get(url=mock_url, json={}, status=200)
-            cadip_client.search_sessions(TIMEOUT, session_ids, start_date, stop_date, PLATFORMS)
+            cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
     assert "KeyError" in str(error.getrepr())
 
     # Test a bad response status code
     with responses.RequestsMock() as resp:
         resp.get(url=mock_url, json=content, status=500)
-        sessions = cadip_client.search_sessions(TIMEOUT, session_ids, start_date, stop_date, PLATFORMS)
+        sessions = cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
         assert not sessions
 
     # Test the nominal case
     with responses.RequestsMock() as resp:
         resp.get(url=mock_url, json=content, status=200)
-        sessions = cadip_client.search_sessions(TIMEOUT, session_ids, start_date, stop_date, PLATFORMS)
+        sessions = cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
         assert sessions == features
 
 
