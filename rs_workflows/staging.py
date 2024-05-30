@@ -27,6 +27,7 @@ from rs_client.cadip_client import CadipClient
 from rs_client.stac_client import StacClient
 from rs_common.config import AUXIP_STATION, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
+from rs_workflows.serialization import RsClientSerialization
 
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
@@ -139,6 +140,8 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-i
         tmp_download_path,
         s3_path,
     ):
+        self.rs_client = None  # don't save this instance
+        self.rs_client_serialization = RsClientSerialization(rs_client)  # save the serialization parameters instead
         self.rs_client: AuxipClient | CadipClient = rs_client
         self.mission: str = mission
         self.tmp_download_path: str = tmp_download_path
@@ -196,7 +199,10 @@ def staging(config: PrefectTaskConfig):
     """
 
     logger = get_prefect_logger("task_dwn")
-    rs_client = config.rs_client
+
+    # Deserialize the RsClient instance
+    rs_client = config.rs_client_serialization.deserialize(logger)
+
     # list with failed files
     failed_files = config.task_files_stac.copy()
 
@@ -399,7 +405,8 @@ def staging_flow(config: PrefectFlowConfig):
     logger = get_prefect_logger("flow_dwn")
     logger.info(f"The staging flow is starting. Received workers:{config.max_workers}")
     try:
-        rs_client = config.rs_client
+        # Deserialize the RsClient instance
+        rs_client = config.rs_client_serialization.deserialize(logger)
 
         # get the list with files from the search endpoint
         try:
@@ -446,7 +453,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
         for files_stac in tasks_files_stac:
             staging.submit(
                 PrefectTaskConfig(
-                    config.rs_client,
+                    rs_client,
                     config.mission,
                     config.tmp_download_path,
                     config.s3_path,

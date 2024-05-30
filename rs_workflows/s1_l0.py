@@ -25,6 +25,7 @@ from prefect_dask.task_runners import DaskTaskRunner
 from rs_client.stac_client import StacClient
 from rs_common.config import AUXIP_STATION, ECadipStation
 from rs_common.logging import Logging
+from rs_workflows.serialization import RsClientSerialization
 from rs_workflows.staging import (
     CATALOG_REQUEST_TIMEOUT,
     create_collection_name,
@@ -355,7 +356,8 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
             s3_path (str): The S3 path.
             temp_s3_path (str): The temporary S3 path.
         """
-        self.rs_client = rs_client
+        self.rs_client = None  # don't save this instance
+        self.rs_client_serialization = RsClientSerialization(rs_client)  # save the serialization parameters instead
         self.url_dpr = url_dpr
         self.mission = mission
         self.cadip_session_id = cadip_session_id
@@ -384,6 +386,9 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
 
     """
     logger = get_prefect_logger(LOGGER_NAME)
+
+    # Deserialize the RsClient instance
+    config.rs_client = config.rs_client_serialization.deserialize(logger)
 
     # Check the product types
     ok_types = ["S1SEWRAW", "S1SIWRAW", "S1SSMRAW", "S1SWVRAW"]
