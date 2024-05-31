@@ -32,8 +32,8 @@ def test_create_object_stac_client(mocked_stac_catalog_url):  # pylint: disable=
     assert catalog.id == "stac-fastapi"
 
 
-def test_get_collection_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
-    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+def test_get_collection_stac_client(mocked_stac_catalog_get_collection):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_get_collection, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
     ##################################################
     # Get the collection S1_L1 from jgaucher catalog #
@@ -43,8 +43,8 @@ def test_get_collection_stac_client(mocked_stac_catalog_url):  # pylint: disable
     assert collection.id == "S1_L1"
 
 
-def test_all_collections_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
-    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+def test_all_collections_stac_client(mocked_stac_catalog_get_collection):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_get_collection, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
     #######################################################
     # Get all the collections accessible from pyteam user #
@@ -55,8 +55,8 @@ def test_all_collections_stac_client(mocked_stac_catalog_url):  # pylint: disabl
         assert collection is not None
 
 
-def test_get_items_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
-    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+def test_get_items_stac_client(mocked_stac_catalog_get_collection):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_get_collection, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
     ###################################################
     # Get all the item from the collection toto:S1_L1 #
@@ -83,8 +83,8 @@ def test_create_new_collection_stac_client():  # pylint: disable=missing-functio
     assert new_collection_jgaucher.id == "S3_L3"
 
 
-def test_add_collection_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
-    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+def test_add_collection_stac_client(mocked_stac_catalog_add_collection):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_add_collection, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
     spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
     date_strings = ["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]
@@ -106,8 +106,10 @@ def test_add_collection_stac_client(mocked_stac_catalog_url):  # pylint: disable
     assert response.status_code == 200
 
 
-def test_delete_collection_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
-    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+def test_delete_collection_stac_client(
+    mocked_stac_catalog_delete_collection,
+):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_delete_collection, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
     #######################
     # Delete a collection #
@@ -117,8 +119,8 @@ def test_delete_collection_stac_client(mocked_stac_catalog_url):  # pylint: disa
     assert response.status_code == 200
 
 
-def test_add_item_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
-    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+def test_add_item_stac_client(mocked_stac_catalog_add_item):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_add_item, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
     # Add a new item from toto:S1_L1 collection
 
@@ -149,8 +151,8 @@ def test_add_item_stac_client(mocked_stac_catalog_url):  # pylint: disable=missi
     print(response)
 
 
-def test_remove_item_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
-    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+def test_remove_item_stac_client(mocked_stac_catalog_delete_item):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_delete_item, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
     ##################
     # Delete an item #

@@ -46,7 +46,7 @@ def before_and_after(session_mocker):
 
 
 @pytest.fixture
-def mocked_stac_catalog_url():
+def mocked_stac_catalog_delete_item():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
     with responses.RequestsMock() as resp:
         # Mocked URL
@@ -107,64 +107,73 @@ def mocked_stac_catalog_url():
         }
         resp.get(url=url + "/catalog/", json=json_landing_page, status=200)
 
-        json_collections = {
-            "collections": [
-                {
-                    "id": "S1_L1",
-                    "type": "Collection",
-                    "links": [
-                        {
-                            "rel": "items",
-                            "type": "application/geo+json",
-                            "href": f"{url}/catalog/collections/toto:S1_L1/items",
-                        },
-                        {
-                            "rel": "parent",
-                            "type": "application/json",
-                            "href": f"{url}/catalog/catalogs/toto",
-                        },
-                        {
-                            "rel": "root",
-                            "type": "application/json",
-                            "href": f"{url}/catalog/catalogs/toto",
-                        },
-                        {
-                            "rel": "self",
-                            "type": "application/json",
-                            "href": f"{url}/catalog/collections/toto:S1_L1",
-                        },
-                        {
-                            "rel": "items",
-                            "href": "http://localhost:8082/catalog/collections/toto:S1_L1/items/",
-                            "type": "application/geo+json",
-                        },
-                        {
-                            "rel": "license",
-                            "href": "https://creativecommons.org/licenses/publicdomain/",
-                            "title": "public domain",
-                        },
-                    ],
-                    "owner": "toto",
-                    "extent": {
-                        "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
-                        "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
-                    },
-                    "license": "public-domain",
-                    "description": "Some description",
-                    "stac_version": "1.0.0",
-                }
-            ],
+        json_status = {"status": "200"}
+        resp.add("DELETE", url=url + "/catalog/collections/toto:S1_L1/items/item_0", json=json_status, status=200)
+
+        yield url
+
+
+@pytest.fixture
+def mocked_stac_catalog_add_item():
+    """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
+    with responses.RequestsMock() as resp:
+        # Mocked URL
+        url = "http://mocked_stac_catalog_url"
+
+        # This is the returned content when calling a real STAC catalog service with:
+        # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
+        json_landing_page = {
+            "type": "Catalog",
+            "id": "stac-fastapi",
+            "title": "stac-fastapi",
+            "description": "stac-fastapi",
+            "stac_version": "1.0.0",
             "links": [
+                {"rel": "self", "type": "application/json", "href": f"{url}/catalog/"},
                 {"rel": "root", "type": "application/json", "href": f"{url}/catalog/"},
-                {"rel": "parent", "type": "application/json", "href": f"{url}/catalog/"},
+                {"rel": "data", "type": "application/json", "href": f"{url}/catalog/collections"},
                 {
-                    "rel": "self",
+                    "rel": "conformance",
                     "type": "application/json",
-                    "href": f"{url}/catalog/collections",
+                    "title": "STAC/WFS3 conformance classes implemented by this server",
+                    "href": f"{url}/conformance",
+                },
+                {
+                    "rel": "search",
+                    "type": "application/geo+json",
+                    "title": "STAC search",
+                    "href": f"{url}/catalog/search",
+                    "method": "GET",
+                },
+                {
+                    "rel": "search",
+                    "type": "application/geo+json",
+                    "title": "STAC search",
+                    "href": f"{url}/catalog/search",
+                    "method": "POST",
+                },
+                {
+                    "rel": "child",
+                    "type": "application/json",
+                    "title": "toto_S1_L1",
+                    "href": f"{url}/catalog/collections/toto:S1_L1",
+                },
+                {
+                    "rel": "service-desc",
+                    "type": "application/vnd.oai.openapi+json;version=3.0",
+                    "title": "OpenAPI service description",
+                    "href": f"{url}/api",
+                },
+                {
+                    "rel": "service-doc",
+                    "type": "text/html",
+                    "title": "OpenAPI service documentation",
+                    "href": f"{url}/api.html",
                 },
             ],
+            "stac_extensions": [],
         }
-        resp.get(url=url + "/catalog/collections", json=json_collections, status=200)
+        resp.get(url=url + "/catalog/", json=json_landing_page, status=200)
 
         json_single_collection = {
             "id": "S1_L1",
@@ -212,112 +221,319 @@ def mocked_stac_catalog_url():
         }
         resp.get(url=url + "/catalog/collections/toto:S1_L1", json=json_single_collection, status=200)
 
-        json_single_item = {
-            "type": "FeatureCollection",
-            "context": {"limit": 10, "returned": 1},
-            "features": [
-                {
-                    "id": "S1SIWOCN_20220412T054447_0024_S139",
-                    "bbox": [0],
-                    "type": "Feature",
-                    "links": [
-                        {
-                            "rel": "collection",
-                            "type": "application/json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1",
-                        },
-                        {
-                            "rel": "parent",
-                            "type": "application/json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1",
-                        },
-                        {
-                            "rel": "root",
-                            "type": "application/json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/catalogs/jgaucher",
-                        },
-                        {
-                            "rel": "self",
-                            "type": "application/geo+json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1/items/S1SIWOCN_20220412T054447_0024_S139",
-                        },
-                    ],
-                    "assets": {
-                        "raw": {
-                            "href": "https://rs-server/catalog/jgaucher/collections/S3_L3/items/DCS_04_S1A_20231020064619050845_ch1_DSDB_00001.raw/download/raw",
-                            "alternate": {
-                                "s3": {
-                                    "href": "s3://rs-cluster-catalog/youri-test/DCS_04_S1A_20231020064619050845_ch1_DSDB_00001.raw"
-                                }
-                            },
-                        }
-                    },
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [
-                            [
-                                [-94.6334839, 37.0595608],
-                                [-94.6334839, 37.0332547],
-                                [-94.6005249, 37.0332547],
-                                [-94.6005249, 37.0595608],
-                                [-94.6334839, 37.0595608],
-                            ]
-                        ],
-                    },
-                    "collection": "S1_L1",
-                    "properties": {
-                        "gsd": 0.5971642834779395,
-                        "owner": "toto",
-                        "width": 2500,
-                        "height": 2500,
-                        "datetime": "2000-02-02T00:00:00Z",
-                        "proj:epsg": 3857,
-                        "orientation": "nadir",
-                    },
-                    "stac_version": "1.0.0",
-                    "stac_extensions": [
-                        "https://stac-extensions.github.io/eopf/v1.0.0/schema.json",
-                        "https://stac-extensions.github.io/eo/v1.1.0/schema.json",
-                        "https://stac-extensions.github.io/sat/v1.0.0/schema.json",
-                        "https://stac-extensions.github.io/view/v1.0.0/schema.json",
-                        "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
-                        "https://stac-extensions.github.io/processing/v1.1.0/schema.json",
-                        "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
-                    ],
-                }
-            ],
+        json_status = {"status": "200"}
+        resp.add("POST", url=url + "/catalog/collections/toto:S1_L1/items", json=json_status, status=200)
+
+        yield url
+
+
+@pytest.fixture
+def mocked_stac_catalog_delete_collection():
+    """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
+    with responses.RequestsMock() as resp:
+        # Mocked URL
+        url = "http://mocked_stac_catalog_url"
+
+        # This is the returned content when calling a real STAC catalog service with:
+        # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
+        json_landing_page = {
+            "type": "Catalog",
+            "id": "stac-fastapi",
+            "title": "stac-fastapi",
+            "description": "stac-fastapi",
+            "stac_version": "1.0.0",
             "links": [
+                {"rel": "self", "type": "application/json", "href": f"{url}/catalog/"},
+                {"rel": "root", "type": "application/json", "href": f"{url}/catalog/"},
+                {"rel": "data", "type": "application/json", "href": f"{url}/catalog/collections"},
                 {
-                    "rel": "collection",
+                    "rel": "conformance",
                     "type": "application/json",
-                    "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1",
+                    "title": "STAC/WFS3 conformance classes implemented by this server",
+                    "href": f"{url}/conformance",
                 },
                 {
-                    "rel": "parent",
-                    "type": "application/json",
-                    "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1",
-                },
-                {
-                    "rel": "root",
-                    "type": "application/json",
-                    "href": "https://dev-rspy.esa-copernicus.eu/catalog/catalogs/toto",
-                },
-                {
-                    "rel": "self",
+                    "rel": "search",
                     "type": "application/geo+json",
-                    "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1/items",
+                    "title": "STAC search",
+                    "href": f"{url}/catalog/search",
+                    "method": "GET",
+                },
+                {
+                    "rel": "search",
+                    "type": "application/geo+json",
+                    "title": "STAC search",
+                    "href": f"{url}/catalog/search",
+                    "method": "POST",
+                },
+                {
+                    "rel": "child",
+                    "type": "application/json",
+                    "title": "toto_S1_L1",
+                    "href": f"{url}/catalog/collections/toto:S1_L1",
+                },
+                {
+                    "rel": "service-desc",
+                    "type": "application/vnd.oai.openapi+json;version=3.0",
+                    "title": "OpenAPI service description",
+                    "href": f"{url}/api",
+                },
+                {
+                    "rel": "service-doc",
+                    "type": "text/html",
+                    "title": "OpenAPI service documentation",
+                    "href": f"{url}/api.html",
                 },
             ],
+            "stac_extensions": [],
         }
-        resp.get(url=url + "/catalog/collections/toto:S1_L1/items", json=json_single_item, status=200)
+        resp.get(url=url + "/catalog/", json=json_landing_page, status=200)
+
+        json_status = {"status": "200"}
+        resp.add("DELETE", url=url + "/catalog/collections/toto:S1_L1", json=json_status, status=200)
+
+        yield url
+
+
+@pytest.fixture
+def mocked_stac_catalog_add_collection():
+    """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
+    with responses.RequestsMock() as resp:
+        # Mocked URL
+        url = "http://mocked_stac_catalog_url"
+
+        # This is the returned content when calling a real STAC catalog service with:
+        # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
+        json_landing_page = {
+            "type": "Catalog",
+            "id": "stac-fastapi",
+            "title": "stac-fastapi",
+            "description": "stac-fastapi",
+            "stac_version": "1.0.0",
+            "links": [
+                {"rel": "self", "type": "application/json", "href": f"{url}/catalog/"},
+                {"rel": "root", "type": "application/json", "href": f"{url}/catalog/"},
+                {"rel": "data", "type": "application/json", "href": f"{url}/catalog/collections"},
+                {
+                    "rel": "conformance",
+                    "type": "application/json",
+                    "title": "STAC/WFS3 conformance classes implemented by this server",
+                    "href": f"{url}/conformance",
+                },
+                {
+                    "rel": "search",
+                    "type": "application/geo+json",
+                    "title": "STAC search",
+                    "href": f"{url}/catalog/search",
+                    "method": "GET",
+                },
+                {
+                    "rel": "search",
+                    "type": "application/geo+json",
+                    "title": "STAC search",
+                    "href": f"{url}/catalog/search",
+                    "method": "POST",
+                },
+                {
+                    "rel": "child",
+                    "type": "application/json",
+                    "title": "toto_S1_L1",
+                    "href": f"{url}/catalog/collections/toto:S1_L1",
+                },
+                {
+                    "rel": "service-desc",
+                    "type": "application/vnd.oai.openapi+json;version=3.0",
+                    "title": "OpenAPI service description",
+                    "href": f"{url}/api",
+                },
+                {
+                    "rel": "service-doc",
+                    "type": "text/html",
+                    "title": "OpenAPI service documentation",
+                    "href": f"{url}/api.html",
+                },
+            ],
+            "stac_extensions": [],
+        }
+        resp.get(url=url + "/catalog/", json=json_landing_page, status=200)
 
         json_status = {"status": "200"}
         resp.add("POST", url=url + "/catalog/collections", json=json_status, status=200)
 
-        resp.add("DELETE", url=url + "/catalog/collections/toto:S1_L1", json=json_status, status=200)
+        yield url
 
-        resp.add("POST", url=url + "/catalog/collections/toto:S1_L1/items", json=json_status, status=200)
 
-        resp.add("DELETE", url=url + "/catalog/collections/toto:S1_L1/items/item_0")
+@pytest.fixture
+def mocked_stac_catalog_get_collection():
+    """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
+    with responses.RequestsMock() as resp:
+        # Mocked URL
+        url = "http://mocked_stac_catalog_url"
+
+        # This is the returned content when calling a real STAC catalog service with:
+        # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
+        json_landing_page = {
+            "type": "Catalog",
+            "id": "stac-fastapi",
+            "title": "stac-fastapi",
+            "description": "stac-fastapi",
+            "stac_version": "1.0.0",
+            "links": [
+                {"rel": "self", "type": "application/json", "href": f"{url}/catalog/"},
+                {"rel": "root", "type": "application/json", "href": f"{url}/catalog/"},
+                {"rel": "data", "type": "application/json", "href": f"{url}/catalog/collections"},
+                {
+                    "rel": "conformance",
+                    "type": "application/json",
+                    "title": "STAC/WFS3 conformance classes implemented by this server",
+                    "href": f"{url}/conformance",
+                },
+                {
+                    "rel": "search",
+                    "type": "application/geo+json",
+                    "title": "STAC search",
+                    "href": f"{url}/catalog/search",
+                    "method": "GET",
+                },
+                {
+                    "rel": "search",
+                    "type": "application/geo+json",
+                    "title": "STAC search",
+                    "href": f"{url}/catalog/search",
+                    "method": "POST",
+                },
+                {
+                    "rel": "child",
+                    "type": "application/json",
+                    "title": "toto_S1_L1",
+                    "href": f"{url}/catalog/collections/toto:S1_L1",
+                },
+                {
+                    "rel": "service-desc",
+                    "type": "application/vnd.oai.openapi+json;version=3.0",
+                    "title": "OpenAPI service description",
+                    "href": f"{url}/api",
+                },
+                {
+                    "rel": "service-doc",
+                    "type": "text/html",
+                    "title": "OpenAPI service documentation",
+                    "href": f"{url}/api.html",
+                },
+            ],
+            "stac_extensions": [],
+        }
+        resp.get(url=url + "/catalog/", json=json_landing_page, status=200)
+
+        json_single_collection = {
+            "id": "S1_L1",
+            "type": "Collection",
+            "links": [
+                {
+                    "rel": "items",
+                    "type": "application/geo+json",
+                    "href": f"{url}/catalog/collections/toto:S1_L1/items",
+                },
+                {
+                    "rel": "parent",
+                    "type": "application/json",
+                    "href": f"{url}/catalog/catalogs/toto",
+                },
+                {
+                    "rel": "root",
+                    "type": "application/json",
+                    "href": f"{url}/catalog/catalogs/toto",
+                },
+                {
+                    "rel": "self",
+                    "type": "application/json",
+                    "href": f"{url}/catalog/collections/toto:S1_L1",
+                },
+                {
+                    "rel": "items",
+                    "href": "http://localhost:8082/catalog/collections/toto:S1_L1/items/",
+                    "type": "application/geo+json",
+                },
+                {
+                    "rel": "license",
+                    "href": "https://creativecommons.org/licenses/publicdomain/",
+                    "title": "public domain",
+                },
+            ],
+            "owner": "toto",
+            "extent": {
+                "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
+                "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
+            },
+            "license": "public-domain",
+            "description": "Some description",
+            "stac_version": "1.0.0",
+        }
+        resp.get(url=url + "/catalog/collections/toto:S1_L1", json=json_single_collection, status=200)
+
+        yield url
+
+
+@pytest.fixture
+def mocked_stac_catalog_url():
+    """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
+    with responses.RequestsMock() as resp:
+        # Mocked URL
+        url = "http://mocked_stac_catalog_url"
+
+        # This is the returned content when calling a real STAC catalog service with:
+        # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
+        json_landing_page = {
+            "type": "Catalog",
+            "id": "stac-fastapi",
+            "title": "stac-fastapi",
+            "description": "stac-fastapi",
+            "stac_version": "1.0.0",
+            "links": [
+                {"rel": "self", "type": "application/json", "href": f"{url}/catalog/"},
+                {"rel": "root", "type": "application/json", "href": f"{url}/catalog/"},
+                {"rel": "data", "type": "application/json", "href": f"{url}/catalog/collections"},
+                {
+                    "rel": "conformance",
+                    "type": "application/json",
+                    "title": "STAC/WFS3 conformance classes implemented by this server",
+                    "href": f"{url}/conformance",
+                },
+                {
+                    "rel": "search",
+                    "type": "application/geo+json",
+                    "title": "STAC search",
+                    "href": f"{url}/catalog/search",
+                    "method": "GET",
+                },
+                {
+                    "rel": "search",
+                    "type": "application/geo+json",
+                    "title": "STAC search",
+                    "href": f"{url}/catalog/search",
+                    "method": "POST",
+                },
+                {
+                    "rel": "child",
+                    "type": "application/json",
+                    "title": "toto_S1_L1",
+                    "href": f"{url}/catalog/collections/toto:S1_L1",
+                },
+                {
+                    "rel": "service-desc",
+                    "type": "application/vnd.oai.openapi+json;version=3.0",
+                    "title": "OpenAPI service description",
+                    "href": f"{url}/api",
+                },
+                {
+                    "rel": "service-doc",
+                    "type": "text/html",
+                    "title": "OpenAPI service documentation",
+                    "href": f"{url}/api.html",
+                },
+            ],
+            "stac_extensions": [],
+        }
+        resp.get(url=url + "/catalog/", json=json_landing_page, status=200)
 
         yield url
