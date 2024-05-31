@@ -35,11 +35,8 @@ from rs_client.rs_client import APIKEY_HEADER, TIMEOUT, RsClient
 
 
 class StacClient(RsClient, Client):
-    """StacClient inherits from pystac_client.Client. The goal of this class is to
+    """StacClient inherits from both rs_client.RsClient and pystac_client.Client. The goal of this class is to
     allow an user to use RS-Server services more easily than calling REST endpoints directly.
-
-    Args:
-        Client : The pystac_client that StacClient inherits from.
     """
 
     ##################
@@ -179,12 +176,12 @@ class StacClient(RsClient, Client):
 
         Args:
             collection (Collection): STAC collection
-            add_public_license (bool) If True, add a public domain license field and link.
+            add_public_license (bool): If True, add a public domain license field and link.
             owner_id (str, optional): Collection owner ID. If missing, we use self.owner_id.
             timeout (int): The timeout duration for the HTTP request.
 
         Returns:
-            JSONResponse: The response of the request.
+            JSONResponse (json): The response of the request.
         """
         full_owner_id = owner_id or self.owner_id
 

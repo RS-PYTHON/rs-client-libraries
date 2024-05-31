@@ -42,10 +42,10 @@ class RsClient:
         rs_server_href (str): RS-Server URL. In local mode, pass None.
         rs_server_api_key (str): API key for RS-Server authentication.
         owner_id (str): ID of the owner of the STAC catalog collections (no special characters allowoed).
-        By default, this is the user login from the keycloak account, associated to the API key.
-        Or, in local mode, this is the local system username.
-        Else, your API Key must give you the rights to read/write on this catalog owner.
-        This owner ID is also used in the RS-Client logging.
+                        By default, this is the user login from the keycloak account, associated to the API key.
+                        Or, in local mode, this is the local system username.
+                        Else, your API Key must give you the rights to read/write on this catalog owner.
+                        This owner ID is also used in the RS-Client logging.
         logger (logging.Logger): Logging instance.
         local_mode (bool): Local mode or hybrid/cluster mode.
         apikey_headers (dict): API key in a dict, ready-to-use in HTTP request headers.
