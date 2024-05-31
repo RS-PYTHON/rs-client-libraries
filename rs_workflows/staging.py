@@ -269,7 +269,7 @@ def filter_unpublished_files(
         rs_client (StacClient): An instance of `StacClient` to interact with the STAC catalog.
         collection_name (str): The name of the collection in which the search is performed.
         files_stac (list of dict): A list of files to be checked for publication. Each file is represented as a
-        dictionary with at least an "id" key.
+            dictionary with at least an "id" key.
 
     Returns:
         list of dict: A list of files that are not yet published in the catalog. Each file is represented as a
