@@ -29,7 +29,7 @@ ADD ./*.whl /tmp/whl
 RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
 
 # Install other useful dependencies for rs-demo in local mode
-RUN pip install boto3
+RUN pip install papermill boto3
 
 # Clean everything
 RUN rm -rf /tmp/whl ~/.cache/pip

@@ -25,8 +25,9 @@ from prefect_dask.task_runners import DaskTaskRunner
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
 from rs_client.stac_client import StacClient
-from rs_common.config import ADGS_STATION, ECadipStation, EDownloadStatus
+from rs_common.config import AUXIP_STATION, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
+from rs_workflows.serialization import RsClientSerialization
 
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
@@ -137,6 +138,8 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-i
         tmp_download_path,
         s3_path,
     ):
+        self.rs_client = None  # don't save this instance
+        self.rs_client_serialization = RsClientSerialization(rs_client)  # save the serialization parameters instead
         self.rs_client: AuxipClient | CadipClient = rs_client
         self.mission: str = mission
         self.tmp_download_path: str = tmp_download_path
@@ -194,7 +197,10 @@ def staging(config: PrefectTaskConfig):
     """
 
     logger = get_prefect_logger("task_dwn")
-    rs_client = config.rs_client
+
+    # Deserialize the RsClient instance
+    rs_client = config.rs_client_serialization.deserialize(logger)
+
     # list with failed files
     failed_files = config.task_files_stac.copy()
 
@@ -204,7 +210,7 @@ def staging(config: PrefectTaskConfig):
     for i, file_stac in enumerate(config.task_files_stac):
         # update the filename to be ingested
         try:
-            rs_client.staging(file_stac["id"], ENDPOINT_TIMEOUT, config.s3_path, config.tmp_download_path)
+            rs_client.staging(file_stac["id"], config.s3_path, config.tmp_download_path, timeout=ENDPOINT_TIMEOUT)
         except RuntimeError as e:
             # TODO: Continue? Stop ?
             logger.exception(f"Could not stage file %s. Exception: {e}")
@@ -222,7 +228,7 @@ def staging(config: PrefectTaskConfig):
             )
             time.sleep(1)
             timeout -= 1
-            status = rs_client.staging_status(file_stac["id"], ENDPOINT_TIMEOUT)
+            status = rs_client.staging_status(file_stac["id"], timeout=ENDPOINT_TIMEOUT)
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...", file_stac["id"])
             # TODO: either move the code from filter_unpublished_files to RsClient
@@ -346,7 +352,7 @@ def create_collection_name(mission: str, station: str) -> str:
         RuntimeError: If the provided station type is not supported.
 
     """
-    if station == ADGS_STATION:
+    if station == AUXIP_STATION:
         return f"{mission}_aux"
     # check CADIP
     try:
@@ -412,15 +418,16 @@ def staging_flow(config: PrefectFlowConfig):
     logger = get_prefect_logger("flow_dwn")
     logger.info(f"The staging flow is starting. Received workers:{config.max_workers}")
     try:
-        rs_client = config.rs_client
+        # Deserialize the RsClient instance
+        rs_client = config.rs_client_serialization.deserialize(logger)
 
         # get the list with files from the search endpoint
         try:
             files_stac = rs_client.search_stations(
                 config.start_datetime,
                 config.stop_datetime,
-                SEARCH_ENDPOINT_TIMEOUT,
                 config.limit,
+                timeout=SEARCH_ENDPOINT_TIMEOUT,
             )
         except RuntimeError as e:
             logger.exception(f"Unable to get the list with files for staging: {e}")
@@ -459,7 +466,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
         for files_stac in tasks_files_stac:
             staging.submit(
                 PrefectTaskConfig(
-                    config.rs_client,
+                    rs_client,
                     config.mission,
                     config.tmp_download_path,
                     config.s3_path,

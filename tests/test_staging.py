@@ -40,8 +40,9 @@ from rs_workflows.staging import (
 
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 MISSION_NAME = "s1"
+API_KEY = "dummy-api-key"
 
-ADGS = "ADGS"
+AUXIP = "AUXIP"
 CADIP = "CADIP"
 
 endpoints = {
@@ -50,7 +51,7 @@ endpoints = {
         "download": "/cadip/CADIP/cadu",
         "status": "/cadip/CADIP/cadu/status",
     },
-    "ADGS": {"search": "/adgs/aux/search", "download": "/adgs/aux", "status": "/adgs/aux/status"},
+    "AUXIP": {"search": "/adgs/aux/search", "download": "/adgs/aux", "status": "/adgs/aux/status"},
 }
 
 
@@ -60,14 +61,14 @@ endpoints = {
     "filename, station",
     [
         ("CADU_PRODUCT_TEST.tst", CADIP),
-        ("ADGS_PRODUCT_TEST.tst", ADGS),
+        ("ADGS_PRODUCT_TEST.tst", AUXIP),
     ],
 )
 def test_valid_staging_status(filename, station):
     """Unit test for the staging_status function.
 
     This test validates the behavior of the staging_status function under a valid scenario
-    for different station types (CADIP, ADGS....).
+    for different station types (CADIP, AUXIP....).
 
     Args:
         filename (str): The name of the file for which the downloading status is to be checked.
@@ -84,10 +85,10 @@ def test_valid_staging_status(filename, station):
     timeout = 3  # seconds
 
     rs_client: AuxipClient | CadipClient | None = None
-    if station == ADGS:
-        rs_client = AuxipClient(href, None, "test_user", logger)
+    if station == AUXIP:
+        rs_client = AuxipClient(href, API_KEY, "test_user", logger)
     else:
-        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, logger)
+        rs_client = CadipClient(href, API_KEY, "test_user", ECadipStation.CADIP, logger)
     endpoint = href + endpoints[station]["status"]
     json_response = {"name": filename, "status": EDownloadStatus.NOT_STARTED}
 
@@ -98,7 +99,7 @@ def test_valid_staging_status(filename, station):
         status=200,
     )
 
-    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.NOT_STARTED
+    assert rs_client.staging_status(filename, timeout=timeout) == EDownloadStatus.NOT_STARTED
 
     json_response["status"] = EDownloadStatus.IN_PROGRESS
     responses.add(
@@ -107,7 +108,7 @@ def test_valid_staging_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.IN_PROGRESS
+    assert rs_client.staging_status(filename, timeout=timeout) == EDownloadStatus.IN_PROGRESS
 
     json_response["status"] = EDownloadStatus.DONE
     responses.add(
@@ -116,7 +117,7 @@ def test_valid_staging_status(filename, station):
         json=json_response,
         status=200,
     )
-    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.DONE
+    assert rs_client.staging_status(filename, timeout=timeout) == EDownloadStatus.DONE
 
 
 @pytest.mark.unit
@@ -125,7 +126,7 @@ def test_valid_staging_status(filename, station):
     "filename, station",
     [
         ("CADU_PRODUCT_TEST.tst", CADIP),
-        ("ADGS_PRODUCT_TEST.tst", ADGS),
+        ("ADGS_PRODUCT_TEST.tst", AUXIP),
     ],
 )
 def test_invalid_staging_status(filename, station):
@@ -149,10 +150,10 @@ def test_invalid_staging_status(filename, station):
     timeout = 3  # seconds
 
     rs_client: AuxipClient | CadipClient | None = None
-    if station == ADGS:
-        rs_client = AuxipClient(href, None, "test_user", logger)
+    if station == AUXIP:
+        rs_client = AuxipClient(href, API_KEY, "test_user", logger)
     else:
-        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, logger)
+        rs_client = CadipClient(href, API_KEY, "test_user", ECadipStation.CADIP, logger)
     endpoint = href + endpoints[station]["status"]
 
     json_response = {"detail": "Not Found"}
@@ -163,7 +164,7 @@ def test_invalid_staging_status(filename, station):
         status=404,
     )
 
-    assert rs_client.staging_status(filename, timeout) == EDownloadStatus.FAILED
+    assert rs_client.staging_status(filename, timeout=timeout) == EDownloadStatus.FAILED
 
 
 @pytest.mark.unit
@@ -171,8 +172,8 @@ def test_invalid_staging_status(filename, station):
 @pytest.mark.parametrize(
     "response_is_valid, station",
     [
-        (True, "ADGS"),
-        (False, "ADGS"),
+        (True, "AUXIP"),
+        (False, "AUXIP"),
         (True, "CADIP"),
         (False, "CADIP"),
     ],
@@ -196,7 +197,7 @@ def test_update_stac_catalog(response_is_valid, station):
     logger = Logging.default(__name__)
     href = "http://127.0.0.1:5000"
 
-    rs_client = RsClient(href, None, "testUser", logger).get_stac_client()
+    rs_client = RsClient(href, API_KEY, "testUser", logger).get_stac_client()
 
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
@@ -218,13 +219,12 @@ def test_update_stac_catalog(response_is_valid, station):
 
 
 @pytest.mark.unit
-@responses.activate
 @pytest.mark.parametrize(
     "station, mock_files_in_catalog",
     [
-        ("ADGS", {"numberReturned": 0, "features": []}),
+        ("AUXIP", {"numberReturned": 0, "features": []}),
         (
-            "ADGS",
+            "AUXIP",
             {
                 "numberReturned": 1,
                 "features": [
@@ -235,7 +235,7 @@ def test_update_stac_catalog(response_is_valid, station):
             },
         ),
         (
-            "ADGS",
+            "AUXIP",
             {
                 "numberReturned": 2,
                 "features": [
@@ -276,7 +276,7 @@ def test_update_stac_catalog(response_is_valid, station):
         ),
     ],
 )
-def test_filter_unpublished_files(station, mock_files_in_catalog):
+def test_filter_unpublished_files(station, mock_files_in_catalog, mocked_stac_catalog_url):
     """Test the filter_unpublished_files function.
 
     Args:
@@ -292,9 +292,9 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     """
 
     logger = Logging.default(__name__)
-    href = "http://127.0.0.1:5000"
+    href = mocked_stac_catalog_url
 
-    rs_client = RsClient(href, None, "testUser", logger).get_stac_client()
+    rs_client = RsClient(href, API_KEY, "testUser", logger).get_stac_client()
 
     files_stac_path = RESOURCES / "files_stac.json"
     with open(files_stac_path, encoding="utf-8") as files_stac_f:
@@ -314,29 +314,30 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     # mock the publish to catalog endpoint
     endpoint = f"{href}/catalog/search?" + urllib.parse.urlencode(request_params)
 
-    responses.add(
-        responses.GET,
-        endpoint,
-        json=mock_files_in_catalog,
-        status=200,
-    )
-    logger = Logging.default(__name__)
+    with responses.RequestsMock() as resp:
+        resp.add(
+            responses.GET,
+            endpoint,
+            json=mock_files_in_catalog,
+            status=200,
+        )
+        logger = Logging.default(__name__)
 
-    files_stac = filter_unpublished_files.fn(
-        rs_client,
-        collection_name,
-        files_stac,
-    )
+        files_stac = filter_unpublished_files.fn(
+            rs_client,
+            collection_name,
+            files_stac,
+        )
 
-    logger.debug(f"AFTER filtering ! FS = {files_stac} || ex = {mock_files_in_catalog}")
+        logger.debug(f"AFTER filtering ! FS = {files_stac} || ex = {mock_files_in_catalog}")
 
-    assert len(files_stac) == initial_len - mock_files_in_catalog["numberReturned"]
-    file_ids = []
-    for fs in files_stac:
-        file_ids.append(fs["id"])
+        assert len(files_stac) == initial_len - mock_files_in_catalog["numberReturned"]
+        file_ids = []
+        for fs in files_stac:
+            file_ids.append(fs["id"])
 
-    for fn in mock_files_in_catalog["features"]:
-        assert fn["id"] not in file_ids
+        for fn in mock_files_in_catalog["features"]:
+            assert fn["id"] not in file_ids
 
 
 @pytest.mark.unit
@@ -345,7 +346,7 @@ def test_filter_unpublished_files(station, mock_files_in_catalog):
     "station",
     [
         CADIP,
-        ADGS,
+        AUXIP,
     ],
 )
 def test_ok_staging(station):  # pylint: disable=too-many-locals
@@ -399,10 +400,10 @@ def test_ok_staging(station):  # pylint: disable=too-many-locals
         )
 
     rs_client: AuxipClient | CadipClient | None = None
-    if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", logger)
+    if station == AUXIP:
+        rs_client = AuxipClient(href, API_KEY, "testUser", logger)
     else:
-        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, logger)
+        rs_client = CadipClient(href, API_KEY, "testUser", ECadipStation.CADIP, logger)
 
     # mock the publish to catalog endpoint
     collection_name = create_collection_name(MISSION_NAME, rs_client.station_name)
@@ -430,7 +431,7 @@ def test_ok_staging(station):  # pylint: disable=too-many-locals
     "station",
     [
         CADIP,
-        ADGS,
+        AUXIP,
     ],
 )
 def test_nok_staging(station):  # pylint: disable=too-many-locals
@@ -473,10 +474,10 @@ def test_nok_staging(station):  # pylint: disable=too-many-locals
         )
 
     rs_client: AuxipClient | CadipClient | None = None
-    if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", logger)
+    if station == AUXIP:
+        rs_client = AuxipClient(href, API_KEY, "testUser", logger)
     else:
-        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, logger)
+        rs_client = CadipClient(href, API_KEY, "testUser", ECadipStation.CADIP, logger)
 
     # mock the publish to catalog endpoint
     collection_name = create_collection_name(MISSION_NAME, rs_client.station_name)
@@ -504,7 +505,7 @@ def test_nok_staging(station):  # pylint: disable=too-many-locals
     "station",
     [
         CADIP,
-        ADGS,
+        AUXIP,
     ],
 )
 def test_search_stations(station):
@@ -532,10 +533,10 @@ def test_search_stations(station):
     timeout = 3  # seconds
 
     rs_client: AuxipClient | CadipClient | None = None
-    if station == ADGS:
-        rs_client = AuxipClient(href, None, "test_user", logger)
+    if station == AUXIP:
+        rs_client = AuxipClient(href, API_KEY, "test_user", logger)
     else:
-        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, logger)
+        rs_client = CadipClient(href, API_KEY, "test_user", ECadipStation.CADIP, logger)
 
     # mock the search endpoint
     endpoint = href + endpoints[station]["search"]
@@ -551,7 +552,7 @@ def test_search_stations(station):
     search_response = rs_client.search_stations(
         datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
         datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
-        timeout,
+        timeout=timeout,
     )
     assert len(search_response) == 2
     del files_stac[station]["features"][1]
@@ -565,8 +566,8 @@ def test_search_stations(station):
     search_response = rs_client.search_stations(
         datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
         datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
-        timeout,
         1,
+        timeout=timeout,
     )
     assert len(search_response) == 1
 
@@ -577,7 +578,7 @@ def test_search_stations(station):
     "station",
     [
         CADIP,
-        ADGS,
+        AUXIP,
     ],
 )
 def test_err_ret_search_stations(station):
@@ -608,10 +609,10 @@ def test_err_ret_search_stations(station):
     timeout = 3  # seconds
 
     rs_client: AuxipClient | CadipClient | None = None
-    if station == ADGS:
-        rs_client = AuxipClient(href, None, "test_user", logger)
+    if station == AUXIP:
+        rs_client = AuxipClient(href, API_KEY, "test_user", logger)
     else:
-        rs_client = CadipClient(href, None, "test_user", ECadipStation.CADIP, logger)
+        rs_client = CadipClient(href, API_KEY, "test_user", ECadipStation.CADIP, logger)
 
     # mock the search endpoint
     endpoint = href + endpoints[station]["search"]
@@ -627,8 +628,8 @@ def test_err_ret_search_stations(station):
     search_response = rs_client.search_stations(
         datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
         datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
-        timeout,
         2,
+        timeout=timeout,
     )
     assert len(search_response) == 0
 
@@ -647,8 +648,8 @@ def test_err_ret_search_stations(station):
         search_response = rs_client.search_stations(
             datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
             datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
-            timeout,
             2,
+            timeout=timeout,
         )
     assert "Wrong format of search endpoint answer" in str(runtime_exception.value)
 
@@ -659,7 +660,7 @@ def test_err_ret_search_stations(station):
     "station",
     [
         CADIP,
-        ADGS,
+        AUXIP,
     ],
 )
 def test_wrong_url_search_stations(station):
@@ -687,10 +688,10 @@ def test_wrong_url_search_stations(station):
     timeout = 3  # seconds
 
     rs_client: AuxipClient | CadipClient | None = None
-    if station == ADGS:
-        rs_client = AuxipClient(bad_href, None, "testUser", logger)
+    if station == AUXIP:
+        rs_client = AuxipClient(bad_href, API_KEY, "testUser", logger)
     else:
-        rs_client = CadipClient(bad_href, None, "testUser", ECadipStation.CADIP, logger)
+        rs_client = CadipClient(bad_href, API_KEY, "testUser", ECadipStation.CADIP, logger)
 
     # mock the search endpoint
     endpoint = href + endpoints[station]["search"]
@@ -708,8 +709,8 @@ def test_wrong_url_search_stations(station):
         rs_client.search_stations(
             datetime.strptime("2014-01-01T00:00:00Z", DATETIME_FORMAT),
             datetime.strptime("2024-02-02T23:59:59Z", DATETIME_FORMAT),
-            timeout,
             2,
+            timeout=timeout,
         )
     assert "Could not get the response from the station search endpoint" in str(runtime_exception.value)
 
@@ -718,7 +719,7 @@ def test_wrong_url_search_stations(station):
 @responses.activate
 @pytest.mark.parametrize(
     "station",
-    ["CADIP", "ADGS", "UNKNOWN"],
+    ["CADIP", "AUXIP", "UNKNOWN"],
 )
 def test_create_collection_name(station):
     """Unit test for the create_collection_name function.
@@ -743,7 +744,9 @@ def test_create_collection_name(station):
             create_collection_name(MISSION_NAME, station)
         assert "Unknown station" in str(runtime_exception.value)
     else:
-        assert create_collection_name(MISSION_NAME, station) == MISSION_NAME + "_aux" if station == "ADGS" else "_chunk"
+        assert (
+            create_collection_name(MISSION_NAME, station) == MISSION_NAME + "_aux" if station == "AUXIP" else "_chunk"
+        )
 
 
 @pytest.mark.unit
@@ -752,7 +755,7 @@ def test_create_collection_name(station):
     "station",
     [
         "CADIP",
-        "ADGS",
+        "AUXIP",
     ],
 )
 def test_staging_flow(station):  # pylint: disable=too-many-locals
@@ -797,7 +800,7 @@ def test_staging_flow(station):  # pylint: disable=too-many-locals
     for fs in files_stac[station]["features"]:
         file_ids.append(fs["id"])
     # set the collection name
-    collection_name = "s1_aux" if station == "ADGS" else "s1_chunk"
+    collection_name = "s1_aux" if station == "AUXIP" else "s1_chunk"
     request_params = {"collection": collection_name, "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
     endpoint = endpoint + urllib.parse.urlencode(request_params)
     responses.add(
@@ -830,10 +833,10 @@ def test_staging_flow(station):  # pylint: disable=too-many-locals
         )
 
     rs_client: AuxipClient | CadipClient | None = None
-    if station == ADGS:
-        rs_client = AuxipClient(href, None, "testUser", logger)
+    if station == AUXIP:
+        rs_client = AuxipClient(href, API_KEY, "testUser", logger)
     else:
-        rs_client = CadipClient(href, None, "testUser", ECadipStation.CADIP, logger)
+        rs_client = CadipClient(href, API_KEY, "testUser", ECadipStation.CADIP, logger)
 
     flow_config = PrefectFlowConfig(
         rs_client,
