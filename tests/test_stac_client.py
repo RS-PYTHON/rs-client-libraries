@@ -14,10 +14,11 @@
 
 """All tests for the Stac Client."""
 
+from datetime import datetime
+
 from rs_client.rs_client import RsClient
 from rs_client.stac_client import StacClient
-from pystac import CatalogType, Collection, Item, Link, RelType, Extent, SpatialExtent, TemporalExtent
-from datetime import datetime
+from pystac import Collection, Item, Extent, SpatialExtent, TemporalExtent
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = "OWNER_ID"
@@ -112,14 +113,12 @@ def test_delete_collection_stac_client(mocked_stac_catalog_url):  # pylint: disa
     # Delete a collection #
     #######################
 
-    response = catalog.delete_collection(collection_id="S1_L1", owner_id="toto")  # default owner_id is 'pyteam'
+    response = catalog.remove_collection(collection_id="S1_L1", owner_id="toto")  # default owner_id is 'pyteam'
     assert response.status_code == 200
 
 
-def test_add_item_stac_client(mocked_stac_catalog_url):
+def test_add_item_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
     catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
-
-    collection = catalog.get_collection(collection_id="S1_L1", owner_id="toto")
 
     # Add a new item from toto:S1_L1 collection
 
@@ -148,3 +147,14 @@ def test_add_item_stac_client(mocked_stac_catalog_url):
     response = catalog.add_item(collection_id="S1_L1", item=item, owner_id="toto")
 
     print(response)
+
+
+def test_remove_item_stac_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+
+    ##################
+    # Delete an item #
+    ##################
+
+    response = catalog.remove_item("S1_L1", "item_0", "toto")
+    assert response.status_code == 200

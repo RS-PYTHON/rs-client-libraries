@@ -311,13 +311,13 @@ def mocked_stac_catalog_url():
         }
         resp.get(url=url + "/catalog/collections/toto:S1_L1/items", json=json_single_item, status=200)
 
-        json_post_collection = {"status": "200"}
-        resp.add("POST", url=url + "/catalog/collections", json=json_post_collection, status=200)
+        json_status = {"status": "200"}
+        resp.add("POST", url=url + "/catalog/collections", json=json_status, status=200)
 
-        json_delete_collection = {"status": "200"}
-        resp.add("DELETE", url=url + "/catalog/collections/toto:S1_L1", json=json_delete_collection, status=200)
+        resp.add("DELETE", url=url + "/catalog/collections/toto:S1_L1", json=json_status, status=200)
 
-        json_add_item = {"status": "200"}
-        resp.add("POST", url=url + "/catalog/collections/toto:S1_L1/items", json=json_add_item, status=200)
+        resp.add("POST", url=url + "/catalog/collections/toto:S1_L1/items", json=json_status, status=200)
+
+        resp.add("DELETE", url=url + "/catalog/collections/toto:S1_L1/items/item_0")
 
         yield url
