@@ -185,6 +185,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         Returns:
             JSONResponse: The response of the request.
         """
+
         full_owner_id = owner_id or self.owner_id
 
         # Use owner_id:collection_id instead of just the collection ID, before adding the links,
@@ -220,7 +221,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         # Check that the collection is compliant to STAC
         collection.validate_all()
 
-        # Post the item to the catalog
+        # Post the collection to the catalog
         return requests.post(
             f"{self.href_catalog}/catalog/collections",
             json=collection.to_dict(),

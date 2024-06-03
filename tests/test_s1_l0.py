@@ -23,6 +23,7 @@ import pytest
 import responses
 import yaml
 
+from rs_client.rs_client import RsClient
 from rs_client.stac_client import StacClient
 from rs_common.logging import Logging
 from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
@@ -43,6 +44,8 @@ from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
 
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 API_KEY = "dummy-api-key"
+RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
+OWNER_ID = "OWNER_ID"
 
 
 @pytest.mark.unit
@@ -291,17 +294,7 @@ def test_create_cql2_filter():
     )
 
 
-@pytest.mark.unit
-@responses.activate
-@pytest.mark.parametrize(
-    "endpoint, status",
-    [
-        ("http://127.0.0.1:5000", "200"),
-        ("http://127.0.0.1:5000", "404"),
-        ("http://bad_endpoint", "None"),
-    ],
-)
-def test_get_cadip_catalog_data(endpoint, status):
+def test_get_cadip_catalog_data(mocked_stac_catalog_search_cadip):
     """Test for the get_cadip_catalog_data function.
 
     This test function mocks API responses and verifies the behavior of the
@@ -318,85 +311,41 @@ def test_get_cadip_catalog_data(endpoint, status):
     with a 200 status code. Otherwise, it asserts that the function returns None.
 
     """
-    username = "TestUser"
     collection = "s1_test"
     cadip_session_id = "S1A_20200105072204051312"
     cadip_catalog = RESOURCES / "cadip_catalog.json"
     with open(cadip_catalog, encoding="utf-8") as cadip_catalog_f:
         cadip_catalog = json.loads(cadip_catalog_f.read())
-    if "bad_endpoint" not in endpoint:
-        responses.add(
-            responses.POST,
-            endpoint + "/catalog/search",
-            json=cadip_catalog,
-            status=status,
-        )
-
-    rs_client = StacClient.open(endpoint, API_KEY, username)
+    rs_client: StacClient = RsClient(mocked_stac_catalog_search_cadip, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
     cadip_res = get_cadip_catalog_data.fn(rs_client, collection, cadip_session_id)
-
-    if "bad_endpoint" not in endpoint:
-        # print(cadip_res)
-        if int(status) == 200:
-            assert cadip_res == cadip_catalog
-        else:
-            assert cadip_res is None
-    else:
-        assert cadip_res is None
+    assert cadip_res == cadip_catalog["features"]
 
 
-@pytest.mark.unit
-@responses.activate
-@pytest.mark.parametrize(
-    "endpoint, status",
-    [
-        ("http://127.0.0.1:5000", "200"),
-        ("http://127.0.0.1:5000", "404"),
-        ("http://bad_endpoint", "None"),
-    ],
-)
-def test_get_adgs_catalog_data(endpoint, status):
+def test_get_adgs_catalog_data(mocked_stac_catalog_search_adgs):
     """Test for the get_adgs_catalog_data function.
 
     This test function mocks API responses and verifies the behavior of the
     get_adgs_catalog_data function under different scenarios.
 
     Args:
-        endpoint (str): The URL of the endpoint to mock API requests.
-        status (str): The HTTP status code to mock API responses.
+        mocked_stac_catalog (str): the mocker for the landing page and search endpoint.
 
     The function loads an expected ADGS catalog data from a file and mocks
     the API response based on the provided endpoint and status. It then calls
     the get_adgs_catalog_data function with the specified parameters and
     asserts that it returns the expected catalog data when the endpoint responds
-    with a 200 status code. Otherwise, it asserts that the function returns None.
-
+    with a 200 status code.
     """
-    username = "TestUser"
     collection = "s1_test"
     files_list = ["ADGS1.EOF", "ADGS2.EOF"]
     adgs_catalog = RESOURCES / "adgs_catalog.json"
     with open(adgs_catalog, encoding="utf-8") as adgs_catalog_f:
         adgs_catalog = json.loads(adgs_catalog_f.read())
-    if "bad_endpoint" not in endpoint:
-        responses.add(
-            responses.GET,
-            endpoint + "/catalog/search",
-            json=adgs_catalog,
-            status=status,
-        )
 
-    rs_client = StacClient.open(endpoint, API_KEY, username)
+    rs_client: StacClient = RsClient(mocked_stac_catalog_search_adgs, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
     adgs_res = get_adgs_catalog_data.fn(rs_client, collection, files_list)
 
-    if "bad_endpoint" not in endpoint:
-        print(adgs_res)
-        if int(status) == 200:
-            assert adgs_res == adgs_catalog
-        else:
-            assert adgs_res is None
-    else:
-        assert adgs_res is None
+    assert adgs_res == adgs_catalog["features"]
 
 
 @pytest.mark.unit
@@ -464,6 +413,78 @@ def test_s1_l0_flow(mocker):  # pylint: disable=too-many-locals
         url_gen + "/catalog/collections",
         status=200,
     )
+    json_landing_page = {
+        "type": "Catalog",
+        "id": "stac-fastapi",
+        "title": "stac-fastapi",
+        "description": "stac-fastapi",
+        "stac_version": "1.0.0",
+        "conformsTo": [
+            "https://api.stacspec.org/v1.0.0-rc.3/ogcapi-features/extensions/transaction",
+            "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/oas30",
+            "http://www.opengis.net/spec/ogcapi-features-3/1.0/conf/features-filter",
+            "http://www.opengis.net/spec/cql2/1.0/conf/cql2-json",
+            "https://api.stacspec.org/v1.0.0/item-search#sort",
+            "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/core",
+            "https://api.stacspec.org/v1.0.0/ogcapi-features",
+            "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/geojson",
+            "https://api.stacspec.org/v1.0.0-rc.2/item-search#context",
+            "http://www.opengis.net/spec/cql2/1.0/conf/basic-cql2",
+            "https://api.stacspec.org/v1.0.0/collections",
+            "https://api.stacspec.org/v1.0.0/item-search",
+            "https://api.stacspec.org/v1.0.0/item-search#query",
+            "https://api.stacspec.org/v1.0.0/item-search#fields",
+            "https://api.stacspec.org/v1.0.0/core",
+            "http://www.opengis.net/spec/ogcapi-features-3/1.0/conf/filter",
+            "https://api.stacspec.org/v1.0.0-rc.2/item-search#filter",
+            "http://www.opengis.net/spec/cql2/1.0/conf/cql2-text",
+        ],
+        "links": [
+            {"rel": "self", "type": "application/json", "href": f"{url_gen}/catalog/"},
+            {"rel": "root", "type": "application/json", "href": f"{url_gen}/catalog/"},
+            {"rel": "data", "type": "application/json", "href": f"{url_gen}/catalog/collections"},
+            {
+                "rel": "conformance",
+                "type": "application/json",
+                "title": "STAC/WFS3 conformance classes implemented by this server",
+                "href": f"{url_gen}/conformance",
+            },
+            {
+                "rel": "search",
+                "type": "application/geo+json",
+                "title": "STAC search",
+                "href": f"{url_gen}/catalog/search",
+                "method": "GET",
+            },
+            {
+                "rel": "search",
+                "type": "application/geo+json",
+                "title": "STAC search",
+                "href": f"{url_gen}/catalog/search",
+                "method": "POST",
+            },
+            {
+                "rel": "child",
+                "type": "application/json",
+                "title": "toto_S1_L1",
+                "href": f"{url_gen}/catalog/collections/toto:S1_L1",
+            },
+            {
+                "rel": "service-desc",
+                "type": "application/vnd.oai.openapi+json;version=3.0",
+                "title": "OpenAPI service description",
+                "href": f"{url_gen}/api",
+            },
+            {
+                "rel": "service-doc",
+                "type": "text/html",
+                "title": "OpenAPI service documentation",
+                "href": f"{url_gen}/api.html",
+            },
+        ],
+        "stac_extensions": [],
+    }
+    responses.get(url=url_gen + "/catalog/", json=json_landing_page, status=200)
 
     mocker.patch(
         "rs_workflows.staging.update_stac_catalog",
