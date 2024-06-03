@@ -102,34 +102,26 @@ def test_start_dpr(endpoint, status):
     "cadip_files, , adgs_files, product_types, temp_s3_path",
     [
         (
-            {
-                "type": "FeatureCollection",
-                "context": {"limit": 1000, "returned": 60},
-                "features": [
-                    {
-                        "id": "CADU.raw",
-                        "assets": {
-                            "file": {
-                                "alternate": {"s3": {"href": "s3://test-bucket/CADU.raw"}},
-                            },
+            [
+                {
+                    "id": "CADU.raw",
+                    "assets": {
+                        "file": {
+                            "alternate": {"s3": {"href": "s3://test-bucket/CADU.raw"}},
                         },
                     },
-                ],
-            },
-            {
-                "type": "FeatureCollection",
-                "context": {"limit": 1000, "returned": 60},
-                "features": [
-                    {
-                        "id": "AUX.EOF",
-                        "assets": {
-                            "file": {
-                                "alternate": {"s3": {"href": "s3://test-bucket/AUX.EOF"}},
-                            },
+                },
+            ],
+            [
+                {
+                    "id": "AUX.EOF",
+                    "assets": {
+                        "file": {
+                            "alternate": {"s3": {"href": "s3://test-bucket/AUX.EOF"}},
                         },
                     },
-                ],
-            },
+                },
+            ],
             ["S1SEWRAW"],
             "s3://test-bucket/PRODUCTS/",
         ),

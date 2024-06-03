@@ -113,8 +113,8 @@ def build_eopf_triggering_yaml(cadip_files: dict, adgs_files: dict, product_type
         return None
 
     # Extract paths for CADIP and ADGS files
-    cadip_paths = [file_prop["assets"]["file"]["alternate"]["s3"]["href"] for file_prop in cadip_files["features"]]
-    adgs_paths = [file_prop["assets"]["file"]["alternate"]["s3"]["href"] for file_prop in adgs_files["features"]]
+    cadip_paths = [file_prop["assets"]["file"]["alternate"]["s3"]["href"] for file_prop in cadip_files]
+    adgs_paths = [file_prop["assets"]["file"]["alternate"]["s3"]["href"] for file_prop in adgs_files]
     # create the dictionaries to insert within the yaml template
 
     # Update the YAML template with inputs and I/O products
