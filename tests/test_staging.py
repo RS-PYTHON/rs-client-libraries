@@ -1269,12 +1269,7 @@ def test_staging_flow(station):  # pylint: disable=too-many-locals
     # set the collection name
     collection_name = "s1_aux" if station == "AUXIP" else "s1_chunk"
     request_params = {"collection": collection_name, "ids": ",".join(file_ids), "filter": "owner_id='testUser'"}
-    endpoint = endpoint + urllib.parse.urlencode(request_params)
-    responses.add(
-        responses.GET,
-        endpoint,
-        status=200,
-    )
+    responses.add(responses.POST, endpoint, status=200, json=request_params)
 
     for fn in file_ids:
         # mock the status endpoint
