@@ -39,6 +39,7 @@ from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     s1_l0_flow,
     start_dpr,
 )
+from tests import common
 
 # from prefect.testing.utilities import prefect_test_harness
 
@@ -405,77 +406,7 @@ def test_s1_l0_flow(mocker):  # pylint: disable=too-many-locals
         url_gen + "/catalog/collections",
         status=200,
     )
-    json_landing_page = {
-        "type": "Catalog",
-        "id": "stac-fastapi",
-        "title": "stac-fastapi",
-        "description": "stac-fastapi",
-        "stac_version": "1.0.0",
-        "conformsTo": [
-            "https://api.stacspec.org/v1.0.0-rc.3/ogcapi-features/extensions/transaction",
-            "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/oas30",
-            "http://www.opengis.net/spec/ogcapi-features-3/1.0/conf/features-filter",
-            "http://www.opengis.net/spec/cql2/1.0/conf/cql2-json",
-            "https://api.stacspec.org/v1.0.0/item-search#sort",
-            "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/core",
-            "https://api.stacspec.org/v1.0.0/ogcapi-features",
-            "http://www.opengis.net/spec/ogcapi-features-1/1.0/conf/geojson",
-            "https://api.stacspec.org/v1.0.0-rc.2/item-search#context",
-            "http://www.opengis.net/spec/cql2/1.0/conf/basic-cql2",
-            "https://api.stacspec.org/v1.0.0/collections",
-            "https://api.stacspec.org/v1.0.0/item-search",
-            "https://api.stacspec.org/v1.0.0/item-search#query",
-            "https://api.stacspec.org/v1.0.0/item-search#fields",
-            "https://api.stacspec.org/v1.0.0/core",
-            "http://www.opengis.net/spec/ogcapi-features-3/1.0/conf/filter",
-            "https://api.stacspec.org/v1.0.0-rc.2/item-search#filter",
-            "http://www.opengis.net/spec/cql2/1.0/conf/cql2-text",
-        ],
-        "links": [
-            {"rel": "self", "type": "application/json", "href": f"{url_gen}/catalog/"},
-            {"rel": "root", "type": "application/json", "href": f"{url_gen}/catalog/"},
-            {"rel": "data", "type": "application/json", "href": f"{url_gen}/catalog/collections"},
-            {
-                "rel": "conformance",
-                "type": "application/json",
-                "title": "STAC/WFS3 conformance classes implemented by this server",
-                "href": f"{url_gen}/conformance",
-            },
-            {
-                "rel": "search",
-                "type": "application/geo+json",
-                "title": "STAC search",
-                "href": f"{url_gen}/catalog/search",
-                "method": "GET",
-            },
-            {
-                "rel": "search",
-                "type": "application/geo+json",
-                "title": "STAC search",
-                "href": f"{url_gen}/catalog/search",
-                "method": "POST",
-            },
-            {
-                "rel": "child",
-                "type": "application/json",
-                "title": "toto_S1_L1",
-                "href": f"{url_gen}/catalog/collections/toto:S1_L1",
-            },
-            {
-                "rel": "service-desc",
-                "type": "application/vnd.oai.openapi+json;version=3.0",
-                "title": "OpenAPI service description",
-                "href": f"{url_gen}/api",
-            },
-            {
-                "rel": "service-doc",
-                "type": "text/html",
-                "title": "OpenAPI service documentation",
-                "href": f"{url_gen}/api.html",
-            },
-        ],
-        "stac_extensions": [],
-    }
+    json_landing_page = common.json_landing_page(url_gen, "toto:S1_L1")
     responses.get(url=url_gen + "/catalog/", json=json_landing_page, status=200)
 
     mocker.patch(
