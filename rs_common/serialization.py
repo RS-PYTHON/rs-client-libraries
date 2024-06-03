@@ -23,7 +23,7 @@ from rs_client.stac_client import StacClient
 from rs_common.config import ECadipStation
 
 
-class RsClientSerialization:
+class RsClientSerialization:  # pylint: disable=too-few-public-methods
     """
     We can't pass a RsClient instance to the workflow because it causes (de-)serialization issues.
     So instead we pass the instance parameters, that will be used to recreate a new instance

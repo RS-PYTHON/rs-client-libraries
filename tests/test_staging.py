@@ -276,7 +276,11 @@ def test_update_stac_catalog(response_is_valid, station):
         ),
     ],
 )
-def test_filter_unpublished_files(station, mock_files_in_catalog, mocked_stac_catalog_url):
+def test_filter_unpublished_files(  # pylint: disable=too-many-locals
+    station,
+    mock_files_in_catalog,
+    mocked_stac_catalog_url,
+):
     """Test the filter_unpublished_files function.
 
     Args:

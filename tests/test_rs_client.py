@@ -35,23 +35,27 @@ CADIP_STATION = ECadipStation.CADIP
 PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 
-@pytest.fixture
-def generic_rs_client(mocked_stac_catalog_url):
+@pytest.fixture(name="generic_rs_client")
+def generic_rs_client_(mocked_stac_catalog_url):
+    """Return a generic RsClient instance for testing."""
     yield RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID)  # will be used to test the StacClient
 
 
-@pytest.fixture
-def auxip_client(generic_rs_client):
+@pytest.fixture(name="auxip_client")
+def auxip_client_(generic_rs_client):
+    """Return a generic AuxipClient instance for testing."""
     yield generic_rs_client.get_auxip_client()
 
 
-@pytest.fixture
-def cadip_client(generic_rs_client):
+@pytest.fixture(name="cadip_client")
+def cadip_client_(generic_rs_client):
+    """Return a generic CadipClient instance for testing."""
     yield generic_rs_client.get_cadip_client(CADIP_STATION)
 
 
-@pytest.fixture
-def stac_client(generic_rs_client):
+@pytest.fixture(name="stac_client")
+def stac_client_(generic_rs_client):
+    """Return a generic StacClient instance for testing."""
     yield generic_rs_client.get_stac_client()
 
 

@@ -34,7 +34,7 @@ from starlette.responses import JSONResponse
 from rs_client.rs_client import APIKEY_HEADER, TIMEOUT, RsClient
 
 
-class StacClient(RsClient, Client):
+class StacClient(RsClient, Client):  # pylint: disable=too-many-ancestors
     """StacClient inherits from pystac_client.Client. The goal of this class is to
     allow an user to use RS-Server services more easily than calling REST endpoints directly.
 
@@ -46,7 +46,7 @@ class StacClient(RsClient, Client):
     # Initialisation #
     ##################
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments,super-init-not-called # super-init is called in .open(...)
         self,
         id: str,  # pylint: disable=redefined-builtin
         description: str,
@@ -143,7 +143,7 @@ class StacClient(RsClient, Client):
     @staticmethod
     def __href_catalog(rs_server_href) -> str:
         if from_env := os.getenv("RSPY_HOST_CATALOG", None):
-            return from_env
+            return from_env.rstrip("/")
         if not rs_server_href:
             raise RuntimeError("RS-Server URL is undefined")
         return rs_server_href.rstrip("/")
@@ -261,7 +261,7 @@ class StacClient(RsClient, Client):
             timeout=timeout,
         )
 
-    def add_item(
+    def add_item(  # pylint: disable=arguments-renamed
         self,
         collection_id: str,
         item: Item,
@@ -296,7 +296,7 @@ class StacClient(RsClient, Client):
             timeout=timeout,
         )
 
-    def remove_item(
+    def remove_item(  # pylint: disable=arguments-differ
         self,
         collection_id: str,
         item_id: str,

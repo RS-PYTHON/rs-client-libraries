@@ -66,7 +66,7 @@ def get_prefect_logger(general_logger_name):
 
 
 @task
-def update_stac_catalog(  # pylint: disable=too-many-arguments
+def update_stac_catalog(  # pylint: disable=too-many-locals
     stac_client: StacClient,  # NOTE: maybe use RsClientSerialization instead
     collection_name: str,
     stac_file_info: dict,
@@ -110,13 +110,13 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
         try:
             properties[key] = dateutil.parser.parse(value).strftime(DATETIME_FORMAT_MS)
         # If this is not a datetime, do nothing
-        except Exception:
+        except dateutil.parser.ParserError:
             pass
 
     # Add item to the STAC catalog collection, check status is OK
     item = Item(id=item_id, geometry=geometry, bbox=bbox, datetime=datetime_value, properties=properties, assets=assets)
     try:
-        response = stac_client.add_item(collection_name, item)
+        response = stac_client.add_item(collection_name, item, timeout=CATALOG_REQUEST_TIMEOUT)
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
         stac_client.logger.exception("Request exception caught: %s", e)
         return False
@@ -296,7 +296,7 @@ def filter_unpublished_files(
     owner_collection = f"{stac_client.owner_id}_{collection_name}"
 
     # Search using a CQL2 filter, see: https://pystac-client.readthedocs.io/en/stable/tutorials/cql2-filter.html
-    filter = {
+    filter_ = {
         "op": "and",
         "args": [
             {"op": "=", "args": [{"property": "collection"}, owner_collection]},
@@ -305,17 +305,17 @@ def filter_unpublished_files(
         ],
     }
     try:
-        search = stac_client.search(filter=filter)
+        search = stac_client.search(filter=filter_)
         existing = list(search.items_as_dicts())
 
     # In case of any error, try to ingest everything anyway
-    except Exception as e:
-        stac_client.logger.exception("Request exception caught: %s", e)
+    except NotImplementedError as e:
+        stac_client.logger.exception("Search exception caught: %s", e)
         return files_stac
 
     # Only keep the files that do not alreay exist in the catalog
     existing_ids = [item["id"] for item in existing]
-    return [file_stac for file_stac in files_stac if (file_stac["id"] not in existing_ids)]
+    return [file_stac for file_stac in files_stac if file_stac["id"] not in existing_ids]
 
 
 def create_collection_name(mission, station):

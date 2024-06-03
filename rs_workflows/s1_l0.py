@@ -259,14 +259,14 @@ def get_cadip_catalog_data(
     logger = stac_client.logger
     logger.debug("Task get_cadip_catalog_data STARTED")
 
-    filter = create_cql2_filter({"collection": f"{stac_client.owner_id}_{collection}", "cadip:session_id": session_id})
+    _filter = create_cql2_filter({"collection": f"{stac_client.owner_id}_{collection}", "cadip:session_id": session_id})
 
     try:
-        search = stac_client.search(filter=filter)
+        search = stac_client.search(filter=_filter)
         data = list(search.items_as_dicts())
         logger.debug("Task get_cadip_catalog_data FINISHED")
         return data
-    except Exception as e:
+    except NotImplementedError as e:
         logger.exception("Search exception caught: %s", e)
         return None
 
@@ -295,7 +295,7 @@ def get_adgs_catalog_data(
     logger = stac_client.logger
     logger.debug("Task get_adgs_catalog_data STARTED")
 
-    filter = {
+    _filter = {
         "op": "and",
         "args": [
             {"op": "=", "args": [{"property": "collection"}, f"{stac_client.owner_id}_{collection}"]},
@@ -304,11 +304,11 @@ def get_adgs_catalog_data(
         ],
     }
     try:
-        search = stac_client.search(filter=filter)
+        search = stac_client.search(filter=_filter)
         data = list(search.items_as_dicts())
         logger.debug("Task get_adgs_catalog_data FINISHED")
         return data
-    except Exception as e:
+    except NotImplementedError as e:
         logger.exception("Search exception caught: %s", e)
         return None
 
@@ -447,6 +447,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
                 temporal=TemporalExtent([now, now]),
             ),
         ),
+        timeout=CATALOG_REQUEST_TIMEOUT,
     )
 
     fin_res = []
