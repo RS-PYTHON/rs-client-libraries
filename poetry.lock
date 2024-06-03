@@ -3553,8 +3553,8 @@ orjson = ">=3.7,<4.0"
 packaging = ">=21.3,<24.3"
 pathspec = ">=0.8.0"
 pendulum = [
-    {version = "<3.0", markers = "python_version < \"3.12\""},
     {version = ">=3.0.0,<4", markers = "python_version >= \"3.12\""},
+    {version = "<3.0", markers = "python_version < \"3.12\""},
 ]
 pydantic = {version = ">=1.10.0,<2.0.0 || >2.0.0,<2.0.1 || >2.0.1,<2.1.0 || >2.1.0,<3.0.0", extras = ["email"]}
 pydantic-core = ">=2.12.0,<3.0.0"
@@ -3914,8 +3914,8 @@ files = [
 astroid = ">=3.2.2,<=3.3.0-dev0"
 colorama = {version = ">=0.4.5", markers = "sys_platform == \"win32\""}
 dill = [
-    {version = ">=0.3.6", markers = "python_version >= \"3.11\" and python_version < \"3.12\""},
     {version = ">=0.3.7", markers = "python_version >= \"3.12\""},
+    {version = ">=0.3.6", markers = "python_version >= \"3.11\" and python_version < \"3.12\""},
 ]
 isort = ">=4.2.5,<5.13.0 || >5.13.0,<6"
 mccabe = ">=0.6,<0.8"
@@ -5969,4 +5969,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "jaraco.test", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "87c8a308de59f317dcf6670978a708ce69dbd728699cd9884d6ff48aad3c8492"
+content-hash = "4809704eb1e86377cbdbb67b7bc7ea8571f76a084bfa9a5ead6ea34438734e7f"

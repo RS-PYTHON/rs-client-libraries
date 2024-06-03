@@ -164,6 +164,10 @@ def test_cached_apikey_security(monkeypatch):
     apikey manager service and keycloak to check the apikey validity and information.
     """
 
+    # Use a dummy URL to simulate the fact that we are in cluster mode (not local mode)
+    dummy_href = "http://DUMMY_HREF"
+    rs_client = RsClient(dummy_href, RS_SERVER_API_KEY, OWNER_ID)  # no global href
+
     # Mock the uac manager url
     monkeypatch.setenv("RSPY_UAC_CHECK_URL", RSPY_UAC_CHECK_URL)
 
@@ -179,9 +183,9 @@ def test_cached_apikey_security(monkeypatch):
     responses.get(url=RSPY_UAC_CHECK_URL, status=200, json=initial_response)
 
     # Check the apikey_security result
-    assert RS_CLIENT.apikey_iam_roles == initial_response["iam_roles"]
-    assert RS_CLIENT.apikey_config == initial_response["config"]
-    assert RS_CLIENT.apikey_user_login == initial_response["user_login"]
+    assert rs_client.apikey_iam_roles == initial_response["iam_roles"]
+    assert rs_client.apikey_config == initial_response["config"]
+    assert rs_client.apikey_user_login == initial_response["user_login"]
 
     # If the UAC manager response changes, we won't see it because the previous result was cached
     modified_response = {
@@ -193,12 +197,12 @@ def test_cached_apikey_security(monkeypatch):
 
     # Still the initial response !
     for _ in range(100):
-        assert RS_CLIENT.apikey_iam_roles == initial_response["iam_roles"]
-        assert RS_CLIENT.apikey_config == initial_response["config"]
-        assert RS_CLIENT.apikey_user_login == initial_response["user_login"]
+        assert rs_client.apikey_iam_roles == initial_response["iam_roles"]
+        assert rs_client.apikey_config == initial_response["config"]
+        assert rs_client.apikey_user_login == initial_response["user_login"]
 
     # We have to clear the cache to obtain the modified response
     RsClient.apikey_security_cache.clear()
-    assert RS_CLIENT.apikey_iam_roles == modified_response["iam_roles"]
-    assert RS_CLIENT.apikey_config == modified_response["config"]
-    assert RS_CLIENT.apikey_user_login == modified_response["user_login"]
+    assert rs_client.apikey_iam_roles == modified_response["iam_roles"]
+    assert rs_client.apikey_config == modified_response["config"]
+    assert rs_client.apikey_user_login == modified_response["user_login"]
