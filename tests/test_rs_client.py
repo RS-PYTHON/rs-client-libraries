@@ -36,36 +36,37 @@ PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 
 @pytest.fixture
-def generic_rs_client(mocked_stac_catalog_url):
+def generic_rs_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
     yield RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID)  # will be used to test the StacClient
 
 
 @pytest.fixture
-def auxip_client(generic_rs_client):
+def auxip_client(generic_rs_client):  # pylint: disable=missing-function-docstring, redefined-outer-name
     yield generic_rs_client.get_auxip_client()
 
 
 @pytest.fixture
-def cadip_client(generic_rs_client):
+def cadip_client(generic_rs_client):  # pylint: disable=missing-function-docstring, redefined-outer-name
     yield generic_rs_client.get_cadip_client(CADIP_STATION)
 
 
 @pytest.fixture
-def stac_client(generic_rs_client):
+def stac_client(generic_rs_client):  # pylint: disable=missing-function-docstring, redefined-outer-name
     yield generic_rs_client.get_stac_client()
 
 
-def test_get_child_client(auxip_client, cadip_client, stac_client):
+def test_get_child_client(auxip_client, cadip_client, stac_client):  # pylint: disable=redefined-outer-name
     """Test get_auxip_client, get_cadip_client, get_stac_client"""
     assert isinstance(auxip_client, AuxipClient)
     assert isinstance(cadip_client, CadipClient)
     assert isinstance(stac_client, StacClient)
 
 
-def test_station_names(auxip_client, cadip_client):
+def test_station_names(auxip_client, cadip_client, stac_client):  # pylint: disable=redefined-outer-name
     """Test the station name returned by the AuxipClient and CadipClient"""
     assert "AUXIP" in auxip_client.station_name
     assert "CADIP" in cadip_client.station_name
+    assert isinstance(stac_client, StacClient)
 
 
 def test_server_href(mocked_stac_catalog_url):
@@ -97,7 +98,9 @@ def test_server_href(mocked_stac_catalog_url):
         rs_client.get_stac_client()
 
     # If we use the global URL, it should be returned
-    stac_client = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+    stac_client = RsClient(  # pylint: disable=redefined-outer-name
+        mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID
+    ).get_stac_client()
     assert stac_client.href_catalog == mocked_stac_catalog_url
 
     # It can be overriden by the env var, but a dummy URL will raise a pystac exception
@@ -119,7 +122,9 @@ def test_cadip_sessions():
     start_date = datetime(2000, 1, 1)
     stop_date = datetime(2001, 1, 1)
     url = "http://mocked_cadip_url"
-    cadip_client = RsClient(url, RS_SERVER_API_KEY, OWNER_ID).get_cadip_client(CADIP_STATION)
+    cadip_client = RsClient(url, RS_SERVER_API_KEY, OWNER_ID).get_cadip_client(  # pylint: disable=redefined-outer-name
+        CADIP_STATION
+    )
 
     # Test the connection error with the dummy server
     with pytest.raises(RuntimeError) as error:
