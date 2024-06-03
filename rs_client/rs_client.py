@@ -61,7 +61,7 @@ class RsClient:
         """RsClient class constructor."""
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
-        self.owner_id: str | None = owner_id
+        self.owner_id: str = owner_id or ""
         self.logger: logging.Logger = logger or Logging.default(__name__)
 
         # Remove trailing / character(s) from the URL

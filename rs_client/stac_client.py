@@ -28,13 +28,12 @@ from pystac.layout import HrefLayoutStrategy
 from pystac_client import Client, Modifiable
 from pystac_client.collection_client import CollectionClient
 from pystac_client.stac_api_io import StacApiIO, Timeout
-from requests import Request
-from starlette.responses import JSONResponse
+from requests import Request, Response
 
 from rs_client.rs_client import APIKEY_HEADER, TIMEOUT, RsClient
 
 
-class StacClient(RsClient, Client):  # pylint: disable=too-many-ancestors
+class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-ancestors
     """StacClient inherits from pystac_client.Client. The goal of this class is to
     allow an user to use RS-Server services more easily than calling REST endpoints directly.
 
@@ -82,7 +81,7 @@ class StacClient(RsClient, Client):  # pylint: disable=too-many-ancestors
         )
 
     @classmethod
-    def open(  # pylint: disable=arguments-renamed, too-many-arguments
+    def open(  # type: ignore  # pylint: disable=arguments-renamed, too-many-arguments
         cls,
         # RsClient parameters
         rs_server_href: str | None,
@@ -105,7 +104,7 @@ class StacClient(RsClient, Client):  # pylint: disable=too-many-ancestors
                 headers = {}
             headers[APIKEY_HEADER] = rs_server_api_key
 
-        client: StacClient = super().open(
+        client: StacClient = super().open(  # type: ignore
             cls.__href_catalog(rs_server_href) + "/catalog/",
             headers,
             parameters,
@@ -174,7 +173,7 @@ class StacClient(RsClient, Client):  # pylint: disable=too-many-ancestors
         add_public_license: bool = True,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
-    ):
+    ) -> Response:
         """Update the collection links, then post the collection into the catalog.
 
         Args:
@@ -234,7 +233,7 @@ class StacClient(RsClient, Client):  # pylint: disable=too-many-ancestors
         collection_id: str,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
-    ) -> JSONResponse:
+    ) -> Response:
         """Remove/delete a collection from the catalog.
 
         Args:
@@ -261,13 +260,13 @@ class StacClient(RsClient, Client):  # pylint: disable=too-many-ancestors
             timeout=timeout,
         )
 
-    def add_item(  # pylint: disable=arguments-renamed
+    def add_item(  # type: ignore # pylint: disable=arguments-renamed
         self,
         collection_id: str,
         item: Item,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
-    ) -> JSONResponse:
+    ) -> Response:
         """Update the item links, then post the item into the catalog.
 
         Args:
@@ -296,13 +295,13 @@ class StacClient(RsClient, Client):  # pylint: disable=too-many-ancestors
             timeout=timeout,
         )
 
-    def remove_item(  # pylint: disable=arguments-differ
+    def remove_item(  # type: ignore # pylint: disable=arguments-differ
         self,
         collection_id: str,
         item_id: str,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
-    ) -> JSONResponse:
+    ) -> Response:
         """Remove/delete an item from a collection.
 
         Args:

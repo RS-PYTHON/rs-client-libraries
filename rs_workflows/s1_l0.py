@@ -340,7 +340,7 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
             s3_path (str): The S3 path.
             temp_s3_path (str): The temporary S3 path.
         """
-        self.stac_client = None  # don't save this instance
+        self.stac_client: StacClient | None = None  # don't save this instance
         self.rs_client_serialization = RsClientSerialization(stac_client)  # save the serialization parameters instead
         self.url_dpr = url_dpr
         self.mission = mission
@@ -373,7 +373,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
     logger = get_prefect_logger(LOGGER_NAME)
 
     # Deserialize the RsClient instance
-    config.stac_client = config.rs_client_serialization.deserialize(logger)
+    config.stac_client = config.rs_client_serialization.deserialize(logger)  # type: ignore
 
     # Check the product types
     ok_types = ["S1SEWRAW", "S1SIWRAW", "S1SSMRAW", "S1SWVRAW"]
@@ -391,14 +391,14 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
     # gather the data for cadip session id
     logger.debug("Starting task get_cadip_catalog_data")
     cadip_catalog_data = get_cadip_catalog_data.submit(
-        config.stac_client,  # NOTE: maybe use RsClientSerialization instead
+        config.stac_client,  # type: ignore # NOTE: maybe use RsClientSerialization instead
         cadip_collection,
         config.cadip_session_id,
     )
     # logger.debug(f"cadip_catalog_data = {cadip_catalog_data} | {cadip_catalog_data.result()}")
     logger.debug("Starting task get_adgs_catalog_data")
     adgs_catalog_data = get_adgs_catalog_data.submit(
-        config.stac_client,  # NOTE: maybe use RsClientSerialization instead
+        config.stac_client,  # type: ignore # NOTE: maybe use RsClientSerialization instead
         adgs_collection,
         config.adgs_files,
     )

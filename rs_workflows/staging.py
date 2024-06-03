@@ -110,7 +110,7 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
         try:
             properties[key] = dateutil.parser.parse(value).strftime(DATETIME_FORMAT_MS)
         # If this is not a datetime, do nothing
-        except dateutil.parser.ParserError:
+        except (dateutil.parser.ParserError, TypeError):
             pass
 
     # Add item to the STAC catalog collection, check status is OK
@@ -147,9 +147,8 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-i
         tmp_download_path,
         s3_path,
     ):
-        self.rs_client = None  # don't save this instance
+        self.rs_client: AuxipClient | CadipClient | None = None  # don't save this instance
         self.rs_client_serialization = RsClientSerialization(rs_client)  # save the serialization parameters instead
-        self.rs_client: AuxipClient | CadipClient = rs_client
         self.mission: str = mission
         self.tmp_download_path: str = tmp_download_path
         self.s3_path: str = s3_path
@@ -208,7 +207,7 @@ def staging(config: PrefectTaskConfig):
     logger = get_prefect_logger("task_dwn")
 
     # Deserialize the RsClient instance
-    rs_client = config.rs_client_serialization.deserialize(logger)
+    rs_client: AuxipClient | CadipClient = config.rs_client_serialization.deserialize(logger)  # type: ignore
 
     # list with failed files
     failed_files = config.task_files_stac.copy()
@@ -290,7 +289,7 @@ def filter_unpublished_files(
     ids = set()
     for fs in files_stac:
         ids.add(str(fs["id"]))
-    ids = list(ids)
+    ids = list(ids)  # type: ignore # set to list conversion
 
     # For searching, we need to prefix our collection name by <owner_id>_
     owner_collection = f"{stac_client.owner_id}_{collection_name}"
@@ -405,7 +404,7 @@ def staging_flow(config: PrefectFlowConfig):
     logger.info(f"The staging flow is starting. Received workers:{config.max_workers}")
     try:
         # Deserialize the RsClient instance
-        rs_client = config.rs_client_serialization.deserialize(logger)
+        rs_client: AuxipClient | CadipClient = config.rs_client_serialization.deserialize(logger)  # type: ignore
 
         # get the list with files from the search endpoint
         try:
