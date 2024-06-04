@@ -28,13 +28,12 @@ from pystac.layout import HrefLayoutStrategy
 from pystac_client import Client, Modifiable
 from pystac_client.collection_client import CollectionClient
 from pystac_client.stac_api_io import StacApiIO, Timeout
-from requests import Request
-from starlette.responses import JSONResponse
+from requests import Request, Response
 
 from rs_client.rs_client import APIKEY_HEADER, TIMEOUT, RsClient
 
 
-class StacClient(RsClient, Client):
+class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-ancestors
     """StacClient inherits from both rs_client.RsClient and pystac_client.Client. The goal of this class is to
     allow an user to use RS-Server services more easily than calling REST endpoints directly.
     """
@@ -43,7 +42,7 @@ class StacClient(RsClient, Client):
     # Initialisation #
     ##################
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments,super-init-not-called # super-init is called in .open(...)
         self,
         id: str,  # pylint: disable=redefined-builtin
         description: str,
@@ -79,7 +78,7 @@ class StacClient(RsClient, Client):
         )
 
     @classmethod
-    def open(  # pylint: disable=arguments-renamed, too-many-arguments
+    def open(  # type: ignore  # pylint: disable=arguments-renamed, too-many-arguments
         cls,
         # RsClient parameters
         rs_server_href: str | None,
@@ -102,7 +101,7 @@ class StacClient(RsClient, Client):
                 headers = {}
             headers[APIKEY_HEADER] = rs_server_api_key
 
-        client: StacClient = super().open(
+        client: StacClient = super().open(  # type: ignore
             cls.__href_catalog(rs_server_href) + "/catalog/",
             headers,
             parameters,
@@ -140,7 +139,7 @@ class StacClient(RsClient, Client):
     @staticmethod
     def __href_catalog(rs_server_href) -> str:
         if from_env := os.getenv("RSPY_HOST_CATALOG", None):
-            return from_env
+            return from_env.rstrip("/")
         if not rs_server_href:
             raise RuntimeError("RS-Server URL is undefined")
         return rs_server_href.rstrip("/")
@@ -171,7 +170,7 @@ class StacClient(RsClient, Client):
         add_public_license: bool = True,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
-    ):
+    ) -> Response:
         """Update the collection links, then post the collection into the catalog.
 
         Args:
@@ -183,6 +182,7 @@ class StacClient(RsClient, Client):
         Returns:
             JSONResponse (json): The response of the request.
         """
+
         full_owner_id = owner_id or self.owner_id
 
         # Use owner_id:collection_id instead of just the collection ID, before adding the links,
@@ -218,7 +218,7 @@ class StacClient(RsClient, Client):
         # Check that the collection is compliant to STAC
         collection.validate_all()
 
-        # Post the item to the catalog
+        # Post the collection to the catalog
         return requests.post(
             f"{self.href_catalog}/catalog/collections",
             json=collection.to_dict(),
@@ -231,7 +231,7 @@ class StacClient(RsClient, Client):
         collection_id: str,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
-    ) -> JSONResponse:
+    ) -> Response:
         """Remove/delete a collection from the catalog.
 
         Args:
@@ -258,13 +258,13 @@ class StacClient(RsClient, Client):
             timeout=timeout,
         )
 
-    def add_item(
+    def add_item(  # type: ignore # pylint: disable=arguments-renamed
         self,
         collection_id: str,
         item: Item,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
-    ) -> JSONResponse:
+    ) -> Response:
         """Update the item links, then post the item into the catalog.
 
         Args:
@@ -293,13 +293,13 @@ class StacClient(RsClient, Client):
             timeout=timeout,
         )
 
-    def remove_item(
+    def remove_item(  # type: ignore # pylint: disable=arguments-differ
         self,
         collection_id: str,
         item_id: str,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
-    ) -> JSONResponse:
+    ) -> Response:
         """Remove/delete an item from a collection.
 
         Args:

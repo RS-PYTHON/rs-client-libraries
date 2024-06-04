@@ -56,7 +56,7 @@ class CadipClient(RsClient):
         Either it should just be the RS-Server URL.
         """
         if from_env := os.getenv("RSPY_HOST_CADIP", None):
-            return from_env
+            return from_env.rstrip("/")
         if not self.rs_server_href:
             raise RuntimeError("RS-Server URL is undefined")
         return self.rs_server_href.rstrip("/")

@@ -14,7 +14,7 @@
 
 """(De-)Serialization utility functions for the workflows."""
 
-from typing import Type
+from typing import Type, cast
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
@@ -23,7 +23,7 @@ from rs_client.stac_client import StacClient
 from rs_common.config import ECadipStation
 
 
-class RsClientSerialization:
+class RsClientSerialization:  # pylint: disable=too-few-public-methods
     """
     We can't pass a RsClient instance to the workflow because it causes (de-)serialization issues.
     So instead we pass the instance parameters, that will be used to recreate a new instance
@@ -54,11 +54,9 @@ class RsClientSerialization:
         self.rs_server_api_key: str | None = client.rs_server_api_key
         self.owner_id: str | None = client.owner_id
 
-        # Only for Cadip
-        try:
-            self.station: ECadipStation | None = client.station
-        except AttributeError:
-            pass
+        self.station: ECadipStation | None = None
+        if self.cls == CadipClient:
+            self.station = cast(CadipClient, client).station
 
     def deserialize(self, logger=None) -> RsClient:
         """
@@ -76,7 +74,7 @@ class RsClientSerialization:
         if self.cls == AuxipClient:
             return client.get_auxip_client()
         if self.cls == CadipClient:
-            return client.get_cadip_client(self.station)
+            return client.get_cadip_client(self.station)  # type: ignore
         if self.cls == StacClient:
             return client.get_stac_client()
         raise ValueError(f"Unknown RsClient type: {self.cls}")

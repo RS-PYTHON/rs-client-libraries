@@ -31,6 +31,7 @@ cachetools = "^5.3.3"
 pystac = "^1.10.1"
 pystac-client = "^0.8.1"
 starlette = "^0.37.2"
+python-dateutil = "^2.9.0.post0"
 
 [tool.poetry.group.dev]
 optional = true

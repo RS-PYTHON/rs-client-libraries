@@ -35,37 +35,42 @@ CADIP_STATION = ECadipStation.CADIP
 PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 
-@pytest.fixture
-def generic_rs_client(mocked_stac_catalog_url):
+@pytest.fixture(name="generic_rs_client")
+def generic_rs_client_(mocked_stac_catalog_url):
+    """Return a generic RsClient instance for testing."""
     yield RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID)  # will be used to test the StacClient
 
 
-@pytest.fixture
-def auxip_client(generic_rs_client):
+@pytest.fixture(name="auxip_client")
+def auxip_client_(generic_rs_client):
+    """Return a generic AuxipClient instance for testing."""
     yield generic_rs_client.get_auxip_client()
 
 
-@pytest.fixture
-def cadip_client(generic_rs_client):
+@pytest.fixture(name="cadip_client")
+def cadip_client_(generic_rs_client):
+    """Return a generic CadipClient instance for testing."""
     yield generic_rs_client.get_cadip_client(CADIP_STATION)
 
 
-@pytest.fixture
-def stac_client(generic_rs_client):
+@pytest.fixture(name="stac_client")
+def stac_client_(generic_rs_client):
+    """Return a generic StacClient instance for testing."""
     yield generic_rs_client.get_stac_client()
 
 
-def test_get_child_client(auxip_client, cadip_client, stac_client):
+def test_get_child_client(auxip_client, cadip_client, stac_client):  # pylint: disable=redefined-outer-name
     """Test get_auxip_client, get_cadip_client, get_stac_client"""
     assert isinstance(auxip_client, AuxipClient)
     assert isinstance(cadip_client, CadipClient)
     assert isinstance(stac_client, StacClient)
 
 
-def test_station_names(auxip_client, cadip_client):
+def test_station_names(auxip_client, cadip_client, stac_client):  # pylint: disable=redefined-outer-name
     """Test the station name returned by the AuxipClient and CadipClient"""
     assert "AUXIP" in auxip_client.station_name
     assert "CADIP" in cadip_client.station_name
+    assert isinstance(stac_client, StacClient)
 
 
 def test_server_href(mocked_stac_catalog_url):
@@ -97,7 +102,11 @@ def test_server_href(mocked_stac_catalog_url):
         rs_client.get_stac_client()
 
     # If we use the global URL, it should be returned
-    stac_client = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+    stac_client = RsClient(  # pylint: disable=redefined-outer-name
+        mocked_stac_catalog_url,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_stac_client()
     assert stac_client.href_catalog == mocked_stac_catalog_url
 
     # It can be overriden by the env var, but a dummy URL will raise a pystac exception
@@ -119,7 +128,9 @@ def test_cadip_sessions():
     start_date = datetime(2000, 1, 1)
     stop_date = datetime(2001, 1, 1)
     url = "http://mocked_cadip_url"
-    cadip_client = RsClient(url, RS_SERVER_API_KEY, OWNER_ID).get_cadip_client(CADIP_STATION)
+    cadip_client = RsClient(url, RS_SERVER_API_KEY, OWNER_ID).get_cadip_client(  # pylint: disable=redefined-outer-name
+        CADIP_STATION,
+    )
 
     # Test the connection error with the dummy server
     with pytest.raises(RuntimeError) as error:
@@ -164,6 +175,10 @@ def test_cached_apikey_security(monkeypatch):
     apikey manager service and keycloak to check the apikey validity and information.
     """
 
+    # Use a dummy URL to simulate the fact that we are in cluster mode (not local mode)
+    dummy_href = "http://DUMMY_HREF"
+    rs_client = RsClient(dummy_href, RS_SERVER_API_KEY, OWNER_ID)  # no global href
+
     # Mock the uac manager url
     monkeypatch.setenv("RSPY_UAC_CHECK_URL", RSPY_UAC_CHECK_URL)
 
@@ -179,9 +194,9 @@ def test_cached_apikey_security(monkeypatch):
     responses.get(url=RSPY_UAC_CHECK_URL, status=200, json=initial_response)
 
     # Check the apikey_security result
-    assert RS_CLIENT.apikey_iam_roles == initial_response["iam_roles"]
-    assert RS_CLIENT.apikey_config == initial_response["config"]
-    assert RS_CLIENT.apikey_user_login == initial_response["user_login"]
+    assert rs_client.apikey_iam_roles == initial_response["iam_roles"]
+    assert rs_client.apikey_config == initial_response["config"]
+    assert rs_client.apikey_user_login == initial_response["user_login"]
 
     # If the UAC manager response changes, we won't see it because the previous result was cached
     modified_response = {
@@ -193,12 +208,12 @@ def test_cached_apikey_security(monkeypatch):
 
     # Still the initial response !
     for _ in range(100):
-        assert RS_CLIENT.apikey_iam_roles == initial_response["iam_roles"]
-        assert RS_CLIENT.apikey_config == initial_response["config"]
-        assert RS_CLIENT.apikey_user_login == initial_response["user_login"]
+        assert rs_client.apikey_iam_roles == initial_response["iam_roles"]
+        assert rs_client.apikey_config == initial_response["config"]
+        assert rs_client.apikey_user_login == initial_response["user_login"]
 
     # We have to clear the cache to obtain the modified response
     RsClient.apikey_security_cache.clear()
-    assert RS_CLIENT.apikey_iam_roles == modified_response["iam_roles"]
-    assert RS_CLIENT.apikey_config == modified_response["config"]
-    assert RS_CLIENT.apikey_user_login == modified_response["user_login"]
+    assert rs_client.apikey_iam_roles == modified_response["iam_roles"]
+    assert rs_client.apikey_config == modified_response["config"]
+    assert rs_client.apikey_user_login == modified_response["user_login"]

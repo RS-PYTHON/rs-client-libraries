@@ -17,17 +17,25 @@
 import time
 from datetime import datetime
 
+import dateutil.parser
 import numpy as np
 import requests
 from prefect import exceptions, flow, get_run_logger, task
 from prefect_dask.task_runners import DaskTaskRunner
+from pystac.asset import Asset
+from pystac.item import Item
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
 from rs_client.stac_client import StacClient
-from rs_common.config import AUXIP_STATION, ECadipStation, EDownloadStatus
+from rs_common.config import (
+    AUXIP_STATION,
+    DATETIME_FORMAT_MS,
+    ECadipStation,
+    EDownloadStatus,
+)
 from rs_common.logging import Logging
-from rs_workflows.serialization import RsClientSerialization
+from rs_common.serialization import RsClientSerialization
 
 DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
@@ -58,8 +66,8 @@ def get_prefect_logger(general_logger_name):
 
 
 @task
-def update_stac_catalog(  # pylint: disable=too-many-arguments
-    rs_client: StacClient,
+def update_stac_catalog(  # pylint: disable=too-many-locals
+    stac_client: StacClient,  # NOTE: maybe use RsClientSerialization instead
     collection_name: str,
     stac_file_info: dict,
     obs: str,
@@ -71,7 +79,7 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
     href. It sends a POST request to add the newly composed item into the STAC catalog.
 
     Args:
-        rs_client (StacClient): The client for accessing the STAC catalog.
+        stac_client (StacClient): The client for accessing the STAC catalog.
         collection_name (str): The name of the collection in the STAC catalog.
         stac_file_info (dict): Information about the STAC file to be updated.
         obs (str): The bucket location where the file has been saved.
@@ -80,42 +88,41 @@ def update_stac_catalog(  # pylint: disable=too-many-arguments
         bool (bool): True if the STAC catalog is successfully updated, False otherwise.
 
     """
-    # add the collection name
-    stac_file_info["collection"] = collection_name
-    # add the bucket location where the file has been saved
-    stac_file_info["assets"]["file"]["href"] = f"{obs.rstrip('/')}/{stac_file_info['id']}"
-    # add a fake geometry polygon (the whole globe)
-    stac_file_info["geometry"] = {
-        "type": "Polygon",
-        "coordinates": [
-            [
-                [180, -90],
-                [180, 90],
-                [-180, 90],
-                [-180, -90],
-                [180, -90],
-            ],
-        ],
-    }
-    # pp = pprint.PrettyPrinter(indent=4)
-    # pp.pprint(stac_file_info)
+    item_id = stac_file_info["id"]
+    now = datetime.now()
 
-    catalog_endpoint = rs_client.href_catalog + f"/catalog/collections/{rs_client.owner_id}:{collection_name}/items/"
+    # The file path from the temp s3 bucket is given in the assets
+    assets = {"file": Asset(href=f"{obs.rstrip('/')}/{stac_file_info['id']}")}
+
+    # Copy properties from the input stac file, or use default values
+    properties = stac_file_info.get("properties") or {}
+    geometry = stac_file_info.get("geometry") or {  # NOTE: override the geometry if it is set to None
+        "type": "Polygon",
+        "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
+    }
+    bbox = stac_file_info.get("bbox") or [-180.0, -90.0, 180.0, 90.0]
+    datetime_value = now
+
+    # Try to format each property date or datetime
+    for key, value in properties.items():
+        try:
+            properties[key] = dateutil.parser.parse(value).strftime(DATETIME_FORMAT_MS)
+        # If this is not a datetime, do nothing
+        except (dateutil.parser.ParserError, TypeError):
+            pass
+
+    # Add item to the STAC catalog collection, check status is OK
+    item = Item(id=item_id, geometry=geometry, bbox=bbox, datetime=datetime_value, properties=properties, assets=assets)
     try:
-        response = requests.post(
-            catalog_endpoint,
-            json=stac_file_info,
-            timeout=CATALOG_REQUEST_TIMEOUT,
-            **rs_client.apikey_headers,
-        )
+        response = stac_client.add_item(collection_name, item, timeout=CATALOG_REQUEST_TIMEOUT)
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-        rs_client.logger.exception("Request exception caught: %s", e)
+        stac_client.logger.exception("Request exception caught: %s", e)
         return False
     try:
         if not response.ok:
-            rs_client.logger.error(f"The catalog update endpoint: {response.json()}")
+            stac_client.logger.error(f"The catalog update endpoint: {response.json()}")
     except requests.exceptions.JSONDecodeError:
-        rs_client.logger.exception(f"Could not get the json body from response: {response}")
+        stac_client.logger.exception(f"Could not get the json body from response: {response}")
     return response.status_code == 200
 
 
@@ -138,9 +145,8 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-i
         tmp_download_path,
         s3_path,
     ):
-        self.rs_client = None  # don't save this instance
+        self.rs_client: AuxipClient | CadipClient | None = None  # don't save this instance
         self.rs_client_serialization = RsClientSerialization(rs_client)  # save the serialization parameters instead
-        self.rs_client: AuxipClient | CadipClient = rs_client
         self.mission: str = mission
         self.tmp_download_path: str = tmp_download_path
         self.s3_path: str = s3_path
@@ -199,7 +205,7 @@ def staging(config: PrefectTaskConfig):
     logger = get_prefect_logger("task_dwn")
 
     # Deserialize the RsClient instance
-    rs_client = config.rs_client_serialization.deserialize(logger)
+    rs_client: AuxipClient | CadipClient = config.rs_client_serialization.deserialize(logger)  # type: ignore
 
     # list with failed files
     failed_files = config.task_files_stac.copy()
@@ -234,7 +240,7 @@ def staging(config: PrefectTaskConfig):
             # TODO: either move the code from filter_unpublished_files to RsClient
             # or use the new PgstacClient ?
             if update_stac_catalog.fn(
-                rs_client.get_stac_client(),
+                rs_client.get_stac_client(),  # NOTE: maybe use RsClientSerialization instead
                 create_collection_name(config.mission, rs_client.station_name),
                 file_stac,
                 config.s3_path,
@@ -262,7 +268,7 @@ def staging(config: PrefectTaskConfig):
 
 @task
 def filter_unpublished_files(
-    rs_client: StacClient,
+    stac_client: StacClient,  # NOTE: maybe use RsClientSerialization instead
     collection_name: str,
     files_stac: list,
 ) -> list:
@@ -272,7 +278,7 @@ def filter_unpublished_files(
     STAC (SpatioTemporal Asset Catalog) collection. It returns a list of files that are not yet published.
 
     Parameters:
-        rs_client (StacClient): An instance of `StacClient` to interact with the STAC catalog.
+        stac_client (StacClient): An instance of `StacClient` to interact with the STAC catalog.
         collection_name (str): The name of the collection in which the search is performed.
         files_stac (list of dict): A list of files to be checked for publication. Each file is represented as a
             dictionary with at least an "id" key.
@@ -290,45 +296,36 @@ def filter_unpublished_files(
         [{"id": "file1.raw"}]
     """
 
-    ids = []
-    # TODO: Should this list be checked for duplicated items?
+    # Get files IDs (no duplicate IDs)
+    ids = set()
     for fs in files_stac:
-        ids.append(str(fs["id"]))
-    catalog_endpoint = rs_client.href_catalog + "/catalog/search"
-    request_params = {"collection": collection_name, "ids": ",".join(ids), "filter": f"owner_id='{rs_client.owner_id}'"}
+        ids.add(str(fs["id"]))
+    ids = list(ids)  # type: ignore # set to list conversion
+
+    # For searching, we need to prefix our collection name by <owner_id>_
+    owner_collection = f"{stac_client.owner_id}_{collection_name}"
+
+    # Search using a CQL2 filter, see: https://pystac-client.readthedocs.io/en/stable/tutorials/cql2-filter.html
+    filter_ = {
+        "op": "and",
+        "args": [
+            {"op": "=", "args": [{"property": "collection"}, owner_collection]},
+            {"op": "=", "args": [{"property": "owner"}, stac_client.owner_id]},
+            {"op": "in", "args": [{"property": "id"}, ids]},
+        ],
+    }
     try:
-        response = requests.get(
-            catalog_endpoint,
-            params=request_params,
-            timeout=CATALOG_REQUEST_TIMEOUT,
-            **rs_client.apikey_headers,
-        )
-    except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-        rs_client.logger.exception("Request exception caught: %s", e)
-        # try to ingest everything anyway
+        search = stac_client.search(filter=filter_)
+        existing = list(search.items_as_dicts())
+
+    # In case of any error, try to ingest everything anyway
+    except NotImplementedError as e:
+        stac_client.logger.exception("Search exception caught: %s", e)
         return files_stac
 
-    # try to ingest everything anyway
-    if response.status_code != 200:
-        rs_client.logger.error(f"Quering the catalog endpoint returned status {response.status_code}")
-        return files_stac
-
-    try:
-        eval_response = response.json()
-    except requests.exceptions.JSONDecodeError:
-        # content is empty, try to ingest everything anyway
-        return files_stac
-
-    # no file in the catalog
-    if eval_response["features"] is None:
-        return files_stac
-
-    for feature in eval_response["features"]:
-        for fs in files_stac:
-            if feature["id"] == fs["id"]:
-                files_stac.remove(fs)
-                break
-    return files_stac
+    # Only keep the files that do not alreay exist in the catalog
+    existing_ids = [item["id"] for item in existing]
+    return [file_stac for file_stac in files_stac if file_stac["id"] not in existing_ids]
 
 
 def create_collection_name(mission: str, station: str) -> str:
@@ -396,6 +393,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         self.limit = limit
 
 
+# @flow # TO DEBUG THE CODE, JUST USE @flow
 @flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 15, "threads_per_worker": 1}))
 def staging_flow(config: PrefectFlowConfig):
     """
@@ -419,7 +417,7 @@ def staging_flow(config: PrefectFlowConfig):
     logger.info(f"The staging flow is starting. Received workers:{config.max_workers}")
     try:
         # Deserialize the RsClient instance
-        rs_client = config.rs_client_serialization.deserialize(logger)
+        rs_client: AuxipClient | CadipClient = config.rs_client_serialization.deserialize(logger)  # type: ignore
 
         # get the list with files from the search endpoint
         try:
@@ -445,7 +443,7 @@ element for time interval {config.start_datetime} - {config.stop_datetime}",
         # filter those that are already existing
 
         files_stac = filter_unpublished_files(  # type: ignore
-            rs_client.get_stac_client(),
+            rs_client.get_stac_client(),  # NOTE: maybe use RsClientSerialization instead
             create_collection_name(config.mission, rs_client.station_name),
             files_stac,
             wait_for=[files_stac],
