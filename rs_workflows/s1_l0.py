@@ -435,6 +435,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
                 temporal=TemporalExtent([now, now]),
             ),
         ),
+        timeout=CATALOG_REQUEST_TIMEOUT,
     )
 
     fin_res = []

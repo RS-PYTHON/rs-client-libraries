@@ -1,6 +1,6 @@
 # RS Client Libraries overview
 
-The RS-Client libraries allows the user to call all the RS-Server services. It is composed mainly from the base class RsClient and the 
+The RS-Client libraries allows the user to call all the RS-Server services. It is composed mainly from the base class RsClient and the
 classes which extend this base class: AuxipClient, CadipClient and StacClient.
 
 ![Python Components](../images/python-components.png)
@@ -14,5 +14,3 @@ The **CadipClient** class extends the RsClient class to provide specific functio
 The **StacClient** class extends the RsClient class and the [PySTAC](https://pystac-client.readthedocs.io/en/stable/) to provide specific functionality for interfacing with the STAC (SpatioTemporal Asset Catalog) endpoints on the RS-Server. This class overrides the necessary properties to define the STAC-specific endpoints. Please check also the PyStac client [usage documentation](https://pystac-client.readthedocs.io/en/stable/usage.html#client) for how to use the read catalog methods.
 
 ![Python RS Client](../images/python-rs-client.png)
-
-
