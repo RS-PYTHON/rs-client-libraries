@@ -17,7 +17,7 @@
 import os
 
 from rs_client.rs_client import RsClient
-from rs_common.config import ADGS_STATION
+from rs_common.config import AUXIP_STATION
 
 
 class AuxipClient(RsClient):
@@ -35,7 +35,7 @@ class AuxipClient(RsClient):
         Either it should just be the RS-Server URL.
         """
         if from_env := os.getenv("RSPY_HOST_ADGS", None):
-            return from_env
+            return from_env.rstrip("/")
         if not self.rs_server_href:
             raise RuntimeError("RS-Server URL is undefined")
         return self.rs_server_href.rstrip("/")
@@ -57,5 +57,5 @@ class AuxipClient(RsClient):
 
     @property
     def station_name(self) -> str:
-        """Return "ADGS"."""
-        return ADGS_STATION
+        """Return "AUXIP"."""
+        return AUXIP_STATION

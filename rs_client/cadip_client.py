@@ -20,7 +20,7 @@ from datetime import datetime
 
 import requests
 
-from rs_client.rs_client import RsClient
+from rs_client.rs_client import TIMEOUT, RsClient
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EPlatform
 
 
@@ -56,7 +56,7 @@ class CadipClient(RsClient):
         Either it should just be the RS-Server URL.
         """
         if from_env := os.getenv("RSPY_HOST_CADIP", None):
-            return from_env
+            return from_env.rstrip("/")
         if not self.rs_server_href:
             raise RuntimeError("RS-Server URL is undefined")
         return self.rs_server_href.rstrip("/")
@@ -92,15 +92,16 @@ class CadipClient(RsClient):
 
     def search_sessions(  # pylint: disable=too-many-arguments
         self,
-        timeout: int,
         session_ids: list[str] | None = None,
         start_date: datetime | None = None,
         stop_date: datetime | None = None,
         platforms: list[EPlatform] | None = None,
+        timeout: int = TIMEOUT,
     ) -> list[dict]:  # TODO return pystac.ItemCollection instead
         """Endpoint to retrieve list of sessions from any CADIP station.
 
         Args:
+            timeout (int): The timeout duration for the HTTP request.
             session_ids (list[str]): Session identifiers
                 (eg: ["S1A_20170501121534062343"] or ["S1A_20170501121534062343, S1A_20240328185208053186"])
             start_date (datetime): Start date of the time interval

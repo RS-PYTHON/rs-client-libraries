@@ -14,14 +14,24 @@
 
 """RsClient class implementation."""
 
+import getpass
 import logging
+import os
+import re
+import sys
 from datetime import datetime
 from typing import Union
 
 import requests
+from cachetools import TTLCache, cached
 
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
+
+APIKEY_HEADER = "x-api-key"
+
+# Timeout in seconds
+TIMEOUT = 30
 
 
 class RsClient:
@@ -29,27 +39,130 @@ class RsClient:
     RsClient class implementation.
 
     Attributes:
-        rs_server_href (str): RS-Server URL.
+        rs_server_href (str): RS-Server URL. In local mode, pass None.
         rs_server_api_key (str): API key for RS-Server authentication.
-        owner_id (str): Owner of the catalog collections. The API key must give us the right to read/write this owner
-                        collections in the catalog. This owner ID is also used in the RS-Client logging.
+        owner_id (str): ID of the owner of the STAC catalog collections (no special characters allowoed).
+        By default, this is the user login from the keycloak account, associated to the API key.
+        Or, in local mode, this is the local system username.
+        Else, your API Key must give you the rights to read/write on this catalog owner.
+        This owner ID is also used in the RS-Client logging.
         logger (logging.Logger): Logging instance.
+        local_mode (bool): Local mode or hybrid/cluster mode.
+        apikey_headers (dict): API key in a dict, ready-to-use in HTTP request headers.
     """
 
     def __init__(
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None,
-        owner_id: str,
+        owner_id: str | None = None,
         logger: logging.Logger | None = None,
     ):
         """RsClient class constructor."""
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
-        self.owner_id: str = owner_id
+        self.owner_id: str = owner_id or ""
         self.logger: logging.Logger = logger or Logging.default(__name__)
 
-        self.apikey_headers: dict = {"headers": {"x-api-key": rs_server_api_key}} if rs_server_api_key else {}
+        # Remove trailing / character(s) from the URL
+        if self.rs_server_href:
+            self.rs_server_href = self.rs_server_href.strip().rstrip("/").strip()
+
+        # We are in local mode if the URL is undefined.
+        # Env vars are used instead to determine the different services URL.
+        self.local_mode = not bool(self.rs_server_href)
+
+        if (not self.local_mode) and (not self.rs_server_api_key):
+            raise RuntimeError("API key is mandatory for RS-Server authentication")
+
+        # For HTTP request headers
+        self.apikey_headers: dict = (
+            {"headers": {APIKEY_HEADER: self.rs_server_api_key}} if self.rs_server_api_key else {}
+        )
+
+        # Determine automatically the owner id
+        if not self.owner_id:
+            # In local mode, we use the local system username
+            if self.local_mode:
+                self.owner_id = getpass.getuser()
+
+            # In hybrid/cluster mode, we retrieve the API key login
+            else:
+                self.owner_id = self.apikey_user_login
+
+        # Remove special characters
+        self.owner_id = re.sub(r"[^a-zA-Z0-9]+", "", self.owner_id)
+
+        if not self.owner_id:
+            raise RuntimeError("The owner ID is empty or only contains special characters")
+
+        self.logger.debug(f"Owner ID: {self.owner_id!r}")
+
+    # The following variable is needed for the tests to pass
+    apikey_security_cache: TTLCache = TTLCache(maxsize=sys.maxsize, ttl=120)
+
+    @cached(cache=apikey_security_cache)
+    def apikey_security(self) -> tuple[list[str], dict, str]:
+        """
+        Check the api key validity. Cache an infinite (sys.maxsize) number of results for 120 seconds.
+
+        Returns:
+            Tuple of (IAM roles, config, user login) information from the keycloak account, associated to the api key.
+        """
+
+        # In local mode, we have no API key, so return empty results
+        if self.local_mode:
+            return [], {}, ""
+
+        # self.logger.warning(
+        #     f"TODO: use {self.rs_server_href}/apikeymanager/check/api_key instead, see: "
+        #     "https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-257",
+        # )
+        # Does not work in hybrid mode for now because this URL is not exposed.
+        check_url = os.environ["RSPY_UAC_CHECK_URL"]
+
+        # Request the API key manager, pass user-defined api key in http header
+        # check_url = f"{self.rs_server_href}/apikeymanager/check/api_key"
+        self.logger.debug("Call the API key manager")
+        response = requests.get(check_url, **self.apikey_headers, timeout=TIMEOUT)
+
+        # Read the api key info
+        if response.ok:
+            contents = response.json()
+            # Note: for now, config is an empty dict
+            return contents["iam_roles"], contents["config"], contents["user_login"]
+
+        # Try to read the response detail or error
+        try:
+            json = response.json()
+            if "detail" in json:
+                detail = json["detail"]
+            else:
+                detail = json["error"]
+
+        # If this fail, get the full response content
+        except Exception:  # pylint: disable=broad-exception-caught
+            detail = response.content
+
+        raise RuntimeError(f"API key manager status code {response.status_code}: {detail}")
+
+    @property
+    def apikey_iam_roles(self) -> list[str]:
+        """
+        Return the IAM (Identity and Access Management) roles from the keycloak account,
+        associated to the api key.
+        """
+        return self.apikey_security()[0]
+
+    @property
+    def apikey_config(self) -> dict:
+        """Return the config from the keycloak account, associated to the api key."""
+        return self.apikey_security()[1]
+
+    @property
+    def apikey_user_login(self) -> str:
+        """Return the user login from the keycloak account, associated to the api key."""
+        return self.apikey_security()[2]
 
     #############################
     # Get child class instances #
@@ -81,7 +194,7 @@ class RsClient:
 
         return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger)
 
-    def get_stac_client(self) -> "StacClient":  # type: ignore # noqa: F821
+    def get_stac_client(self, *args, **kwargs) -> "StacClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class StacClient, with the same attributes as this "self" instance.
         """
@@ -89,13 +202,13 @@ class RsClient:
             StacClient,
         )
 
-        return StacClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
+        return StacClient.open(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger, *args, **kwargs)
 
     ############################
     # Call RS-Server endpoints #
     ############################
 
-    def staging_status(self, filename, timeout: int) -> EDownloadStatus:
+    def staging_status(self, filename, timeout: int = TIMEOUT) -> EDownloadStatus:
         """Check the status of a file download from the specified rs-server endpoint.
 
         This function sends a GET request to the rs-server endpoint with the filename as a query parameter
@@ -134,7 +247,7 @@ class RsClient:
 
         return EDownloadStatus.FAILED
 
-    def staging(self, filename: str, timeout: int, s3_path: str = "", tmp_download_path: str = ""):
+    def staging(self, filename: str, s3_path: str = "", tmp_download_path: str = "", timeout: int = TIMEOUT):
         """Stage a file for download.
 
         This method stages a file for download by sending a request to the staging endpoint
@@ -187,9 +300,9 @@ class RsClient:
         self,
         start_date: datetime,
         stop_date: datetime,
-        timeout: int,
         limit: Union[int, None] = None,
         sortby: Union[str, None] = None,
+        timeout: int = TIMEOUT,
     ) -> list:
         """Retrieve a list of files from the specified endpoint.
 

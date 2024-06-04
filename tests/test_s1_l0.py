@@ -23,6 +23,7 @@ import pytest
 import responses
 import yaml
 
+from rs_client.rs_client import RsClient
 from rs_client.stac_client import StacClient
 from rs_common.logging import Logging
 from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
@@ -38,11 +39,14 @@ from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     s1_l0_flow,
     start_dpr,
 )
+from tests import common
 
 # from prefect.testing.utilities import prefect_test_harness
 
-
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
+API_KEY = "dummy-api-key"
+RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
+OWNER_ID = "OWNER_ID"
 
 
 @pytest.mark.unit
@@ -99,34 +103,26 @@ def test_start_dpr(endpoint, status):
     "cadip_files, , adgs_files, product_types, temp_s3_path",
     [
         (
-            {
-                "type": "FeatureCollection",
-                "context": {"limit": 1000, "returned": 60},
-                "features": [
-                    {
-                        "id": "CADU.raw",
-                        "assets": {
-                            "file": {
-                                "alternate": {"s3": {"href": "s3://test-bucket/CADU.raw"}},
-                            },
+            [
+                {
+                    "id": "CADU.raw",
+                    "assets": {
+                        "file": {
+                            "alternate": {"s3": {"href": "s3://test-bucket/CADU.raw"}},
                         },
                     },
-                ],
-            },
-            {
-                "type": "FeatureCollection",
-                "context": {"limit": 1000, "returned": 60},
-                "features": [
-                    {
-                        "id": "AUX.EOF",
-                        "assets": {
-                            "file": {
-                                "alternate": {"s3": {"href": "s3://test-bucket/AUX.EOF"}},
-                            },
+                },
+            ],
+            [
+                {
+                    "id": "AUX.EOF",
+                    "assets": {
+                        "file": {
+                            "alternate": {"s3": {"href": "s3://test-bucket/AUX.EOF"}},
                         },
                     },
-                ],
-            },
+                },
+            ],
             ["S1SEWRAW"],
             "s3://test-bucket/PRODUCTS/",
         ),
@@ -291,17 +287,7 @@ def test_create_cql2_filter():
     )
 
 
-@pytest.mark.unit
-@responses.activate
-@pytest.mark.parametrize(
-    "endpoint, status",
-    [
-        ("http://127.0.0.1:5000", "200"),
-        ("http://127.0.0.1:5000", "404"),
-        ("http://bad_endpoint", "None"),
-    ],
-)
-def test_get_cadip_catalog_data(endpoint, status):
+def test_get_cadip_catalog_data(mocked_stac_catalog_search_cadip):
     """Test for the get_cadip_catalog_data function.
 
     This test function mocks API responses and verifies the behavior of the
@@ -318,85 +304,39 @@ def test_get_cadip_catalog_data(endpoint, status):
     with a 200 status code. Otherwise, it asserts that the function returns None.
 
     """
-    username = "TestUser"
     collection = "s1_test"
     cadip_session_id = "S1A_20200105072204051312"
-    cadip_catalog = RESOURCES / "cadip_catalog.json"
-    with open(cadip_catalog, encoding="utf-8") as cadip_catalog_f:
+    with open(RESOURCES / "cadip_catalog.json", encoding="utf-8") as cadip_catalog_f:
         cadip_catalog = json.loads(cadip_catalog_f.read())
-    if "bad_endpoint" not in endpoint:
-        responses.add(
-            responses.POST,
-            endpoint + "/catalog/search",
-            json=cadip_catalog,
-            status=status,
-        )
-
-    rs_client = StacClient(endpoint, None, username)
+    rs_client: StacClient = RsClient(mocked_stac_catalog_search_cadip, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
     cadip_res = get_cadip_catalog_data.fn(rs_client, collection, cadip_session_id)
-
-    if "bad_endpoint" not in endpoint:
-        # print(cadip_res)
-        if int(status) == 200:
-            assert cadip_res == cadip_catalog
-        else:
-            assert cadip_res is None
-    else:
-        assert cadip_res is None
+    assert cadip_res == cadip_catalog["features"]
 
 
-@pytest.mark.unit
-@responses.activate
-@pytest.mark.parametrize(
-    "endpoint, status",
-    [
-        ("http://127.0.0.1:5000", "200"),
-        ("http://127.0.0.1:5000", "404"),
-        ("http://bad_endpoint", "None"),
-    ],
-)
-def test_get_adgs_catalog_data(endpoint, status):
+def test_get_adgs_catalog_data(mocked_stac_catalog_search_adgs):
     """Test for the get_adgs_catalog_data function.
 
     This test function mocks API responses and verifies the behavior of the
     get_adgs_catalog_data function under different scenarios.
 
     Args:
-        endpoint (str): The URL of the endpoint to mock API requests.
-        status (str): The HTTP status code to mock API responses.
+        mocked_stac_catalog (str): the mocker for the landing page and search endpoint.
 
     The function loads an expected ADGS catalog data from a file and mocks
     the API response based on the provided endpoint and status. It then calls
     the get_adgs_catalog_data function with the specified parameters and
     asserts that it returns the expected catalog data when the endpoint responds
-    with a 200 status code. Otherwise, it asserts that the function returns None.
-
+    with a 200 status code.
     """
-    username = "TestUser"
     collection = "s1_test"
     files_list = ["ADGS1.EOF", "ADGS2.EOF"]
-    adgs_catalog = RESOURCES / "adgs_catalog.json"
-    with open(adgs_catalog, encoding="utf-8") as adgs_catalog_f:
+    with open(RESOURCES / "adgs_catalog.json", encoding="utf-8") as adgs_catalog_f:
         adgs_catalog = json.loads(adgs_catalog_f.read())
-    if "bad_endpoint" not in endpoint:
-        responses.add(
-            responses.GET,
-            endpoint + "/catalog/search",
-            json=adgs_catalog,
-            status=status,
-        )
 
-    rs_client = StacClient(endpoint, "", username)
+    rs_client: StacClient = RsClient(mocked_stac_catalog_search_adgs, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
     adgs_res = get_adgs_catalog_data.fn(rs_client, collection, files_list)
 
-    if "bad_endpoint" not in endpoint:
-        print(adgs_res)
-        if int(status) == 200:
-            assert adgs_res == adgs_catalog
-        else:
-            assert adgs_res is None
-    else:
-        assert adgs_res is None
+    assert adgs_res == adgs_catalog["features"]
 
 
 @pytest.mark.unit
@@ -464,12 +404,14 @@ def test_s1_l0_flow(mocker):  # pylint: disable=too-many-locals
         url_gen + "/catalog/collections",
         status=200,
     )
+    json_landing_page = common.json_landing_page(url_gen, "toto:S1_L1")
+    responses.get(url=url_gen + "/catalog/", json=json_landing_page, status=200)
 
     mocker.patch(
         "rs_workflows.staging.update_stac_catalog",
         return_value=True,
     )
-    rs_client = StacClient(url_gen, None, username)
+    rs_client = StacClient.open(url_gen, API_KEY, username)
     adgs_files = [
         "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
         "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
@@ -550,7 +492,7 @@ if __name__ == "__main__":
     if not args.apikey:
         args.apikey = os.environ.get("RSPY_APIKEY", None)
 
-    _rs_client = StacClient(args.url_catalog, args.apikey, args.user, logger)
+    _rs_client = StacClient.open(args.url_catalog, args.apikey, args.user, logger)
 
     # TODO: use "real" values ?
     _adgs_files = [
