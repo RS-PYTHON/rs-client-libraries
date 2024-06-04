@@ -42,10 +42,10 @@ class RsClient:
         rs_server_href (str): RS-Server URL. In local mode, pass None.
         rs_server_api_key (str): API key for RS-Server authentication.
         owner_id (str): ID of the owner of the STAC catalog collections (no special characters allowoed).
-        By default, this is the user login from the keycloak account, associated to the API key.
-        Or, in local mode, this is the local system username.
-        Else, your API Key must give you the rights to read/write on this catalog owner.
-        This owner ID is also used in the RS-Client logging.
+                        By default, this is the user login from the keycloak account, associated to the API key.
+                        Or, in local mode, this is the local system username.
+                        Else, your API Key must give you the rights to read/write on this catalog owner.
+                        This owner ID is also used in the RS-Client logging.
         logger (logging.Logger): Logging instance.
         local_mode (bool): Local mode or hybrid/cluster mode.
         apikey_headers (dict): API key in a dict, ready-to-use in HTTP request headers.
@@ -307,7 +307,7 @@ class RsClient:
         """Retrieve a list of files from the specified endpoint.
 
         This function queries the specified endpoint to retrieve a list of files available in the
-        station (CADIP, ADGS, LTA ...) that were collected by the stalleite within the provided time range,
+        station (CADIP, ADGS, LTA ...) that were collected by the satellite within the provided time range,
         starting from 'start_date' up to 'stop_date' (inclusive).
 
         Args:
@@ -318,19 +318,19 @@ class RsClient:
             sortby (str, optional): The attribute to sort the results by. Defaults to None.
 
         Returns:
-            files (list): A list of files (in stac format) available at the endpoint within the specified time range.
+            files (list): The list of files available at the station within the specified time range.
 
         Raises:
-            - RuntimeError if the endpoint can't be reached
+            RuntimeError: if the endpoint can't be reached
 
         Notes:
             - This function queries the specified endpoint with a time range to retrieve information about
             available files.
             - It constructs a payload with the start and stop dates in ISO 8601 format and sends a GET
             request to the endpoint.
-            - The response is expected to be in JSON format with STAC, containing information about available files.
-                EODAG should return the information in STACH format through JSON
-            - The function then extracts file information from the response and returns a list of files.
+            - The response is expected to be a STAC Compatible formatted JSONResponse, containing information about
+             available files.
+            - The function converts a STAC FeatureCollection to a Python list.
         """
 
         payload = {
