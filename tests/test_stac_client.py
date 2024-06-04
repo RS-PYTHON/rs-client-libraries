@@ -73,7 +73,9 @@ def test_get_items_stac_client(mocked_stac_catalog_get_collection):  # pylint: d
 def test_create_new_collection_stac_client():  # pylint: disable=missing-function-docstring
     spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
     date_strings = ["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]
-    date_objects = [datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ") for date_str in date_strings]
+    date_objects: list[datetime | None] = [  # mypy complains without this | None
+        datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ") for date_str in date_strings
+    ]
     temporal = TemporalExtent(intervals=date_objects)
     extent = Extent(spatial=spatial, temporal=temporal)
     new_collection = Collection(id="S2_L2", description="S2_L2 collection.", extent=extent)
@@ -89,7 +91,9 @@ def test_add_collection_stac_client(mocked_stac_catalog_add_collection):  # pyli
 
     spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
     date_strings = ["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]
-    date_objects = [datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ") for date_str in date_strings]
+    date_objects: list[datetime | None] = [  # mypy complains without this | None
+        datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ") for date_str in date_strings
+    ]
     temporal = TemporalExtent(intervals=date_objects)
     extent = Extent(spatial=spatial, temporal=temporal)
     new_collection = Collection(id="S2_L2", description="S2_L2 collection.", extent=extent)

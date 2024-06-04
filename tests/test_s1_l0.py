@@ -306,8 +306,7 @@ def test_get_cadip_catalog_data(mocked_stac_catalog_search_cadip):
     """
     collection = "s1_test"
     cadip_session_id = "S1A_20200105072204051312"
-    cadip_catalog = RESOURCES / "cadip_catalog.json"
-    with open(cadip_catalog, encoding="utf-8") as cadip_catalog_f:
+    with open(RESOURCES / "cadip_catalog.json", encoding="utf-8") as cadip_catalog_f:
         cadip_catalog = json.loads(cadip_catalog_f.read())
     rs_client: StacClient = RsClient(mocked_stac_catalog_search_cadip, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
     cadip_res = get_cadip_catalog_data.fn(rs_client, collection, cadip_session_id)
@@ -331,8 +330,7 @@ def test_get_adgs_catalog_data(mocked_stac_catalog_search_adgs):
     """
     collection = "s1_test"
     files_list = ["ADGS1.EOF", "ADGS2.EOF"]
-    adgs_catalog = RESOURCES / "adgs_catalog.json"
-    with open(adgs_catalog, encoding="utf-8") as adgs_catalog_f:
+    with open(RESOURCES / "adgs_catalog.json", encoding="utf-8") as adgs_catalog_f:
         adgs_catalog = json.loads(adgs_catalog_f.read())
 
     rs_client: StacClient = RsClient(mocked_stac_catalog_search_adgs, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
