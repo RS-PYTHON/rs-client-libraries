@@ -251,6 +251,11 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
             link for link in self.links if not ((link.rel == pystac.RelType.CHILD) and (link.href == collection_link))
         ]
 
+        # We need to clear the cache for this and parent "get_collection" methods
+        # because their returned value must be updated.
+        self.get_collection.cache_clear()
+        Client.get_collection.cache_clear()
+
         # Remove the collection from the server catalog
         return requests.delete(
             f"{self.href_catalog}/catalog/collections/{full_collection_id}",
