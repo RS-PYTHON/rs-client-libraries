@@ -41,6 +41,7 @@ class RsClient:
     Attributes:
         rs_server_href (str): RS-Server URL. In local mode, pass None.
         rs_server_api_key (str): API key for RS-Server authentication.
+                                 If not set, we try to read it from the RSPY_APIKEY environment variable.
         owner_id (str): ID of the owner of the STAC catalog collections (no special characters allowoed).
                         By default, this is the user login from the keycloak account, associated to the API key.
                         Or, in local mode, this is the local system username.
@@ -54,7 +55,7 @@ class RsClient:
     def __init__(
         self,
         rs_server_href: str | None,
-        rs_server_api_key: str | None,
+        rs_server_api_key: str | None = None,
         owner_id: str | None = None,
         logger: logging.Logger | None = None,
     ):
@@ -71,6 +72,10 @@ class RsClient:
         # We are in local mode if the URL is undefined.
         # Env vars are used instead to determine the different services URL.
         self.local_mode = not bool(self.rs_server_href)
+
+        # If the API key is not set, we try to read it from the RSPY_APIKEY environment variable.
+        if not self.rs_server_api_key:
+            self.rs_server_api_key = os.getenv("RSPY_APIKEY")  # None if the env var is not set
 
         if (not self.local_mode) and (not self.rs_server_api_key):
             raise RuntimeError("API key is mandatory for RS-Server authentication")

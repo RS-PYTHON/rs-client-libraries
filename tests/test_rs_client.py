@@ -116,6 +116,24 @@ def test_server_href(mocked_stac_catalog_url):
             RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
 
+def test_api_key_by_env_var():
+    """Test that we can pass the API key by environment variable."""
+
+    # Test that we can pass it by argument
+    rs_client = RsClient("", RS_SERVER_API_KEY, owner_id=OWNER_ID)  # no global href
+    assert rs_client.rs_server_api_key == RS_SERVER_API_KEY
+
+    # Else, if we don't pass it and we don't have the env var, it will be None
+    rs_client = RsClient("", owner_id=OWNER_ID)
+    assert rs_client.rs_server_api_key is None
+
+    # Else we can pass it by env var
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setenv("RSPY_APIKEY", RS_SERVER_API_KEY)
+        rs_client = RsClient("", owner_id=OWNER_ID)
+        assert rs_client.rs_server_api_key == RS_SERVER_API_KEY
+
+
 def test_cadip_sessions():
     """
     Test CadipClient.search_sessions
