@@ -341,13 +341,14 @@ class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many
         self.adgs_files = adgs_files
         self.s3_path = s3_path
         self.temp_s3_path = temp_s3_path
-        self.creation_time = f"{datetime.datetime.now(datetime.timezone.utc):%Y%m%d%H%M%S}"
 
 
 # At the time being, no more than 2 workers are required, because this flow runs at most 2 tasks in in parallel
 # @flow # TO DEBUG THE CODE, JUST USE @flow
-@flow(flow_run_name = "{config.rs_client_serialization.owner_id}_{config.creation_time}",
-        task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 2, "threads_per_worker": 1}))
+@flow(
+    flow_run_name="{config.rs_client_serialization.get_flow_name}",
+    task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 2, "threads_per_worker": 1}),
+)
 def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-locals
     """Constructs a Prefect Flow for Sentinel-1 Level 0 processing.
 

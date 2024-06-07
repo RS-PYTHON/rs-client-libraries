@@ -37,7 +37,7 @@ from rs_workflows.staging import (
     staging_flow,
 )
 
-# NOTE: for local mode, use the followings exports: 
+# NOTE: for local mode, use the followings exports:
 # export RSPY_HOST_ADGS=http://127.0.0.1:8001
 # export RSPY_HOST_CADIP=http://127.0.0.1:8002
 # export RSPY_HOST_CATALOG=http://127.0.0.1:8003

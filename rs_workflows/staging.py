@@ -15,7 +15,7 @@
 """Common workflows for general usage"""
 
 import time
-import datetime
+from datetime import datetime
 
 import dateutil.parser
 import numpy as np
@@ -89,7 +89,7 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
 
     """
     item_id = stac_file_info["id"]
-    now = datetime.datetime.now()
+    now = datetime.now()
 
     # The file path from the temp s3 bucket is given in the assets
     assets = {"file": Asset(href=f"{obs.rstrip('/')}/{stac_file_info['id']}")}
@@ -150,7 +150,6 @@ class PrefectCommonConfig:  # pylint: disable=too-few-public-methods, too-many-i
         self.mission: str = mission
         self.tmp_download_path: str = tmp_download_path
         self.s3_path: str = s3_path
-        self.creation_time = f"{datetime.datetime.now(datetime.timezone.utc):%Y%m%d%H%M%S}"
 
 
 class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-methods
@@ -393,9 +392,12 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         self.stop_datetime: datetime = stop_datetime
         self.limit = limit
 
+
 # @flow # TO DEBUG THE CODE, JUST USE @flow
-@flow(flow_run_name = "{config.rs_client_serialization.owner_id}_{config.creation_time}",
-      task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 15, "threads_per_worker": 1}))
+@flow(
+    flow_run_name="{config.rs_client_serialization.get_flow_name}",
+    task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 15, "threads_per_worker": 1}),
+)
 def staging_flow(config: PrefectFlowConfig):
     """
     Prefect flow for staging (downloading/ingesting) files from a station.
