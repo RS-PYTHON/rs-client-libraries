@@ -394,7 +394,10 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
 
 
 # @flow # TO DEBUG THE CODE, JUST USE @flow
-@flow(task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 15, "threads_per_worker": 1}))
+@flow(
+    flow_run_name="{config.rs_client_serialization.get_flow_name}",
+    task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 15, "threads_per_worker": 1}),
+)
 def staging_flow(config: PrefectFlowConfig):
     """
     Prefect flow for staging (downloading/ingesting) files from a station.

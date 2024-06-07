@@ -37,7 +37,12 @@ from rs_workflows.staging import (
     staging_flow,
 )
 
-# NOTE: for local mode, use export RSPY_HOST_CATALOG=http://127.0.0.1:8003
+# NOTE: for local mode, use the followings exports:
+# export RSPY_HOST_ADGS=http://127.0.0.1:8001
+# export RSPY_HOST_CADIP=http://127.0.0.1:8002
+# export RSPY_HOST_CATALOG=http://127.0.0.1:8003
+# and set the argument --url to ""
+
 
 s3_session = boto3.session.Session()
 s3_client = s3_session.client(

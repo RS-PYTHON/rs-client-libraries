@@ -14,13 +14,14 @@
 
 """(De-)Serialization utility functions for the workflows."""
 
+from datetime import datetime, timezone
 from typing import Type, cast
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
 from rs_client.rs_client import RsClient
 from rs_client.stac_client import StacClient
-from rs_common.config import ECadipStation
+from rs_common.config import DATETIME_FORMAT, ECadipStation
 
 
 class RsClientSerialization:  # pylint: disable=too-few-public-methods
@@ -78,3 +79,8 @@ class RsClientSerialization:  # pylint: disable=too-few-public-methods
         if self.cls == StacClient:
             return client.get_stac_client()
         raise ValueError(f"Unknown RsClient type: {self.cls}")
+
+    @property
+    def get_flow_name(self):
+        """Return a unique flow name for Prefect."""
+        return f"{self.owner_id}_{datetime.now(timezone.utc).strftime(DATETIME_FORMAT)}"
