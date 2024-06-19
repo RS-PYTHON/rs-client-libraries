@@ -37,7 +37,7 @@ from rs_common.config import (
 from rs_common.logging import Logging
 from rs_common.serialization import RsClientSerialization
 
-DOWNLOAD_FILE_TIMEOUT = 180  # in seconds
+DOWNLOAD_FILE_TIMEOUT = 360  # in seconds
 SET_PREFECT_LOGGING_LEVEL = "DEBUG"
 ENDPOINT_TIMEOUT = 10  # in seconds
 SEARCH_ENDPOINT_TIMEOUT = 60  # in seconds
@@ -225,15 +225,15 @@ def staging(config: PrefectTaskConfig):
         # monitor the status of the file until it is completely downloaded before initiating the next download request
         status = rs_client.staging_status(file_stac["id"], ENDPOINT_TIMEOUT)
         # just for the demo the timeout is hardcoded, it should be otherwise defined somewhere in the configuration
-        timeout = DOWNLOAD_FILE_TIMEOUT  # 3 minutes
+        timeout = DOWNLOAD_FILE_TIMEOUT  # 6 minutes
         while status in [EDownloadStatus.NOT_STARTED, EDownloadStatus.IN_PROGRESS] and timeout > 0:
             logger.info(
                 "The download progress for file %s is %s",
                 file_stac["id"],
                 status.name,
             )
-            time.sleep(1)
-            timeout -= 1
+            time.sleep(2)
+            timeout -= 2
             status = rs_client.staging_status(file_stac["id"], timeout=ENDPOINT_TIMEOUT)
         if status == EDownloadStatus.DONE:
             logger.info("File %s has been properly downloaded...", file_stac["id"])
@@ -396,7 +396,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
 # @flow # TO DEBUG THE CODE, JUST USE @flow
 @flow(
     flow_run_name="{config.rs_client_serialization.get_flow_name}",
-    task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 15, "threads_per_worker": 1}),
+    task_runner=DaskTaskRunner(cluster_kwargs={"n_workers": 5, "threads_per_worker": 1}),
 )
 def staging_flow(config: PrefectFlowConfig):
     """
