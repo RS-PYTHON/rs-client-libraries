@@ -146,12 +146,16 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
 
     def full_collection_id(self, owner_id: str | None, collection_id: str):
         """
-        Return the full collection name as: <owner_id>:<collection_id>
+        Return the full collection name as: <owner_id>:<collection_id> 
+        or <collection_id> if owner_id is missing
 
         Args:
-            owner_id (str): Collection owner ID. If missing, we use self.owner_id.
+            owner_id (str): Collection owner ID. If missing, only the collection_id will be used
+            and the owner_id will be taken from the provided apikey
             collection_id (str): Collection name
         """
+        if not owner_id and not self.owner_id:
+            return collection_id
         return f"{owner_id or self.owner_id}:{collection_id}"
 
     ################################
@@ -168,7 +172,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         self,
         collection: Collection,
         add_public_license: bool = True,
-        owner_id: str | None = None,
+        #owner_id: str | None = None,
         timeout: int = TIMEOUT,
     ) -> Response:
         """Update the collection links, then post the collection into the catalog.
@@ -183,20 +187,20 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
             JSONResponse (json): The response of the request.
         """
 
-        full_owner_id = owner_id or self.owner_id
+        #full_owner_id = owner_id or self.owner_id
 
         # Use owner_id:collection_id instead of just the collection ID, before adding the links,
         # so the links contain the full owner_id:collection_id
-        short_collection_id = collection.id
-        full_collection_id = self.full_collection_id(owner_id, short_collection_id)
-        collection.id = full_collection_id
+        #short_collection_id = collection.id
+        #full_collection_id = self.full_collection_id(owner_id, short_collection_id)
+        #collection.id = full_collection_id
 
         # Default description
         if not collection.description:
-            collection.description = f"This is the collection {short_collection_id} from user {full_owner_id}."
+            collection.description = f"This is the collection {collection.id}"
 
         # Add the owner_id as an extra field
-        collection.extra_fields["owner"] = full_owner_id
+        # collection.extra_fields["owner"] = full_owner_id
 
         # Add public domain license
         if add_public_license:
@@ -210,10 +214,10 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
             )
 
         # Update the links
-        self.add_child(collection)
+        #self.add_child(collection)
 
         # Restore the short collection_id at the root of the collection
-        collection.id = short_collection_id
+        #collection.id = short_collection_id
 
         # Check that the collection is compliant to STAC
         collection.validate_all()

@@ -17,6 +17,8 @@
 import time
 from datetime import datetime
 
+import getpass
+import re
 import dateutil.parser
 import numpy as np
 import requests
@@ -265,7 +267,20 @@ def staging(config: PrefectTaskConfig):
 
     return failed_files
 
-
+def get_owner_id(stac_client: StacClient):
+    if not stac_client.owner_id:
+        # In local mode, we use the local system username
+        if stac_client.local_mode:
+            owner_id = getpass.getuser()
+        # In hybrid/cluster mode, we retrieve the API key login
+        else:
+            owner_id = stac_client.apikey_user_login
+        # Remove special characters
+        owner_id = re.sub(r"[^a-zA-Z0-9]+", "", owner_id)
+    if not owner_id:
+        raise RuntimeError("The owner ID is empty or only contains special characters")
+    return owner_id
+        
 @task
 def filter_unpublished_files(
     stac_client: StacClient,  # NOTE: maybe use RsClientSerialization instead
@@ -303,14 +318,23 @@ def filter_unpublished_files(
     ids = list(ids)  # type: ignore # set to list conversion
 
     # For searching, we need to prefix our collection name by <owner_id>_
-    owner_collection = f"{stac_client.owner_id}_{collection_name}"
+    # NOTE: as the stac_client.owner_id may be None (see comments from rs_client.py file, at the end of __init__)
+    # the owner has to be taken here:
+    try:
+        owner_id = stac_client.owner_id or get_owner_id(stac_client)
+    except RuntimeError:
+        stac_client.loggr.exception("The owner id could not be get to create the search expression")
+        # In case of any error, try to ingest everything anyway
+        return files_stac
+    
+    owner_collection = f"{owner_id}_{collection_name}"
 
     # Search using a CQL2 filter, see: https://pystac-client.readthedocs.io/en/stable/tutorials/cql2-filter.html
     filter_ = {
         "op": "and",
         "args": [
             {"op": "=", "args": [{"property": "collection"}, owner_collection]},
-            {"op": "=", "args": [{"property": "owner"}, stac_client.owner_id]},
+            {"op": "=", "args": [{"property": "owner"}, owner_id]},
             {"op": "in", "args": [{"property": "id"}, ids]},
         ],
     }

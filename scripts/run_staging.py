@@ -26,12 +26,13 @@ from datetime import datetime
 # RSPY_APIKEY="RSPY_APIKEY"
 import boto3
 import botocore
-import requests
+#import requests
+from pystac import Collection, Extent, SpatialExtent, TemporalExtent
 
 from rs_client.rs_client import RsClient
 from rs_common.config import DATETIME_FORMAT
 from rs_workflows.staging import (
-    CATALOG_REQUEST_TIMEOUT,
+    #CATALOG_REQUEST_TIMEOUT,
     PrefectFlowConfig,
     create_collection_name,
     staging_flow,
@@ -43,82 +44,78 @@ from rs_workflows.staging import (
 # export RSPY_HOST_CATALOG=http://127.0.0.1:8003
 # and set the argument --url to ""
 
-
-s3_session = boto3.session.Session()
-s3_client = s3_session.client(
-    service_name="s3",
-    aws_access_key_id=os.environ["S3_ACCESSKEY"],
-    aws_secret_access_key=os.environ["S3_SECRETKEY"],
-    endpoint_url=os.environ["S3_ENDPOINT"],
-    region_name=os.environ["S3_REGION"],
-)
+local_mode = (os.getenv("RSPY_LOCAL_MODE") == "1")
+if local_mode:
+    s3_session = boto3.session.Session()
+    s3_client = s3_session.client(
+        service_name="s3",
+        aws_access_key_id=os.environ["S3_ACCESSKEY"],
+        aws_secret_access_key=os.environ["S3_SECRETKEY"],
+        endpoint_url=os.environ["S3_ENDPOINT"],
+        region_name=os.environ["S3_REGION"],
+    )
 
 BUCKETS = ["rs-cluster-temp", "rs-cluster-catalog"]  # bucket names under S3_ENDPOINT
 BUCKET_DIR = "stations"
 BUCKET_URL = f"s3://{BUCKETS[0]}/{BUCKET_DIR}"
 
 
-@dataclass
-class Collection:
-    """A collection for test purpose."""
+# @dataclass
+# class Collection:
+#     """A collection for test purpose."""
 
-    user: str
-    name: str
+#     user: str
+#     name: str
 
-    @property
-    def id_(self) -> str:
-        """Returns the id."""
-        return f"{self.user}_{self.name}"
+#     @property
+#     def id_(self) -> str:
+#         """Returns the id."""
+#         return f"{self.user}_{self.name}"
 
-    @property
-    def properties(self):
-        """Returns the properties."""
-        return {
-            "id": self.name,
-            "type": "Collection",
-            "links": [
-                {
-                    "rel": "items",
-                    "type": "application/geo+json",
-                    "href": f"http://localhost:8082/collections/{self.name}/items",
-                },
-                {"rel": "parent", "type": "application/json", "href": "http://localhost:8082/"},
-                {"rel": "root", "type": "application/json", "href": "http://localhost:8082/"},
-                {
-                    "rel": "self",
-                    "type": "application/json",
-                    "href": f"""http://localhost:8082/collections/{self.name}""",
-                },
-                {
-                    "rel": "license",
-                    "href": "https://creativecommons.org/licenses/publicdomain/",
-                    "title": "public domain",
-                },
-            ],
-            "extent": {
-                "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
-                "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
-            },
-            "license": "public-domain",
-            "description": "Some description",
-            "stac_version": "1.0.0",
-            "owner": self.user,
-        }
+#     @property
+#     def properties(self):
+#         """Returns the properties."""
+#         collection_dict = {
+#             "id": self.name,
+#             "type": "Collection",            
+#             "extent": {
+#                 "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
+#                 "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
+#             },
+#             "license": "public-domain",
+#             "description": "Some description",
+#             "stac_version": "1.0.0",            
+#         }
+#         if self.user:
+#             collection_dict["owner"] = self.user
+#         return collection_dict
 
 
-def create_collection(_rs_client, collection_name, _logger):
-    """Create a collection in the catalog."""
-    catalog_endpoint = _rs_client.href_catalog + "/catalog/collections"
-    collection_type = Collection(_rs_client.owner_id, collection_name)
-    _logger.info(f"Endpoint used to insert the item info  within the catalog: {catalog_endpoint}")
-    # try:
-    response = requests.post(
-        catalog_endpoint,
-        data=None,
-        json=collection_type.properties,
-        timeout=CATALOG_REQUEST_TIMEOUT,
-        **_rs_client.apikey_headers,
+def create_collection(stac_client, collection_name, _logger):
+    """Create a collection in the catalog."""   
+    start_date = datetime(2010, 1, 1, 12, 0, 0)
+    stop_date = datetime(2024, 1, 1, 12, 0, 0) 
+    response = stac_client.add_collection(
+        Collection(
+            id=collection_name,
+            description=None, # rs-client will provide a default description for us
+            extent=Extent(
+                spatial=SpatialExtent(bboxes=[-180.0, -90.0, 180.0, 90.0]),
+                temporal=TemporalExtent([start_date, stop_date])
+            )
+        )
     )
+    # catalog_endpoint = _rs_client.rs_server_href + "/catalog/collections"
+    # collection_type = Collection(_rs_client.owner_id, collection_name)
+    # _logger.info(f"Endpoint used to insert the item info  within the catalog: {catalog_endpoint}")
+    # # try:
+    # response = requests.post(
+    #     catalog_endpoint,
+    #     data=None,
+    #     json=collection_type.properties,
+    #     timeout=CATALOG_REQUEST_TIMEOUT,
+    #     **_rs_client.apikey_headers,
+    # )    
     # except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
     #    _logger.exception(f"Could not get the response from the session search endpoint: {e}")
     #    return
@@ -126,6 +123,10 @@ def create_collection(_rs_client, collection_name, _logger):
     #    _logger.exception(f"urllib exception: {e}")
     #    return
     _logger.info(f"response = {response}")
+    if response.status_code == 401:
+        _logger.error("The collection could not be created because of the UNAUTHORZIED apikey ! Useless to continue")
+        sys.exit(0)
+    
 
 
 if __name__ == "__main__":
@@ -136,11 +137,12 @@ if __name__ == "__main__":
     """
 
     # If the bucket is already created, clear all files to start fresh for each demo.
-    for b in BUCKETS:
-        try:
-            s3_client.create_bucket(Bucket=b)
-        except botocore.exceptions.ClientError as e:
-            print(f"Bucket {b} error: {e}")
+    if local_mode:
+        for b in BUCKETS:
+            try:
+                s3_client.create_bucket(Bucket=b)
+            except botocore.exceptions.ClientError as e:
+                print(f"Bucket {b} error: {e}")
     LOG_FOLDER = "./demo/"
     os.makedirs(LOG_FOLDER, exist_ok=True)
     log_formatter = logging.Formatter("[%(asctime)-20s] [%(name)-10s] [%(levelname)-6s] %(message)s")
@@ -172,7 +174,7 @@ if __name__ == "__main__":
         help="Station name (use CADIP or ADGS and the url accordingly)",
     )
 
-    parser.add_argument("-u", "--user", type=str, required=True, help="User name")
+    parser.add_argument("-u", "--user", type=str, required=False, default=None, help="User name. Default: None")
 
     parser.add_argument("-b", "--start-date", type=str, required=True, help="Start date used for time interval search")
 
@@ -242,10 +244,10 @@ if __name__ == "__main__":
             rs_client = generic_client.get_cadip_client(args.station.upper())
         except RuntimeError as e:
             logger.exception(f"Could not get the cadip client. Error: {e}")
-            sys.exit(-1)
-
-    create_collection(rs_client.get_stac_client(), create_collection_name(args.mission, rs_client.station_name), logger)
-
+            sys.exit(-1)    
+    
+    create_collection(generic_client.get_stac_client(), create_collection_name(args.mission, rs_client.station_name), logger)
+    
     # catalog_endpoint = args.url_catalog.rstrip("/") + "/catalog/collections"
     # collection_type = Collection(args.user, "s1_aux")
     # logger.info(f"Endpoint used to insert the item info  within the catalog: {catalog_endpoint}")

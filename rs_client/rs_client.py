@@ -62,9 +62,9 @@ class RsClient:
         """RsClient class constructor."""
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
-        self.owner_id: str = owner_id or ""
+        self.owner_id: str = owner_id
         self.logger: logging.Logger = logger or Logging.default(__name__)
-
+        
         # Remove trailing / character(s) from the URL
         if self.rs_server_href:
             self.rs_server_href = self.rs_server_href.strip().rstrip("/").strip()
@@ -84,24 +84,10 @@ class RsClient:
         self.apikey_headers: dict = (
             {"headers": {APIKEY_HEADER: self.rs_server_api_key}} if self.rs_server_api_key else {}
         )
-
-        # Determine automatically the owner id
+        # The self.owner_id may be None, in this case it will be determined by the rs-server-catalog
+        # using the provided apikey
         if not self.owner_id:
-            # In local mode, we use the local system username
-            if self.local_mode:
-                self.owner_id = getpass.getuser()
-
-            # In hybrid/cluster mode, we retrieve the API key login
-            else:
-                self.owner_id = self.apikey_user_login
-
-        # Remove special characters
-        self.owner_id = re.sub(r"[^a-zA-Z0-9]+", "", self.owner_id)
-
-        if not self.owner_id:
-            raise RuntimeError("The owner ID is empty or only contains special characters")
-
-        self.logger.debug(f"Owner ID: {self.owner_id!r}")
+            self.logger.info("The owner ID was not provided")
 
     # The following variable is needed for the tests to pass
     apikey_security_cache: TTLCache = TTLCache(maxsize=sys.maxsize, ttl=120)
