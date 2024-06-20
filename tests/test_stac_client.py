@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """All tests for the Stac Client."""
-
+import pytest
 from datetime import datetime
 
 from pystac import Collection, Extent, Item, SpatialExtent, TemporalExtent
@@ -85,9 +85,15 @@ def test_create_new_collection_stac_client():  # pylint: disable=missing-functio
     assert new_collection.id == "S2_L2"
     assert new_collection_jgaucher.id == "S3_L3"
 
-
-def test_add_collection_stac_client(mocked_stac_catalog_add_collection):  # pylint: disable=missing-function-docstring
-    catalog: StacClient = RsClient(mocked_stac_catalog_add_collection, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+@pytest.mark.parametrize(
+    ("owner_id"),
+    [
+        (OWNER_ID),
+        (None),
+    ],
+)
+def test_add_collection_stac_client(mocked_stac_catalog_add_collection, owner_id):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_add_collection, RS_SERVER_API_KEY, owner_id).get_stac_client()
 
     spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
     date_strings = ["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]
@@ -121,6 +127,18 @@ def test_delete_collection_stac_client(
     #######################
 
     response = catalog.remove_collection(collection_id="S1_L1", owner_id="toto")  # default owner_id is 'pyteam'
+    assert response.status_code == 200
+
+def test_delete_collection_stac_client_without_owner(
+    mocked_stac_catalog_delete_collection_without_owner,
+):  # pylint: disable=missing-function-docstring
+    catalog: StacClient = RsClient(mocked_stac_catalog_delete_collection_without_owner, RS_SERVER_API_KEY, None).get_stac_client()
+
+    #######################
+    # Delete a collection #
+    #######################
+
+    response = catalog.remove_collection(collection_id="S1_L1")  # default owner_id is 'pyteam'
     assert response.status_code == 200
 
 

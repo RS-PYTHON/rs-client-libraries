@@ -22,6 +22,7 @@ Fixtures defined in a conftest.py can be used by any test in that package withou
 
 import pytest
 import responses
+import getpass
 
 from tests import common
 
@@ -142,7 +143,29 @@ def mocked_stac_catalog_add_item():
 
 
 @pytest.fixture
-def mocked_stac_catalog_delete_collection():
+def mocked_stac_catalog_delete_collection(owner_id):
+    """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
+    with responses.RequestsMock() as resp:
+        # Mocked URL
+        url = "http://mocked_stac_catalog_url"
+        
+        # This is the returned content when calling a real STAC catalog service with:
+        # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
+        json_landing_page = common.json_landing_page(url, f"{owner_id or getpass.getuser()}:S1_L1")
+        resp.get(url=url + "/catalog/", json=json_landing_page, status=200)
+
+        json_status = {"status": "200"}
+        if owner_id:
+            endpoint_sufix = f"/catalog/collections/{owner_id}:S1_L1"
+        else:
+            endpoint_sufix = f"/catalog/collections/S1_L1"
+
+        resp.add("DELETE", url=url + endpoint_sufix, json=json_status, status=200)
+
+        yield url
+
+@pytest.fixture
+def mocked_stac_catalog_delete_collection_without_owner():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
     with responses.RequestsMock() as resp:
         # Mocked URL
@@ -150,14 +173,13 @@ def mocked_stac_catalog_delete_collection():
 
         # This is the returned content when calling a real STAC catalog service with:
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-        json_landing_page = common.json_landing_page(url, "toto:S1_L1")
+        json_landing_page = common.json_landing_page(url, "S1_L1")
         resp.get(url=url + "/catalog/", json=json_landing_page, status=200)
 
         json_status = {"status": "200"}
-        resp.add("DELETE", url=url + "/catalog/collections/toto:S1_L1", json=json_status, status=200)
+        resp.add("DELETE", url=url + "/catalog/collections/S1_L1", json=json_status, status=200)
 
         yield url
-
 
 @pytest.fixture
 def mocked_stac_catalog_add_collection():

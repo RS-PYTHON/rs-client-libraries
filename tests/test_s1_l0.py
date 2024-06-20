@@ -454,7 +454,7 @@ if __name__ == "__main__":
 
     parser.add_argument("-d", "--url-dpr", type=str, required=True, help="Url of the DPR endpoint")
 
-    parser.add_argument("-u", "--user", type=str, required=True, help="User name")
+    parser.add_argument("-u", "--user", type=str, required=False, help="User name", default=None)
 
     parser.add_argument("-m", "--mission", type=str, required=True, help="Mission name")
 

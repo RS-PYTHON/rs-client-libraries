@@ -171,8 +171,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
     def add_collection(
         self,
         collection: Collection,
-        add_public_license: bool = True,
-        #owner_id: str | None = None,
+        add_public_license: bool = True,        
         timeout: int = TIMEOUT,
     ) -> Response:
         """Update the collection links, then post the collection into the catalog.
@@ -180,27 +179,15 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         Args:
             collection (Collection): STAC collection
             add_public_license (bool): If True, add a public domain license field and link.
-            owner_id (str, optional): Collection owner ID. If missing, we use self.owner_id.
             timeout (int): The timeout duration for the HTTP request.
 
         Returns:
             JSONResponse (json): The response of the request.
         """
 
-        #full_owner_id = owner_id or self.owner_id
-
-        # Use owner_id:collection_id instead of just the collection ID, before adding the links,
-        # so the links contain the full owner_id:collection_id
-        #short_collection_id = collection.id
-        #full_collection_id = self.full_collection_id(owner_id, short_collection_id)
-        #collection.id = full_collection_id
-
         # Default description
         if not collection.description:
-            collection.description = f"This is the collection {collection.id}"
-
-        # Add the owner_id as an extra field
-        # collection.extra_fields["owner"] = full_owner_id
+            collection.description = f"This is a default description for the collection {collection.id}"
 
         # Add public domain license
         if add_public_license:
@@ -212,12 +199,6 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
                     title="public-domain",
                 ),
             )
-
-        # Update the links
-        #self.add_child(collection)
-
-        # Restore the short collection_id at the root of the collection
-        #collection.id = short_collection_id
 
         # Check that the collection is compliant to STAC
         collection.validate_all()
@@ -240,7 +221,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
 
         Args:
             collection_id (str): The collection id.
-            owner_id (str, optional): Collection owner ID. If missing, we use self.owner_id.
+            owner_id (str, optional): Collection owner ID. 
             timeout (int): The timeout duration for the HTTP request.
 
         Returns:
@@ -285,9 +266,9 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         Returns:
             JSONResponse: The response of the request.
         """
-        # owner_id:collection_id
+        # owner_id:collection_id or collection_id
         full_collection_id = self.full_collection_id(owner_id, collection_id)
-
+        
         # Get the collection from the catalog
         collection = self.get_collection(collection_id, owner_id)
 
