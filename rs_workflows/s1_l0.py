@@ -267,13 +267,15 @@ def get_cadip_catalog_data(
 def merge_assets_to_one_feature(assets_dict: List[dict]) -> dict:
     """Combine output of DPR into one multi-asset STAC Feature."""
     matching_stac = assets_dict[0]
-    asset_types = {'zarr': 'zarr', 'cog': 'cog', '.nc': 'netcdf'}
+    asset_types = {"zarr": "zarr", "cog": "cog", ".nc": "netcdf"}
 
     # Create a dictionary of assets using comprehension
-    matching_stac["stac_discovery"]["assets"] = {value: {"href": asset['stac_discovery']['id']}
-                                                 for asset in assets_dict
-                                                 for key, value in asset_types.items()
-                                                 if key in asset['stac_discovery']['id']}
+    matching_stac["stac_discovery"]["assets"] = {
+        value: {"href": asset["stac_discovery"]["id"]}
+        for asset in assets_dict
+        for key, value in asset_types.items()
+        if key in asset["stac_discovery"]["id"]
+    }
 
     return matching_stac
 
@@ -457,7 +459,6 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
 
     fin_res = []
     for output_product in get_yaml_outputs(yaml_dpr_input.result()):
-
         assets = [d for d in files_stac.result() if d["stac_discovery"]["properties"]["eopf:type"] in output_product]
         if len(assets) > 1:
             matching_stac = merge_assets_to_one_feature(assets)
