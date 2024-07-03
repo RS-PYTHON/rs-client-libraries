@@ -64,11 +64,15 @@ def start_dpr(dpr_endpoint: str, yaml_dpr_input: dict):
             timeout=DPR_PROCESSING_TIMEOUT,
         )
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-        logger.exception("Calling the dpr simulater resulted in exception: %s", e)
+        logger.exception("Calling the dpr simulator resulted in exception: %s", e)
         return None
 
     if int(response.status_code) != 200:
-        logger.error(f"The dpr simulator endpoint failed with status code: {response.status_code}")
+        try:
+            body = json.dumps(response.json(), indent=2)
+        except requests.JSONDecodeError:
+            body = {}
+        logger.error(f"The dpr simulator endpoint failed with status code: {response.status_code}\n{body}")
         return None
 
     logger.debug("DPR processor results: \n\n")
@@ -382,14 +386,6 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
 
     # Deserialize the RsClient instance
     config.stac_client = config.rs_client_serialization.deserialize(logger)  # type: ignore
-
-    # Check the product types
-    ok_types = ["S1SEWRAW", "S1SIWRAW", "S1SSMRAW", "S1SWVRAW"]
-    for product_type in config.product_types:
-        if product_type not in ok_types:
-            raise RuntimeError(
-                f"Unrecognized product type: {product_type}\n" "It should be one of: \n" + "\n".join(ok_types),
-            )
 
     # TODO: the station for CADIP should come as an input
     cadip_collection = create_collection_name(config.mission, ECadipStation["CADIP"])
