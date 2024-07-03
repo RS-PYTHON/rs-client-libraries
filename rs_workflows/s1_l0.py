@@ -17,6 +17,7 @@ import json
 import os.path as osp
 from datetime import datetime
 from pathlib import Path
+from typing import List
 
 import requests
 import yaml
@@ -263,6 +264,20 @@ def get_cadip_catalog_data(
         return None
 
 
+def merge_assets_to_one_feature(assets_dict: List[dict]) -> dict:
+    """Combine output of DPR into one multi-asset STAC Feature."""
+    matching_stac = assets_dict[0]
+    asset_types = {'zarr': 'zarr', 'cog': 'cog', '.nc': 'netcdf'}
+
+    # Create a dictionary of assets using comprehension
+    matching_stac["stac_discovery"]["assets"] = {value: {"href": asset['stac_discovery']['id']}
+                                                 for asset in assets_dict
+                                                 for key, value in asset_types.items()
+                                                 if key in asset['stac_discovery']['id']}
+
+    return matching_stac
+
+
 @task
 def get_adgs_catalog_data(
     stac_client: StacClient,  # NOTE: maybe use RsClientSerialization instead
@@ -419,7 +434,6 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
     # this task depends on the result from the previous task
     logger.debug("Starting task start_dpr")
     files_stac = start_dpr.submit(config.url_dpr, yaml_dpr_input.result(), wait_for=[yaml_dpr_input])
-
     if not files_stac.result():
         logger.error("DPR did not processed anything")
         return
@@ -443,13 +457,13 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
 
     fin_res = []
     for output_product in get_yaml_outputs(yaml_dpr_input.result()):
-        matching_stac = next(
-            (d for d in files_stac.result() if d["stac_discovery"]["properties"]["eopf:type"] in output_product),
-            None,
-        )
 
-        matching_stac["stac_discovery"]["assets"] = {"file": {"href": ""}}
-
+        assets = [d for d in files_stac.result() if d["stac_discovery"]["properties"]["eopf:type"] in output_product]
+        if len(assets) > 1:
+            matching_stac = merge_assets_to_one_feature(assets)
+        else:
+            matching_stac = assets[0]
+            matching_stac["stac_discovery"]["assets"] = {"file": {"href": ""}}
         # Update catalog (it moves the products from temporary bucket to the final one)
         logger.info("Starting task update_stac_catalog")
         fin_res.append(
@@ -459,6 +473,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
                     collection_name,
                     matching_stac["stac_discovery"],
                     output_product,
+                    update_assets=len(assets) > 1,
                     wait_for=[files_stac],
                 ),
                 output_product,
