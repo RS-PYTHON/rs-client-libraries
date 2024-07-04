@@ -42,6 +42,7 @@ LOGGER_NAME = "s1_l0_wf"
 DPR_PROCESSING_TIMEOUT = 14400  # 4 hours
 asset_types = {"zarr": "zarr", "cog": "cog", ".nc": "netcdf"}
 
+
 @task
 def start_dpr(dpr_endpoint: str, yaml_dpr_input: dict):
     """Starts the DPR processing with the given YAML input.
@@ -460,9 +461,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
         else:
             matching_stac = assets[0]
             assets_dict = {
-                asset_pt: {"href": ""}
-                for asset_pt in asset_types.keys()
-                if asset_pt in matching_stac["stac_discovery"]["id"]
+                asset_pt: {"href": ""} for asset_pt in asset_types if asset_pt in matching_stac["stac_discovery"]["id"]
             }
 
             # Check if assets_dict is empty, set default if so
