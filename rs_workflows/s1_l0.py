@@ -40,7 +40,7 @@ CONFIG_DIR = Path(osp.realpath(osp.dirname(__file__))) / "config"
 YAML_TEMPLATE_FILE = "dpr_config_template.yaml"
 LOGGER_NAME = "s1_l0_wf"
 DPR_PROCESSING_TIMEOUT = 14400  # 4 hours
-
+asset_types = {"zarr": "zarr", "cog": "cog", ".nc": "netcdf"}
 
 @task
 def start_dpr(dpr_endpoint: str, yaml_dpr_input: dict):
@@ -271,7 +271,6 @@ def get_cadip_catalog_data(
 def merge_assets_to_one_feature(assets_dict: List[dict]) -> dict:
     """Combine output of DPR into one multi-asset STAC Feature."""
     matching_stac = assets_dict[0]
-    asset_types = {"zarr": "zarr", "cog": "cog", ".nc": "netcdf"}
 
     # Create a dictionary of assets using comprehension
     matching_stac["stac_discovery"]["assets"] = {
@@ -460,7 +459,15 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
             matching_stac = merge_assets_to_one_feature(assets)
         else:
             matching_stac = assets[0]
-            matching_stac["stac_discovery"]["assets"] = {"file": {"href": ""}}
+            assets_dict = {
+                asset_pt: {"href": ""}
+                for asset_pt in asset_types.keys()
+                if asset_pt in matching_stac["stac_discovery"]["id"]
+            }
+
+            # Check if assets_dict is empty, set default if so
+            matching_stac["stac_discovery"]["assets"] = assets_dict if assets_dict else {"file": {"href": ""}}
+
         # Update catalog (it moves the products from temporary bucket to the final one)
         logger.info("Starting task update_stac_catalog")
         fin_res.append(
