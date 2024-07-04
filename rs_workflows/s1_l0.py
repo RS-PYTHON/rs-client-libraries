@@ -71,7 +71,7 @@ def start_dpr(dpr_endpoint: str, yaml_dpr_input: dict):
         try:
             body = json.dumps(response.json(), indent=2)
         except requests.JSONDecodeError:
-            body = {}
+            body = ""
         logger.error(f"The dpr simulator endpoint failed with status code: {response.status_code}\n{body}")
         return None
 
