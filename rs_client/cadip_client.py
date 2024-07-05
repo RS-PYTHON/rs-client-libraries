@@ -53,7 +53,7 @@ class CadipClient(RsClient):
         """
         Return the RS-Server CADIP URL hostname.
         This URL can be overwritten using the RSPY_HOST_CADIP env variable (used e.g. for local mode).
-        Either it should just be the RS-Server URL.
+        Otherwise it should just be the RS-Server URL.
         """
         if from_env := os.getenv("RSPY_HOST_CADIP", None):
             return from_env.rstrip("/")

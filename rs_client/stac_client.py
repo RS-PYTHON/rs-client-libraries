@@ -132,7 +132,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         """
         Return the RS-Server catalog URL hostname.
         This URL can be overwritten using the RSPY_HOST_CATALOG env variable (used e.g. for local mode).
-        Either it should just be the RS-Server URL.
+        Otherwise it should just be the RS-Server URL.
         """
         return self.__href_catalog(self.rs_server_href)
 

@@ -32,7 +32,7 @@ class AuxipClient(RsClient):
         """
         Return the RS-Server ADGS URL hostname.
         This URL can be overwritten using the RSPY_HOST_ADGS env variable (used e.g. for local mode).
-        Either it should just be the RS-Server URL.
+        Otherwise it should just be the RS-Server URL.
         """
         if from_env := os.getenv("RSPY_HOST_ADGS", None):
             return from_env.rstrip("/")
