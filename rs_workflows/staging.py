@@ -100,9 +100,11 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
     else:
         new_href_value = Asset(href=f"{obs.rstrip('/')}/{stac_file_info['id']}")
         # Iterate over the keys in the 'assets' dictionary
-        for asset_key, asset_value in stac_file_info["assets"].items():
-            if "href" in asset_value:
-                assets.update({asset_key: new_href_value})
+        assets = {
+            (asset_key if asset_key != "file" else "file"): new_href_value
+            for asset_key, asset_value in stac_file_info["assets"].items()
+            if "href" in asset_value
+        }
 
     # Copy properties from the input stac file, or use default values
     properties = stac_file_info.get("properties") or {}
