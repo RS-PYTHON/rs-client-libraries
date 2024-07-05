@@ -93,12 +93,16 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
     now = datetime.now()
 
     # The file path from the temp s3 bucket is given in the assets
+    assets = {}
     if kwargs.get("update_assets", None):
-        assets = {}
         for asset in stac_file_info["assets"]:
             assets.update({asset: Asset(href=f"{obs.rstrip('/')}/{stac_file_info['assets'][asset]['href']}")})
     else:
-        assets = {"file": Asset(href=f"{obs.rstrip('/')}/{stac_file_info['id']}")}
+        new_href_value = Asset(href=f"{obs.rstrip('/')}/{stac_file_info['id']}")
+        # Iterate over the keys in the 'assets' dictionary
+        for asset_key, asset_value in stac_file_info['assets'].items():
+            if 'href' in asset_value:
+                assets.update({asset_key: new_href_value})
 
     # Copy properties from the input stac file, or use default values
     properties = stac_file_info.get("properties") or {}
