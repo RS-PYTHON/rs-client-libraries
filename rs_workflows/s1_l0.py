@@ -408,15 +408,15 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
     )
 
     # the previous tasks may be launched in parallel. The next task depends on the results from these previous tasks
-    # if not cadip_catalog_data.result():
-    #     logger.error(f"No Cadip files were found in the catalog for Cadip session ID: {config.cadip_session_id!r}")
-    #     return
-    #
-    # if not adgs_catalog_data.result():
-    #     logger.error(  # pylint: disable=logging-not-lazy
-    #         "None of these Auxip files were found in the catalog:\n" + "\n".join(config.adgs_files),
-    #     )
-    #     return
+    if not cadip_catalog_data.result():
+        logger.error(f"No Cadip files were found in the catalog for Cadip session ID: {config.cadip_session_id!r}")
+        return
+
+    if not adgs_catalog_data.result():
+        logger.error(  # pylint: disable=logging-not-lazy
+            "None of these Auxip files were found in the catalog:\n" + "\n".join(config.adgs_files),
+        )
+        return
 
     logger.debug("Starting task build_eopf_triggering_yaml ")
     yaml_dpr_input = build_eopf_triggering_yaml.submit(
