@@ -72,7 +72,7 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
     stac_file_info: dict,
     obs: str,
     **kwargs,
-):
+):  # NOSONAR
     """Update the STAC catalog with file information.
 
     This task updates the STAC catalog with the information of a file that has been processed
@@ -99,12 +99,13 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
             assets.update({asset: Asset(href=f"{obs.rstrip('/')}/{stac_file_info['assets'][asset]['href']}")})
     else:
         new_href_value = Asset(href=f"{obs.rstrip('/')}/{stac_file_info['id']}")
-        # Iterate over the keys in the 'assets' dictionary
-        assets = {
-            (asset_key if asset_key != "file" else "file"): new_href_value
-            for asset_key, asset_value in stac_file_info["assets"].items()
-            if "href" in asset_value
-        }
+        if "file" in stac_file_info["assets"]:
+            assets = {"file": new_href_value}
+        else:
+            # Iterate over the keys in the 'assets' dictionary
+            for asset_key, asset_value in stac_file_info["assets"].items():
+                if "href" in asset_value:
+                    assets.update({asset_key: new_href_value})
 
     # Copy properties from the input stac file, or use default values
     properties = stac_file_info.get("properties") or {}
