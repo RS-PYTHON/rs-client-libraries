@@ -36,6 +36,7 @@ from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     get_adgs_catalog_data,
     get_cadip_catalog_data,
     get_yaml_outputs,
+    merge_assets_to_one_feature,
     s1_l0_flow,
     start_dpr,
 )
@@ -337,6 +338,67 @@ def test_get_adgs_catalog_data(mocked_stac_catalog_search_adgs):
     adgs_res = get_adgs_catalog_data.fn(rs_client, collection, files_list)
 
     assert adgs_res == adgs_catalog["features"]
+
+
+@pytest.mark.unit
+def test_merge_assets():
+    """Test merge_assets_to_one_feature."""
+    feature_inp = {
+        "type": "Feature",
+        "id": "file_id.zarr",
+        "properties": {
+            "owner": "jovyan",
+            "created": "2022-04-12T06:51:59.109790Z",
+            "expires": "2024-08-07T10:59:37.012927Z",
+            "mission": "Sentinel-1",
+            "updated": "2024-07-08T10:59:37.012927Z",
+            "datetime": "2024-07-08T10:59:36.834335Z",
+            "platform": "s",
+            "eopf:type": "S1SIWRAW",
+            "providers": [],
+            "published": "2024-07-08T10:59:37.012920Z",
+            "instrument": "sar",
+            "end_datetime": "2022-04-12T05:45:12.619848Z",
+            "eopf:timeline": "NRT-3h",
+            "start_datetime": "2022-04-12T05:44:47.620394Z",
+            "sat:orbit_state": "DESCENDING",
+            "processing:level": "L2",
+            "sat:anx_datetime": "2022-04-12T05:07:10.890454Z",
+            "eopf:data_take_id": "334217",
+            "processing:sofware": "Sentinel-1 IPF 03.51",
+            "sat:absolute_orbit": 42736,
+            "sat:relative_orbit": 139,
+            "processing:facility": "Unknown Unknown Unknown Unknown",
+            "eopf:instrument_mode": "IW",
+            "eopf:instrument_swath": "IW",
+            "sat:platform_international_designator": "2014-016A",
+        },
+        "assets": {
+            "zarr": {
+                "href": "https://bucket/file_id.zarr/download/file",
+                "alternate": {"s3": {"href": "s3://bucket/file_id.zarr"}},
+            },
+        },
+        "collection": "S1A_dpr",
+    }
+    test_out = merge_assets_to_one_feature([feature_inp, feature_inp])
+    # Test that assets from a list of features are correctly merged into one.
+    assert test_out["stac_discovery"]["assets"] == {
+        "assets": [
+            {
+                "zarr": {
+                    "href": "https://bucket/file_id.zarr/download/file",
+                    "alternate": {"s3": {"href": "s3://bucket/file_id.zarr"}},
+                    "zarr": {
+                        "href": "https://bucket/file_id.zarr/download/file",
+                        "alternate": {"s3": {"href": "s3://bucket/file_id.zarr"}},
+                    },
+                },
+            },
+        ],
+    }
+    # test that properties are not changed.
+    assert test_out["properties"] == feature_inp["properties"]
 
 
 @pytest.mark.unit
