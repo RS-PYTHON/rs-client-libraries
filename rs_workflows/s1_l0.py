@@ -259,14 +259,10 @@ def get_cadip_catalog_data(
 
     _filter = create_cql2_filter({"collection": f"{stac_client.owner_id}_{collection}", "cadip:session_id": session_id})
 
-    try:
-        search = stac_client.search(filter=_filter)
-        data = list(search.items_as_dicts())
-        logger.debug("Task get_cadip_catalog_data FINISHED")
-        return data
-    except NotImplementedError as e:
-        logger.exception("Search exception caught: %s", e)
-        return None
+    search = stac_client.search(filter=_filter)
+    data = list(search.items_as_dicts())
+    logger.debug("Task get_cadip_catalog_data FINISHED")
+    return data
 
 
 def merge_assets_to_one_feature(assets_dict: List[dict]) -> dict:
@@ -316,14 +312,11 @@ def get_adgs_catalog_data(
             {"op": "in", "args": [{"property": "id"}, files]},
         ],
     }
-    try:
-        search = stac_client.search(filter=_filter)
-        data = list(search.items_as_dicts())
-        logger.debug("Task get_adgs_catalog_data FINISHED")
-        return data
-    except NotImplementedError as e:
-        logger.exception("Search exception caught: %s", e)
-        return None
+
+    search = stac_client.search(filter=_filter)
+    data = list(search.items_as_dicts())
+    logger.debug("Task get_adgs_catalog_data FINISHED")
+    return data
 
 
 class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes
