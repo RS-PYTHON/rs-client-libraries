@@ -344,15 +344,17 @@ def test_get_adgs_catalog_data(mocked_stac_catalog_search_adgs):
 def test_merge_assets():
     """Test merge_assets_to_one_feature."""
     zar_feature_inp = {
-        "type": "Feature",
-        "id": "file_id.zarr",
-        "assets": {
-            "zarr": {
-                "href": "https://bucket/file_id.zarr/download/file",
-                "alternate": {"s3": {"href": "s3://bucket/file_id.zarr"}},
+        "stac_discovery": {
+            "type": "Feature",
+            "id": "file_id.zarr",
+            "assets": {
+                "zarr": {
+                    "href": "https://bucket/file_id.zarr/download/file",
+                    "alternate": {"s3": {"href": "s3://bucket/file_id.zarr"}},
+                },
             },
+            "collection": "S1A_dpr",
         },
-        "collection": "S1A_dpr",
     }
 
     cog_feature_inp = {
@@ -368,7 +370,7 @@ def test_merge_assets():
     }
     test_out = merge_assets_to_one_feature([zar_feature_inp, cog_feature_inp])
     # Test that assets from a list of features are correctly merged into one.
-    assert test_out["assets"] == {
+    assert test_out["stac_discovery"]["assets"] == {
         "assets": [
             {
                 "zarr": {
