@@ -358,15 +358,17 @@ def test_merge_assets():
     }
 
     cog_feature_inp = {
-        "type": "Feature",
-        "id": "file_id.zarr",
-        "assets": {
-            "cog": {
-                "href": "https://bucket/file_id.cog/download/file",
-                "alternate": {"s3": {"href": "s3://bucket/file_id.cog"}},
+        "stac_discovery": {
+            "type": "Feature",
+            "id": "file_id.cog",
+            "assets": {
+                "cog": {
+                    "href": "https://bucket/file_id.cog/download/file",
+                    "alternate": {"s3": {"href": "s3://bucket/file_id.cog"}},
+                },
             },
+            "collection": "S1A_dpr",
         },
-        "collection": "S1A_dpr",
     }
     test_out = merge_assets_to_one_feature([zar_feature_inp, cog_feature_inp])
     # Test that assets from a list of features are correctly merged into one.
