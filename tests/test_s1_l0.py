@@ -372,9 +372,7 @@ def test_merge_assets():
     }
     test_out = merge_assets_to_one_feature([zar_feature_inp, cog_feature_inp])
     # Test that assets from a list of features are correctly merged into one.
-    assert test_out["stac_discovery"]["assets"] == {
-        "assets": [{"cog": {"href": "file_id.cog"}, "zarr": {"href": "file_id.zarr"}}],
-    }
+    assert test_out["stac_discovery"]["assets"] == {"cog": {"href": "file_id.cog"}, "zarr": {"href": "file_id.zarr"}}
 
 
 @pytest.mark.unit
