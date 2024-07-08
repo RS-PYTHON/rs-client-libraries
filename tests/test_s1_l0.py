@@ -378,10 +378,10 @@ def test_merge_assets():
 
 @pytest.mark.unit
 @responses.activate
-@pytest.mark.parametrize("product_types, dpr_answer_file, catalog_name", [
-    (["S1SEWRAW", "S1SIWGRH"], "dpr_answer.json", "toto:S1_L1"),
-    (["S1SIWGRH"], "dpr_answer_multi_asset.json", "toto:S1_L1")
-])
+@pytest.mark.parametrize(
+    "product_types, dpr_answer_file, catalog_name",
+    [(["S1SEWRAW"], "dpr_answer.json", "toto:S1_L1"), (["S1SIWGRH"], "dpr_answer_multi_asset.json", "toto:S1_L1")],
+)
 def test_s1_l0_flow(mocker, product_types, dpr_answer_file, catalog_name):  # pylint: disable=too-many-locals
     """Parameterized test for s1_l0 flow"""
     username = "TestUser"
@@ -416,6 +416,11 @@ def test_s1_l0_flow(mocker, product_types, dpr_answer_file, catalog_name):  # py
     mocker.patch(
         "rs_workflows.s1_l0.build_eopf_triggering_yaml",
         return_value=file_loaded,
+    )
+
+    mocker.patch(
+        "rs_workflows.s1_l0.get_yaml_outputs",
+        return_value=product_types,
     )
 
     dpr_answer_path = RESOURCES / dpr_answer_file
