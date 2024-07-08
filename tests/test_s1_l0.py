@@ -467,6 +467,58 @@ def test_s1_l0_flow(mocker, product_types, dpr_answer_file, catalog_name):  # py
     ).is_completed()
 
 
+@responses.activate
+@pytest.mark.unit
+@pytest.mark.parametrize("cadip_result, adgs_result", [(False, True), (True, False)])
+def test_no_staging_data_in_flow(mocker, cadip_result, adgs_result):  # pylint: disable=too-many-locals
+    """Test the case when staging flows (for cadip and adgs) are empty."""
+    username = "TestUser"
+    mission = "s1"
+    cadip_session_id = "S1A_20200105072204051312"
+    s3_storage = "s3://test_final"
+    temp_s3_storage = "s3://test_temp"
+    url_gen = "http://127.0.0.1:5000"
+    url_dpr = "http://127.0.0.1:5010"
+
+    # mock the endpoint for catalog creation
+    responses.add(
+        responses.POST,
+        url_gen + "/catalog/collections",
+        status=200,
+    )
+    json_landing_page = common.json_landing_page(url_gen, "toto:S1_L1")
+    responses.get(url=url_gen + "/catalog/", json=json_landing_page, status=200)
+
+    # Mock get_cadip_catalog_data submit
+    mock_submit = mocker.patch.object(get_cadip_catalog_data, "submit")
+    mock_task_instance = mocker.Mock()
+    mock_task_instance.result.return_value = cadip_result
+    mock_submit.return_value = mock_task_instance
+
+    # Mock get_adgs_catalog_data submit
+    mock_submit = mocker.patch.object(get_adgs_catalog_data, "submit")
+    mock_task_instance = mocker.Mock()
+    mock_task_instance.result.return_value = adgs_result
+    mock_submit.return_value = mock_task_instance
+
+    rs_client = StacClient.open(url_gen, API_KEY, username)
+    product_types = []  # type: ignore
+    adgs_files = []  # type: ignore
+
+    assert s1_l0_flow._run(  # pylint: disable=protected-access
+        PrefectS1L0FlowConfig(
+            rs_client,
+            url_dpr,
+            mission,
+            cadip_session_id,
+            product_types,
+            adgs_files,
+            s3_storage,
+            temp_s3_storage,
+        ),
+    ).is_completed()
+
+
 if __name__ == "__main__":
     # This script initiates the processing of Sentinel-1 Level 0 products using the Prefect flow."""
 
