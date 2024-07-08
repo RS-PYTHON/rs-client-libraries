@@ -150,7 +150,13 @@ def test_add_item_stac_client(mocked_stac_catalog_add_item):  # pylint: disable=
         "proj:epsg": 3857,
         "orientation": "nadir",
     }
-    item = Item(id="item_0", geometry=geometry, bbox=[0], datetime=datetime.now(), properties=properties)
+    item = Item(
+        id="item_0",
+        geometry=geometry,
+        bbox=[-180.0, -90.0, 180.0, 90.0],
+        datetime=datetime.now(),
+        properties=properties,
+    )
     response = catalog.add_item(collection_id="S1_L1", item=item, owner_id="toto")
 
     print(response)

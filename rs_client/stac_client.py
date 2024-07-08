@@ -284,6 +284,9 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         # owner_id:collection_id
         full_collection_id = self.full_collection_id(owner_id, collection_id)
 
+        # Check that the item is compliant to STAC
+        item.validate()
+
         # Get the collection from the catalog
         collection = self.get_collection(collection_id, owner_id)
 
