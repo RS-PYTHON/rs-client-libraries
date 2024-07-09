@@ -171,3 +171,24 @@ def test_remove_item_stac_client(mocked_stac_catalog_delete_item):  # pylint: di
 
     response = catalog.remove_item("S1_L1", "item_0", "toto")
     assert response.status_code == 200
+
+
+def test_search_item_inside_collection_stac_client_mock(  # pylint: disable=missing-function-docstring
+    mocked_stac_catalog_search_inside_collection,
+):
+
+    catalog: StacClient = RsClient(
+        mocked_stac_catalog_search_inside_collection, RS_SERVER_API_KEY, OWNER_ID
+    ).get_stac_client()
+
+    ################################
+    # Search items in a collection #
+    ################################
+
+    response = catalog.search_inside_collection(owner_id="ycolera", collection_id="my_tutorial_collection")
+    count = 0
+    for item in response.items():
+        assert item.collection_id == "my_tutorial_collection"
+        count += 1
+
+    assert count == 2

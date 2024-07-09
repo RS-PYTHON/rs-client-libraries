@@ -18,8 +18,18 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime as datetime_
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import pystac
 import requests
@@ -28,12 +38,10 @@ from pystac.layout import HrefLayoutStrategy
 from pystac_client import Client, Modifiable
 from pystac_client.collection_client import CollectionClient
 from pystac_client.stac_api_io import StacApiIO, Timeout
+from pystac_client.item_search import GeoInterface, ItemSearch
 from requests import Request, Response
 
 from rs_client.rs_client import APIKEY_HEADER, TIMEOUT, RsClient
-import json
-from starlette.responses import JSONResponse
-import requests
 
 
 class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-ancestors
@@ -330,4 +338,74 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
             f"{self.href_catalog}/catalog/collections/{full_collection_id}/items/{item_id}",
             **self.apikey_headers,
             timeout=timeout,
+        )
+
+    DatetimeOrTimestamp = Optional[Union[datetime_, str]]
+    Datetime = str
+    DatetimeLike = Union[
+        DatetimeOrTimestamp,
+        Tuple[DatetimeOrTimestamp, DatetimeOrTimestamp],
+        List[DatetimeOrTimestamp],
+        Iterator[DatetimeOrTimestamp],
+    ]
+
+    BBox = Tuple[float, ...]
+    BBoxLike = Union[BBox, List[float], Iterator[float], str]
+
+    Collections = Tuple[str, ...]
+    CollectionsLike = Union[List[str], Iterator[str], str]
+
+    IDs = Tuple[str, ...]
+    IDsLike = Union[IDs, str, List[str], Iterator[str]]
+
+    Intersects = Dict[str, Any]
+    IntersectsLike = Union[str, GeoInterface, Intersects]
+
+    Query = Dict[str, Any]
+    QueryLike = Union[Query, List[str]]
+
+    FilterLangLike = str
+    FilterLike = Union[Dict[str, Any], str]
+
+    Sortby = List[Dict[str, str]]
+    SortbyLike = Union[Sortby, str, List[str]]
+
+    Fields = Dict[str, List[str]]
+    FieldsLike = Union[Fields, str, List[str]]
+
+    def search_inside_collection(  # pylint: disable=too-many-arguments
+        self,
+        *,
+        owner_id: str,
+        collection_id: str,
+        method: Optional[str] = "POST",
+        max_items: Optional[int] = None,
+        limit: Optional[int] = None,
+        ids: Optional[IDsLike] = None,
+        bbox: Optional[BBoxLike] = None,
+        intersects: Optional[IntersectsLike] = None,
+        datetime: Optional[DatetimeLike] = None,
+        query: Optional[QueryLike] = None,
+        stac_filter: Optional[FilterLike] = None,
+        filter_lang: Optional[FilterLangLike] = None,
+        sortby: Optional[SortbyLike] = None,
+        fields: Optional[FieldsLike] = None,
+    ) -> ItemSearch:
+        """Search items inside a specific collection."""
+
+        return Client.search(
+            self,
+            method=method,
+            max_items=max_items,
+            limit=limit,
+            ids=ids,
+            collections=[f"{owner_id}_{collection_id}"],
+            bbox=bbox,
+            intersects=intersects,
+            datetime=datetime,
+            query=query,
+            filter=stac_filter,
+            filter_lang=filter_lang,
+            sortby=sortby,
+            fields=fields,
         )
