@@ -364,7 +364,6 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
     Query = Dict[str, Any]
     QueryLike = Union[Query, List[str]]
 
-    FilterLangLike = str
     FilterLike = Union[Dict[str, Any], str]
 
     Sortby = List[Dict[str, str]]
@@ -387,7 +386,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         datetime: Optional[DatetimeLike] = None,
         query: Optional[QueryLike] = None,
         stac_filter: Optional[FilterLike] = None,
-        filter_lang: Optional[FilterLangLike] = None,
+        filter_lang: Optional[str] = None,
         sortby: Optional[SortbyLike] = None,
         fields: Optional[FieldsLike] = None,
     ) -> ItemSearch:
