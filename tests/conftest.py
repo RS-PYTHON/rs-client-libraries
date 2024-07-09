@@ -511,12 +511,18 @@ def mocked_stac_catalog_search_inside_collection():
                         {
                             "rel": "collection",
                             "type": "application/json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/ycolera:my_tutorial_collection",
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "ycolera:my_tutorial_collection"
+                            ),
                         },
                         {
                             "rel": "parent",
                             "type": "application/json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/ycolera:my_tutorial_collection",
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "ycolera:my_tutorial_collection"
+                            ),
                         },
                         {
                             "rel": "root",
@@ -526,15 +532,26 @@ def mocked_stac_catalog_search_inside_collection():
                         {
                             "rel": "self",
                             "type": "application/geo+json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/ycolera:my_tutorial_collection/items/DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw",
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "ycolera:my_tutorial_collection/items/"
+                                "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw"
+                            ),
                         },
                     ],
                     "assets": {
                         "file": {
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/ycolera:my_tutorial_collection/items/DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw/download/file",
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "ycolera:my_tutorial_collection/items/"
+                                "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw/download/file"
+                            ),
                             "alternate": {
                                 "s3": {
-                                    "href": "s3://rs-cluster-catalog/ycolera/CADIP/DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw"
+                                    "href": (
+                                        "s3://rs-cluster-catalog/ycolera/CADIP/"
+                                        "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw"
+                                    )
                                 }
                             },
                         }
@@ -567,12 +584,18 @@ def mocked_stac_catalog_search_inside_collection():
                         {
                             "rel": "collection",
                             "type": "application/json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/ycolera:my_tutorial_collection",
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "ycolera:my_tutorial_collection"
+                            ),
                         },
                         {
                             "rel": "parent",
                             "type": "application/json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/ycolera:my_tutorial_collection",
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "ycolera:my_tutorial_collection"
+                            ),
                         },
                         {
                             "rel": "root",
@@ -582,15 +605,27 @@ def mocked_stac_catalog_search_inside_collection():
                         {
                             "rel": "self",
                             "type": "application/geo+json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/ycolera:my_tutorial_collection/items/S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ",
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "ycolera:my_tutorial_collection/items/"
+                                "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ"
+                            ),
                         },
                     ],
                     "assets": {
                         "file": {
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/ycolera:my_tutorial_collection/items/S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ/download/file",
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "ycolera:my_tutorial_collection/items/"
+                                "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ/"
+                                "download/file"
+                            ),
                             "alternate": {
                                 "s3": {
-                                    "href": "s3://rs-cluster-catalog/ycolera/AUXIP/S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ"
+                                    "href": (
+                                        "s3://rs-cluster-catalog/ycolera/AUXIP/"
+                                        "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ"
+                                    )
                                 }
                             },
                         }
@@ -639,6 +674,7 @@ def mocked_stac_catalog_search_inside_collection():
                 },
             ],
         }
+
         resp.post(url=url + "/catalog/search", json=json_search, status=200)
         yield url
 
