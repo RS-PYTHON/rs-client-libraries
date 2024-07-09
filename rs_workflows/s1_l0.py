@@ -17,6 +17,7 @@ import json
 import os.path as osp
 from datetime import datetime
 from pathlib import Path
+from typing import List
 
 import requests
 import yaml
@@ -39,6 +40,7 @@ CONFIG_DIR = Path(osp.realpath(osp.dirname(__file__))) / "config"
 YAML_TEMPLATE_FILE = "dpr_config_template.yaml"
 LOGGER_NAME = "s1_l0_wf"
 DPR_PROCESSING_TIMEOUT = 14400  # 4 hours
+asset_types = {"zarr": "zarr", "cog": "cog", ".nc": "netcdf"}
 
 
 @task
@@ -63,11 +65,15 @@ def start_dpr(dpr_endpoint: str, yaml_dpr_input: dict):
             timeout=DPR_PROCESSING_TIMEOUT,
         )
     except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-        logger.exception("Calling the dpr simulater resulted in exception: %s", e)
+        logger.exception("Calling the dpr simulator resulted in exception: %s", e)
         return None
 
     if int(response.status_code) != 200:
-        logger.error(f"The dpr simulator endpoint failed with status code: {response.status_code}")
+        try:
+            body = json.dumps(response.json(), indent=2)
+        except requests.JSONDecodeError:
+            body = ""
+        logger.error(f"The dpr simulator endpoint failed with status code: {response.status_code}\n{body}")
         return None
 
     logger.debug("DPR processor results: \n\n")
@@ -253,14 +259,25 @@ def get_cadip_catalog_data(
 
     _filter = create_cql2_filter({"collection": f"{stac_client.owner_id}_{collection}", "cadip:session_id": session_id})
 
-    try:
-        search = stac_client.search(filter=_filter)
-        data = list(search.items_as_dicts())
-        logger.debug("Task get_cadip_catalog_data FINISHED")
-        return data
-    except NotImplementedError as e:
-        logger.exception("Search exception caught: %s", e)
-        return None
+    search = stac_client.search(filter=_filter)
+    data = list(search.items_as_dicts())
+    logger.debug("Task get_cadip_catalog_data FINISHED")
+    return data
+
+
+def merge_assets_to_one_feature(assets_dict: List[dict]) -> dict:
+    """Combine output of DPR into one multi-asset STAC Feature."""
+    matching_stac = assets_dict[0]
+
+    # Create a dictionary of assets using comprehension
+    matching_stac["stac_discovery"]["assets"] = {
+        value: {"href": asset["stac_discovery"]["id"]}
+        for asset in assets_dict
+        for key, value in asset_types.items()
+        if key in asset["stac_discovery"]["id"]
+    }
+
+    return matching_stac
 
 
 @task
@@ -295,14 +312,11 @@ def get_adgs_catalog_data(
             {"op": "in", "args": [{"property": "id"}, files]},
         ],
     }
-    try:
-        search = stac_client.search(filter=_filter)
-        data = list(search.items_as_dicts())
-        logger.debug("Task get_adgs_catalog_data FINISHED")
-        return data
-    except NotImplementedError as e:
-        logger.exception("Search exception caught: %s", e)
-        return None
+
+    search = stac_client.search(filter=_filter)
+    data = list(search.items_as_dicts())
+    logger.debug("Task get_adgs_catalog_data FINISHED")
+    return data
 
 
 class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes
@@ -366,14 +380,6 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
     # Deserialize the RsClient instance
     config.stac_client = config.rs_client_serialization.deserialize(logger)  # type: ignore
 
-    # Check the product types
-    ok_types = ["S1SEWRAW", "S1SIWRAW", "S1SSMRAW", "S1SWVRAW"]
-    for product_type in config.product_types:
-        if product_type not in ok_types:
-            raise RuntimeError(
-                f"Unrecognized product type: {product_type}\n" "It should be one of: \n" + "\n".join(ok_types),
-            )
-
     # TODO: the station for CADIP should come as an input
     cadip_collection = create_collection_name(config.mission, ECadipStation["CADIP"])
     adgs_collection = create_collection_name(config.mission, AUXIP_STATION)
@@ -419,7 +425,6 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
     # this task depends on the result from the previous task
     logger.debug("Starting task start_dpr")
     files_stac = start_dpr.submit(config.url_dpr, yaml_dpr_input.result(), wait_for=[yaml_dpr_input])
-
     if not files_stac.result():
         logger.error("DPR did not processed anything")
         return
@@ -443,12 +448,16 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
 
     fin_res = []
     for output_product in get_yaml_outputs(yaml_dpr_input.result()):
-        matching_stac = next(
-            (d for d in files_stac.result() if d["stac_discovery"]["properties"]["eopf:type"] in output_product),
-            None,
-        )
-
-        matching_stac["stac_discovery"]["assets"] = {"file": {"href": ""}}
+        assets = [d for d in files_stac.result() if d["stac_discovery"]["properties"]["eopf:type"] in output_product]
+        if len(assets) > 1:
+            matching_stac = merge_assets_to_one_feature(assets)
+        else:
+            matching_stac = assets[0]
+            assets_dict = {
+                asset_pt: {"href": ""} for asset_pt in asset_types if asset_pt in matching_stac["stac_discovery"]["id"]
+            }
+            # Check if assets_dict is empty, set default if so
+            matching_stac["stac_discovery"]["assets"] = assets_dict
 
         # Update catalog (it moves the products from temporary bucket to the final one)
         logger.info("Starting task update_stac_catalog")
@@ -459,6 +468,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
                     collection_name,
                     matching_stac["stac_discovery"],
                     output_product,
+                    update_assets=len(assets) > 1,
                     wait_for=[files_stac],
                 ),
                 output_product,

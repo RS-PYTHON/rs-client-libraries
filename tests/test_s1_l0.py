@@ -36,8 +36,10 @@ from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     get_adgs_catalog_data,
     get_cadip_catalog_data,
     get_yaml_outputs,
+    merge_assets_to_one_feature,
     s1_l0_flow,
     start_dpr,
+    update_stac_catalog,
 )
 from tests import common
 
@@ -340,17 +342,51 @@ def test_get_adgs_catalog_data(mocked_stac_catalog_search_adgs):
 
 
 @pytest.mark.unit
+def test_merge_assets():
+    """Test merge_assets_to_one_feature."""
+    zar_feature_inp = {
+        "stac_discovery": {
+            "type": "Feature",
+            "id": "file_id.zarr",
+            "assets": {
+                "zarr": {
+                    "href": "https://bucket/file_id.zarr/download/file",
+                    "alternate": {"s3": {"href": "s3://bucket/file_id.zarr"}},
+                },
+            },
+            "collection": "S1A_dpr",
+        },
+    }
+
+    cog_feature_inp = {
+        "stac_discovery": {
+            "type": "Feature",
+            "id": "file_id.cog",
+            "assets": {
+                "cog": {
+                    "href": "https://bucket/file_id.cog/download/file",
+                    "alternate": {"s3": {"href": "s3://bucket/file_id.cog"}},
+                },
+            },
+            "collection": "S1A_dpr",
+        },
+    }
+    test_out = merge_assets_to_one_feature([zar_feature_inp, cog_feature_inp])
+    # Test that assets from a list of features are correctly merged into one.
+    assert test_out["stac_discovery"]["assets"] == {"cog": {"href": "file_id.cog"}, "zarr": {"href": "file_id.zarr"}}
+
+
+@pytest.mark.unit
 @responses.activate
-def test_s1_l0_flow(mocker):  # pylint: disable=too-many-locals
-    """Test for s1_l0 flow
-    NOTE: the mock for start_dpr does not produce any output. Thus, the
-    last part from the flow is not covered in this test
-    TODO: To be implemented in future
-    """
+@pytest.mark.parametrize(
+    "product_types, dpr_answer_file, catalog_name",
+    [(["S1SEWRAW"], "dpr_answer.json", "toto:S1_L1"), (["S1SIWGRH"], "dpr_answer_multi_asset.json", "toto:S1_L1")],
+)
+def test_s1_l0_flow(mocker, product_types, dpr_answer_file, catalog_name):  # pylint: disable=too-many-locals
+    """Parameterized test for s1_l0 flow"""
     username = "TestUser"
     mission = "s1"
     cadip_session_id = "S1A_20200105072204051312"
-    product_types = ["S1SEWRAW"]
     s3_storage = "s3://test_final"
     temp_s3_storage = "s3://test_temp"
     url_gen = "http://127.0.0.1:5000"
@@ -381,22 +417,119 @@ def test_s1_l0_flow(mocker):  # pylint: disable=too-many-locals
         "rs_workflows.s1_l0.build_eopf_triggering_yaml",
         return_value=file_loaded,
     )
-    # TODO: the following mock did not work. I also tried to mock the endpoint,
-    # but inside the prefect task is not seen
-    dpr_answer_path = RESOURCES / "dpr_answer.json"
+
+    mocker.patch(
+        "rs_workflows.s1_l0.get_yaml_outputs",
+        return_value=product_types,
+    )
+
+    dpr_answer_path = RESOURCES / dpr_answer_file
     with open(dpr_answer_path, encoding="utf-8") as dpr_answer_f:
         file_loaded = json.loads(dpr_answer_f.read())
 
-    mocker.patch(
-        "rs_workflows.s1_l0.start_dpr",
-        return_value=file_loaded,
+    mock_submit = mocker.patch.object(start_dpr, "submit")
+    mock_task_instance = mocker.Mock()
+    mock_task_instance.result.return_value = file_loaded
+    mock_submit.return_value = mock_task_instance
+    # mock the endpoint for catalog creation
+
+    responses.add(
+        responses.POST,
+        url_gen + "/catalog/collections",
+        status=200,
     )
-    # responses.add(
-    #         responses.GET,
-    #         url_dpr + "/run",
-    #         json=file_loaded,
-    #         status=200,
-    #     )
+    json_landing_page = common.json_landing_page(url_gen, catalog_name)
+    responses.get(url=url_gen + "/catalog/", json=json_landing_page, status=200)
+
+    mock_submit = mocker.patch.object(update_stac_catalog, "submit")
+    mock_task_instance = mocker.Mock()
+    mock_task_instance.result.return_value = True
+    mock_submit.return_value = mock_task_instance
+
+    rs_client = StacClient.open(url_gen, API_KEY, username)
+    adgs_files = [
+        "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
+        "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
+        "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
+    ]
+
+    assert s1_l0_flow._run(  # pylint: disable=protected-access
+        PrefectS1L0FlowConfig(
+            rs_client,
+            url_dpr,
+            mission,
+            cadip_session_id,
+            product_types,
+            adgs_files,
+            s3_storage,
+            temp_s3_storage,
+        ),
+    ).is_completed()
+
+
+@responses.activate
+@pytest.mark.unit
+@pytest.mark.parametrize("cadip_result, adgs_result", [(False, True), (True, False)])
+def test_no_staging_data_in_flow(mocker, cadip_result, adgs_result):  # pylint: disable=too-many-locals
+    """Test the case when staging flows (for cadip and adgs) are empty."""
+    username = "TestUser"
+    mission = "s1"
+    cadip_session_id = "S1A_20200105072204051312"
+    s3_storage = "s3://test_final"
+    temp_s3_storage = "s3://test_temp"
+    url_gen = "http://127.0.0.1:5000"
+    url_dpr = "http://127.0.0.1:5010"
+
+    # mock the endpoint for catalog creation
+    responses.add(
+        responses.POST,
+        url_gen + "/catalog/collections",
+        status=200,
+    )
+    json_landing_page = common.json_landing_page(url_gen, "toto:S1_L1")
+    responses.get(url=url_gen + "/catalog/", json=json_landing_page, status=200)
+
+    # Mock get_cadip_catalog_data submit
+    mock_submit = mocker.patch.object(get_cadip_catalog_data, "submit")
+    mock_task_instance = mocker.Mock()
+    mock_task_instance.result.return_value = cadip_result
+    mock_submit.return_value = mock_task_instance
+
+    # Mock get_adgs_catalog_data submit
+    mock_submit = mocker.patch.object(get_adgs_catalog_data, "submit")
+    mock_task_instance = mocker.Mock()
+    mock_task_instance.result.return_value = adgs_result
+    mock_submit.return_value = mock_task_instance
+
+    rs_client = StacClient.open(url_gen, API_KEY, username)
+    product_types = []  # type: ignore
+    adgs_files = []  # type: ignore
+
+    assert s1_l0_flow._run(  # pylint: disable=protected-access
+        PrefectS1L0FlowConfig(
+            rs_client,
+            url_dpr,
+            mission,
+            cadip_session_id,
+            product_types,
+            adgs_files,
+            s3_storage,
+            temp_s3_storage,
+        ),
+    ).is_completed()
+
+
+@responses.activate
+@pytest.mark.unit
+def test_no_dpr_output(mocker):
+    """Test the case when DPR flow is empty."""
+    username = "TestUser"
+    mission = "s1"
+    cadip_session_id = "S1A_20200105072204051312"
+    s3_storage = "s3://test_final"
+    temp_s3_storage = "s3://test_temp"
+    url_gen = "http://127.0.0.1:5000"
+    url_dpr = "http://127.0.0.1:5010"
 
     # mock the endpoint for catalog creation
     responses.add(
@@ -408,15 +541,30 @@ def test_s1_l0_flow(mocker):  # pylint: disable=too-many-locals
     responses.get(url=url_gen + "/catalog/", json=json_landing_page, status=200)
 
     mocker.patch(
-        "rs_workflows.staging.update_stac_catalog",
-        return_value=True,
+        "rs_workflows.s1_l0.build_eopf_triggering_yaml",
+        return_value=False,
     )
+
+    # Mock get_cadip_catalog_data submit
+    mock_submit = mocker.patch.object(get_cadip_catalog_data, "submit")
+    mock_task_instance = mocker.Mock()
+    mock_task_instance.result.return_value = True
+    mock_submit.return_value = mock_task_instance
+
+    # Mock get_adgs_catalog_data submit
+    mock_submit = mocker.patch.object(get_adgs_catalog_data, "submit")
+    mock_task_instance = mocker.Mock()
+    mock_task_instance.result.return_value = True
+    mock_submit.return_value = mock_task_instance
+
+    mock_submit = mocker.patch.object(start_dpr, "submit")
+    mock_task_instance = mocker.Mock()
+    mock_task_instance.result.return_value = False
+    mock_submit.return_value = mock_task_instance
+
     rs_client = StacClient.open(url_gen, API_KEY, username)
-    adgs_files = [
-        "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
-        "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
-        "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
-    ]
+    product_types = []  # type: ignore
+    adgs_files = []  # type: ignore
 
     assert s1_l0_flow._run(  # pylint: disable=protected-access
         PrefectS1L0FlowConfig(

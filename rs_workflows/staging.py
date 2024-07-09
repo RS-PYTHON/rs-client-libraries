@@ -71,6 +71,7 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
     collection_name: str,
     stac_file_info: dict,
     obs: str,
+    **kwargs,
 ):
     """Update the STAC catalog with file information.
 
@@ -92,7 +93,25 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
     now = datetime.now()
 
     # The file path from the temp s3 bucket is given in the assets
-    assets = {"file": Asset(href=f"{obs.rstrip('/')}/{stac_file_info['id']}")}
+    assets = {}
+    update_assets = kwargs.get("update_assets", None)
+
+    if update_assets:
+        assets = {
+            asset: Asset(href=f"{obs.rstrip('/')}/{stac_file_info['assets'][asset]['href']}")
+            for asset in stac_file_info["assets"]
+        }
+    else:
+        new_href_value = Asset(href=f"{obs.rstrip('/')}/{stac_file_info['id']}")
+        assets = (
+            {"file": new_href_value}
+            if "file" in stac_file_info["assets"]
+            else {
+                asset_key: new_href_value
+                for asset_key, asset_value in stac_file_info["assets"].items()
+                if "href" in asset_value
+            }
+        )
 
     # Copy properties from the input stac file, or use default values
     properties = stac_file_info.get("properties") or {}
