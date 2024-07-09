@@ -366,8 +366,8 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
     def search_inside_collection(  # pylint: disable=too-many-arguments
         self,
         *,
-        owner_id: str,
         collection_id: str,
+        owner_id: str | None = None,
         method: Optional[str] = "POST",
         max_items: Optional[int] = None,
         limit: Optional[int] = None,
@@ -389,7 +389,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
             max_items=max_items,
             limit=limit,
             ids=ids,
-            collections=[f"{owner_id}_{collection_id}"],
+            collections=[self.full_collection_id(owner_id, collection_id)],
             bbox=bbox,
             intersects=intersects,
             datetime=datetime,
