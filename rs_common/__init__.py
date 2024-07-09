@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""rs-workflows main module."""
+"""Common modules."""
 
-# Set automatically by running `poetry dynamic-versioning`
-__version__ = "0.0.0"
+# Configure OpenTelemetry
+from rs_common import opentelemetry
+
+opentelemetry.init_traces("rs.client")

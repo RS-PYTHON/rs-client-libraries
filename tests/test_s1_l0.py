@@ -23,6 +23,9 @@ import pytest
 import responses
 import yaml
 
+from rs_client.rs_client import RsClient
+from rs_client.stac_client import StacClient
+from rs_common.logging import Logging
 from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     LOGGER_NAME,
     PrefectS1L0FlowConfig,
@@ -36,12 +39,14 @@ from rs_workflows.s1_l0 import (  # CONFIG_DIR,; YAML_TEMPLATE_FILE,
     s1_l0_flow,
     start_dpr,
 )
-from rs_workflows.utils.logging import Logging
+from tests import common
 
 # from prefect.testing.utilities import prefect_test_harness
 
-
 RESOURCES = Path(osp.realpath(osp.dirname(__file__))) / "resources"
+API_KEY = "dummy-api-key"
+RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
+OWNER_ID = "OWNER_ID"
 
 
 @pytest.mark.unit
@@ -98,34 +103,26 @@ def test_start_dpr(endpoint, status):
     "cadip_files, , adgs_files, product_types, temp_s3_path",
     [
         (
-            {
-                "type": "FeatureCollection",
-                "context": {"limit": 1000, "returned": 60},
-                "features": [
-                    {
-                        "id": "CADU.raw",
-                        "assets": {
-                            "file": {
-                                "alternate": {"s3": {"href": "s3://test-bucket/CADU.raw"}},
-                            },
+            [
+                {
+                    "id": "CADU.raw",
+                    "assets": {
+                        "file": {
+                            "alternate": {"s3": {"href": "s3://test-bucket/CADU.raw"}},
                         },
                     },
-                ],
-            },
-            {
-                "type": "FeatureCollection",
-                "context": {"limit": 1000, "returned": 60},
-                "features": [
-                    {
-                        "id": "AUX.EOF",
-                        "assets": {
-                            "file": {
-                                "alternate": {"s3": {"href": "s3://test-bucket/AUX.EOF"}},
-                            },
+                },
+            ],
+            [
+                {
+                    "id": "AUX.EOF",
+                    "assets": {
+                        "file": {
+                            "alternate": {"s3": {"href": "s3://test-bucket/AUX.EOF"}},
                         },
                     },
-                ],
-            },
+                },
+            ],
             ["S1SEWRAW"],
             "s3://test-bucket/PRODUCTS/",
         ),
@@ -290,17 +287,7 @@ def test_create_cql2_filter():
     )
 
 
-@pytest.mark.unit
-@responses.activate
-@pytest.mark.parametrize(
-    "endpoint, status",
-    [
-        ("http://127.0.0.1:5000", "200"),
-        ("http://127.0.0.1:5000", "404"),
-        ("http://bad_endpoint", "None"),
-    ],
-)
-def test_get_cadip_catalog_data(endpoint, status):
+def test_get_cadip_catalog_data(mocked_stac_catalog_search_cadip):
     """Test for the get_cadip_catalog_data function.
 
     This test function mocks API responses and verifies the behavior of the
@@ -317,162 +304,132 @@ def test_get_cadip_catalog_data(endpoint, status):
     with a 200 status code. Otherwise, it asserts that the function returns None.
 
     """
-    username = "TestUser"
     collection = "s1_test"
     cadip_session_id = "S1A_20200105072204051312"
-    apikey = ""
-    cadip_catalog = RESOURCES / "cadip_catalog.json"
-    with open(cadip_catalog, encoding="utf-8") as cadip_catalog_f:
+    with open(RESOURCES / "cadip_catalog.json", encoding="utf-8") as cadip_catalog_f:
         cadip_catalog = json.loads(cadip_catalog_f.read())
-    if "bad_endpoint" not in endpoint:
-        responses.add(
-            responses.POST,
-            endpoint + "/catalog/search",
-            json=cadip_catalog,
-            status=status,
-        )
-
-    if "bad_endpoint" not in endpoint:
-        cadip_res = get_cadip_catalog_data.fn(endpoint, username, collection, cadip_session_id, apikey)
-        print(cadip_res)
-        if int(status) == 200:
-            assert cadip_res == cadip_catalog
-        else:
-            assert cadip_res is None
-    else:
-        assert get_cadip_catalog_data.fn(endpoint, username, collection, cadip_session_id, apikey) is None
+    rs_client: StacClient = RsClient(mocked_stac_catalog_search_cadip, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+    cadip_res = get_cadip_catalog_data.fn(rs_client, collection, cadip_session_id)
+    assert cadip_res == cadip_catalog["features"]
 
 
-@pytest.mark.unit
-@responses.activate
-@pytest.mark.parametrize(
-    "endpoint, status",
-    [
-        ("http://127.0.0.1:5000", "200"),
-        ("http://127.0.0.1:5000", "404"),
-        ("http://bad_endpoint", "None"),
-    ],
-)
-def test_get_adgs_catalog_data(endpoint, status):
+def test_get_adgs_catalog_data(mocked_stac_catalog_search_adgs):
     """Test for the get_adgs_catalog_data function.
 
     This test function mocks API responses and verifies the behavior of the
     get_adgs_catalog_data function under different scenarios.
 
     Args:
-        endpoint (str): The URL of the endpoint to mock API requests.
-        status (str): The HTTP status code to mock API responses.
+        mocked_stac_catalog (str): the mocker for the landing page and search endpoint.
 
     The function loads an expected ADGS catalog data from a file and mocks
     the API response based on the provided endpoint and status. It then calls
     the get_adgs_catalog_data function with the specified parameters and
     asserts that it returns the expected catalog data when the endpoint responds
-    with a 200 status code. Otherwise, it asserts that the function returns None.
-
+    with a 200 status code.
     """
-    username = "TestUser"
     collection = "s1_test"
     files_list = ["ADGS1.EOF", "ADGS2.EOF"]
-    apikey = ""
-    adgs_catalog = RESOURCES / "adgs_catalog.json"
-    with open(adgs_catalog, encoding="utf-8") as adgs_catalog_f:
+    with open(RESOURCES / "adgs_catalog.json", encoding="utf-8") as adgs_catalog_f:
         adgs_catalog = json.loads(adgs_catalog_f.read())
-    if "bad_endpoint" not in endpoint:
-        responses.add(
-            responses.GET,
-            endpoint + "/catalog/search",
-            json=adgs_catalog,
-            status=status,
-        )
 
-    if "bad_endpoint" not in endpoint:
-        adgs_res = get_adgs_catalog_data.fn(endpoint, username, collection, files_list, apikey)
-        print(adgs_res)
-        if int(status) == 200:
-            assert adgs_res == adgs_catalog
-        else:
-            assert adgs_res is None
-    else:
-        assert get_adgs_catalog_data.fn(endpoint, username, collection, files_list, apikey) is None
+    rs_client: StacClient = RsClient(mocked_stac_catalog_search_adgs, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
+    adgs_res = get_adgs_catalog_data.fn(rs_client, collection, files_list)
+
+    assert adgs_res == adgs_catalog["features"]
 
 
-# TODO: The unit testing for this prefect flow does not work
-# We can consider that all the other files / task have been tested (see up)
-# @pytest.mark.unit
-# @responses.activate
-# def test_s1_l0_flow(mocker):
-#     username = "TestUser"
-#     mission = "s1"
-#     cadip_session_id = "S1A_20200105072204051312"
-#     product_types = ["S1SEWRAW", "S1SIWRAW"]
-#     s3_storage = "s3://test_final"
-#     temp_s3_storage = "s3://test_temp"
-#     apikey = ""
-#     url_gen = "http://127.0.0.1:5000"
-#     url_dpr = "http://127.0.0.1:5010"
+@pytest.mark.unit
+@responses.activate
+def test_s1_l0_flow(mocker):  # pylint: disable=too-many-locals
+    """Test for s1_l0 flow
+    NOTE: the mock for start_dpr does not produce any output. Thus, the
+    last part from the flow is not covered in this test
+    TODO: To be implemented in future
+    """
+    username = "TestUser"
+    mission = "s1"
+    cadip_session_id = "S1A_20200105072204051312"
+    product_types = ["S1SEWRAW"]
+    s3_storage = "s3://test_final"
+    temp_s3_storage = "s3://test_temp"
+    url_gen = "http://127.0.0.1:5000"
+    url_dpr = "http://127.0.0.1:5010"
 
-#     # mock all the prefect tasks
-#     cadip_catalog = RESOURCES / "cadip_catalog.json"
-#     adgs_catalog = RESOURCES / "adgs_catalog.json"
-#     with open(cadip_catalog, encoding="utf-8") as cadip_catalog_f:
-#         file_loaded = json.loads(cadip_catalog_f.read())
-#     mocker.patch(
-#         "rs_workflows.s1_l0.get_cadip_catalog_data",
-#         return_value=file_loaded,
-#     )
-#     with open(adgs_catalog, encoding="utf-8") as adgs_catalog_f:
-#         file_loaded = json.loads(adgs_catalog_f.read())
-#     mocker.patch(
-#         "rs_workflows.s1_l0.get_adgs_catalog_data",
-#         return_value=file_loaded,
-#     )
-#     yaml_input_path = RESOURCES / "dpr_config_test.yaml"
-#     with open(yaml_input_path, encoding="utf-8") as yaml_file:
-#         file_loaded = yaml.safe_load(yaml_file)
-#     mocker.patch(
-#         "rs_workflows.s1_l0.get_adgs_catalog_data",
-#         return_value=file_loaded,
-#     )
-#     # TODO: the following mock did not work. I also tried to mock the endpoint,
-#     # but inside the prefect task is not seen
-#     dpr_answer_path = RESOURCES / "dpr_answer.json"
-#     with open(dpr_answer_path, encoding="utf-8") as dpr_answer_f:
-#         file_loaded = json.loads(dpr_answer_f.read())
-#     mocker.patch(
-#         "rs_workflows.s1_l0.start_dpr",
-#         return_value=file_loaded,
-#     )
-#     # responses.add(
-#     #         responses.GET,
-#     #         url_dpr + "/run",
-#     #         json=file_loaded,
-#     #         status=200,
-#     #     )
+    # mock all the prefect tasks
+    cadip_catalog = RESOURCES / "cadip_catalog.json"
+    adgs_catalog = RESOURCES / "adgs_catalog.json"
+    with open(cadip_catalog, encoding="utf-8") as cadip_catalog_f:
+        file_loaded = json.loads(cadip_catalog_f.read())
 
-#     # mock the endpoint for catalog creation
-#     responses.add(
-#             responses.POST,
-#             url_gen + "/catalog/collections",
-#             status=200,
-#         )
-#     mocker.patch(
-#         "rs_workflows.common.update_stac_catalog",
-#         return_value=True,
-#     )
-#     with prefect_test_harness():
-#         s1_l0_flow(
-#             PrefectS1L0FlowConfig(
-#                 username,
-#                 url_gen,
-#                 url_dpr,
-#                 mission,
-#                 cadip_session_id,
-#                 product_types,
-#                 s3_storage,
-#                 temp_s3_storage,
-#                 apikey,
-#             ),
-#         )
+    mocker.patch(
+        "rs_workflows.s1_l0.get_cadip_catalog_data",
+        return_value=file_loaded,
+    )
+    with open(adgs_catalog, encoding="utf-8") as adgs_catalog_f:
+        file_loaded = json.loads(adgs_catalog_f.read())
+
+    mocker.patch(
+        "rs_workflows.s1_l0.get_adgs_catalog_data",
+        return_value=file_loaded,
+    )
+    yaml_input_path = RESOURCES / "dpr_config_test.yaml"
+    with open(yaml_input_path, encoding="utf-8") as yaml_file:
+        file_loaded = yaml.safe_load(yaml_file)
+
+    mocker.patch(
+        "rs_workflows.s1_l0.build_eopf_triggering_yaml",
+        return_value=file_loaded,
+    )
+    # TODO: the following mock did not work. I also tried to mock the endpoint,
+    # but inside the prefect task is not seen
+    dpr_answer_path = RESOURCES / "dpr_answer.json"
+    with open(dpr_answer_path, encoding="utf-8") as dpr_answer_f:
+        file_loaded = json.loads(dpr_answer_f.read())
+
+    mocker.patch(
+        "rs_workflows.s1_l0.start_dpr",
+        return_value=file_loaded,
+    )
+    # responses.add(
+    #         responses.GET,
+    #         url_dpr + "/run",
+    #         json=file_loaded,
+    #         status=200,
+    #     )
+
+    # mock the endpoint for catalog creation
+    responses.add(
+        responses.POST,
+        url_gen + "/catalog/collections",
+        status=200,
+    )
+    json_landing_page = common.json_landing_page(url_gen, "toto:S1_L1")
+    responses.get(url=url_gen + "/catalog/", json=json_landing_page, status=200)
+
+    mocker.patch(
+        "rs_workflows.staging.update_stac_catalog",
+        return_value=True,
+    )
+    rs_client = StacClient.open(url_gen, API_KEY, username)
+    adgs_files = [
+        "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
+        "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
+        "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
+    ]
+
+    assert s1_l0_flow._run(  # pylint: disable=protected-access
+        PrefectS1L0FlowConfig(
+            rs_client,
+            url_dpr,
+            mission,
+            cadip_session_id,
+            product_types,
+            adgs_files,
+            s3_storage,
+            temp_s3_storage,
+        ),
+    ).is_completed()
 
 
 if __name__ == "__main__":
@@ -535,16 +492,24 @@ if __name__ == "__main__":
     if not args.apikey:
         args.apikey = os.environ.get("RSPY_APIKEY", None)
 
+    _rs_client = StacClient.open(args.url_catalog, args.apikey, args.user, logger)
+
+    # TODO: use "real" values ?
+    _adgs_files = [
+        "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
+        "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
+        "S1A_OPER_AUX_RESORB_OPOD_20210716T110702_V20210716T071044_20210716T102814.EOF",
+    ]
+
     s1_l0_flow(
         PrefectS1L0FlowConfig(
-            args.user,
-            args.url_catalog,
+            _rs_client,
             args.url_dpr,
             args.mission,
             args.session_id,
             args.product_types,
+            _adgs_files,
             args.s3_storage,
             args.temp_s3_storage,
-            args.apikey,
         ),
     )

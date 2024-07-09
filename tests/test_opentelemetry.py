@@ -12,7 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""rs-workflows main module."""
+"""Unit tests for OpenTelemetry."""
 
-# Set automatically by running `poetry dynamic-versioning`
-__version__ = "0.0.0"
+from rs_common import opentelemetry
+from rs_common.logging import Logging
+
+
+def test_opentelemetry(mocker):
+    """
+    For now, just test that the otel init code passes without errors.
+    Don't check the generated logs, traces and metrics.
+    """
+
+    # Patch the global variables. See: https://stackoverflow.com/a/69685866
+    mocker.patch("rs_common.opentelemetry.FROM_PYTEST", new=True, autospec=False)
+
+    Logging.default(__name__)
+    opentelemetry.init_traces("pytest")
