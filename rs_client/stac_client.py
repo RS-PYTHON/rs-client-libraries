@@ -20,16 +20,7 @@ import logging
 import os
 from datetime import datetime as datetime_
 from functools import lru_cache
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterator,
-    List,
-    Optional,
-    Tuple,
-    Union,
-)
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
 import pystac
 import requests
@@ -37,8 +28,8 @@ from pystac import CatalogType, Collection, Item, Link, RelType
 from pystac.layout import HrefLayoutStrategy
 from pystac_client import Client, Modifiable
 from pystac_client.collection_client import CollectionClient
-from pystac_client.stac_api_io import StacApiIO, Timeout
 from pystac_client.item_search import GeoInterface, ItemSearch
+from pystac_client.stac_api_io import StacApiIO, Timeout
 from requests import Request, Response
 
 from rs_client.rs_client import APIKEY_HEADER, TIMEOUT, RsClient

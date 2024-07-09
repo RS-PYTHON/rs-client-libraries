@@ -176,9 +176,10 @@ def test_remove_item_stac_client(mocked_stac_catalog_delete_item):  # pylint: di
 def test_search_item_inside_collection_stac_client_mock(  # pylint: disable=missing-function-docstring
     mocked_stac_catalog_search_inside_collection,
 ):
-
     catalog: StacClient = RsClient(
-        mocked_stac_catalog_search_inside_collection, RS_SERVER_API_KEY, OWNER_ID
+        mocked_stac_catalog_search_inside_collection,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
     ).get_stac_client()
 
     ################################

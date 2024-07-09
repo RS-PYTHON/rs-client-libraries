@@ -551,10 +551,10 @@ def mocked_stac_catalog_search_inside_collection():
                                     "href": (
                                         "s3://rs-cluster-catalog/ycolera/CADIP/"
                                         "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw"
-                                    )
-                                }
+                                    ),
+                                },
                             },
-                        }
+                        },
                     },
                     "geometry": {
                         "type": "Polygon",
@@ -625,10 +625,10 @@ def mocked_stac_catalog_search_inside_collection():
                                     "href": (
                                         "s3://rs-cluster-catalog/ycolera/AUXIP/"
                                         "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ"
-                                    )
-                                }
+                                    ),
+                                },
                             },
-                        }
+                        },
                     },
                     "geometry": {
                         "type": "Polygon",
