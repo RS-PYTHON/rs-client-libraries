@@ -116,8 +116,8 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
     # Copy properties from the input stac file, or use default values
     properties = stac_file_info.get("properties") or {}
     geometry = stac_file_info.get("geometry") or {  # NOTE: override the geometry if it is set to None
-         "type": "Polygon",
-         "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
+        "type": "Polygon",
+        "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
     }
     bbox = stac_file_info.get("bbox") or [-180.0, -90.0, 180.0, 90.0]
     datetime_value = now
