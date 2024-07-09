@@ -186,10 +186,10 @@ def test_search_item_inside_collection_stac_client_mock(  # pylint: disable=miss
     # Search items in a collection #
     ################################
 
-    response = catalog.search_inside_collection(owner_id="ycolera", collection_id="my_tutorial_collection")
+    response = catalog.search_inside_collection(owner_id="toto", collection_id="S1_L1")
     count = 0
     for item in response.items():
-        assert item.collection_id == "my_tutorial_collection"
+        assert item.collection_id == "S1_L1"
         count += 1
 
     assert count == 2
