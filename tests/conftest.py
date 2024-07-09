@@ -670,7 +670,9 @@ def mocked_stac_catalog_search_inside_collection():
                 {
                     "rel": "self",
                     "type": "application/geo+json",
-                    "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/ycolera:my_tutorial_collection/items",
+                    "href": (
+                        "https://dev-rspy.esa-copernicus.eu/catalog/collections/ycolera:my_tutorial_collection/items"
+                    ),
                 },
             ],
         }
