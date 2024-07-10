@@ -173,23 +173,34 @@ def test_remove_item_stac_client(mocked_stac_catalog_delete_item):  # pylint: di
     assert response.status_code == 200
 
 
-def test_search_item_inside_collection_stac_client_mock(  # pylint: disable=missing-function-docstring
+def test_search_item_inside_collection_stac_client_mock(
     mocked_stac_catalog_search_inside_collection,
 ):
+    """Test searching items inside a collection
+
+    This test verifies that items within a specific collection are correctly retrieved and
+    asserts their properties when the /catalog/collections/[<owner_id>:]<collection_id>/search endpoint
+    is called
+
+    Args:
+        mocked_stac_catalog_search_inside_collection: Mock object for STAC catalog search
+        inside a collection.
+    """
     catalog: StacClient = RsClient(
         mocked_stac_catalog_search_inside_collection,
         RS_SERVER_API_KEY,
         OWNER_ID,
     ).get_stac_client()
 
-    ################################
-    # Search items in a collection #
-    ################################
-
     response = catalog.search_inside_collection(owner_id="toto", collection_id="S1_L1")
-    count = 0
-    for item in response.items():
-        assert item.collection_id == "S1_L1"
-        count += 1
 
-    assert count == 2
+    expected_ids = [
+        "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw",
+        "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ",
+    ]
+
+    for count, item in enumerate(response.items()):
+        assert item.collection_id == "S1_L1"
+        assert item.id == expected_ids[count]
+
+    assert count == 1  # count should be 1 for two items
