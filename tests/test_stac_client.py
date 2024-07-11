@@ -199,6 +199,8 @@ def test_search_item_inside_collection_stac_client_mock(
         "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ",
     ]
 
+    count = 0
+
     for count, item in enumerate(response.items()):
         assert item.collection_id == "S1_L1"
         assert item.id == expected_ids[count]
