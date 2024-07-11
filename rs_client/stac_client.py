@@ -18,9 +18,8 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime as datetime_
 from functools import lru_cache
-from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import pystac
 import requests
@@ -28,7 +27,17 @@ from pystac import CatalogType, Collection, Item, Link, RelType
 from pystac.layout import HrefLayoutStrategy
 from pystac_client import Client, Modifiable
 from pystac_client.collection_client import CollectionClient
-from pystac_client.item_search import GeoInterface, ItemSearch
+from pystac_client.item_search import (
+    BBoxLike,
+    DatetimeLike,
+    FieldsLike,
+    FilterLike,
+    IDsLike,
+    IntersectsLike,
+    ItemSearch,
+    QueryLike,
+    SortbyLike,
+)
 from pystac_client.stac_api_io import StacApiIO, Timeout
 from requests import Request, Response
 
@@ -330,38 +339,6 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
             **self.apikey_headers,
             timeout=timeout,
         )
-
-    DatetimeOrTimestamp = Optional[Union[datetime_, str]]
-    Datetime = str
-    DatetimeLike = Union[
-        DatetimeOrTimestamp,
-        Tuple[DatetimeOrTimestamp, DatetimeOrTimestamp],
-        List[DatetimeOrTimestamp],
-        Iterator[DatetimeOrTimestamp],
-    ]
-
-    BBox = Tuple[float, ...]
-    BBoxLike = Union[BBox, List[float], Iterator[float], str]
-
-    Collections = Tuple[str, ...]
-    CollectionsLike = Union[List[str], Iterator[str], str]
-
-    IDs = Tuple[str, ...]
-    IDsLike = Union[IDs, str, List[str], Iterator[str]]
-
-    Intersects = Dict[str, Any]
-    IntersectsLike = Union[str, GeoInterface, Intersects]
-
-    Query = Dict[str, Any]
-    QueryLike = Union[Query, List[str]]
-
-    FilterLike = Union[Dict[str, Any], str]
-
-    Sortby = List[Dict[str, str]]
-    SortbyLike = Union[Sortby, str, List[str]]
-
-    Fields = Dict[str, List[str]]
-    FieldsLike = Union[Fields, str, List[str]]
 
     def search_inside_collection(  # pylint: disable=too-many-arguments
         self,
