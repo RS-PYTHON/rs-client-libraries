@@ -214,7 +214,6 @@ class RsClient:
             self.logger,
             *args,
             **kwargs,
-            ignore_conformance=True,
         )
 
     ############################
