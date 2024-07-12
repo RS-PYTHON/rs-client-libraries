@@ -207,7 +207,15 @@ class RsClient:
             StacClient,
         )
 
-        return StacClient.open(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger, *args, **kwargs)
+        return StacClient.open(
+            self.rs_server_href,
+            self.rs_server_api_key,
+            self.owner_id,
+            self.logger,
+            *args,
+            **kwargs,
+            ignore_conformance=True,
+        )
 
     ############################
     # Call RS-Server endpoints #
