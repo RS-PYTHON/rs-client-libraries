@@ -27,6 +27,17 @@ from pystac import CatalogType, Collection, Item, Link, RelType
 from pystac.layout import HrefLayoutStrategy
 from pystac_client import Client, Modifiable
 from pystac_client.collection_client import CollectionClient
+from pystac_client.item_search import (
+    BBoxLike,
+    DatetimeLike,
+    FieldsLike,
+    FilterLike,
+    IDsLike,
+    IntersectsLike,
+    ItemSearch,
+    QueryLike,
+    SortbyLike,
+)
 from pystac_client.stac_api_io import StacApiIO, Timeout
 from requests import Request, Response
 
@@ -327,4 +338,41 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
             f"{self.href_catalog}/catalog/collections/{full_collection_id}/items/{item_id}",
             **self.apikey_headers,
             timeout=timeout,
+        )
+
+    def search_inside_collection(  # pylint: disable=too-many-arguments
+        self,
+        *,
+        collection_id: str,
+        owner_id: str | None = None,
+        method: Optional[str] = "POST",
+        max_items: Optional[int] = None,
+        limit: Optional[int] = None,
+        ids: Optional[IDsLike] = None,
+        bbox: Optional[BBoxLike] = None,
+        intersects: Optional[IntersectsLike] = None,
+        datetime: Optional[DatetimeLike] = None,
+        query: Optional[QueryLike] = None,
+        stac_filter: Optional[FilterLike] = None,
+        filter_lang: Optional[str] = None,
+        sortby: Optional[SortbyLike] = None,
+        fields: Optional[FieldsLike] = None,
+    ) -> ItemSearch:
+        """Search items inside a specific collection."""
+
+        return Client.search(
+            self,
+            method=method,
+            max_items=max_items,
+            limit=limit,
+            ids=ids,
+            collections=[f"{owner_id}_{collection_id}"],
+            bbox=bbox,
+            intersects=intersects,
+            datetime=datetime,
+            query=query,
+            filter=stac_filter,
+            filter_lang=filter_lang,
+            sortby=sortby,
+            fields=fields,
         )

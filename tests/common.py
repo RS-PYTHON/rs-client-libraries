@@ -39,6 +39,7 @@ def json_landing_page(href: str, user_collection: str, conforms_to=True):
                 "http://www.opengis.net/spec/ogcapi-features-3/1.0/conf/filter",
                 "https://api.stacspec.org/v1.0.0-rc.2/item-search#filter",
                 "http://www.opengis.net/spec/cql2/1.0/conf/cql2-text",
+                "https://api.stacspec.org/v1.0.0/item-search",
             ],
         }
         if conforms_to

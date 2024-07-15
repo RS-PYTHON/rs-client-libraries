@@ -493,6 +493,181 @@ def mocked_stac_catalog_search_cadip():
 
 
 @pytest.fixture
+def mocked_stac_catalog_search_inside_collection():
+    """Mock responses to a STAC catalog search request."""
+    with responses.RequestsMock() as resp:
+        url = "http://mocked_stac_catalog_url"
+        json_landing_page = common.json_landing_page(url, "toto:S1_L1", conforms_to=True)
+        resp.get(url=url + "/catalog/", json=json_landing_page, status=200)
+        json_search = {
+            "type": "FeatureCollection",
+            "context": {"limit": 10, "returned": 2},
+            "features": [
+                {
+                    "id": "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw",
+                    "bbox": [-180, -90, 180, 90],
+                    "type": "Feature",
+                    "links": [
+                        {
+                            "rel": "collection",
+                            "type": "application/json",
+                            "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
+                        },
+                        {
+                            "rel": "parent",
+                            "type": "application/json",
+                            "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
+                        },
+                        {
+                            "rel": "root",
+                            "type": "application/json",
+                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/catalogs/toto",
+                        },
+                        {
+                            "rel": "self",
+                            "type": "application/geo+json",
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "toto:S1_L1/items/"
+                                "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw"
+                            ),
+                        },
+                    ],
+                    "assets": {
+                        "file": {
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "toto:S1_L1/items/"
+                                "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw/download/file"
+                            ),
+                            "alternate": {
+                                "s3": {
+                                    "href": (
+                                        "s3://rs-cluster-catalog/toto/CADIP/"
+                                        "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw"
+                                    ),
+                                },
+                            },
+                        },
+                    },
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
+                    },
+                    "collection": "S1_L1",
+                    "properties": {
+                        "gsd": 0.12345,
+                        "owner": "toto",
+                        "width": 2500,
+                        "height": 2500,
+                        "expires": "2024-08-08T07:12:45.662521Z",
+                        "updated": "2024-07-09T07:12:45.662521Z",
+                        "datetime": "2024-07-09T07:12:45.459911Z",
+                        "proj:epsg": 3857,
+                        "published": "2024-07-09T07:12:45.662515Z",
+                        "orientation": "nadir",
+                    },
+                    "stac_version": "1.0.0",
+                    "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
+                },
+                {
+                    "id": "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ",
+                    "bbox": [-180, -90, 180, 90],
+                    "type": "Feature",
+                    "links": [
+                        {
+                            "rel": "collection",
+                            "type": "application/json",
+                            "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
+                        },
+                        {
+                            "rel": "parent",
+                            "type": "application/json",
+                            "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
+                        },
+                        {
+                            "rel": "root",
+                            "type": "application/json",
+                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/catalogs/toto",
+                        },
+                        {
+                            "rel": "self",
+                            "type": "application/geo+json",
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "toto:S1_L1/items/"
+                                "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ"
+                            ),
+                        },
+                    ],
+                    "assets": {
+                        "file": {
+                            "href": (
+                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                                "toto:S1_L1/items/"
+                                "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ/"
+                                "download/file"
+                            ),
+                            "alternate": {
+                                "s3": {
+                                    "href": (
+                                        "s3://rs-cluster-catalog/toto/AUXIP/"
+                                        "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ"
+                                    ),
+                                },
+                            },
+                        },
+                    },
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
+                    },
+                    "collection": "S1_L1",
+                    "properties": {
+                        "gsd": 0.12345,
+                        "owner": "toto",
+                        "width": 2500,
+                        "height": 2500,
+                        "expires": "2024-08-08T07:12:39.570544Z",
+                        "updated": "2024-07-09T07:12:39.570544Z",
+                        "datetime": "2024-07-09T07:12:39.081716Z",
+                        "proj:epsg": 3857,
+                        "published": "2024-07-09T07:12:39.570534Z",
+                        "orientation": "nadir",
+                    },
+                    "stac_version": "1.0.0",
+                    "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
+                },
+            ],
+            "links": [
+                {
+                    "rel": "collection",
+                    "type": "application/json",
+                    "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1",
+                },
+                {
+                    "rel": "parent",
+                    "type": "application/json",
+                    "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1",
+                },
+                {
+                    "rel": "root",
+                    "type": "application/json",
+                    "href": "https://dev-rspy.esa-copernicus.eu/catalog/catalogs/toto",
+                },
+                {
+                    "rel": "self",
+                    "type": "application/geo+json",
+                    "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1/items"),
+                },
+            ],
+        }
+
+        resp.post(url=url + "/catalog/search", json=json_search, status=200)
+        yield url
+
+
+@pytest.fixture
 def mocked_stac_catalog_url():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
     with responses.RequestsMock() as resp:
