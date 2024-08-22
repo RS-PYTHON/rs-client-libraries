@@ -98,13 +98,15 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
 
     if update_assets:
         assets = {
-            asset: Asset(href=f"{obs.rstrip('/')}/{stac_file_info['assets'][asset]['href']}")
+            stac_file_info["assets"][asset]["href"].split()[-1]: Asset(
+                href=f"{obs.rstrip('/')}/{stac_file_info['assets'][asset]['href']}",
+            )
             for asset in stac_file_info["assets"]
         }
     else:
         new_href_value = Asset(href=f"{obs.rstrip('/')}/{stac_file_info['id']}")
         assets = (
-            {"file": new_href_value}
+            {stac_file_info["id"]: new_href_value}
             if "file" in stac_file_info["assets"]
             else {
                 asset_key: new_href_value
