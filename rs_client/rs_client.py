@@ -27,6 +27,7 @@ from cachetools import TTLCache, cached
 
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
+from rs_common.utils import AuthInfo
 
 APIKEY_HEADER = "x-api-key"
 
@@ -107,27 +108,27 @@ class RsClient:
     apikey_security_cache: TTLCache = TTLCache(maxsize=sys.maxsize, ttl=120)
 
     @cached(cache=apikey_security_cache)
-    def apikey_security(self) -> tuple[list[str], dict, str]:
+    def apikey_security(self) -> AuthInfo:
         """
         Check the api key validity. Cache an infinite (sys.maxsize) number of results for 120 seconds.
 
         Returns:
-            Tuple of (IAM roles, config, user login) information from the keycloak account, associated to the api key.
+            Authentication information from the keycloak account, associated to the api key.
         """
 
         # In local mode, we have no API key, so return empty results
         if self.local_mode:
-            return [], {}, ""
+            return AuthInfo(user_login="", iam_roles=[], apikey_config={})
 
         # self.logger.warning(
-        #     f"TODO: use {self.rs_server_href}/apikeymanager/check/api_key instead, see: "
+        #     f"TODO: use {self.rs_server_href}/apikeymanager/auth/check_key instead, see: "
         #     "https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-257",
         # )
         # Does not work in hybrid mode for now because this URL is not exposed.
         check_url = os.environ["RSPY_UAC_CHECK_URL"]
 
         # Request the API key manager, pass user-defined api key in http header
-        # check_url = f"{self.rs_server_href}/apikeymanager/check/api_key"
+        # check_url = f"{self.rs_server_href}/apikeymanager/auth/check_key"
         self.logger.debug("Call the API key manager")
         response = requests.get(check_url, **self.apikey_headers, timeout=TIMEOUT)
 
@@ -135,7 +136,11 @@ class RsClient:
         if response.ok:
             contents = response.json()
             # Note: for now, config is an empty dict
-            return contents["iam_roles"], contents["config"], contents["user_login"]
+            return AuthInfo(
+                user_login=contents["user_login"],
+                iam_roles=contents["iam_roles"],
+                apikey_config=contents["config"],
+            )
 
         # Try to read the response detail or error
         try:
@@ -157,17 +162,17 @@ class RsClient:
         Return the IAM (Identity and Access Management) roles from the keycloak account,
         associated to the api key.
         """
-        return self.apikey_security()[0]
+        return self.apikey_security().iam_roles
 
     @property
     def apikey_config(self) -> dict:
         """Return the config from the keycloak account, associated to the api key."""
-        return self.apikey_security()[1]
+        return self.apikey_security().apikey_config
 
     @property
     def apikey_user_login(self) -> str:
         """Return the user login from the keycloak account, associated to the api key."""
-        return self.apikey_security()[2]
+        return self.apikey_security().user_login
 
     #############################
     # Get child class instances #
