@@ -94,8 +94,7 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
 
     # The file path from the temp s3 bucket is given in the assets
     assets = {}
-    update_assets = kwargs.get("update_assets", None)
-    print(f"update_assets = {update_assets}")
+    update_assets = kwargs.get("update_assets", None)    
 
     if update_assets:        
         assets = {
@@ -115,7 +114,7 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
                 if "href" in asset_value
             }
         )
-    print(f"assets = {assets}")
+    
     # Copy properties from the input stac file, or use default values
     properties = stac_file_info.get("properties") or {}
     geometry = stac_file_info.get("geometry") or {  # NOTE: override the geometry if it is set to None
