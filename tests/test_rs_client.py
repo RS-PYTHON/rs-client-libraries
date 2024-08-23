@@ -119,6 +119,8 @@ def test_server_href(mocked_stac_catalog_url):
 def test_api_key_by_env_var():
     """Test that we can pass the API key by environment variable."""
 
+    # TODO test RSPY_OAUTH2_COOKIE instead
+
     # Test that we can pass it by argument
     rs_client = RsClient("", RS_SERVER_API_KEY, owner_id=OWNER_ID)  # no global href
     assert rs_client.rs_server_api_key == RS_SERVER_API_KEY

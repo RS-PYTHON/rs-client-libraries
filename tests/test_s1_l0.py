@@ -446,7 +446,7 @@ def test_s1_l0_flow(mocker, product_types, dpr_answer_file, catalog_name):  # py
     mock_task_instance.result.return_value = True
     mock_submit.return_value = mock_task_instance
 
-    rs_client = StacClient.open(url_gen, API_KEY, username)
+    rs_client = StacClient.open(url_gen, API_KEY, None, username)
     adgs_files = [
         "S1A_AUX_PP2_V20200106T080000_G20200106T080000.SAFE",
         "S1A_OPER_MPL_ORBPRE_20200409T021411_20200416T021411_0001.EOF",
@@ -501,7 +501,7 @@ def test_no_staging_data_in_flow(mocker, cadip_result, adgs_result):  # pylint: 
     mock_task_instance.result.return_value = adgs_result
     mock_submit.return_value = mock_task_instance
 
-    rs_client = StacClient.open(url_gen, API_KEY, username)
+    rs_client = StacClient.open(url_gen, API_KEY, None, username)
     product_types = []  # type: ignore
     adgs_files = []  # type: ignore
 
@@ -562,7 +562,7 @@ def test_no_dpr_output(mocker):
     mock_task_instance.result.return_value = False
     mock_submit.return_value = mock_task_instance
 
-    rs_client = StacClient.open(url_gen, API_KEY, username)
+    rs_client = StacClient.open(url_gen, API_KEY, None, username)
     product_types = []  # type: ignore
     adgs_files = []  # type: ignore
 
@@ -640,7 +640,7 @@ if __name__ == "__main__":
     if not args.apikey:
         args.apikey = os.environ.get("RSPY_APIKEY", None)
 
-    _rs_client = StacClient.open(args.url_catalog, args.apikey, args.user, logger)
+    _rs_client = StacClient.open(args.url_catalog, args.apikey, None, args.user, logger)
 
     # TODO: use "real" values ?
     _adgs_files = [

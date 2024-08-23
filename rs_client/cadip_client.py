@@ -119,7 +119,7 @@ class CadipClient(RsClient):
         if stop_date:
             payload["stop_date"] = stop_date.strftime(DATETIME_FORMAT)
         try:
-            response = requests.get(
+            response = self.http_session.get(
                 self.href_session,
                 params=payload,
                 timeout=timeout,
