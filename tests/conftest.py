@@ -276,9 +276,10 @@ def mocked_stac_catalog_search_adgs():
                         },
                     ],
                     "assets": {
-                        "file": {
+                        "ADGS1.EOF": {
                             "href": (
-                                "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS1.EOF/" "download/file"
+                                "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS1.EOF/"
+                                "download/file"
                             ),
                             "alternate": {"s3": {"href": "s3://rs-cluster-catalog/stations/ADGS/ADGS1.EOF"}},
                             "file:size": 2029769,
@@ -325,9 +326,10 @@ def mocked_stac_catalog_search_adgs():
                         },
                     ],
                     "assets": {
-                        "file": {
+                        "ADGS2.EOF": {
                             "href": (
-                                "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS2.EOF/" "download/file"
+                                "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS2.EOF/" 
+                                "download/file"
                             ),
                             "alternate": {"s3": {"href": "s3://rs-cluster-catalog/stations/ADGS/ADGS2.EOF"}},
                             "file:size": 1922340,
@@ -396,7 +398,7 @@ def mocked_stac_catalog_search_cadip():
                         },
                     ],
                     "assets": {
-                        "file": {
+                        "CADU1.raw": {
                             "href": (
                                 "https://rs-server/catalog/TestUser/collections/s1_chunk/items/CADU1.raw/"
                                 "download/file"
@@ -452,7 +454,7 @@ def mocked_stac_catalog_search_cadip():
                         },
                     ],
                     "assets": {
-                        "file": {
+                        "CADU2.raw": {
                             "href": (
                                 "https://rs-server/catalog/TestUser/collections/s1_chunk/items/CADU2.raw/"
                                 "download/file"
@@ -534,7 +536,7 @@ def mocked_stac_catalog_search_inside_collection():
                         },
                     ],
                     "assets": {
-                        "file": {
+                        "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw": {
                             "href": (
                                 "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
                                 "toto:S1_L1/items/"
@@ -601,7 +603,7 @@ def mocked_stac_catalog_search_inside_collection():
                         },
                     ],
                     "assets": {
-                        "file": {
+                        "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ": {
                             "href": (
                                 "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
                                 "toto:S1_L1/items/"

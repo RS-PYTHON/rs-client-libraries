@@ -28,7 +28,7 @@
                 }
             ],
             "assets": {
-                "file": {
+                "ADGS1.EOF": {
                     "href": "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS1.EOF/download/file",
                     "alternate": {
                         "s3": {
@@ -85,7 +85,7 @@
                 }
             ],
             "assets": {
-                "file": {
+                "ADGS2.EOF": {
                     "href": "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS2.EOF/download/file",
                     "alternate": {
                         "s3": {
