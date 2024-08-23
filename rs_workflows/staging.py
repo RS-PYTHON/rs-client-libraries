@@ -95,26 +95,27 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
     # The file path from the temp s3 bucket is given in the assets
     assets = {}
     update_assets = kwargs.get("update_assets", None)
+    print(f"update_assets = {update_assets}")
 
-    if update_assets:
+    if update_assets:        
         assets = {
             stac_file_info["assets"][asset]["href"].split("/")[-1]: Asset(
                 href=f"{obs.rstrip('/')}/{stac_file_info['assets'][asset]['href']}",
             )
             for asset in stac_file_info["assets"]
         }
-    else:
+    else:        
         new_href_value = Asset(href=f"{obs.rstrip('/')}/{stac_file_info['id']}")
         assets = (
             {stac_file_info["id"]: new_href_value}
             if "file" in stac_file_info["assets"]
             else {
-                asset_key: new_href_value
-                for asset_key, asset_value in stac_file_info["assets"].items()
+                stac_file_info['id'].split("/")[-1]: new_href_value
+                for _, asset_value in stac_file_info["assets"].items()
                 if "href" in asset_value
             }
         )
-
+    print(f"assets = {assets}")
     # Copy properties from the input stac file, or use default values
     properties = stac_file_info.get("properties") or {}
     geometry = stac_file_info.get("geometry") or {  # NOTE: override the geometry if it is set to None
