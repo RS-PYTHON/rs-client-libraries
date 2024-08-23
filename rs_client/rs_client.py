@@ -74,10 +74,6 @@ class RsClient:
         # Env vars are used instead to determine the different services URL.
         self.local_mode = not bool(self.rs_server_href)
 
-        # If the API key is not set, we try to read it from the RSPY_APIKEY environment variable.
-        if not self.rs_server_api_key:
-            self.rs_server_api_key = os.getenv("RSPY_APIKEY")  # None if the env var is not set
-
         if (not self.local_mode) and (not self.rs_server_api_key):
             raise RuntimeError("API key is mandatory for RS-Server authentication")
 
