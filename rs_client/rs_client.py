@@ -125,20 +125,13 @@ class RsClient:
         if not response.ok:
             raise RuntimeError(f"OAuth2 status code {response.status_code}: {utils.read_response_error(response)}")
 
-        # Try to decode the JSON response
-        try:
-            contents = response.json()
-            return AuthInfo(
-                user_login=contents["user_login"],
-                iam_roles=contents["iam_roles"],
-                apikey_config={},  # no API key config here
-            )
-
-        # If the cookie is invalid, the response status code is 200, but the body is actually
-        # the contents of a webpage that is used to authenticate. We cannot use this from
-        # python code so just raise an Exception.
-        except JSONDecodeError:
-            raise RuntimeError("Invalid authentication response. Your OAuth2 session cookie may be invalid.")
+        # Decode the JSON response
+        contents = response.json()
+        return AuthInfo(
+            user_login=contents["user_login"],
+            iam_roles=contents["iam_roles"],
+            apikey_config={},  # no API key config here
+        )
 
     # The following variable is needed for the tests to pass
     apikey_security_cache: TTLCache = TTLCache(maxsize=sys.maxsize, ttl=120)
