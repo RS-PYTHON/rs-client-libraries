@@ -278,8 +278,7 @@ def mocked_stac_catalog_search_adgs():
                     "assets": {
                         "ADGS1.EOF": {
                             "href": (
-                                "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS1.EOF/"
-                                "download/file"
+                                "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS1.EOF/" "download/file"
                             ),
                             "alternate": {"s3": {"href": "s3://rs-cluster-catalog/stations/ADGS/ADGS1.EOF"}},
                             "file:size": 2029769,
@@ -328,8 +327,7 @@ def mocked_stac_catalog_search_adgs():
                     "assets": {
                         "ADGS2.EOF": {
                             "href": (
-                                "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS2.EOF/" 
-                                "download/file"
+                                "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS2.EOF/" "download/file"
                             ),
                             "alternate": {"s3": {"href": "s3://rs-cluster-catalog/stations/ADGS/ADGS2.EOF"}},
                             "file:size": 1922340,
