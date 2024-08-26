@@ -540,7 +540,7 @@ def test_ok_staging(station):  # pylint: disable=too-many-locals
             },
         ],
         "assets": {
-            "file": {
+            "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ": {
                 "href": "s3://test/tmp/S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ",
             },
         },

@@ -28,7 +28,7 @@
                 }
             ],
             "assets": {
-                "file": {
+                "CADU1.raw": {
                     "href": "https://rs-server/catalog/TestUser/collections/s1_chunk/items/CADU1.raw/download/file",
                     "alternate": {
                         "s3": {
@@ -91,7 +91,7 @@
                 }
             ],
             "assets": {
-                "file": {
+                "CADU2.raw": {
                     "href": "https://rs-server/catalog/TestUser/collections/s1_chunk/items/CADU2.raw/download/file",
                     "alternate": {
                         "s3": {

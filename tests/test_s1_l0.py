@@ -109,7 +109,7 @@ def test_start_dpr(endpoint, status):
                 {
                     "id": "CADU.raw",
                     "assets": {
-                        "file": {
+                        "CADU.raw": {
                             "alternate": {"s3": {"href": "s3://test-bucket/CADU.raw"}},
                         },
                     },
@@ -119,7 +119,7 @@ def test_start_dpr(endpoint, status):
                 {
                     "id": "AUX.EOF",
                     "assets": {
-                        "file": {
+                        "AUX.EOF": {
                             "alternate": {"s3": {"href": "s3://test-bucket/AUX.EOF"}},
                         },
                     },
@@ -585,7 +585,11 @@ if __name__ == "__main__":
 
     # It requires the CADIP session ID, RS-Server catalog URL, user name, mission name, S3 storage paths,
     # and optionally an API key (when this is run on the cluster).
-
+    # example to start it:
+    # bash:~  python3 test_s1_l0.py -c http://127.0.0.1:8003 -d http://127.0.0.1:6002 -u user -m s1
+    # -p S1SEWRAW S1SIWRAW S1SSMRAW S1SWVRAW -s S1A_20200105072204051312
+    # -o s3://rs-cluster-catalog/DPR
+    # -t s3://rs-cluster-temp/DPR
     logger = Logging.default(LOGGER_NAME)
 
     parser = argparse.ArgumentParser(
@@ -639,8 +643,19 @@ if __name__ == "__main__":
 
     if not args.apikey:
         args.apikey = os.environ.get("RSPY_APIKEY", None)
+    # local mode only
+    os.environ["RSPY_HOST_AUXIP"] = "http://localhost:8001"
+    os.environ["RSPY_HOST_CADIP"] = "http://localhost:8002"
+    os.environ["RSPY_HOST_CATALOG"] = "http://localhost:8003"
+    os.environ["RSPY_PREFECT_URL"] = "http://localhost:4200"
+    os.environ["RSPY_DPR_SIMU_URL"] = "http://dpr-simulator:8000"
 
-    _rs_client = StacClient.open(args.url_catalog, args.apikey, args.user, logger)
+    generic_client = RsClient(None, rs_server_api_key=None, owner_id=None, logger=None)
+    _rs_client = generic_client.get_stac_client()
+    # END OF local mode only
+    # cluster mode only
+    # _rs_client = StacClient.open(args.url_catalog, args.apikey, args.user, logger)
+    # END of cluster mode
 
     # TODO: use "real" values ?
     _adgs_files = [
