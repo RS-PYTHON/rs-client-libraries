@@ -83,7 +83,6 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         # we can authenticate with oauth2 instead. But maybe it will be useful in hybrid mode, to be discussed.
         # if not self.rs_server_api_key:
         #     self.rs_server_api_key = os.getenv("RSPY_APIKEY")  # None if the env var is not set
-
         if (not self.local_mode) and (not self.rs_server_api_key) and (not self.rs_server_oauth2_cookie):
             raise RuntimeError("API key or OAuth2 cookie is mandatory for RS-Server authentication")
 
