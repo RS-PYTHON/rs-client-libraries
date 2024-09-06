@@ -37,13 +37,10 @@ def read_response_error(response):
     # Try to read the response detail or error
     try:
         json = response.json()
-        if "detail" in json:
-            detail = json["detail"]
-        else:
-            detail = json["error"]
+        detail = json.get("detail") or json["error"]
 
     # If this fail, get the full response content
     except Exception:  # pylint: disable=broad-exception-caught
-        detail = response.content
+        detail = response.content.decode("utf-8", errors="ignore")
 
     return detail

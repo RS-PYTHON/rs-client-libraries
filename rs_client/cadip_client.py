@@ -36,7 +36,7 @@ class CadipClient(RsClient):
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None,
-        owner_id: str,
+        owner_id: str | None,
         station: ECadipStation,
         logger: logging.Logger | None = None,
     ):

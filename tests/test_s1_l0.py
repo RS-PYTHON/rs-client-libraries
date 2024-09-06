@@ -650,7 +650,7 @@ if __name__ == "__main__":
     os.environ["RSPY_PREFECT_URL"] = "http://localhost:4200"
     os.environ["RSPY_DPR_SIMU_URL"] = "http://dpr-simulator:8000"
 
-    generic_client = RsClient(None, rs_server_api_key=None, rs_server_oauth2_cookie=None, owner_id=None, logger=None)
+    generic_client = RsClient(None, rs_server_api_key=None, owner_id=None, logger=None)
     _rs_client = generic_client.get_stac_client()
     # END OF local mode only
     # cluster mode only

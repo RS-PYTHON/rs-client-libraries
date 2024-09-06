@@ -24,7 +24,6 @@ from typing import Union
 
 import requests
 from cachetools import TTLCache, cached
-from requests.exceptions import JSONDecodeError
 
 from rs_common import utils
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus
@@ -37,7 +36,7 @@ APIKEY_HEADER = "x-api-key"
 TIMEOUT = 30
 
 
-class RsClient:
+class RsClient:  # pylint: disable=too-many-instance-attributes
     """
     RsClient class implementation.
 
@@ -67,8 +66,8 @@ class RsClient:
         """RsClient class constructor."""
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
-        self.rs_server_oauth2_cookie: str = os.getenv("RSPY_OAUTH2_COOKIE")
-        self.owner_id: str = owner_id or ""
+        self.rs_server_oauth2_cookie: str | None = os.getenv("RSPY_OAUTH2_COOKIE")
+        self.owner_id: str | None = owner_id or ""
         self.logger: logging.Logger = logger or Logging.default(__name__)
 
         # Remove trailing / character(s) from the URL
@@ -78,6 +77,12 @@ class RsClient:
         # We are in local mode if the URL is undefined.
         # Env vars are used instead to determine the different services URL.
         self.local_mode = not bool(self.rs_server_href)
+
+        # If the API key is not set, we try to read it from the RSPY_APIKEY environment variable.
+        # NOTE: deactivate this for now, it is not userful anymore in cluster mode, because
+        # we can authenticate with oauth2 instead. But maybe it will be useful in hybrid mode, to be discussed.
+        # if not self.rs_server_api_key:
+        #     self.rs_server_api_key = os.getenv("RSPY_APIKEY")  # None if the env var is not set
 
         if (not self.local_mode) and (not self.rs_server_api_key) and (not self.rs_server_oauth2_cookie):
             raise RuntimeError("API key or OAuth2 cookie is mandatory for RS-Server authentication")
