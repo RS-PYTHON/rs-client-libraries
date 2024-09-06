@@ -28,12 +28,13 @@ def test_response_error():
     detail = "detail message"
     error = "error message"
     content = "response content"
+    timeout = 10  # seconds
 
     responses.get(url=dummy_href, status=500, json={"detail": detail})
-    assert read_response_error(requests.get(dummy_href)) == detail
+    assert read_response_error(requests.get(dummy_href, timeout=timeout)) == detail
 
     responses.get(url=dummy_href, status=500, json={"error": error})
-    assert read_response_error(requests.get(dummy_href)) == error
+    assert read_response_error(requests.get(dummy_href, timeout=timeout)) == error
 
     responses.get(url=dummy_href, status=500, body=content)
-    assert read_response_error(requests.get(dummy_href)) == content
+    assert read_response_error(requests.get(dummy_href, timeout=timeout)) == content

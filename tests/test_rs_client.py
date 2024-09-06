@@ -275,3 +275,13 @@ def test_oauth2_security(monkeypatch):
 
     # Check that the owner id is taken from the user login
     assert rs_client.owner_id == auth_info["user_login"]
+
+
+def test_no_security():
+    """If no apikey or oauth2 cookie is present, we should have an error."""
+
+    # Use a dummy URL to simulate the fact that we are in cluster mode (not local mode)
+    dummy_href = "http://DUMMY_HREF"
+
+    with pytest.raises(RuntimeError):
+        RsClient(dummy_href)  # "API key or OAuth2 cookie is mandatory for RS-Server authentication"
