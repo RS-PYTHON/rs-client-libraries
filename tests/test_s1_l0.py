@@ -641,9 +641,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if not args.apikey:
-        args.apikey = os.environ.get("RSPY_APIKEY", None)
-    # local mode only
     os.environ["RSPY_HOST_AUXIP"] = "http://localhost:8001"
     os.environ["RSPY_HOST_CADIP"] = "http://localhost:8002"
     os.environ["RSPY_HOST_CATALOG"] = "http://localhost:8003"
