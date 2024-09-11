@@ -89,7 +89,7 @@ def test_start_dpr(endpoint, status):
 
     if "bad_endpoint" not in endpoint:
         dpr_resp = start_dpr.fn(endpoint, yaml_input)
-        if int(status) == 200:
+        if int(status) in [200, 201]:
             assert (
                 dpr_resp[0]["stac_discovery"]["id"]
                 == "S01SIWSLC_20231201T170634_0067_A117_S000_5464A_VH_IW1_7F0.zarr.zip"
@@ -436,7 +436,7 @@ def test_s1_l0_flow(mocker, product_types, dpr_answer_file, catalog_name):  # py
     responses.add(
         responses.POST,
         url_gen + "/catalog/collections",
-        status=200,
+        status=201,
     )
     json_landing_page = common.json_landing_page(url_gen, catalog_name)
     responses.get(url=url_gen + "/catalog/", json=json_landing_page, status=200)
@@ -484,7 +484,7 @@ def test_no_staging_data_in_flow(mocker, cadip_result, adgs_result):  # pylint: 
     responses.add(
         responses.POST,
         url_gen + "/catalog/collections",
-        status=200,
+        status=201,
     )
     json_landing_page = common.json_landing_page(url_gen, "toto:S1_L1")
     responses.get(url=url_gen + "/catalog/", json=json_landing_page, status=200)
@@ -535,7 +535,7 @@ def test_no_dpr_output(mocker):
     responses.add(
         responses.POST,
         url_gen + "/catalog/collections",
-        status=200,
+        status=201,
     )
     json_landing_page = common.json_landing_page(url_gen, "toto:S1_L1")
     responses.get(url=url_gen + "/catalog/", json=json_landing_page, status=200)
