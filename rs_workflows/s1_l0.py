@@ -449,11 +449,15 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
     config.stac_client.add_collection(
         Collection(
             id=collection_name,
+            type="Collection",
+            owner=config.rs_client_serialization.owner_id,
             description=None,  # rs-client will provide a default description for us
             extent=Extent(
                 spatial=SpatialExtent(bboxes=[-180.0, -90.0, 180.0, 90.0]),
                 temporal=TemporalExtent([now, now]),
             ),
+            links=[{"href": "./.zattrs.json", "rel": "self", "type": "application/json"}],
+            license="esa-domain",
         ),
         timeout=CATALOG_REQUEST_TIMEOUT,
     )
