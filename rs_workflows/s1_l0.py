@@ -68,7 +68,7 @@ def start_dpr(dpr_endpoint: str, yaml_dpr_input: dict):
         logger.exception("Calling the dpr simulator resulted in exception: %s", e)
         return None
 
-    if int(response.status_code) != 200:
+    if int(response.status_code) != 201:
         try:
             body = json.dumps(response.json(), indent=2)
         except requests.JSONDecodeError:
