@@ -16,6 +16,7 @@
 
 import time
 from datetime import datetime
+from shapely import geometry as geom
 
 import dateutil.parser
 import numpy as np
@@ -123,6 +124,14 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
     }
     bbox = stac_file_info.get("bbox") or [-180.0, -90.0, 180.0, 90.0]
     datetime_value = now
+
+    # Check if the geometry is a valid polygon. If not we correct the geometry (Temporary solution)
+    if geometry["type"] == "Polygon":
+        poly = geom.Polygon(geometry["coordinates"])
+        if not (poly.is_valid and poly.is_closed):
+
+            coords = poly.exterior.coords.xy
+            geometry["coordinates"] = [[list(coord) for coord in zip(coords[0], coords[1])]]
 
     # Try to format each property date or datetime
     for key, value in properties.items():
