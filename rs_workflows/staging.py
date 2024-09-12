@@ -127,7 +127,7 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
 
     # Check if the geometry is a valid polygon. If not we correct the geometry (Temporary solution)
     if geometry["type"] == "Polygon":
-        poly = geom.Polygon(geometry["coordinates"])
+        poly = geom.Polygon(geometry["coordinates"][0])
         if not (poly.is_valid and poly.is_closed):
 
             coords = poly.exterior.coords.xy
