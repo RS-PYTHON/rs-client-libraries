@@ -25,8 +25,10 @@ from typing import Union
 import requests
 from cachetools import TTLCache, cached
 
+from rs_common import utils
 from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus
 from rs_common.logging import Logging
+from rs_common.utils import AuthInfo
 
 APIKEY_HEADER = "x-api-key"
 
@@ -34,14 +36,15 @@ APIKEY_HEADER = "x-api-key"
 TIMEOUT = 30
 
 
-class RsClient:
+class RsClient:  # pylint: disable=too-many-instance-attributes
     """
     RsClient class implementation.
 
     Attributes:
         rs_server_href (str): RS-Server URL. In local mode, pass None.
         rs_server_api_key (str): API key for RS-Server authentication.
-                                 If not set, we try to read it from the RSPY_APIKEY environment variable.
+        rs_server_oauth2_cookie (str): session cookie that contains the OAuth2 authentication read from the
+                                       RSPY_OAUTH2_COOKIE environment variable.
         owner_id (str): ID of the owner of the STAC catalog collections (no special characters allowoed).
                         By default, this is the user login from the keycloak account, associated to the API key.
                         Or, in local mode, this is the local system username.
@@ -50,6 +53,7 @@ class RsClient:
         logger (logging.Logger): Logging instance.
         local_mode (bool): Local mode or hybrid/cluster mode.
         apikey_headers (dict): API key in a dict, ready-to-use in HTTP request headers.
+        http_session (Session): HTTP requests session with cookies.
     """
 
     def __init__(
@@ -62,7 +66,8 @@ class RsClient:
         """RsClient class constructor."""
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
-        self.owner_id: str = owner_id or ""
+        self.rs_server_oauth2_cookie: str | None = os.getenv("RSPY_OAUTH2_COOKIE")
+        self.owner_id: str | None = owner_id or ""
         self.logger: logging.Logger = logger or Logging.default(__name__)
 
         # Remove trailing / character(s) from the URL
@@ -73,17 +78,18 @@ class RsClient:
         # Env vars are used instead to determine the different services URL.
         self.local_mode = not bool(self.rs_server_href)
 
-        # If the API key is not set, we try to read it from the RSPY_APIKEY environment variable.
-        if not self.rs_server_api_key:
-            self.rs_server_api_key = os.getenv("RSPY_APIKEY")  # None if the env var is not set
-
-        if (not self.local_mode) and (not self.rs_server_api_key):
-            raise RuntimeError("API key is mandatory for RS-Server authentication")
+        if (not self.local_mode) and (not self.rs_server_api_key) and (not self.rs_server_oauth2_cookie):
+            raise RuntimeError("API key or OAuth2 cookie is mandatory for RS-Server authentication")
 
         # For HTTP request headers
         self.apikey_headers: dict = (
             {"headers": {APIKEY_HEADER: self.rs_server_api_key}} if self.rs_server_api_key else {}
         )
+
+        # HTTP requests session with cookies
+        self.http_session = requests.Session()
+        if self.rs_server_oauth2_cookie:
+            self.http_session.cookies.set("session", self.rs_server_oauth2_cookie)
 
         # Determine automatically the owner id
         if not self.owner_id:
@@ -91,9 +97,9 @@ class RsClient:
             if self.local_mode:
                 self.owner_id = getpass.getuser()
 
-            # In hybrid/cluster mode, we retrieve the API key login
+            # In hybrid/cluster mode, we retrieve the OAuth2 or API key login
             else:
-                self.owner_id = self.apikey_user_login
+                self.owner_id = self.apikey_user_login if self.rs_server_api_key else self.oauth2_user_login
 
         # Remove special characters
         self.owner_id = re.sub(r"[^a-zA-Z0-9]+", "", self.owner_id)
@@ -103,53 +109,87 @@ class RsClient:
 
         self.logger.debug(f"Owner ID: {self.owner_id!r}")
 
+    def oauth2_security(self) -> AuthInfo:
+        """
+        Returns:
+            Authentication information from the user keycloak account, associated to the authentication cookie.
+        """
+
+        # In local mode, we have no authentication, so return empty results
+        if self.local_mode:
+            return AuthInfo(user_login="", iam_roles=[], apikey_config={})
+
+        # Call the endpoint to retrieve the user information
+        response = self.http_session.get(f"{self.rs_server_href}/auth/me")
+        if not response.ok:
+            raise RuntimeError(f"OAuth2 status code {response.status_code}: {utils.read_response_error(response)}")
+
+        # Decode the JSON response
+        contents = response.json()
+        return AuthInfo(
+            user_login=contents["user_login"],
+            iam_roles=contents["iam_roles"],
+            apikey_config={},  # no API key config here
+        )
+
     # The following variable is needed for the tests to pass
     apikey_security_cache: TTLCache = TTLCache(maxsize=sys.maxsize, ttl=120)
 
     @cached(cache=apikey_security_cache)
-    def apikey_security(self) -> tuple[list[str], dict, str]:
+    def apikey_security(self) -> AuthInfo:
         """
         Check the api key validity. Cache an infinite (sys.maxsize) number of results for 120 seconds.
 
         Returns:
-            Tuple of (IAM roles, config, user login) information from the keycloak account, associated to the api key.
+            Authentication information from the keycloak account, associated to the api key.
         """
 
         # In local mode, we have no API key, so return empty results
         if self.local_mode:
-            return [], {}, ""
+            return AuthInfo(user_login="", iam_roles=[], apikey_config={})
 
         # self.logger.warning(
-        #     f"TODO: use {self.rs_server_href}/apikeymanager/check/api_key instead, see: "
+        #     f"TODO: use {self.rs_server_href}/apikeymanager/auth/check_key instead, see: "
         #     "https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-257",
         # )
         # Does not work in hybrid mode for now because this URL is not exposed.
         check_url = os.environ["RSPY_UAC_CHECK_URL"]
 
         # Request the API key manager, pass user-defined api key in http header
-        # check_url = f"{self.rs_server_href}/apikeymanager/check/api_key"
+        # check_url = f"{self.rs_server_href}/apikeymanager/auth/check_key"
         self.logger.debug("Call the API key manager")
-        response = requests.get(check_url, **self.apikey_headers, timeout=TIMEOUT)
+        response = self.http_session.get(check_url, **self.apikey_headers, timeout=TIMEOUT)
+        if not response.ok:
+            raise RuntimeError(
+                f"API key manager status code {response.status_code}: {utils.read_response_error(response)}",
+            )
 
-        # Read the api key info
-        if response.ok:
-            contents = response.json()
-            # Note: for now, config is an empty dict
-            return contents["iam_roles"], contents["config"], contents["user_login"]
+        # Read the api key info.
+        # Note: for now, config is an empty dict.
+        contents = response.json()
+        return AuthInfo(
+            user_login=contents["user_login"],
+            iam_roles=contents["iam_roles"],
+            apikey_config=contents["config"],
+        )
 
-        # Try to read the response detail or error
-        try:
-            json = response.json()
-            if "detail" in json:
-                detail = json["detail"]
-            else:
-                detail = json["error"]
+    @property
+    def oauth2_user_login(self) -> str:
+        """Return the user login from the keycloak account, associated to the authentication cookie."""
+        return self.oauth2_security().user_login
 
-        # If this fail, get the full response content
-        except Exception:  # pylint: disable=broad-exception-caught
-            detail = response.content
+    @property
+    def apikey_user_login(self) -> str:
+        """Return the user login from the keycloak account, associated to the api key."""
+        return self.apikey_security().user_login
 
-        raise RuntimeError(f"API key manager status code {response.status_code}: {detail}")
+    @property
+    def oauth2_iam_roles(self) -> list[str]:
+        """
+        Return the IAM (Identity and Access Management) roles from the keycloak account,
+        associated to the authentication cookie
+        """
+        return self.oauth2_security().iam_roles
 
     @property
     def apikey_iam_roles(self) -> list[str]:
@@ -157,17 +197,12 @@ class RsClient:
         Return the IAM (Identity and Access Management) roles from the keycloak account,
         associated to the api key.
         """
-        return self.apikey_security()[0]
+        return self.apikey_security().iam_roles
 
     @property
     def apikey_config(self) -> dict:
         """Return the config from the keycloak account, associated to the api key."""
-        return self.apikey_security()[1]
-
-    @property
-    def apikey_user_login(self) -> str:
-        """Return the user login from the keycloak account, associated to the api key."""
-        return self.apikey_security()[2]
+        return self.apikey_security().apikey_config
 
     #############################
     # Get child class instances #
@@ -210,6 +245,7 @@ class RsClient:
         return StacClient.open(
             self.rs_server_href,
             self.rs_server_api_key,
+            self.rs_server_oauth2_cookie,
             self.owner_id,
             self.logger,
             *args,
@@ -238,7 +274,7 @@ class RsClient:
 
         # TODO: check the status for a certain timeout if http returns NOK ?
         try:
-            response = requests.get(
+            response = self.http_session.get(
                 self.href_status,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
                 params={"name": filename},
                 timeout=timeout,
@@ -290,7 +326,7 @@ class RsClient:
         payload["name"] = filename
         try:
             # logger.debug(f"Calling  {endpoint} with payload {payload}")
-            response = requests.get(
+            response = self.http_session.get(
                 self.href_staging,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
                 params=payload,
                 timeout=timeout,
@@ -355,7 +391,7 @@ class RsClient:
         if sortby:
             payload["sortby"] = str(sortby)
         try:
-            response = requests.get(
+            response = self.http_session.get(
                 self.href_search,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
                 params=payload,
                 timeout=timeout,

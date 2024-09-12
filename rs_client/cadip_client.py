@@ -36,7 +36,7 @@ class CadipClient(RsClient):
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None,
-        owner_id: str,
+        owner_id: str | None,
         station: ECadipStation,
         logger: logging.Logger | None = None,
     ):
@@ -119,7 +119,7 @@ class CadipClient(RsClient):
         if stop_date:
             payload["stop_date"] = stop_date.strftime(DATETIME_FORMAT)
         try:
-            response = requests.get(
+            response = self.http_session.get(
                 self.href_session,
                 params=payload,
                 timeout=timeout,

@@ -23,7 +23,6 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 
-# RSPY_APIKEY="RSPY_APIKEY"
 import boto3
 import botocore
 import requests
@@ -226,10 +225,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-
-    # check if the RSPY_APIKEY env var is set
-    if not args.apikey:
-        args.apikey = os.environ.get("RSPY_APIKEY", None)
 
     generic_client = RsClient(args.url, args.apikey, args.user, logger=None)
 

@@ -22,7 +22,6 @@ from functools import lru_cache
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import pystac
-import requests
 from pystac import CatalogType, Collection, Item, Link, RelType
 from pystac.layout import HrefLayoutStrategy
 from pystac_client import Client, Modifiable
@@ -94,6 +93,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         # RsClient parameters
         rs_server_href: str | None,
         rs_server_api_key: str | None,
+        rs_server_oauth2_cookie: str | None,
         owner_id: str | None,
         logger: logging.Logger | None = None,
         # pystac Client parameters
@@ -107,10 +107,22 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
     ) -> StacClient:
         """Create a new StacClient instance."""
 
+        # Save the API key in the HTTP headers
         if rs_server_api_key:
             if headers is None:
                 headers = {}
             headers[APIKEY_HEADER] = rs_server_api_key
+
+        # Save the OAuth2 authentication cookie in the pystac client cookies
+        if rs_server_oauth2_cookie:
+            if stac_io is None:
+                stac_io = StacApiIO(  # This is what is done in pystac_client/client.py::from_file
+                    headers=headers,
+                    parameters=parameters,
+                    request_modifier=request_modifier,
+                    timeout=timeout,
+                )
+            stac_io.session.cookies.set("session", rs_server_oauth2_cookie)
 
         client: StacClient = super().open(  # type: ignore
             cls.__href_catalog(rs_server_href) + "/catalog/",
@@ -230,7 +242,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         collection.validate_all()
 
         # Post the collection to the catalog
-        return requests.post(
+        return self.http_session.post(
             f"{self.href_catalog}/catalog/collections",
             json=collection.to_dict(),
             **self.apikey_headers,
@@ -268,7 +280,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         Client.get_collection.cache_clear()
 
         # Remove the collection from the server catalog
-        return requests.delete(
+        return self.http_session.delete(
             f"{self.href_catalog}/catalog/collections/{full_collection_id}",
             **self.apikey_headers,
             timeout=timeout,
@@ -305,7 +317,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         collection.add_item(item)
 
         # Post the item to the catalog
-        return requests.post(
+        return self.http_session.post(
             f"{self.href_catalog}/catalog/collections/{full_collection_id}/items",
             json=item.to_dict(),
             **self.apikey_headers,
@@ -334,7 +346,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         full_collection_id = self.full_collection_id(owner_id, collection_id)
 
         # Remove the collection from the server catalog
-        return requests.delete(
+        return self.http_session.delete(
             f"{self.href_catalog}/catalog/collections/{full_collection_id}/items/{item_id}",
             **self.apikey_headers,
             timeout=timeout,

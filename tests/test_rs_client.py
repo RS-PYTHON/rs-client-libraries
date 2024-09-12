@@ -36,8 +36,9 @@ PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 
 @pytest.fixture(name="generic_rs_client")
-def generic_rs_client_(mocked_stac_catalog_url):
+def generic_rs_client_(mocked_stac_catalog_url, monkeypatch):
     """Return a generic RsClient instance for testing."""
+    monkeypatch.setenv("RSPY_OAUTH2_COOKIE", "RSPY_OAUTH2_COOKIE")
     yield RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID)  # will be used to test the StacClient
 
 
@@ -116,24 +117,6 @@ def test_server_href(mocked_stac_catalog_url):
             RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 
 
-def test_api_key_by_env_var():
-    """Test that we can pass the API key by environment variable."""
-
-    # Test that we can pass it by argument
-    rs_client = RsClient("", RS_SERVER_API_KEY, owner_id=OWNER_ID)  # no global href
-    assert rs_client.rs_server_api_key == RS_SERVER_API_KEY
-
-    # Else, if we don't pass it and we don't have the env var, it will be None
-    rs_client = RsClient("", owner_id=OWNER_ID)
-    assert rs_client.rs_server_api_key is None
-
-    # Else we can pass it by env var
-    with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setenv("RSPY_APIKEY", RS_SERVER_API_KEY)
-        rs_client = RsClient("", owner_id=OWNER_ID)
-        assert rs_client.rs_server_api_key == RS_SERVER_API_KEY
-
-
 def test_cadip_sessions():
     """
     Test CadipClient.search_sessions
@@ -187,7 +170,7 @@ def test_cadip_sessions():
 
 
 @responses.activate
-def test_cached_apikey_security(monkeypatch):
+def test_apikey_security(monkeypatch):
     """
     Test that we are caching the call results to the apikey_security function, that calls the
     apikey manager service and keycloak to check the apikey validity and information.
@@ -195,7 +178,6 @@ def test_cached_apikey_security(monkeypatch):
 
     # Use a dummy URL to simulate the fact that we are in cluster mode (not local mode)
     dummy_href = "http://DUMMY_HREF"
-    rs_client = RsClient(dummy_href, RS_SERVER_API_KEY, OWNER_ID)  # no global href
 
     # Mock the uac manager url
     monkeypatch.setenv("RSPY_UAC_CHECK_URL", RSPY_UAC_CHECK_URL)
@@ -204,17 +186,23 @@ def test_cached_apikey_security(monkeypatch):
     initial_response = {
         "iam_roles": ["initial", "roles"],
         "config": {"initial": "config"},
-        "user_login": "initial_login",
+        "user_login": "initiallogin",  # no special characters
     }
 
     # Clear the cached response and mock the uac manager response
     RsClient.apikey_security_cache.clear()
     responses.get(url=RSPY_UAC_CHECK_URL, status=200, json=initial_response)
 
+    # Init RsClient
+    rs_client = RsClient(dummy_href, RS_SERVER_API_KEY, owner_id=None)
+
     # Check the apikey_security result
     assert rs_client.apikey_iam_roles == initial_response["iam_roles"]
     assert rs_client.apikey_config == initial_response["config"]
     assert rs_client.apikey_user_login == initial_response["user_login"]
+
+    # Check that the owner id is taken from the apikey user login
+    assert rs_client.owner_id == initial_response["user_login"]
 
     # If the UAC manager response changes, we won't see it because the previous result was cached
     modified_response = {
@@ -235,3 +223,45 @@ def test_cached_apikey_security(monkeypatch):
     assert rs_client.apikey_iam_roles == modified_response["iam_roles"]
     assert rs_client.apikey_config == modified_response["config"]
     assert rs_client.apikey_user_login == modified_response["user_login"]
+
+
+@responses.activate
+def test_oauth2_security(monkeypatch):
+    """
+    Test the oauth2 security that calls the rs-server endpoint and keycloak to check the user information.
+    """
+
+    # Use a dummy URL to simulate the fact that we are in cluster mode (not local mode)
+    dummy_href = "http://DUMMY_HREF"
+
+    # Mocked user information from keycloak
+    auth_info = {
+        "user_login": "ownerid",  # no special characters
+        "iam_roles": ["role2", "role1", "role3"],
+    }
+
+    # Mocked cookie value that allows to call the rs-server endpoint
+    monkeypatch.setenv("RSPY_OAUTH2_COOKIE", "RSPY_OAUTH2_COOKIE")
+
+    # Mock the rs-server response
+    responses.get(url=f"{dummy_href}/auth/me", status=200, json=auth_info)
+
+    # Init RsClient
+    rs_client = RsClient(dummy_href)
+
+    # Check the oauth2_security result
+    assert rs_client.oauth2_iam_roles == auth_info["iam_roles"]
+    assert rs_client.oauth2_user_login == auth_info["user_login"]
+
+    # Check that the owner id is taken from the user login
+    assert rs_client.owner_id == auth_info["user_login"]
+
+
+def test_no_security():
+    """If no apikey or oauth2 cookie is present, we should have an error."""
+
+    # Use a dummy URL to simulate the fact that we are in cluster mode (not local mode)
+    dummy_href = "http://DUMMY_HREF"
+
+    with pytest.raises(RuntimeError):
+        RsClient(dummy_href)  # "API key or OAuth2 cookie is mandatory for RS-Server authentication"
