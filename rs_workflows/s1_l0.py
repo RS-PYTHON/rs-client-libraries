@@ -68,7 +68,7 @@ def start_dpr(dpr_endpoint: str, yaml_dpr_input: dict):
         logger.exception("Calling the dpr simulator resulted in exception: %s", e)
         return None
 
-    if int(response.status_code) != 200:
+    if int(response.status_code) not in [201, 200]:
         try:
             body = json.dumps(response.json(), indent=2)
         except requests.JSONDecodeError:
@@ -454,6 +454,7 @@ def s1_l0_flow(config: PrefectS1L0FlowConfig):  # pylint: disable=too-many-local
                 spatial=SpatialExtent(bboxes=[-180.0, -90.0, 180.0, 90.0]),
                 temporal=TemporalExtent([now, now]),
             ),
+            license="esa-domain",
         ),
         timeout=CATALOG_REQUEST_TIMEOUT,
     )
