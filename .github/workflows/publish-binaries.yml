@@ -90,12 +90,18 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     name: "Publish wheel"
+    environment:
+      name: pypi
+      url: https://pypi.org/project/rs-client-libraries/
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     outputs:
       version_name: ${{ steps.publish-wheel.outputs.version_name }}
       package_name: ${{ steps.publish-wheel.outputs.package_name }}
-    continue-on-error: true # TODO remove when the right python repo will be set
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # so that Dunamai produce the correct version
       - id: publish-wheel
         uses: ./.github/actions/publish-wheel
         with:
