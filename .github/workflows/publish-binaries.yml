@@ -90,9 +90,6 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     name: "Publish wheel"
-    environment:
-      name: pypi
-      url: https://pypi.org/project/rs-client-libraries/
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     outputs:
