@@ -66,5 +66,5 @@ runs:
       with:
         skip-existing: true
         packages-dir: ${{ inputs.package_directory }}/dist
-        repository-url: https://pypi.org/legacy/
+        #repository-url: https://test.pypi.org/legacy/
         verbose: true
