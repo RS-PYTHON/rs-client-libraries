@@ -82,27 +82,51 @@ jobs:
           echo "docker_tag=$docker_tag" >> $GITHUB_OUTPUT
         shell: bash
 
-  ##################
-  # Publish wheels #
-  ##################
+  ################
+  # Build wheels #
+  ################
 
-  publish-whl:
+  build-whl:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
-    name: "Publish wheel"
-    permissions:
-      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+    name: "Build wheel"
     outputs:
-      version_name: ${{ steps.publish-wheel.outputs.version_name }}
-      package_name: ${{ steps.publish-wheel.outputs.package_name }}
+      version_name: ${{ steps.build-wheel.outputs.version_name }}
+      package_name: ${{ steps.build-wheel.outputs.package_name }}
+      sdist_name: ${{ steps.build-wheel.outputs.sdist_name }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # so that Dunamai produce the correct version
-      - id: publish-wheel
-        uses: ./.github/actions/publish-wheel
+      - id: build-wheel
+        uses: ./.github/actions/build-wheel
         with:
           package_directory: .
+
+  ###################
+  # Publish to PyPI #
+  ###################
+
+  publish-pypi:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    name: "Publish wheel and sdist"
+    needs: [build-whl]
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+    steps:
+      - name: Download dist dependencies
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: ./dist
+      - name: Publish wheel and sdist packages
+        uses: pypa/gh-action-pypi-publish@release/v1
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+        with:
+          skip-existing: true
+          packages-dir: ./dist
+          verbose: true
 
 
   #########################
@@ -113,7 +137,7 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     name: "Docker image for wheel storage"
-    needs: [set-env, publish-whl]
+    needs: [set-env, build-whl]
     permissions: write-all
     outputs:
       docker_image: ${{ steps.publish-docker.outputs.docker_image}}
@@ -124,7 +148,7 @@ jobs:
       - name: Download .whl dependencies
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.publish-whl.outputs.package_name }}
+          name: ${{ needs.build-whl.outputs.package_name }}
           path: ./whl
 
       - id: publish-docker
@@ -133,7 +157,7 @@ jobs:
           dockerfile: ./.github/dockerfiles/Dockerfile.store
           build_context_path: ./whl
           image_suffix: _store
-          version_name: ${{ needs.publish-whl.outputs.version_name }}
+          version_name: ${{ needs.build-whl.outputs.version_name }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_tag: ${{ needs.set-env.outputs.docker_tag }}
 
@@ -141,7 +165,7 @@ jobs:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     name: "Docker image for Jupyter"
-    needs: [set-env, publish-whl]
+    needs: [set-env, build-whl]
     permissions: write-all
     outputs:
       docker_image: ${{ steps.publish-docker.outputs.docker_image}}
@@ -152,7 +176,7 @@ jobs:
       - name: Download .whl dependencies
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.publish-whl.outputs.package_name }}
+          name: ${{ needs.build-whl.outputs.package_name }}
           path: ./whl
 
       - id: publish-docker
@@ -161,7 +185,7 @@ jobs:
           dockerfile: ./.github/dockerfiles/Dockerfile.jupyter
           build_context_path: ./whl
           image_suffix: _jupyter
-          version_name: ${{ needs.publish-whl.outputs.version_name }}
+          version_name: ${{ needs.build-whl.outputs.version_name }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_tag: ${{ needs.set-env.outputs.docker_tag }}
 
