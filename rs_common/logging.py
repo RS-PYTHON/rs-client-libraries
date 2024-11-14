@@ -92,7 +92,7 @@ class CustomFormatter(logging.Formatter):
 
     
     _FORMAT = (
-        f"%(asctime)s [{{color}}%(levelname)s{_RESET}] [%(name)s] "
+        f"[{{color}}%(levelname)s{_RESET}] [%(name)s] "
         f"[%(filename)s:%(lineno)d] "
         f"[trace_id=%(otelTraceID)s span_id=%(otelSpanID)s resource.service.name=%(otelServiceName)s trace_sampled=%(otelTraceSampled)s] - %(message)s"
     )
