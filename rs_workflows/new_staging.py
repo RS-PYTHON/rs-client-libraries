@@ -17,27 +17,77 @@ from datetime import datetime
 import boto3
 import botocore
 
-COLLECTION_NAME = "S1_L1"
 TIMEOUT = 10
 CATALOG_BUCKET = "rs-cluster-catalog"
+RSPY_HOST_STAGING = os.environ["RSPY_HOST_STAGING"]
 
-
-class RsStagingClient(Processes):
+class RsStagingClient():
+    """ Class to handle the staging process in rs-client-libraries
+        
+        This class provides python methods to call the different endpoints of the rs-server-staging methof
+    """
     def __init__(self, local_mode):# pylint: disable=too-many-arguments
         """
         Initialize the  owslib.ogcapi.processes.Processes object with provided parameters.
-        """
-        ###super().__init__() ### TODO uncomment
-                
+        """                
         # Define logger
         self.logger = Logging.default(__name__)
         self.local_mode = local_mode
 
-    def run_staging(self, api_key_header, stac_input, stac_output_coll_name):
+    def get_processes(self):
+        """
+        Call endpoint /processes - Returns list of all available processes from config
+        """
+        return requests.get(f"{RSPY_HOST_STAGING}/processes")
+    
+    def get_resource(self, resource):
+        """
+        Call endpoint /processes/{resource} - Should return info about a specific resource
+        """
+        return requests.get(f"{RSPY_HOST_STAGING}/processes/{resource}")
+    
+    def execute_process(self, resource):
+        """
+        Call endpoint/processes/{resource}/execution - execute processing jobs
+        Args:
+            resource (str): name of the process to execute
+        """
+        return requests.get(f"{RSPY_HOST_STAGING}/processes/{resource}/execution")
+    
+    def get_job_status(self, job_id):
+        """
+        Call endpoint /jobs/{job_id} - get status of processing job
+        Args:
+            job_id (int): job identifier
+        """
+        return requests.get(f"{RSPY_HOST_STAGING}/jobs/{job_id}")
+    
+    def get_jobs(self):
+        """
+        Call endpoint /jobs to get the status of all jobs
+        """
+        return requests.get(f"{RSPY_HOST_STAGING}/jobs")
+    
+    def delete_job(self, job_id):
+        """
+        Call endpoint /jobs/{job_id} - get status of processing job
+        Args:
+            job_id (int): job identifier
+        """
+        return requests.delete(f"{RSPY_HOST_STAGING}/jobs/{job_id}")
+    
+    def get_specific_job_result(self, job_id):
+        """
+        Call endpoint /jobs/{job_id}/results - get result from a specific job
+        Args:
+            job_id (int): job identifier
+        """
+    
+    def run_staging(self, api_key_header, stac_input, stac_output_coll_name, run_staging):
         """Method to start the staging process from rs-client
 
         Args:
-            api_key (_type_): _description_
+            api_key_header (dict): api key to use in cluster mode
             stac_input (_type_): input information for the data to stage: either a Feature or a FeatureCollection
             stac_output_coll (_type_): _description_
         """
@@ -143,14 +193,12 @@ class RsStagingClient(Processes):
                         self.logger.info('Deleting', object['Key'])
                         s3_client.delete_object(Bucket=CATALOG_BUCKET, Key=object['Key'])
                         
-                        
         # ----- Step 3: Launch and monitor the staging process
-        RSPY_HOST_STAGING = os.environ["RSPY_HOST_STAGING"]
         post_response = requests.post(f"{RSPY_HOST_STAGING}/processes/staging/execution", 
                                     json=staging_body,
                                     **apikey_headers,
                                     timeout = TIMEOUT,)
-
+                
         resp = json.loads(post_response.content)
         pprint.PrettyPrinter(indent=4).pprint(resp)
 
@@ -184,8 +232,7 @@ if __name__ == '__main__':
     """
     Launch staging using with rs_client library
     """
-    # -------------------------------- Input data -----------------------------------------   
-    
+    # ----------------- Input data -----------------   
     APIKEY_HEADER = "x-api-key"
     collection_id = "cadip_s1A"
     stac_output_coll_name = "cadip_s1A_staged"
@@ -208,12 +255,27 @@ if __name__ == '__main__':
     cadip_station = ECadipStation.CADIP # you can also have: INS, MPS, MTI, NSG, SGS
     cadip_client = generic_client.get_cadip_client(cadip_station)    
     
+    # from datetime import datetime
+    # from dateutil import parser
+    # str_start = "2024-06-12T02:57:21.459000Z" # or any date sting of differing formats.
+    # start_date =  parser.parse(str_start)
+    # str_end = "2024-08-22T11:30:12.767000Z"
+    # stop_date = parser.parse(str_end)
+    #session_ids = ["S1A_20231120061537234567"]
+    #cadip_search_result = cadip_client.search_sessions(session_ids)
+    
     # Apply a request to get information about sessions that you want to stage
-    session = requests.Session() ### TO REMOVE
-    href = "http://127.0.0.1:8002" ### TO REMOVE
-    search_result = session.get(f"{href}/cadip/collections/{collection_id}/items").json() ### TO REMOVE
+    session = requests.Session()
+    href = "http://127.0.0.1:8002"
+    
+    ### TODO: will be replaced with a rs-client function with story https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-404
+    #cadip_search_result = cadip_client.search_sessions(session_ids, start_date,stop_date)
+    
+    ### TODO: use the following line instead
+    search_result = session.get(f"{href}/cadip/collections/{collection_id}/items").json() 
     
     # Create necessary clients to perform catalog search and staging opeation 
     staging_client = RsStagingClient(local_mode)
     # Launch staging process
-    staging_client.run_staging(apikey_headers, search_result, stac_output_coll_name)
+    staging_client.run_staging(apikey_headers, search_result, stac_output_coll_name, stac_client)
+    
