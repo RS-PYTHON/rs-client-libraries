@@ -24,7 +24,12 @@ RSPY_HOST_STAGING = os.environ["RSPY_HOST_STAGING"]
 class RsStagingClient():
     """ Class to handle the staging process in rs-client-libraries
         
-        This class provides python methods to call the different endpoints of the rs-server-staging methof
+        This class provides python methods to call the different endpoints of the rs-server-staging method
+        
+        Remark: this class don't inherits from the owslib.ogcapi.processes.Processes class because the latter
+        doesn't provide wrapping for all endpoints defined in rs-server-staging (it only provides the  /processes
+        and /processes/{processId}/execution endpoints + it doesn't allow to manage apikey_header parameter which 
+        is passed as an extra argument) 
     """
     def __init__(self, local_mode):# pylint: disable=too-many-arguments
         """
@@ -194,6 +199,11 @@ class RsStagingClient():
                         s3_client.delete_object(Bucket=CATALOG_BUCKET, Key=object['Key'])
                         
         # ----- Step 3: Launch and monitor the staging process
+        
+        # Remark: this class don't inherits from the owslib.ogcapi.processes.Processes class because the latter
+        # doesn't provide wrapping for all endpoints defined in rs-server-staging (it only provides the  /processes
+        # and /processes/{processId}/execution endpoints + it doesn't allow to manage apikey_header parameter which 
+        # is passed as an extra argument) 
         post_response = requests.post(f"{RSPY_HOST_STAGING}/processes/staging/execution", 
                                     json=staging_body,
                                     **apikey_headers,
