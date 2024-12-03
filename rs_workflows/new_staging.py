@@ -246,7 +246,7 @@ if __name__ == '__main__':
     APIKEY_HEADER = "x-api-key"
     collection_id = "cadip_s1A"
     stac_output_coll_name = "cadip_s1A_staged"
-    apikey_value = None#"x-api-key"
+    apikey_value = None#"x-api-key" ### TODO: get apikey from frontend page
     apikey_headers: dict = (
             {"headers": {APIKEY_HEADER: apikey_value}} if apikey_value else {}
         )
