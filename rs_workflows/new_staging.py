@@ -279,13 +279,12 @@ if __name__ == '__main__':
     href = "http://127.0.0.1:8002"
     
     ### TODO: will be replaced with a rs-client function with story https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-404
-    #cadip_search_result = cadip_client.search_sessions(session_ids, start_date,stop_date)
+    search_result = session.get(f"{href}/cadip/collections/{collection_id}/items").json() 
     
     ### TODO: use the following line instead
-    search_result = session.get(f"{href}/cadip/collections/{collection_id}/items").json() 
+    #cadip_search_result = cadip_client.search_sessions(session_ids, start_date,stop_date)
     
     # Create necessary clients to perform catalog search and staging opeation 
     staging_client = RsStagingClient(local_mode)
     # Launch staging process
     staging_client.run_staging(apikey_headers, search_result, stac_output_coll_name, stac_client)
-    
