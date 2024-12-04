@@ -18,7 +18,7 @@
 # into the jupyter docker image that is used by rs-demo in local mode.
 #
 
-FROM jupyter/minimal-notebook:latest
+FROM ghcr.io/rs-python/jupyter/minimal-notebook:latest
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl

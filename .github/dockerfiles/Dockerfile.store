@@ -18,7 +18,7 @@
 # as a workaround before we publish it into a python registry.
 #
 
-FROM python:3.11-slim-bookworm
+FROM ghcr.io/rs-python/python:3.11.7-slim-bookworm
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
