@@ -248,7 +248,7 @@ if __name__ == "__main__":
                     spatial=SpatialExtent(bboxes=[-180.0, -90.0, 180.0, 90.0]),
                     temporal=TemporalExtent(
                         [datetime(2000, 1, 1), datetime(2030, 1, 1)],
-                    ),  ### To check + checker gestion de l'apikey
+                    ),
                 ),
             ),
         )
@@ -280,7 +280,7 @@ if __name__ == "__main__":
             logger.info("PANIC: Could not get bucket info. Exiting")
             sys.exit(-1)
     # Delete all existing objects from rs-server-catalog
-    if PREFIX:  ### TODO - Remove ?
+    if PREFIX:
         response = s3_client.list_objects_v2(Bucket=CATALOG_BUCKET, Prefix=PREFIX)
         if response.get("Contents", None):
             for elem in response["Contents"]:

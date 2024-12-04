@@ -401,7 +401,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         limit: The limit for the number of the files in the list retrieved from the ADGS/CADIP station (optional).
     """
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         rs_client: AuxipClient | CadipClient,
         mission,

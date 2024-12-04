@@ -52,7 +52,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
     # Initialisation #
     ##################
 
-    def __init__(  # pylint: disable=too-many-arguments,super-init-not-called # super-init is called in .open(...)
+    def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments, super-init-not-called # super-init is called in .open(...)  # noqa: E501
         self,
         id: str,  # pylint: disable=redefined-builtin
         description: str,
@@ -88,7 +88,7 @@ class StacClient(RsClient, Client):  # type: ignore # pylint: disable=too-many-a
         )
 
     @classmethod
-    def open(  # type: ignore  # pylint: disable=arguments-renamed, too-many-arguments
+    def open(  # type: ignore  # pylint: disable=arguments-renamed, too-many-arguments, too-many-positional-arguments
         cls,
         # RsClient parameters
         rs_server_href: str | None,

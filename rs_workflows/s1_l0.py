@@ -334,7 +334,7 @@ def get_adgs_catalog_data(
 class PrefectS1L0FlowConfig:  # pylint: disable=too-few-public-methods, too-many-instance-attributes
     """Configuration for Prefect flow related to S1 Level 0 data."""
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         stac_client: StacClient,
         url_dpr: str,
