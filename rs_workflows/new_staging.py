@@ -32,9 +32,8 @@ from rs_client.rs_client import RsClient
 from rs_common.config import ECadipStation
 from rs_common.logging import Logging
 
+
 RSPY_HOST_STAGING = os.getenv("RSPY_HOST_STAGING")
-if not RSPY_HOST_STAGING:
-    raise TypeError("Environment variable RSPY_HOST_STAGING is not defined")
 
 class RsStagingClient:
     """Class to handle the staging process in rs-client-libraries
