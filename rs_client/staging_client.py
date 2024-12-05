@@ -37,7 +37,7 @@ if os.getenv("RSPY_LOCAL_MODE") == "1":
     RSPY_HOST_STAGING = os.getenv("RSPY_HOST_STAGING")
 else:
     RSPY_HOST_STAGING = "http://rs-server-staging:8000"
-class RsStagingClient:
+class StagingClient(RsClient):
     """Class to handle the staging process in rs-client-libraries
 
     This class provides python methods to call the different endpoints of the rs-server-staging method
@@ -48,12 +48,13 @@ class RsStagingClient:
     is passed as an extra argument)
     """
 
-    def __init__(self):
+    def __init__(self, rs_server_href, rs_server_api_key, owner_id, logger):
         """
         Initialize the  owslib.ogcapi.processes.Processes object with provided parameters.
         """
+        super().__init__(rs_server_href, rs_server_api_key, owner_id, logger)
         # Define logger
-        self.logger = Logging.default(__name__)
+        self.logger = logger
 
     def get_processes(self, timeout: int):
         """
@@ -232,6 +233,8 @@ if __name__ == "__main__":
     stac_client = generic_client.get_stac_client()
     cadip_station = ECadipStation.CADIP  # you can also have: INS, MPS, MTI, NSG, SGS
     cadip_client = generic_client.get_cadip_client(cadip_station)
+    staging_client = generic_client.get_staging_client()
+
     logger = Logging.default(__name__)
 
     # ----- Step 1 - Create the output STAC collection if it doesn't alredy exists
@@ -292,9 +295,6 @@ if __name__ == "__main__":
     # Apply a request to get information about sessions that you want to stage
     session = requests.Session()
     search_result = session.get(f"{os.getenv('RSPY_HOST_CADIP')}/cadip/collections/{COLLECTION_ID}/items").json()
-
-    # Create necessary clients to perform catalog search and staging opeation
-    staging_client = RsStagingClient()
     
     # Launch staging process
     staging_client.run_staging(APIKEY_HEADERS, search_result, STAC_OUTPUT_COLL_NAME, TIMEOUT)

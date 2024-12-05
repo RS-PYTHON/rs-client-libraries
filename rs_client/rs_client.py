@@ -207,7 +207,14 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     #############################
     # Get child class instances #
     #############################
-
+    def get_staging_client(self) -> "AuxipClient":  # type: ignore # noqa: F821
+        """
+        Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
+        """
+        from rs_client.staging_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            StagingClient,
+        )
+        return StagingClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
     def get_auxip_client(self) -> "AuxipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
