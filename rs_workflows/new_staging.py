@@ -32,9 +32,10 @@ from rs_client.rs_client import RsClient
 from rs_common.config import ECadipStation
 from rs_common.logging import Logging
 
-
-RSPY_HOST_STAGING = os.getenv("RSPY_HOST_STAGING")
-
+if os.getenv("RSPY_LOCAL_MODE") == "1":
+    RSPY_HOST_STAGING = os.getenv("RSPY_HOST_STAGING")
+else:
+    RSPY_HOST_STAGING = "http://rs-server-staging:8000"
 class RsStagingClient:
     """Class to handle the staging process in rs-client-libraries
 
