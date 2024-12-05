@@ -308,7 +308,7 @@ if __name__ == "__main__":
         print(f"Item {item.get('id')} has {len(item.get('assets'))} assets") 
     
     # Delete the whole collection
-    # logger.info("Deleting the collection...")
-    # result = session.delete(f"{os.getenv('RSPY_HOST_CATALOG')}/catalog/collections/{STAC_OUTPUT_COLL_NAME}")
-    # assert result.json()["deleted collection"] == STAC_OUTPUT_COLL_NAME
-    # pp.pprint(result.json())
+    logger.info("Deleting the collection...")
+    result = session.delete(f"{os.getenv('RSPY_HOST_CATALOG')}/catalog/collections/{STAC_OUTPUT_COLL_NAME}")
+    assert result.json()["deleted collection"] == STAC_OUTPUT_COLL_NAME
+    pp.pprint(result.json())
