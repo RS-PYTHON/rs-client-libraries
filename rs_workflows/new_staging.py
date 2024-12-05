@@ -32,10 +32,9 @@ from rs_client.rs_client import RsClient
 from rs_common.config import ECadipStation
 from rs_common.logging import Logging
 
-TIMEOUT = 10
-CATALOG_BUCKET = "rs-cluster-catalog"
-RSPY_HOST_STAGING = os.environ["RSPY_HOST_STAGING"]
-
+RSPY_HOST_STAGING = os.getenv("RSPY_HOST_STAGING")
+if not RSPY_HOST_STAGING:
+    raise TypeError("Environment variable RSPY_HOST_STAGING is not defined")
 
 class RsStagingClient:
     """Class to handle the staging process in rs-client-libraries
@@ -211,6 +210,8 @@ class RsStagingClient:
 
 if __name__ == "__main__":
     # ----------------- Input data -----------------
+    TIMEOUT = 10
+    CATALOG_BUCKET = "rs-cluster-catalog"
     APIKEY_HEADER = "x-api-key"
     COLLECTION_ID = "cadip_s1A"
     STAC_OUTPUT_COLL_NAME = "cadip_s1A_staged"
@@ -239,7 +240,7 @@ if __name__ == "__main__":
         logger.info(
             f"Collection {STAC_OUTPUT_COLL_NAME} already exists -> staging process will use the existing one",
         )
-    except TypeError:
+    except: # pylint: disable=bare-except
         create_coll_response = stac_client.add_collection(
             Collection(
                 id=STAC_OUTPUT_COLL_NAME,
