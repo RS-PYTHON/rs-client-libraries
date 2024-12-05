@@ -311,7 +311,6 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         Raises:
             RuntimeError: If an error occurs while staging the file.
-
         """
 
         # dictionary to be used for payload request
