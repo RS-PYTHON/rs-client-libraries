@@ -33,10 +33,6 @@ from rs_common.config import ECadipStation
 from rs_common.logging import Logging
 pp = pprint.PrettyPrinter(indent=2, width=80, sort_dicts=False, compact=True)
 
-if os.getenv("RSPY_LOCAL_MODE") == "1":
-    RSPY_HOST_STAGING = os.getenv("RSPY_HOST_STAGING")
-else:
-    RSPY_HOST_STAGING = "http://rs-server-staging:8000"
 class RsStagingClient:
     """Class to handle the staging process in rs-client-libraries
 
@@ -54,19 +50,23 @@ class RsStagingClient:
         """
         # Define logger
         self.logger = Logging.default(__name__)
+        if os.getenv("RSPY_LOCAL_MODE") == "1":
+            self.RSPY_HOST_STAGING = os.getenv("RSPY_HOST_STAGING")
+        else:
+            self.RSPY_HOST_STAGING = "http://rs-server-staging:8000"
 
     def get_processes(self, timeout: int):
         """
         Call endpoint /processes - Returns list of all available processes from config
         """
-        return requests.get(f"{RSPY_HOST_STAGING}/processes", timeout=timeout)  # pylint: disable=too-many-arguments
+        return requests.get(f"{self.RSPY_HOST_STAGING}/processes", timeout=timeout)  # pylint: disable=too-many-arguments
 
     def get_resource(self, resource: str, timeout: int):
         """
         Call endpoint /processes/{resource} - Should return info about a specific resource
         """
         return requests.get(
-            f"{RSPY_HOST_STAGING}/processes/{resource}",
+            f"{self.RSPY_HOST_STAGING}/processes/{resource}",
             timeout=timeout,
         )  # pylint: disable=too-many-arguments
 
@@ -76,7 +76,7 @@ class RsStagingClient:
         Args:
             resource (str): name of the process to execute
         """
-        return requests.get(f"{RSPY_HOST_STAGING}/processes/{resource}/execution", timeout=timeout)
+        return requests.get(f"{self.RSPY_HOST_STAGING}/processes/{resource}/execution", timeout=timeout)
 
     def get_job_status(self, job_id: int, timeout: int):
         """
@@ -84,13 +84,13 @@ class RsStagingClient:
         Args:
             job_id (int): job identifier
         """
-        return requests.get(f"{RSPY_HOST_STAGING}/jobs/{job_id}", timeout=timeout)
+        return requests.get(f"{self.RSPY_HOST_STAGING}/jobs/{job_id}", timeout=timeout)
 
     def get_jobs(self, timeout: int):
         """
         Call endpoint /jobs to get the status of all jobs
         """
-        return requests.get(f"{RSPY_HOST_STAGING}/jobs", timeout=timeout)
+        return requests.get(f"{self.RSPY_HOST_STAGING}/jobs", timeout=timeout)
 
     def delete_job(self, job_id: int, timeout: int):
         """
@@ -98,7 +98,7 @@ class RsStagingClient:
         Args:
             job_id (int): job identifier
         """
-        return requests.delete(f"{RSPY_HOST_STAGING}/jobs/{job_id}", timeout=timeout)
+        return requests.delete(f"{self.RSPY_HOST_STAGING}/jobs/{job_id}", timeout=timeout)
 
     def get_specific_job_result(self, job_id):
         """
@@ -173,7 +173,7 @@ class RsStagingClient:
         # and /processes/{processId}/execution endpoints + it doesn't allow to manage apikey_header parameter which
         # is passed as an extra argument)
         post_response = requests.post(
-            f"{RSPY_HOST_STAGING}/processes/staging/execution",
+            f"{self.RSPY_HOST_STAGING}/processes/staging/execution",
             json=staging_body,
             **apikey_headers,
             timeout=timeout,
@@ -188,7 +188,7 @@ class RsStagingClient:
         timeout = 120
         while timeout > 0:
             post_response = requests.get(
-                f"{RSPY_HOST_STAGING}/jobs/{job_id}",
+                f"{self.RSPY_HOST_STAGING}/jobs/{job_id}",
                 **apikey_headers,
                 timeout=timeout,
             )
