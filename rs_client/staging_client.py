@@ -57,46 +57,63 @@ class StagingClient(RsClient):
         super().__init__(rs_server_href, rs_server_api_key, owner_id, logger)
         # Define logger
         self.logger = logger
-        self.resource = "staging" ###
-        self.job_id = None ###
-        self.href_staging = None ###
-
+        self.resource = "staging"    
+        self.job_id = None
     
     @property
-    def get_processes(self) -> str:
+    def href_staging(self) -> str:
+        """
+        Return the RS-Server staging URL hostname.
+        This URL can be overwritten using the RSPY_HOST_STAGING env variable (used e.g. for local mode).
+        Otherwise it should just be the RS-Server URL.
+        """
+        if from_env := os.getenv("RSPY_HOST_STAGING", None):
+            return from_env.rstrip("/")
+        if not self.rs_server_href:
+            raise RuntimeError("RS-Server URL is undefined")
+        return self.rs_server_href.rstrip("/")
+
+    @property
+    def href_processes(self) -> str:
         """
         Call endpoint /processes - Returns list of all available processes from config
         """
         return f"{self.href_staging}/processes"
     
     @property
-    def get_resources(self) -> str:
+    def href_resources(self) -> str:
         """
         Call endpoint /processes - Returns list of all available processes from config
         """
         return f"{self.href_staging}/processes/{self.resource}"
  
     @property
-    def execute_process(self) -> str:
+    def href_execute_process(self) -> str:
         """
         Call endpoint /processes - Returns list of all available processes from config
         """
         return f"{self.href_staging}/processes/{self.resource}/execution"
 
     @property
-    def get_job_status(self) -> str:
+    def href_jobs(self) -> str:
         """
         Call endpoint /processes - Returns list of all available processes from config
         """
-        return f"{self.href_staging}/jobs/{self.job_id}"
+        return f"{self.href_staging}/jobs"
 
     @property
-    def get_jobs(self) -> str:
+    def href_job_status(self) -> str:
         """
         Call endpoint /processes - Returns list of all available processes from config
         """
         return f"{self.href_staging}/jobs/{self.job_id}"
-
+    
+    @property
+    def href_job_result(self) -> str:
+        """
+        Call endpoint /processes - Returns list of all available processes from config
+        """
+        return f"{self.href_staging}/jobs/{self.job_id}/results"
 
     ############################
     # Call RS-Server endpoints #
@@ -104,50 +121,57 @@ class StagingClient(RsClient):
 
     def run_staging(  # pylint: disable=too-many-locals
         self,
-        apikey_headers: dict[str, Any],
         stac_input: dict[Any, Any],
         out_coll_name: str,
-        timeout: int,
-    ):
+    ): 
         """Method to start the staging process from rs-client
 
         Args:
             api_key_header (dict): api key to use in cluster mode
             stac_input (_type_): input information for the data to stage: either a Feature or a FeatureCollection
             stac_output_coll (_type_): _description_
+        
+        Return:
+            job_id (str): identifier of the current job
         """
-        staging_body = {  # pylint: disable=line-too-long
+        staging_body = {
             "version": "0.2.0",
             "id": "staging",
-            "title": {"en": "Staging"},
-            "description": {
-                "en": "A process that takes an external STAC ItemCollection, "
-                "asynchronously download its assets into the RS catalog bucket "
-                "and creates the corresponding STAC items in the RS catalog.",
+            "title": {
+                "en": "Staging"
             },
-            "jobControlOptions": ["async-execute"],
-            "keywords": ["stac", "staging"],
+            "description": {
+                "en": "A process that takes an external STAC ItemCollection, asynchronously download its assets into the RS catalog bucket and creates the corresponding STAC items in the RS catalog."
+            },
+            "jobControlOptions": [
+                "async-execute"
+            ],
+            "keywords": [
+                "stac",
+                "staging"
+            ],
             "links": [
                 {
                     "type": "text/html",
                     "rel": "about",
                     "title": "documentation",
-                    "href": "https://home.rs-python.eu/rs-documentation/"
-                    "rs-server/docs/doc/users/functionalities/#staging",
-                    "hreflang": "en-US",
-                },
+                    "href": "https://home.rs-python.eu/rs-documentation/rs-server/docs/doc/users/functionalities/#staging",
+                    "hreflang": "en-US"
+                }
             ],
             "inputs": {
                 "collection": {
                     "title": "Target collection",
                     "description": "The target collection identifier in the RS catalog",
                     "id": out_coll_name,
-                    "schema": {"type": "string"},
+                    "schema": {
+                        "type": "string"
+                    },
                     "minOccurs": 1,
-                    "maxOccurs": 1,
+                    "maxOccurs": 1
                 },
                 "items": stac_input,
-                "provider": "cadip",
+                "provider": "cadip"
             },
             "outputs": {
                 "result": {
@@ -156,44 +180,44 @@ class StagingClient(RsClient):
                     "description": "The staged STAC ItemCollection",
                     "schema": "false",
                     "minOccurs": 1,
-                    "maxOccurs": 1,
-                },
-            },
+                    "maxOccurs": 1
+                }
+            }
         }
-
-        # ----- Step 3: Launch and monitor the staging process
+        self.logger.info(f"href execute process vaut: {self.href_execute_process}")
         post_response = self.http_session.post(
-                url=self.execute_process,
+                url=self.href_execute_process,
                 json=staging_body,
                 timeout=TIMEOUT,
                 **self.apikey_headers,
             )
-        
+        # Monitor the running job
         resp = json.loads(post_response.content)
+        self.logger.info(f"Response vaut: {resp}")
+        
         pprint.PrettyPrinter(indent=4).pprint(resp)
 
-        job_id = resp["status"]["started"]
-        print(f"\nJob ID = {job_id}\n")
-
-        timeout = 120
-        while timeout > 0:
-            post_response = requests.get(
-                f"{RSPY_HOST_STAGING}/jobs/{job_id}",
-                **apikey_headers,
-                timeout=timeout,
+        self.job_id = resp["status"]["started"]
+        print(f"\nJob ID = {self.job_id}\n")
+        
+        return resp
+    
+    def get_jobs(self):
+        """Method to get running jobs"""
+        return self.http_session.get(
+                url=self.href_jobs,
+                **self.apikey_headers,
+                timeout=TIMEOUT,
             )
-            try:
-                resp = json.loads(post_response.content)
-                pprint.PrettyPrinter(indent=4).pprint(resp)
-                print("\n")
-                if resp["status"] == "FINISHED":
-                    print("Job COMPLETED")
-                    break
-
-                if resp["status"] == "FAILED":
-                    print("Job FAILED")
-                    break
-            except (json.JSONDecodeError,):
-                continue
-            time.sleep(2)
-            timeout -= 2
+    
+    def get_job_status(  # pylint: disable=too-many-locals
+        self,
+        job_id: str
+    ):
+        """Method to get a specific job response"""
+        self.job_id = job_id
+        return self.http_session.get(
+                url=self.href_job_status,
+                **self.apikey_headers,
+                timeout=TIMEOUT,
+            )
