@@ -14,24 +14,12 @@
 
 """Lauch staging with rs-clienclient-libraries"""
 
-import getpass
 import json
 import os
 import pprint
-import sys
-import time
-from datetime import datetime
 from typing import Any
-
-import boto3
-import botocore
-import requests
-from pystac import Collection, Extent, SpatialExtent, TemporalExtent
-
 from rs_client.rs_client import TIMEOUT, RsClient
 
-from rs_common.config import ECadipStation
-from rs_common.logging import Logging
 pp = pprint.PrettyPrinter(indent=2, width=80, sort_dicts=False, compact=True)
 
 if os.getenv("RSPY_LOCAL_MODE") == "1":
@@ -184,23 +172,27 @@ class StagingClient(RsClient):
                 }
             }
         }
-        self.logger.info(f"href execute process vaut: {self.href_execute_process}")
-        post_response = self.http_session.post(
-                url=self.href_execute_process,
-                json=staging_body,
-                timeout=TIMEOUT,
+
+        try:
+            post_response = self.http_session.post(
+                    url=self.href_execute_process,
+                    json=staging_body,
+                    timeout=TIMEOUT,
                 **self.apikey_headers,
             )
-        # Monitor the running job
-        resp = json.loads(post_response.content)
-        self.logger.info(f"Response vaut: {resp}")
-        
-        pprint.PrettyPrinter(indent=4).pprint(resp)
+            
+            # Monitor the running job
+            resp = json.loads(post_response.content)        
+            pprint.PrettyPrinter(indent=4).pprint(resp)
 
-        self.job_id = resp["status"]["started"]
-        print(f"\nJob ID = {self.job_id}\n")
+            self.job_id = resp["status"]["started"]
+            print(f"\nJob ID = {self.job_id}\n")
         
-        return resp
+        except RuntimeError as e:
+            self.logger.exception(f"Could not stage file %s. Exception: {e}")
+
+        
+        return post_response.status_code, resp
     
     def get_jobs(self):
         """Method to get running jobs"""
