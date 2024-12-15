@@ -5,7 +5,7 @@ import responses
 from rs_common.logging import Logging
 from rs_client.rs_client import RsClient
 import getpass
-from starlette.status import HTTP_200_OK, HTTP_403_FORBIDDEN
+from starlette.status import *
 import os
 import os.path as osp
 from pathlib import Path
@@ -55,7 +55,7 @@ def test_staging_ok(station, href, collection_id, fixture_name, request):
         logger=None,
     )
     
-    # Step 1 - Mock CADIP/AUXIP search response by loading a json file containing some sessions
+    # Mock CADIP/AUXIP search response by loading a json file containing some sessions
     feature = request.getfixturevalue(fixture_name)
     responses.add(
         method=responses.GET,
@@ -71,7 +71,7 @@ def test_staging_ok(station, href, collection_id, fixture_name, request):
     # Check that we obtain the good number of elements
     assert len(search_response_json["features"]) == 2
     
-    #Step 2 - Mock the staging response
+    #Mock the staging response
     json_response = {'status': {'started': 'e390e31c-b274-49d2-88c2-466cc4fe23c9'}}
     responses.add(
         method=responses.POST,
@@ -113,7 +113,7 @@ def test_staging_nok(station, href, collection_id, fixture_name, request):
         logger=None,
     )
     
-    # Step 1 - Mock CADIP/AUXIP search response by loading a json file containing some sessions
+    # Mock CADIP/AUXIP search response by loading a json file containing some sessions
     feature = request.getfixturevalue(fixture_name)
     responses.add(
         method=responses.GET,
@@ -129,23 +129,28 @@ def test_staging_nok(station, href, collection_id, fixture_name, request):
     # Check that we obtain the good number of elements
     assert len(search_response_json["features"]) == 2
     
-    #Step 2 - Mock the staging response
-    json_response = {'status': {'started': 'e390e31c-b274-49d2-88c2-466cc4fe23c9'}}
+    # Case of an empty dictionary in input of the staging process
     responses.add(
         method=responses.POST,
         url=f"{href_staging}/processes/{resource}/execution",
-        json=json_response,
-        status=200,
+        json={},
+        status=422,
     )
     
     staging_client = generic_client.get_staging_client()  
-
-    with pytest.raises(Exception) as e_info:
-        staging_status, staging_response = staging_client.run_staging({}, output_collection)
+    staging_status, staging_response = staging_client.run_staging({}, output_collection)
     
-    assert staging_status == HTTP_200_OK
-    assert staging_response == json_response
-
+    # Case of a timeout for the staging
+    responses.add(
+        method=responses.POST,
+        url=f"{href_staging}/processes/{resource}/execution",
+        json={},
+        status=504,
+    )
+    staging_client = generic_client.get_staging_client()  
+    staging_status, staging_response = staging_client.run_staging({}, output_collection)
+    assert staging_status == HTTP_504_GATEWAY_TIMEOUT
+    assert staging_response == None
 
 @pytest.mark.unit
 @responses.activate

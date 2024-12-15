@@ -180,6 +180,7 @@ class StagingClient(RsClient):
                     timeout=TIMEOUT,
                 **self.apikey_headers,
             )
+            self.logger.info(f"POST response vaut: {post_response}")
             
             # Monitor the running job
             resp = json.loads(post_response.content)        
@@ -188,9 +189,9 @@ class StagingClient(RsClient):
             self.job_id = resp["status"]["started"]
             print(f"\nJob ID = {self.job_id}\n")
         
-        except RuntimeError as e:
+        except KeyError as e:
             self.logger.exception(f"Could not stage file %s. Exception: {e}")
-
+            return post_response.status_code, None
         
         return post_response.status_code, resp
     
