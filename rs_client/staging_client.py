@@ -19,6 +19,8 @@ import os
 import pprint
 from typing import Any
 from rs_client.rs_client import TIMEOUT, RsClient
+import requests
+from stac_pydantic.api import Item, ItemCollection
 
 pp = pprint.PrettyPrinter(indent=2, width=80, sort_dicts=False, compact=True)
 
@@ -109,7 +111,7 @@ class StagingClient(RsClient):
 
     def run_staging(  # pylint: disable=too-many-locals
         self,
-        stac_input: dict[Any, Any],
+        stac_input: dict[Any, Any] | str,
         out_coll_name: str,
     ): 
         """Method to start the staging process from rs-client
@@ -122,6 +124,32 @@ class StagingClient(RsClient):
         Return:
             job_id (str): identifier of the current job
         """
+        # If stac_input is a file, load this file to a dictionary
+        if isinstance(stac_input, str):
+            # Read the yaml or json file
+            with open(stac_input, encoding="utf-8") as opened:
+                stac_file_to_dict = json.loads(opened.read())
+        stac_input_dict = stac_file_to_dict if isinstance(stac_input, str) else stac_input
+        
+        # Check that the type        
+        if "type" not in stac_input_dict:
+            raise KeyError("Staging input data has missing key 'type'")
+        
+        # Validate input data using Pydantic 
+        if stac_input_dict["type"] == "Feature":
+            stac_item = Item(**stac_input_dict)
+            stac_item_collection = ItemCollection(
+                **{
+                    "type": "FeatureCollection",
+                    "context": {"limit": 1000, "returned": 2},
+                    "features": [stac_item]
+                }
+            )
+        else:
+            stac_item_collection = ItemCollection(
+                **stac_input_dict
+            )
+        
         staging_body = {
             "version": "0.2.0",
             "id": "staging",
@@ -158,7 +186,7 @@ class StagingClient(RsClient):
                     "minOccurs": 1,
                     "maxOccurs": 1
                 },
-                "items": stac_input,
+                "items": stac_item_collection.model_dump(mode="json"),
                 "provider": "cadip"
             },
             "outputs": {
@@ -190,7 +218,7 @@ class StagingClient(RsClient):
             print(f"\nJob ID = {self.job_id}\n")
         
         except KeyError as e:
-            self.logger.exception(f"Could not stage file %s. Exception: {e}")
+            self.logger.exception(f"Could not launch the staging - response doesn't have the right format: {e}")
             return post_response.status_code, None
         
         return post_response.status_code, resp
@@ -209,8 +237,13 @@ class StagingClient(RsClient):
     ):
         """Method to get a specific job response"""
         self.job_id = job_id
-        return self.http_session.get(
+        
+        try:
+            job_response = self.http_session.get(
                 url=self.href_job_status,
                 **self.apikey_headers,
                 timeout=TIMEOUT,
             )
+            return job_response
+        except Exception:
+            raise requests.exceptions.ReadTimeout(f"The following input job doesn't exist: {self.job_id}")
