@@ -14,7 +14,7 @@
 
 """Unit tests for utility funtions."""
 
-import requests
+import requests  # type: ignore
 import responses
 
 from rs_common.utils import read_response_error
