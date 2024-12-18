@@ -30,6 +30,7 @@ from starlette.status import (
 )
 
 from rs_client.rs_client import RsClient
+from rs_common.config import EDownloadStatus
 
 RESOURCES_FOLDER = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 AUXIP = "AUXIP"
@@ -262,7 +263,7 @@ def test_get_job_status(staging_client, href_staging):
     Test to check the behaviour of the function to get the status of a specific job
     """
     job_id = "afbec9b5-7e46-4251-8e71-ec38479dbb11"
-    json_job = {
+    json_response = {
         "created_at": "2024-12-16T13:27:44.787943",
         "detail": "Finished",
         "identifier": "afbec9b5-7e46-4251-8e71-ec38479dbb11",
@@ -274,14 +275,26 @@ def test_get_job_status(staging_client, href_staging):
     responses.add(
         method=responses.GET,
         url=f"{href_staging}/jobs/{job_id}",
-        json=json_job,
+        json=json_response,
         status=500,
     )
     # Check that the job information are returned if we specify a valid job identifier in input
     job_response = staging_client.get_job_status(job_id)
     assert job_response.status_code == HTTP_500_INTERNAL_SERVER_ERROR
-    assert job_response.json() == json_job
+    assert job_response.json() == json_response
 
     # Check that an exception is raised if we don't specify a valid job identifier
     job_response = staging_client.get_job_status(job_id)
     assert job_response.status_code == 500
+
+    # Check that the right download status is sent back
+    json_response["status"] = EDownloadStatus.IN_PROGRESS
+    responses.add(
+        method=responses.GET,
+        url=f"{href_staging}/jobs/{job_id}",
+        json=json_response,
+        status=200,
+    )
+    job_response = staging_client.get_job_status(job_id)
+    assert job_response.status_code == 200
+    assert job_response.json()["status"] == EDownloadStatus.IN_PROGRESS
