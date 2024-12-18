@@ -234,7 +234,7 @@ class StagingClient(RsClient):
             print(f"\nJob ID = {self.job_id}\n")
 
         except KeyError as e:
-            self.logger.exception(f"Could not launch the staging - response doesn't have the right format: {e}")
+            self.logger.exception(f"Could not launch the staging - response doesn't have the following key: {e}")
             return post_response.status_code, None
 
         return post_response.status_code, self.job_id
