@@ -130,11 +130,16 @@ class StagingClient(RsClient):
         """Method to start the staging process from rs-client
 
         Args:
-            stac_input (dict | str): input dictionary
-            out_coll_name (_type_): _description_
+            stac_input (dict | str): input dictionary: the stac_input can have different format. It can be:
+                - A Python dictionary corresponding to a Feature or a FeatureCollection (that can be for example
+                  the output of a search for Cadip or Auxip sessions)
+                - A json string corresponding to a Feature or a FeatureCollection
+                - A string corresponding to a path to a json file containing a Feature or a FeatureCollection
+            out_coll_name (): _description_
 
         Return:
-            job_id (str): identifier of the current job
+            job_id (int, str): Returns the status code of the staging request + the identifier
+            (or None if staging endpoint fails) of the running job
         """
         stac_input_dict = {}
         # If stac_input is a file, load this file to a dictionary
@@ -232,7 +237,7 @@ class StagingClient(RsClient):
             self.logger.exception(f"Could not launch the staging - response doesn't have the right format: {e}")
             return post_response.status_code, None
 
-        return post_response.status_code, resp
+        return post_response.status_code, self.job_id
 
     def get_jobs(self):
         """Method to get running jobs"""

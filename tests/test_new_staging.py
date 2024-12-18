@@ -121,7 +121,7 @@ def test_staging_ok(station, data_fixture, request, href_staging, staging_client
     )
     staging_status, staging_response = staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION)
     assert staging_status == HTTP_200_OK
-    assert staging_response == json_response
+    assert staging_response == json_response["status"]["started"]
 
     # Nominal case - stage a Feature
     staging_status, staging_response = staging_client.run_staging(
@@ -129,18 +129,18 @@ def test_staging_ok(station, data_fixture, request, href_staging, staging_client
         OUTPUT_COLLECTION,
     )
     assert staging_status == HTTP_200_OK
-    assert staging_response == json_response
+    assert staging_response == json_response["status"]["started"]
 
     # Nominal case - check that the test pass if the input data is a json file with a valid format
     item_file_to_stage = osp.join(RESOURCES_FOLDER, "staging", f"{station.lower()}_data.json")
     staging_status, staging_response = staging_client.run_staging(item_file_to_stage, OUTPUT_COLLECTION)
     assert staging_status == HTTP_200_OK
-    assert staging_response == json_response
+    assert staging_response == json_response["status"]["started"]
 
     # Nominal case - check that the test pass if the input data is a json string with a valid format
     staging_status, staging_response = staging_client.run_staging(json.dumps(data_to_stage), OUTPUT_COLLECTION)
     assert staging_status == HTTP_200_OK
-    assert staging_response == json_response
+    assert staging_response == json_response["status"]["started"]
 
 
 @pytest.mark.unit
