@@ -224,7 +224,9 @@ class StagingClient(RsClient):
                 timeout=TIMEOUT,
                 **self.apikey_headers,
             )
-            self.logger.info(f"POST response vaut: {post_response}")
+
+            if post_response.status_code != 200:
+                self.logger.warning(f"Staging response status code: {post_response.status_code}")
 
             # Monitor the running job
             resp = json.loads(post_response.content)
@@ -232,6 +234,8 @@ class StagingClient(RsClient):
 
             self.job_id = resp["status"]["started"]
             print(f"\nJob ID = {self.job_id}\n")
+            if post_response.status_code == 200 and self.job_id:
+                self.logger.info(f"Staging job {self.job_id} successfully launched !")
 
         except KeyError as e:
             self.logger.exception(f"Could not launch the staging - response doesn't have the following key: {e}")
