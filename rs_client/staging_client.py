@@ -16,42 +16,34 @@
 
 import json
 import os
-import pprint
 from typing import Any
 
+import requests
 from stac_pydantic.api import Item, ItemCollection
 
 from rs_client.rs_client import TIMEOUT, RsClient
-
-pp = pprint.PrettyPrinter(indent=2, width=80, sort_dicts=False, compact=True)
-
-if os.getenv("RSPY_LOCAL_MODE") == "1":
-    RSPY_HOST_STAGING = os.getenv("RSPY_HOST_STAGING")
-else:
-    RSPY_HOST_STAGING = "http://rs-server-staging:8000"
 
 
 class StagingClient(RsClient):
     """
     Class to handle the staging process in rs-client-libraries
 
-    This class provides python methods to call the different endpoints of the rs-server-staging method
+    This class provides python methods to call the different endpoints of the rs-server-staging method.
 
     Remark: this class don't inherits from the owslib.ogcapi.processes.Processes class because the latter
     doesn't provide wrapping for all endpoints defined in rs-server-staging (it only provides the  /processes
     and /processes/{processId}/execution endpoints + it doesn't allow to manage apikey_header parameter which
-    is passed as an extra argument)
+    is passed as an extra argument).
     """
 
     def __init__(self, rs_server_href: str | None, rs_server_api_key: str | None, owner_id: str | None, logger: Any):
         """
-        Initialize the StagingClient parameters
+        Initialize the StagingClient parameters.
         """
         super().__init__(rs_server_href, rs_server_api_key, owner_id, logger)
         # Define logger
         self.logger = logger
         self.resource = "staging"
-        self.job_id: str | None = None
 
     @property
     def href_staging(self) -> str:
@@ -66,68 +58,55 @@ class StagingClient(RsClient):
             raise RuntimeError("RS-Server URL is undefined")
         return self.rs_server_href.rstrip("/")
 
-    @property
-    def href_search(self) -> str:
-        """href for search"""
-        return ""
-
-    @property
-    def href_status(self) -> str:
-        """href for status"""
-        return ""
-
-    @property
-    def href_processes(self) -> str:
-        """
-        Url to get processes
-        """
-        return f"{self.href_staging}/processes"
-
-    @property
-    def href_resources(self) -> str:
-        """
-        Url for the staging process
-        """
-        return f"{self.href_staging}/processes/{self.resource}"
-
-    @property
-    def href_execute_process(self) -> str:
-        """
-        Url to execute a specific process
-        """
-        return f"{self.href_staging}/processes/{self.resource}/execution"
-
-    @property
-    def href_jobs(self) -> str:
-        """
-        Url to get running jobs
-        """
-        return f"{self.href_staging}/jobs"
-
-    @property
-    def href_job_status(self) -> str:
-        """
-        Url to get status of a specific job
-        """
-        return f"{self.href_staging}/jobs/{self.job_id}"
-
-    @property
-    def href_job_result(self) -> str:
-        """
-        Url to get the results of a specific job
-        """
-        return f"{self.href_staging}/jobs/{self.job_id}/results"
-
     ############################
     # Call RS-Server endpoints #
     ############################
+
+    def get_processes(self) -> requests.models.Response:
+        """_summary_
+
+        Returns:
+            dict: dictionary containing the content of the response
+        """
+        response = self.http_session.get(
+            url=f"{self.href_staging}/processes",
+            timeout=TIMEOUT,
+            **self.apikey_headers,
+        )
+
+        if not response.ok:
+            self.logger.error(
+                f"Error to delete the - staging reponse status code: {response.status_code} - "
+                f"Reason: {response.reason}",
+            )
+
+        return response
+
+    def get_resource(self, resource: str) -> requests.models.Response:
+        """
+        Wrapper to get a specific resource
+        Args:
+            resource (str): name of the resource
+        """
+        response = self.http_session.get(
+            url=f"{self.href_staging}/processes/{resource}",
+            timeout=TIMEOUT,
+            **self.apikey_headers,
+        )
+
+        if not response.ok:
+            self.logger.error(
+                f"Error to get resources - staging reponse status code: {response.status_code} - "
+                f"Reason: {response.reason}",
+            )
+        return response
 
     def run_staging(  # pylint: disable=too-many-locals
         self,
         stac_input: dict[Any, Any] | str,
         out_coll_name: str,
-    ):
-        """Method to start the staging process from rs-client
+    ) -> tuple[int, str | None]:
+        """Method to start the staging process from rs-client - Call the endpoint /processes/staging/execution
 
         Args:
             stac_input (dict | str): input dictionary: the stac_input can have different format. It can be:
@@ -156,9 +135,8 @@ class StagingClient(RsClient):
         else:
             stac_input_dict = stac_input
 
-        # Check that the type
         if "type" not in stac_input_dict:
-            raise KeyError("Staging input data has missing key 'type'")
+            raise KeyError("Key 'type' is missing from the staging input data")
 
         # Validate input data using Pydantic
         if stac_input_dict["type"] == "Feature":
@@ -219,56 +197,89 @@ class StagingClient(RsClient):
 
         try:
             post_response = self.http_session.post(
-                url=self.href_execute_process,
+                url=f"{self.href_staging}/processes/{self.resource}/execution",
                 json=staging_body,
                 timeout=TIMEOUT,
                 **self.apikey_headers,
             )
 
-            if post_response.status_code != 200:
+            if not post_response.ok:
                 self.logger.warning(f"Staging response status code: {post_response.status_code}")
 
             # Monitor the running job
             resp = json.loads(post_response.content)
-            pprint.PrettyPrinter(indent=4).pprint(resp)
 
-            self.job_id = resp["status"]["started"]
-            print(f"\nJob ID = {self.job_id}\n")
-            if post_response.status_code == 200 and self.job_id:
-                self.logger.info(f"Staging job {self.job_id} successfully launched !")
+            job_id = resp["status"]["started"]
+            if post_response.ok:
+                self.logger.info(f"Staging job {job_id} successfully launched !")
 
         except KeyError as e:
             self.logger.exception(f"Could not launch the staging - response doesn't have the following key: {e}")
             return post_response.status_code, None
 
-        return post_response.status_code, self.job_id
+        return post_response.status_code, job_id
 
-    def get_jobs(self):
+    def get_jobs(self) -> requests.models.Response:
         """Method to get running jobs"""
-        return self.http_session.get(
-            url=self.href_jobs,
+        response = self.http_session.get(
+            url=f"{self.href_staging}/jobs",
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
 
-    def get_job_status(self, job_id: str):  # pylint: disable=too-many-locals
-        """Method to get a specific job response"""
-        self.job_id = job_id
-
-        try:
-            job_response = self.http_session.get(
-                url=self.href_job_status,
-                **self.apikey_headers,
-                timeout=TIMEOUT,
+        if not response.ok:
+            self.logger.error(
+                f"Error to get all jobs - staging reponse status code: {response.status_code} - "
+                f"Reason: {response.reason}",
             )
+        return response
 
-            if job_response.status_code != 200:
-                self.logger.error(
-                    f"Staging reponse status code: {job_response.status_code} - "
-                    f"The following input job doesn't exist: {self.job_id}",
-                )
-            return job_response
+    def get_job(self, job_id: str) -> requests.models.Response:  # pylint: disable=too-many-locals
+        """Method to get a specific job response"""
 
-        except Exception:
-            self.logger.error(f"Input job identifier doesn't have the right format {self.job_id}")
-            raise
+        job_response = self.http_session.get(
+            url=f"{self.href_staging}/jobs/{job_id}",
+            **self.apikey_headers,
+            timeout=TIMEOUT,
+        )
+
+        if not job_response.ok:
+            self.logger.error(
+                f"Error to get the job status - staging reponse status code: {job_response.status_code} - "
+                f"Reason: {job_response.reason}",
+            )
+        return job_response
+
+    def delete_job(self, job_id: str) -> requests.models.Response:  # pylint: disable=too-many-locals
+        """Method to get a specific job response"""
+        response = self.http_session.delete(
+            url=f"{self.href_staging}/jobs/{job_id}",
+            **self.apikey_headers,
+            timeout=TIMEOUT,
+        )
+
+        if not response.ok:
+            self.logger.error(
+                f"Error to delete the job - staging reponse status code: {response.status_code} - "
+                f"Reason: {response.reason}",
+            )
+        return response
+
+    def get_job_results(self, job_id: str) -> requests.models.Response:
+        """Wrapper to get the result of a specfific job
+
+        Args:
+            job_id (str): _description_
+        """
+        response = self.http_session.get(
+            url=f"{self.href_staging}/jobs/{job_id}/results",
+            timeout=TIMEOUT,
+            **self.apikey_headers,
+        )
+
+        if not response.ok:
+            self.logger.error(
+                f"Error to get job {job_id} result - staging reponse status code: {response.status_code} - "
+                f"Reason: {response.reason}",
+            )
+        return response

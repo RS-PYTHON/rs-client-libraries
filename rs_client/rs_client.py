@@ -207,15 +207,6 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     #############################
     # Get child class instances #
     #############################
-    def get_staging_client(self) -> "AuxipClient":  # type: ignore # noqa: F821
-        """
-        Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
-        """
-        from rs_client.staging_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
-            StagingClient,
-        )
-
-        return StagingClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
 
     def get_auxip_client(self) -> "AuxipClient":  # type: ignore # noqa: F821
         """
@@ -260,6 +251,16 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             *args,
             **kwargs,
         )
+
+    def get_staging_client(self) -> "AuxipClient":  # type: ignore # noqa: F821
+        """
+        Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
+        """
+        from rs_client.staging_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            StagingClient,
+        )
+
+        return StagingClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
 
     ############################
     # Call RS-Server endpoints #
@@ -426,16 +427,13 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     ##############################################
 
     @property
-    def href_search(self) -> str:
+    def href_search(self):
         """Implemented by AuxipClient and CadipClient."""
-        raise NotImplementedError
 
     @property
-    def href_staging(self) -> str:
+    def href_staging(self):
         """Implemented by AuxipClient and CadipClient."""
-        raise NotImplementedError
 
     @property
-    def href_status(self) -> str:
+    def href_status(self):
         """Implemented by AuxipClient and CadipClient."""
-        raise NotImplementedError

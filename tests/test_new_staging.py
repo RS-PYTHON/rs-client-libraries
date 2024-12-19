@@ -16,18 +16,13 @@
 
 import getpass
 import json
-import os
 import os.path as osp
 from pathlib import Path
 from typing import Any
 
 import pytest
 import responses
-from starlette.status import (
-    HTTP_200_OK,
-    HTTP_408_REQUEST_TIMEOUT,
-    HTTP_500_INTERNAL_SERVER_ERROR,
-)
+from starlette import status
 
 from rs_client.rs_client import RsClient
 from rs_common.config import EDownloadStatus
@@ -36,21 +31,23 @@ RESOURCES_FOLDER = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 AUXIP = "AUXIP"
 CADIP = "CADIP"
 RESOURCE = "staging"
-APIKEY = None
+RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
+
 OWNER_ID = getpass.getuser()
 OUTPUT_COLLECTION = "my_test_collection"
 
 
-@pytest.fixture(name="rs_server_href")
-def get_rs_server_href():
+@pytest.fixture(name="dummy_href")
+def get_dummy_href():
     """
-    rs_server_href for local_mode
+    Dummy href for local_mode
     """
-    return None
+    dummy_href = "http://DUMMY_HREF"
+    return dummy_href
 
 
 @pytest.fixture(name="staging_client")
-def get_staging_client(rs_server_href):
+def get_staging_client(dummy_href):
     """Create a staging client
 
     Args:
@@ -60,21 +57,12 @@ def get_staging_client(rs_server_href):
         StagingClient: StagingClient object to apply the staging
     """
     client = RsClient(
-        rs_server_href=rs_server_href,
-        rs_server_api_key=APIKEY,
+        rs_server_href=dummy_href,
+        rs_server_api_key=RS_SERVER_API_KEY,
         owner_id=OWNER_ID,
         logger=None,
     )
     return client.get_staging_client()
-
-
-@pytest.fixture(name="href_staging")
-def get_href_staging():
-    """
-    Return href for staging
-    """
-    href_staging = os.environ["RSPY_HOST_STAGING"] = "http://127.0.0.1:8004"
-    return href_staging
 
 
 @pytest.fixture(name="cadip_data")
@@ -99,6 +87,60 @@ def auxip_data():
 
 @pytest.mark.unit
 @responses.activate
+def test_get_processes(staging_client, dummy_href):
+    """
+    Test to check the behaviour of the function to get the status of a specific job
+    """
+    json_response = {"processes": [{"name": "staging", "processor": "Staging"}]}
+
+    responses.add(
+        method=responses.GET,
+        url=f"{dummy_href}/processes",
+        json=json_response,
+        status=status.HTTP_200_OK,
+    )
+    # Check that the job information are returned if we specify a valid job identifier in input
+    job_response = staging_client.get_processes()
+    assert job_response.status_code == status.HTTP_200_OK
+    assert job_response.json() == json_response
+
+
+@pytest.mark.unit
+@responses.activate
+def test_get_resources(staging_client, dummy_href):
+    """
+    Test to check the behaviour of the function to get the status of a specific job
+    """
+    json_response = {"processes": [{"name": "staging", "processor": "Staging"}]}
+    valid_resource = "staging"
+    unvalid_resource = "resource_that_doesnt_exist"
+
+    responses.add(
+        method=responses.GET,
+        url=f"{dummy_href}/processes/{valid_resource}",
+        json=json_response,
+        status=status.HTTP_200_OK,
+    )
+    # Check that the job information are returned if we specify a valid job identifier in input
+    job_response = staging_client.get_resource(valid_resource)
+    assert job_response.status_code == status.HTTP_200_OK
+    assert job_response.json() == json_response
+
+    # Check that the right error status code is returned if trying to get an unexisting resource
+    not_found_response = {"detail": "Resource not found"}
+    responses.add(
+        method=responses.GET,
+        url=f"{dummy_href}/processes/{unvalid_resource}",
+        json=not_found_response,
+        status=status.HTTP_404_NOT_FOUND,
+    )
+
+    job_response = staging_client.get_resource(unvalid_resource)
+    assert job_response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.unit
+@responses.activate
 @pytest.mark.parametrize(
     "station, data_fixture",
     [
@@ -106,7 +148,7 @@ def auxip_data():
         (AUXIP, "auxip_data"),
     ],
 )
-def test_staging_ok(station, data_fixture, request, href_staging, staging_client):
+def test_staging_ok(station, data_fixture, request, dummy_href, staging_client):
     """
     Nominal cases for staging
     """
@@ -116,12 +158,12 @@ def test_staging_ok(station, data_fixture, request, href_staging, staging_client
     json_response = {"status": {"started": "e390e31c-b274-49d2-88c2-466cc4fe23c9"}}
     responses.add(
         method=responses.POST,
-        url=f"{href_staging}/processes/{RESOURCE}/execution",
+        url=f"{dummy_href}/processes/{RESOURCE}/execution",
         json=json_response,
-        status=200,
+        status=status.HTTP_200_OK,
     )
     staging_status, staging_response = staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION)
-    assert staging_status == HTTP_200_OK
+    assert staging_status == status.HTTP_200_OK
     assert staging_response == json_response["status"]["started"]
 
     # Nominal case - stage a Feature
@@ -129,31 +171,31 @@ def test_staging_ok(station, data_fixture, request, href_staging, staging_client
         data_to_stage["features"][0],
         OUTPUT_COLLECTION,
     )
-    assert staging_status == HTTP_200_OK
+    assert staging_status == status.HTTP_200_OK
     assert staging_response == json_response["status"]["started"]
 
     # Nominal case - check that the test pass if the input data is a json file with a valid format
     item_file_to_stage = osp.join(RESOURCES_FOLDER, "staging", f"{station.lower()}_data.json")
     staging_status, staging_response = staging_client.run_staging(item_file_to_stage, OUTPUT_COLLECTION)
-    assert staging_status == HTTP_200_OK
+    assert staging_status == status.HTTP_200_OK
     assert staging_response == json_response["status"]["started"]
 
     # Nominal case - check that the test pass if the input data is a json string with a valid format
     staging_status, staging_response = staging_client.run_staging(json.dumps(data_to_stage), OUTPUT_COLLECTION)
-    assert staging_status == HTTP_200_OK
+    assert staging_status == status.HTTP_200_OK
     assert staging_response == json_response["status"]["started"]
 
 
 @pytest.mark.unit
 @responses.activate
-def test_staging_fails_stage_empty_dict(href_staging, staging_client):
+def test_staging_fails_stage_empty_dict(dummy_href, staging_client):
     """
     Failing case where we use an empty dictionary in input of the staging
     In this case an exception should be raised
     """
     responses.add(
         method=responses.POST,
-        url=f"{href_staging}/processes/{RESOURCE}/execution",
+        url=f"{dummy_href}/processes/{RESOURCE}/execution",
         json={},
         status=422,
     )
@@ -162,7 +204,7 @@ def test_staging_fails_stage_empty_dict(href_staging, staging_client):
             {},
             OUTPUT_COLLECTION,
         )
-    assert "Staging input data has missing key 'type'" in str(exc_info.value)
+    assert "Key 'type' is missing from the staging input data" in str(exc_info.value)
 
 
 @pytest.mark.unit
@@ -174,7 +216,7 @@ def test_staging_fails_stage_empty_dict(href_staging, staging_client):
         (AUXIP, "auxip_data"),
     ],
 )
-def test_staging_fails_wrong_data_format(station, data_fixture, href_staging, staging_client, request):
+def test_staging_fails_wrong_data_format(station, data_fixture, dummy_href, staging_client, request):
     """
     Failing case where the  input data is a json file
     with an unvalid format - In this case check that a pydantic ValueError is raised
@@ -182,9 +224,9 @@ def test_staging_fails_wrong_data_format(station, data_fixture, href_staging, st
     json_response = {"status": {"started": "e390e31c-b274-49d2-88c2-466cc4fe23c9"}}
     responses.add(
         method=responses.POST,
-        url=f"{href_staging}/processes/{RESOURCE}/execution",
+        url=f"{dummy_href}/processes/{RESOURCE}/execution",
         json=json_response,
-        status=200,
+        status=status.HTTP_200_OK,
     )
     # Check that the test raises an exception if the input file has a wrong data format
     item_file_to_stage = osp.join(RESOURCES_FOLDER, "staging", f"wrong_{station.lower()}_data.json")
@@ -209,7 +251,7 @@ def test_staging_fails_wrong_data_format(station, data_fixture, href_staging, st
     "data_fixture",
     ["cadip_data", "auxip_data"],
 )
-def test_staging_fails_endpoint_send_error(data_fixture, request, href_staging, staging_client):
+def test_staging_fails_endpoint_send_error(data_fixture, request, dummy_href, staging_client):
     """
     Failing case where the staging endpoint fails and doesn't return a job identifier
     """
@@ -219,18 +261,18 @@ def test_staging_fails_endpoint_send_error(data_fixture, request, href_staging, 
     # Case of a timeout for the staging
     responses.add(
         method=responses.POST,
-        url=f"{href_staging}/processes/{RESOURCE}/execution",
+        url=f"{dummy_href}/processes/{RESOURCE}/execution",
         json=json_response,
-        status=408,
+        status=status.HTTP_408_REQUEST_TIMEOUT,
     )
     staging_status, staging_response = staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION)
-    assert staging_status == HTTP_408_REQUEST_TIMEOUT
+    assert staging_status == status.HTTP_408_REQUEST_TIMEOUT
     assert staging_response is None
 
 
 @pytest.mark.unit
 @responses.activate
-def test_get_jobs(staging_client, href_staging):
+def test_get_jobs(staging_client, dummy_href):
     """
     Test to check the behaviour of the function to get all running jobs
     """
@@ -246,19 +288,19 @@ def test_get_jobs(staging_client, href_staging):
     # Mock the response of the endpoint to get all jobs
     responses.add(
         method=responses.GET,
-        url=f"{href_staging}/jobs",
+        url=f"{dummy_href}/jobs",
         json=json_jobs_data,
-        status=200,
+        status=status.HTTP_200_OK,
     )
     jobs_response = staging_client.get_jobs()
 
-    assert jobs_response.status_code == HTTP_200_OK
+    assert jobs_response.status_code == status.HTTP_200_OK
     assert jobs_response.json() == json_jobs_data
 
 
 @pytest.mark.unit
 @responses.activate
-def test_get_job_status(staging_client, href_staging):
+def test_get_job(staging_client, dummy_href):
     """
     Test to check the behaviour of the function to get the status of a specific job
     """
@@ -274,27 +316,89 @@ def test_get_job_status(staging_client, href_staging):
 
     responses.add(
         method=responses.GET,
-        url=f"{href_staging}/jobs/{job_id}",
+        url=f"{dummy_href}/jobs/{job_id}",
         json=json_response,
-        status=500,
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
     # Check that the job information are returned if we specify a valid job identifier in input
-    job_response = staging_client.get_job_status(job_id)
-    assert job_response.status_code == HTTP_500_INTERNAL_SERVER_ERROR
+    job_response = staging_client.get_job(job_id)
+    assert job_response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert job_response.json() == json_response
 
     # Check that an exception is raised if we don't specify a valid job identifier
-    job_response = staging_client.get_job_status(job_id)
-    assert job_response.status_code == 500
+    job_response = staging_client.get_job(job_id)
+    assert job_response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
     # Check that the right download status is sent back
     json_response["status"] = EDownloadStatus.IN_PROGRESS
     responses.add(
         method=responses.GET,
-        url=f"{href_staging}/jobs/{job_id}",
+        url=f"{dummy_href}/jobs/{job_id}",
         json=json_response,
-        status=200,
+        status=status.HTTP_200_OK,
     )
-    job_response = staging_client.get_job_status(job_id)
-    assert job_response.status_code == 200
+    job_response = staging_client.get_job(job_id)
+    assert job_response.status_code == status.HTTP_200_OK
     assert job_response.json()["status"] == EDownloadStatus.IN_PROGRESS
+
+
+@pytest.mark.unit
+@responses.activate
+def test_delete_job(staging_client, dummy_href):
+    """
+    Test to check the behaviour of the function to get the status of a specific job
+    """
+    job_id = "0474d453-3306-48e2-ab32-ac00bafb3115"
+    json_response = {"message": f"Job {job_id} deleted successfully"}
+
+    responses.add(
+        method=responses.DELETE,
+        url=f"{dummy_href}/jobs/{job_id}",
+        json=json_response,
+        status=status.HTTP_200_OK,
+    )
+    # Check that the job information are returned if we specify a valid job identifier in input
+    job_response = staging_client.delete_job(job_id)
+    assert job_response.status_code == status.HTTP_200_OK
+    assert job_response.json() == json_response
+
+    # Check that we obtain the right error status_code when wanting to delete an unexisting job
+    responses.add(
+        method=responses.DELETE,
+        url=f"{dummy_href}/jobs/{job_id}",
+        json=None,
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+    job_response = staging_client.delete_job(job_id)
+    assert job_response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+
+
+@pytest.mark.unit
+@responses.activate
+def test_get_job_results(staging_client, dummy_href):
+    """
+    Test to check the behaviour of the function to get the status of a specific job
+    """
+    job_id = "0474d453-3306-48e2-ab32-ac00bafb3115"
+    json_response = "FINISHED"
+
+    responses.add(
+        method=responses.GET,
+        url=f"{dummy_href}/jobs/{job_id}/results",
+        json=json_response,
+        status=status.HTTP_200_OK,
+    )
+    # Check that the job results are returned if we specify a valid job identifier in input
+    job_response = staging_client.get_job_results(job_id)
+    assert job_response.status_code == status.HTTP_200_OK
+    assert job_response.json() == json_response
+
+    # Check that we obtain the right error status_code when wanting to get results from unexisting job
+    responses.add(
+        method=responses.GET,
+        url=f"{dummy_href}/jobs/{job_id}/results",
+        json=None,
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+    job_response = staging_client.get_job_results(job_id)
+    assert job_response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
