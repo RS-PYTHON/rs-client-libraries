@@ -321,12 +321,12 @@ def test_get_job(staging_client, dummy_href):
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
     # Check that the job information are returned if we specify a valid job identifier in input
-    job_response = staging_client.get_job(job_id)
+    job_response = staging_client.get_job_info(job_id)
     assert job_response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert job_response.json() == json_response
 
     # Check that an exception is raised if we don't specify a valid job identifier
-    job_response = staging_client.get_job(job_id)
+    job_response = staging_client.get_job_info(job_id)
     assert job_response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
     # Check that the right download status is sent back
@@ -337,7 +337,7 @@ def test_get_job(staging_client, dummy_href):
         json=json_response,
         status=status.HTTP_200_OK,
     )
-    job_response = staging_client.get_job(job_id)
+    job_response = staging_client.get_job_info(job_id)
     assert job_response.status_code == status.HTTP_200_OK
     assert job_response.json()["status"] == EDownloadStatus.IN_PROGRESS
 

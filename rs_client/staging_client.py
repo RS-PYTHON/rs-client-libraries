@@ -234,7 +234,7 @@ class StagingClient(RsClient):
             )
         return response
 
-    def get_job(self, job_id: str) -> requests.models.Response:  # pylint: disable=too-many-locals
+    def get_job_info(self, job_id: str) -> requests.models.Response:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
 
         job_response = self.http_session.get(
@@ -260,7 +260,8 @@ class StagingClient(RsClient):
 
         if not response.ok:
             self.logger.error(
-                f"Error to delete the job - staging reponse status code: {response.status_code} - "
+                f"Error to delete the job "
+                f"- staging reponse status code: {response.status_code} - "
                 f"Reason: {response.reason}",
             )
         return response
