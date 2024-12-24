@@ -202,7 +202,6 @@ jobs:
             --error-for-skips \
             --cov=./rs_client \
             --cov=./rs_common \
-            --cov=./rs_workflows \
             --cov-report=term \
             --cov-report=xml:./cov-report.xml \
             --junit-xml=./junit-xml-report.xml \
@@ -277,7 +276,7 @@ jobs:
       - name: Get directory names
         id: dir_names
         run: |
-          echo sources=./rs_client,./rs_common,./rs_workflows >> $GITHUB_OUTPUT
+          echo sources=./rs_client,./rs_common >> $GITHUB_OUTPUT
           echo tests=./tests >> $GITHUB_OUTPUT
         shell: bash
 
