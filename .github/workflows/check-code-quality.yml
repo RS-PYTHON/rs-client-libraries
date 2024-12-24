@@ -23,7 +23,7 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: 3.11
+  PYTHON_VERSION: 3.11.7
   SONAR_PROJECT_KEY: RS-PYTHON_rs-client-libraries_AY9yLor3vquboa54Od6W
 
 jobs:
