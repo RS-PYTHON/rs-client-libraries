@@ -27,7 +27,6 @@ classifiers = [
 packages = [
     { include = "rs_client" },
     { include = "rs_common" },
-    { include = "rs_workflows" },
 ]
 
 # This root project is not used in release production.
@@ -35,10 +34,8 @@ packages = [
 
 # All the dependencies for release are set in the sub-projects
 [tool.poetry.dependencies]
-python = "^3.11"
-prefect = "^2.14.21"
+python = "3.11.7"
 numpy = "2.1.2"
-prefect-dask = "^0.2.6"
 opentelemetry-distro = "^0.48b0" # then run 'poetry run opentelemetry-bootstrap -a install'
 opentelemetry-instrumentation-aws-lambda = "^0.48b0"
 opentelemetry-test-utils = "^0.48b0"

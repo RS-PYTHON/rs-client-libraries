@@ -24,7 +24,7 @@ from rs_common.utils import read_response_error
 def test_response_error():
     """Test reading responses errors."""
 
-    dummy_href = "http://DUMMY_HREF"
+    dummy_href = "https://DUMMY_HREF"
     detail = "detail message"
     error = "error message"
     content = "response content"
