@@ -344,7 +344,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             self.logger.exception(f"Staging file exception for {filename}:", e)
             raise RuntimeError(f"Staging file exception for {filename}") from e
 
-    def search_stations(  # pylint: disable=too-many-arguments
+    def search_stations(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         start_date: datetime,
         stop_date: datetime,

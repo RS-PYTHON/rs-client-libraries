@@ -32,7 +32,7 @@ class CadipClient(RsClient):
         station (ECadipStation): Cadip station
     """
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None,
@@ -90,7 +90,7 @@ class CadipClient(RsClient):
     # Call RS-Server endpoints #
     ############################
 
-    def search_sessions(  # pylint: disable=too-many-arguments
+    def search_sessions(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         session_ids: list[str] | None = None,
         start_date: datetime | None = None,
