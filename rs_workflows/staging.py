@@ -16,7 +16,6 @@
 
 import time
 from datetime import datetime
-from shapely import geometry as geom
 
 import dateutil.parser
 import numpy as np
@@ -25,6 +24,7 @@ from prefect import exceptions, flow, get_run_logger, task
 from prefect_dask.task_runners import DaskTaskRunner
 from pystac.asset import Asset
 from pystac.item import Item
+from shapely import geometry as geom
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
@@ -129,7 +129,6 @@ def update_stac_catalog(  # pylint: disable=too-many-locals
     if geometry["type"] == "Polygon":
         poly = geom.Polygon(geometry["coordinates"][0])
         if not (poly.is_valid and poly.is_closed):
-
             coords = poly.exterior.coords.xy
             geometry["coordinates"] = [[list(coord) for coord in zip(coords[0], coords[1])]]
 
@@ -196,7 +195,7 @@ class PrefectTaskConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
 
     """
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         rs_client: AuxipClient | CadipClient,
         mission,
@@ -402,7 +401,7 @@ class PrefectFlowConfig(PrefectCommonConfig):  # pylint: disable=too-few-public-
         limit: The limit for the number of the files in the list retrieved from the ADGS/CADIP station (optional).
     """
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         rs_client: AuxipClient | CadipClient,
         mission,
