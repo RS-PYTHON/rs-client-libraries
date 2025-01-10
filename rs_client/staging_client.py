@@ -79,17 +79,16 @@ class StagingClient(RsClient):
                 f"Error to delete the - staging reponse status code: {response.status_code} - "
                 f"Reason: {response.reason}",
             )
-
         return response
 
-    def get_resource(self, resource: str) -> requests.models.Response:
+    def get_process(self, process_id: str) -> requests.models.Response:
         """
-        Wrapper to get a specific resource
+        Wrapper to get a specific process
         Args:
-            resource (str): name of the resource
+            process_id (str): name of the resource
         """
         response = self.http_session.get(
-            url=f"{self.href_staging}/processes/{resource}",
+            url=f"{self.href_staging}/processes/{process_id}",
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
@@ -183,16 +182,11 @@ class StagingClient(RsClient):
                 "items": stac_item_collection.model_dump(mode="json"),
                 "provider": "cadip",
             },
-            "outputs": {
-                "result": {
-                    "title": "Output STAC items",
-                    "id": "some_output_id",
-                    "description": "The staged STAC ItemCollection",
-                    "schema": "false",
-                    "minOccurs": 1,
-                    "maxOccurs": 1,
-                },
-            },
+            "outputs":{
+                "featureCollectionOutput": {
+                    "transmissionMode": "value"
+                }
+            }
         }
 
         try:
@@ -236,7 +230,6 @@ class StagingClient(RsClient):
 
     def get_job_info(self, job_id: str) -> requests.models.Response:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
-
         job_response = self.http_session.get(
             url=f"{self.href_staging}/jobs/{job_id}",
             **self.apikey_headers,
