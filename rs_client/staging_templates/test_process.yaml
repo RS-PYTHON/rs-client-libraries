@@ -1,7 +1,0 @@
-person1: include('person')
-person2: include('person')
----
-
-allOf:
-
-
