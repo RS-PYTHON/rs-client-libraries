@@ -30,7 +30,6 @@ from rs_common.config import EDownloadStatus
 RESOURCES_FOLDER = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 AUXIP = "AUXIP"
 CADIP = "CADIP"
-RESOURCE = "staging"
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 
 OWNER_ID = getpass.getuser()
@@ -91,7 +90,21 @@ def test_get_processes(staging_client, dummy_href):
     """
     Test to check the behaviour of the function to get the status of a specific job
     """
-    json_response = {"processes": [{"name": "staging", "processor": "Staging"}]}
+    json_response = {
+        "processes": [
+                {
+                    "name": "staging", 
+                    "processor": "Staging",
+                    "id": "staging_processor",
+                    "version": "0.0.1",   
+                }
+            ],
+        "links": [
+            {
+                "href": "https://example.com/api/service"
+            }
+        ],      
+    }
 
     responses.add(
         method=responses.GET,
@@ -101,41 +114,71 @@ def test_get_processes(staging_client, dummy_href):
     )
     # Check that the job information are returned if we specify a valid job identifier in input
     job_response = staging_client.get_processes()
-    assert job_response.status_code == status.HTTP_200_OK
-    assert job_response.json() == json_response
-
-
-@pytest.mark.unit
-@responses.activate
-def test_get_resources(staging_client, dummy_href):
-    """
-    Test to check the behaviour of the function to get the status of a specific job
-    """
-    json_response = {"processes": [{"name": "staging", "processor": "Staging"}]}
-    valid_resource = "staging"
-    unvalid_resource = "resource_that_doesnt_exist"
+    assert not job_response.errors
+    assert job_response.data == json_response
+    
+    # check that an exception is raised if the endpoint response
+    # is invalid according to the ogc standard (here we removed the required field
+    # "id" and ensure that the corresponding validation exception is raised)
+    json_response = {
+        "processes": [
+                {
+                    "name": "staging", 
+                    "processor": "Staging",
+                    "version": "0.0.1",   
+                }
+            ],
+        "links": [
+            {
+                "href": "https://example.com/api/service"
+            }
+        ],      
+    }
 
     responses.add(
         method=responses.GET,
-        url=f"{dummy_href}/processes/{valid_resource}",
+        url=f"{dummy_href}/processes",
         json=json_response,
         status=status.HTTP_200_OK,
     )
     # Check that the job information are returned if we specify a valid job identifier in input
-    job_response = staging_client.get_resource(valid_resource)
+    job_response = staging_client.get_processes()
+    assert job_response.errors
+    assert not job_response.data
+
+
+@pytest.mark.unit
+@responses.activate
+def test_get_process(staging_client, dummy_href):
+    """
+    Test to check the behaviour of the function to get the status of a specific job
+    """
+    json_response = {"processes": [{"name": "staging", "processor": "Staging"}]}
+    process_id = "staging"
+
+    responses.add(
+        method=responses.GET,
+        url=f"{dummy_href}/processes/{process_id}",
+        json=json_response,
+        status=status.HTTP_200_OK,
+    )
+    # Check that the job information are returned if we specify a valid job identifier in input
+    job_response = staging_client.get_process(process_id)
+    
     assert job_response.status_code == status.HTTP_200_OK
     assert job_response.json() == json_response
 
     # Check that the right error status code is returned if trying to get an unexisting resource
+    process_id = "process_that_doesnt_exist"
     not_found_response = {"detail": "Resource not found"}
     responses.add(
         method=responses.GET,
-        url=f"{dummy_href}/processes/{unvalid_resource}",
+        url=f"{dummy_href}/processes/{process_id}",
         json=not_found_response,
         status=status.HTTP_404_NOT_FOUND,
     )
 
-    job_response = staging_client.get_resource(unvalid_resource)
+    job_response = staging_client.get_process(process_id)
     assert job_response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -153,14 +196,35 @@ def test_staging_ok(station, data_fixture, request, dummy_href, staging_client):
     Nominal cases for staging
     """
     data_to_stage = request.getfixturevalue(data_fixture)
-
+    process_id = "staging"
     # Nominal case - stage a FeatureCollection
-    json_response = {"status": {"started": "e390e31c-b274-49d2-88c2-466cc4fe23c9"}}
+    json_response = {
+        "processID": "string",
+        "type": "process",
+        "jobID": "e390e31c-b274-49d2-88c2-466cc4fe23c9",
+        "status": "accepted",
+        "message": "string",
+        "created": "2019-08-24T14:15:22Z",
+        "started": "2019-08-24T14:15:22Z",
+        "finished": "2019-08-24T14:15:22Z",
+        "updated": "2019-08-24T14:15:22Z",
+        "progress": 100,
+        "links": [
+            {
+            "href": "string",
+            "rel": "service",
+            "type": "application/json",
+            "hreflang": "en",
+            "title": "string"
+            }
+        ]
+    }
+    
     responses.add(
         method=responses.POST,
-        url=f"{dummy_href}/processes/{RESOURCE}/execution",
+        url=f"{dummy_href}/processes/{process_id}/execution",
         json=json_response,
-        status=status.HTTP_200_OK,
+        status=status.HTTP_400_BAD_REQUEST,
     )
     staging_status, staging_response = staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION)
     assert staging_status == status.HTTP_200_OK
@@ -193,9 +257,10 @@ def test_staging_fails_stage_empty_dict(dummy_href, staging_client):
     Failing case where we use an empty dictionary in input of the staging
     In this case an exception should be raised
     """
+    process_id = "staging"
     responses.add(
         method=responses.POST,
-        url=f"{dummy_href}/processes/{RESOURCE}/execution",
+        url=f"{dummy_href}/processes/{process_id}/execution",
         json={},
         status=422,
     )
@@ -222,9 +287,10 @@ def test_staging_fails_wrong_data_format(station, data_fixture, dummy_href, stag
     with an unvalid format - In this case check that a pydantic ValueError is raised
     """
     json_response = {"status": {"started": "e390e31c-b274-49d2-88c2-466cc4fe23c9"}}
+    process_id = "staging"
     responses.add(
         method=responses.POST,
-        url=f"{dummy_href}/processes/{RESOURCE}/execution",
+        url=f"{dummy_href}/processes/{process_id}/execution",
         json=json_response,
         status=status.HTTP_200_OK,
     )
@@ -257,11 +323,12 @@ def test_staging_fails_endpoint_send_error(data_fixture, request, dummy_href, st
     """
     data_to_stage = request.getfixturevalue(data_fixture)
     json_response: dict[Any, Any] = {}
+    process_id = "staging"
 
     # Case of a timeout for the staging
     responses.add(
         method=responses.POST,
-        url=f"{dummy_href}/processes/{RESOURCE}/execution",
+        url=f"{dummy_href}/processes/{process_id}/execution",
         json=json_response,
         status=status.HTTP_408_REQUEST_TIMEOUT,
     )

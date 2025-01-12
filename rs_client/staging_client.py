@@ -20,9 +20,22 @@ from typing import Any
 
 import requests
 from stac_pydantic.api import Item, ItemCollection
-
 from rs_client.rs_client import TIMEOUT, RsClient
 
+# openapi_core libraries used for endpoints validation
+from openapi_core import Spec
+from openapi_core import validate_request
+from openapi_core import validate_response
+from openapi_core.contrib.requests import RequestsOpenAPIRequest, RequestsOpenAPIResponse
+from openapi_core import OpenAPI
+import os.path as osp
+
+PATH_TO_YAML_OPENAPI = osp.join(
+    osp.realpath(osp.dirname(__file__)),
+    "staging_templates",
+    "yaml",
+    "staging_openapi_schema.yaml"
+    )
 
 class StagingClient(RsClient):
     """
@@ -58,10 +71,41 @@ class StagingClient(RsClient):
             raise RuntimeError("RS-Server URL is undefined")
         return self.rs_server_href.rstrip("/")
 
+    def validate_and_unmarshal_response(self, response):
+        """
+        Validate an endpoint response according to the ogc specifications
+        (described as yaml schemas)
+
+        Args:
+            response (Response): endpoint response
+
+        Returns:
+            ResponseUnmarshalResult: Python deserialized object allowing to easily
+            get information about the endpoint response (response content, potential
+            errors,...)
+        """
+        openapi = OpenAPI.from_file_path(PATH_TO_YAML_OPENAPI)
+        request = RequestsOpenAPIRequest(response.request)
+        response = RequestsOpenAPIResponse(response)
+        
+        #validate_response(response=response, spec= Spec.from_file_path(PATH_TO_YAML_OPENAPI), request=request)
+        result = openapi.unmarshal_response(request, response)
+        
+        if result.errors:
+            for error in result.errors:
+                self.logger.error(f"Validation error: {error}")
+                if hasattr(error, 'message'):
+                    self.logger.error(f"Error Message: {error.message}")
+                if hasattr(error, 'detail'):
+                    self.logger.error(f"Error Detail: {error.detail}")
+        
+        return result
+    
+    
     ############################
     # Call RS-Server endpoints #
     ############################
-
+    
     def get_processes(self) -> requests.models.Response:
         """_summary_
 
@@ -79,7 +123,8 @@ class StagingClient(RsClient):
                 f"Error to delete the - staging reponse status code: {response.status_code} - "
                 f"Reason: {response.reason}",
             )
-        return response
+       
+        return self.validate_and_unmarshal_response(response)
 
     def get_process(self, process_id: str) -> requests.models.Response:
         """
@@ -98,7 +143,7 @@ class StagingClient(RsClient):
                 f"Error to get resources - staging reponse status code: {response.status_code} - "
                 f"Reason: {response.reason}",
             )
-        return response
+        return self.validate_and_unmarshal_response(response)
 
     def run_staging(  # pylint: disable=too-many-locals
         self,
@@ -189,29 +234,30 @@ class StagingClient(RsClient):
             }
         }
 
-        try:
-            post_response = self.http_session.post(
-                url=f"{self.href_staging}/processes/{self.resource}/execution",
-                json=staging_body,
-                timeout=TIMEOUT,
-                **self.apikey_headers,
-            )
+        ###try:
+        post_response = self.http_session.post(
+            url=f"{self.href_staging}/processes/{self.resource}/execution",
+            json=staging_body,
+            timeout=TIMEOUT,
+            **self.apikey_headers,
+        )
 
-            if not post_response.ok:
-                self.logger.warning(f"Staging response status code: {post_response.status_code}")
+        #     if not post_response.ok:
+        #         self.logger.warning(f"Staging response status code: {post_response.status_code}")
 
-            # Monitor the running job
-            resp = json.loads(post_response.content)
+        #     # Monitor the running job
+        #     resp = json.loads(post_response.content)
 
-            job_id = resp["status"]["started"]
-            if post_response.ok:
-                self.logger.info(f"Staging job {job_id} successfully launched !")
+        #     job_id = resp["status"]["started"]
+        #     if post_response.ok:
+        #         self.logger.info(f"Staging job {job_id} successfully launched !")
 
-        except KeyError as e:
-            self.logger.exception(f"Could not launch the staging - response doesn't have the following key: {e}")
-            return post_response.status_code, None
+        # except KeyError as e:
+        #     self.logger.exception(f"Could not launch the staging - response doesn't have the following key: {e}")
+        #     return post_response.status_code, None
 
-        return post_response.status_code, job_id
+        # return post_response.status_code, job_id
+        return  self.validate_and_unmarshal_response(post_response)
 
     def get_jobs(self) -> requests.models.Response:
         """Method to get running jobs"""

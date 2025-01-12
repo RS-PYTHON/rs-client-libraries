@@ -1,0 +1,113 @@
+openapi: 3.0.0
+info:
+  title: RS Staging API
+  version: 1.0.0
+paths:
+  /processes:
+    get:
+      summary: Get a list of processes
+      responses:
+        '200':
+          description: Returns list of all available processes from config.
+          content:
+            application/json:
+              schema:
+                $ref: './processList.yaml'
+  /processes/{process_id}:
+    get:
+      summary: Get information on a specific process
+      parameters:
+        - name: process_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Returns a description of a specific process
+          content:
+            application/json:
+              schema:
+                $ref: './process.yaml'
+  /processes/{process_id}/execution:
+    post:
+      summary: Get information on a specific process
+      parameters:
+        - name: process_id
+          in: path
+          required: true
+          schema:
+            type: string
+      # Here both the request and the response need to be validates according to yaml schemas
+      requestBody:
+        description: Check the body from the request used to execute the process
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './execute.yaml'
+      responses:
+        '200':
+          description: Returns a description of a specific process
+          content:
+            application/json:
+              schema:
+                $ref: './statusInfo.yaml'
+  /jobs:
+    get:
+      summary: Returns the status of all jobs.
+      responses:
+        '200':
+          description: Returns the status of all jobs.
+          content:
+            application/json:
+              schema:
+                $ref: './jobList.yaml'
+  /jobs/{job-id}:
+    get:
+      summary: Returns the status of all jobs.
+      parameters:
+        - name: job-id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Returns the status of all jobs.
+          content:
+            application/json:
+              schema:
+                $ref: './jobList.yaml'
+    delete:
+      summary: Deletes a specific job.
+      parameters:
+        - name: job-id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The ID of the job to be deleted.
+      responses:
+        '200':
+          description: Deletes a specific job.
+          content:
+            application/json:
+              schema:
+                $ref: './statusInfo.yaml'
+  /jobs/{job-id}/results:
+    get:
+      summary: Returns the results of a given job
+      parameters:
+        - name: job-id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Returns the status of all jobs.
+          content:
+            application/json:
+              schema:
+                $ref: './results.yaml'
