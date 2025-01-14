@@ -27,7 +27,6 @@ from starlette import status
 
 from rs_client.rs_client import RsClient
 from rs_client.staging_client import StagingValidationException
-from rs_common.config import EDownloadStatus
 
 RESOURCES_FOLDER = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 AUXIP = "AUXIP"
@@ -36,7 +35,7 @@ RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 
 OWNER_ID = getpass.getuser()
 OUTPUT_COLLECTION = "my_test_collection"
-
+TIMEOUT = 5
 
 # -------------------------- Staging fixtures --------------------------
 
@@ -113,6 +112,9 @@ def get_staging_response_sample():
 
 @pytest.fixture(name="processes_sample")
 def get_processes_sample():
+    """ 
+    Example of response from the /processes endpoint
+    """
     return {
         "processes": [
             {
@@ -177,7 +179,7 @@ def test_get_processes(staging_client, dummy_href, processes_sample):
         status=status.HTTP_200_OK,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        process_resp = staging_client.get_processes()
+        process_resp = staging_client.get_processes() # pylint: disable=W0612
     assert "'links' is a required property" in str(exc_info.value)
 
 
@@ -294,7 +296,7 @@ def test_get_process(staging_client, dummy_href):
         (AUXIP, "auxip_data"),
     ],
 )
-def test_staging_ok(station, data_fixture, request, dummy_href, staging_client, staging_response_sample):
+def test_staging_ok(station, data_fixture, request, dummy_href, staging_client, staging_response_sample): # pylint: disable=R0913, R0917
     """
     Nominal cases for staging
     """
@@ -361,7 +363,7 @@ def test_staging_fails_stage_empty_dict(dummy_href, staging_client):
         (AUXIP, "auxip_data"),
     ],
 )
-def test_staging_fails_wrong_data_format(
+def test_staging_fails_wrong_data_format( # pylint: disable=R0913, R0917
     station,
     data_fixture,
     dummy_href,
@@ -420,7 +422,7 @@ def test_staging_fails_endpoint_send_error(data_fixture, request, dummy_href, st
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        staging_resp = staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION)
+        staging_resp = staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION) # pylint: disable=W0612
     assert "Unknown response http status: 500" in str(exc_info.value)
 
 
@@ -534,7 +536,7 @@ def test_get_job(staging_client, dummy_href):
         status=status.HTTP_404_NOT_FOUND,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        job_response = staging_client.get_job_info(job_id)
+        job_response = staging_client.get_job_info(job_id) # pylint: disable=W0612
     assert "Unknown response http status: 404" in str(exc_info.value)
 
     # Check that the right download status is sent back
@@ -557,7 +559,7 @@ def test_get_job(staging_client, dummy_href):
         status=status.HTTP_200_OK,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        jobs_resp = staging_client.get_jobs()
+        jobs_resp = staging_client.get_jobs() # pylint: disable=W0612
     assert "Failed to cast value to object type" in str(exc_info.value)
 
 
@@ -593,7 +595,8 @@ def test_delete_job(staging_client, dummy_href):
     job_resp = staging_client.delete_job(job_id)
     assert job_resp is not None
 
-    # Check that we obtain the right error status_code when wanting to delete a job with an identifier that doesn't exist
+    # Check that we obtain the right error status_code when wanting to
+    # delete a job with an identifier that doesn't exist
     responses.add(
         method=responses.DELETE,
         url=f"{dummy_href}/jobs/{job_id}",
@@ -613,7 +616,7 @@ def test_delete_job(staging_client, dummy_href):
         status=status.HTTP_200_OK,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        jobs_resp = staging_client.get_jobs()
+        jobs_resp = staging_client.get_jobs() # pylint: disable=W0612
     assert "Failed to cast value to object type" in str(exc_info.value)
 
 
@@ -689,6 +692,7 @@ def test_validate_and_unmarshal_request(staging_client, dummy_href, staging_resp
     )
     response = requests.post(
         f"{dummy_href}/processes/{process_id}/execution",
+        timeout=TIMEOUT,
         json=request_body,
     )
     result = staging_client.validate_and_unmarshal_request(response.request)
@@ -712,7 +716,7 @@ def test_validate_and_unmarshal_response(staging_client, dummy_href, processes_s
         json=json_response,
         status=status.HTTP_200_OK,
     )
-    response = requests.get(url=f"{dummy_href}/processes")
+    response = requests.get(url=f"{dummy_href}/processes", timeout=TIMEOUT)
     process_resp = staging_client.validate_and_unmarshal_response(response)
     assert process_resp == json_response
 
@@ -732,7 +736,7 @@ def test_validate_and_unmarshal_response(staging_client, dummy_href, processes_s
         json=json_response,
         status=status.HTTP_200_OK,
     )
-    response = requests.get(url=f"{dummy_href}/processes")
+    response = requests.get(url=f"{dummy_href}/processes", timeout=TIMEOUT)
     with pytest.raises(StagingValidationException) as exc_info:
         process_resp = staging_client.validate_and_unmarshal_response(response)
     assert "'links' is a required property" in str(exc_info.value)
@@ -748,7 +752,7 @@ def test_validate_and_unmarshal_response(staging_client, dummy_href, processes_s
         json=json_response,
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
-    response = requests.get(url=f"{dummy_href}/processes")
+    response = requests.get(url=f"{dummy_href}/processes", timeout=TIMEOUT)
     with pytest.raises(StagingValidationException) as exc_info:
         process_resp = staging_client.validate_and_unmarshal_response(response)
     assert "Unknown response http status: 500" in str(exc_info.value)
