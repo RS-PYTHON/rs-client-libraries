@@ -112,9 +112,7 @@ def get_staging_response_sample():
 
 @pytest.fixture(name="processes_sample")
 def get_processes_sample():
-    """ 
-    Example of response from the /processes endpoint
-    """
+    """Example of response from the /processes endpoint"""
     return {
         "processes": [
             {
@@ -179,7 +177,7 @@ def test_get_processes(staging_client, dummy_href, processes_sample):
         status=status.HTTP_200_OK,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        process_resp = staging_client.get_processes() # pylint: disable=W0612
+        staging_client.get_processes()
     assert "'links' is a required property" in str(exc_info.value)
 
 
@@ -258,7 +256,7 @@ def test_get_process(staging_client, dummy_href):
         status=status.HTTP_404_NOT_FOUND,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        process_resp = staging_client.get_process(process_id)
+        staging_client.get_process(process_id)
     assert "Unknown response http status: 404" in str(exc_info.value)
 
     # Check that we get a validation error if the server sends a response with an unvalid format
@@ -283,7 +281,7 @@ def test_get_process(staging_client, dummy_href):
         status=status.HTTP_200_OK,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        process_resp = staging_client.get_process(process_id)
+        staging_client.get_process(process_id)
     assert "{'wrong_key': False} is not valid under any of the given schemas" in str(exc_info.value)
 
 
@@ -296,7 +294,14 @@ def test_get_process(staging_client, dummy_href):
         (AUXIP, "auxip_data"),
     ],
 )
-def test_staging_ok(station, data_fixture, request, dummy_href, staging_client, staging_response_sample): # pylint: disable=R0913, R0917
+def test_staging_ok(
+    station,
+    data_fixture,
+    request,
+    dummy_href,
+    staging_client,
+    staging_response_sample,
+):  # pylint: disable=R0913, R0917
     """
     Nominal cases for staging
     """
@@ -347,7 +352,7 @@ def test_staging_fails_stage_empty_dict(dummy_href, staging_client):
         status=422,
     )
     with pytest.raises(KeyError) as exc_info:
-        staging_resp = staging_client.run_staging(  # pylint: disable=unused-variable
+        staging_client.run_staging(
             {},
             OUTPUT_COLLECTION,
         )
@@ -363,7 +368,7 @@ def test_staging_fails_stage_empty_dict(dummy_href, staging_client):
         (AUXIP, "auxip_data"),
     ],
 )
-def test_staging_fails_wrong_data_format( # pylint: disable=R0913, R0917
+def test_staging_fails_wrong_data_format(  # pylint: disable=R0913, R0917
     station,
     data_fixture,
     dummy_href,
@@ -386,7 +391,7 @@ def test_staging_fails_wrong_data_format( # pylint: disable=R0913, R0917
     # Check that the test raises an exception if the input file has a wrong data format
     item_file_to_stage = osp.join(RESOURCES_FOLDER, "staging", f"wrong_{station.lower()}_data.json")
     with pytest.raises(ValueError) as exc_info:
-        staging_resp = staging_client.run_staging(  # pylint: disable=unused-variable
+        staging_client.run_staging(
             item_file_to_stage,
             OUTPUT_COLLECTION,
         )
@@ -396,7 +401,7 @@ def test_staging_fails_wrong_data_format( # pylint: disable=R0913, R0917
     data_to_stage = request.getfixturevalue(data_fixture)
     data_to_stage["features"][0].pop("bbox")
     with pytest.raises(ValueError) as exc_info:
-        staging_resp = staging_client.run_staging(json.dumps(data_to_stage), OUTPUT_COLLECTION)
+        staging_client.run_staging(json.dumps(data_to_stage), OUTPUT_COLLECTION)
     assert "bbox is required if geometry is not null" in str(exc_info.value)
 
 
@@ -422,7 +427,7 @@ def test_staging_fails_endpoint_send_error(data_fixture, request, dummy_href, st
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        staging_resp = staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION) # pylint: disable=W0612
+        staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION)
     assert "Unknown response http status: 500" in str(exc_info.value)
 
 
@@ -479,7 +484,7 @@ def test_get_jobs(staging_client, dummy_href):
         status=status.HTTP_404_NOT_FOUND,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        jobs_resp = staging_client.get_jobs()
+        staging_client.get_jobs()
     assert "Unknown response http status: 404" in str(exc_info.value)
 
     # Check that an exception is raised if the endpoints returns an unvalid response
@@ -491,7 +496,7 @@ def test_get_jobs(staging_client, dummy_href):
         status=status.HTTP_200_OK,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        jobs_resp = staging_client.get_jobs()
+        staging_client.get_jobs()
     assert "Failed to cast value to object type" in str(exc_info.value)
 
 
@@ -536,7 +541,7 @@ def test_get_job(staging_client, dummy_href):
         status=status.HTTP_404_NOT_FOUND,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        job_response = staging_client.get_job_info(job_id) # pylint: disable=W0612
+        staging_client.get_job_info(job_id)
     assert "Unknown response http status: 404" in str(exc_info.value)
 
     # Check that the right download status is sent back
@@ -559,7 +564,7 @@ def test_get_job(staging_client, dummy_href):
         status=status.HTTP_200_OK,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        jobs_resp = staging_client.get_jobs() # pylint: disable=W0612
+        staging_client.get_jobs()
     assert "Failed to cast value to object type" in str(exc_info.value)
 
 
@@ -604,7 +609,7 @@ def test_delete_job(staging_client, dummy_href):
         status=status.HTTP_404_NOT_FOUND,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        job_resp = staging_client.delete_job(job_id)
+        staging_client.delete_job(job_id)
     assert "Unknown response http status: 404" in str(exc_info.value)
 
     # Check that an exception is raised if the endpoints returns an unvalid response
@@ -616,7 +621,7 @@ def test_delete_job(staging_client, dummy_href):
         status=status.HTTP_200_OK,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        jobs_resp = staging_client.get_jobs() # pylint: disable=W0612
+        staging_client.get_jobs()
     assert "Failed to cast value to object type" in str(exc_info.value)
 
 
@@ -647,7 +652,7 @@ def test_get_job_results(staging_client, dummy_href):
         status=status.HTTP_404_NOT_FOUND,
     )
     with pytest.raises(StagingValidationException) as exc_info:
-        job_result_resp = staging_client.get_job_results(job_id)
+        staging_client.get_job_results(job_id)
     assert "Unknown response http status: 404" in str(exc_info.value)
 
 
@@ -738,7 +743,7 @@ def test_validate_and_unmarshal_response(staging_client, dummy_href, processes_s
     )
     response = requests.get(url=f"{dummy_href}/processes", timeout=TIMEOUT)
     with pytest.raises(StagingValidationException) as exc_info:
-        process_resp = staging_client.validate_and_unmarshal_response(response)
+        staging_client.validate_and_unmarshal_response(response)
     assert "'links' is a required property" in str(exc_info.value)
 
     # Case 3: Let's now modify the status of the mocked response to an error status
@@ -754,5 +759,5 @@ def test_validate_and_unmarshal_response(staging_client, dummy_href, processes_s
     )
     response = requests.get(url=f"{dummy_href}/processes", timeout=TIMEOUT)
     with pytest.raises(StagingValidationException) as exc_info:
-        process_resp = staging_client.validate_and_unmarshal_response(response)
+        staging_client.validate_and_unmarshal_response(response)
     assert "Unknown response http status: 500" in str(exc_info.value)
