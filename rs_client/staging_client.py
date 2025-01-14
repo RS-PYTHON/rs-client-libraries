@@ -22,7 +22,7 @@ from typing import Any
 # openapi_core libraries used for endpoints validation
 import openapi_core
 import requests
-from openapi_core import OpenAPI, Spec, validate_request, validate_response
+from openapi_core import OpenAPI  # Spec, validate_request, validate_response
 from openapi_core.contrib.requests import (
     RequestsOpenAPIRequest,
     RequestsOpenAPIResponse,
