@@ -679,13 +679,7 @@ def test_validate_and_unmarshal_request(staging_client, dummy_href, staging_resp
             },
         },
         "response": "raw",
-        "subscriber": {
-            "successUri": "http://example.com",
-            "inProgressUri": "http://example.com",
-            "failedUri": "http://example.com",
-        },
     }
-    request_body = {"data": "aaa"}
 
     json_response = staging_response_sample
     # Nominal case - the json request body is valid
@@ -701,9 +695,25 @@ def test_validate_and_unmarshal_request(staging_client, dummy_href, staging_resp
         json=request_body,
     )
     result = staging_client.validate_and_unmarshal_request(response.request)
-
+    assert result is not None 
+    
     # Check that we obtain an exception if the json request body is not valid
-
+    request_body["response"] = "unauthorized_value"
+    responses.add(
+        method=responses.POST,
+        url=f"{dummy_href}/processes/{process_id}/execution",
+        json=json_response,
+        status=status.HTTP_200_OK,
+    )
+    response = requests.post(
+        f"{dummy_href}/processes/{process_id}/execution",
+        timeout=TIMEOUT,
+        json=request_body,
+    )
+    with pytest.raises(StagingValidationException) as exc_info:
+        staging_client.validate_and_unmarshal_request(response.request)
+    assert "Request body validation error" in str(exc_info.value)
+    
 
 @pytest.mark.unit
 @responses.activate
