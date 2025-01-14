@@ -492,7 +492,7 @@ def test_get_jobs(staging_client, dummy_href):
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/jobs",
-        json=json_response["jobs"][0].pop("jobID"),
+        json=json_response["jobs"][0].pop("jobID"),  # type: ignore
         status=status.HTTP_200_OK,
     )
     with pytest.raises(StagingValidationException) as exc_info:

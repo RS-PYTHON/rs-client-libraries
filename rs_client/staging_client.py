@@ -22,6 +22,7 @@ from typing import Any
 import requests
 
 # openapi_core libraries used for endpoints validation
+import openapi_core
 from openapi_core import OpenAPI, Spec, validate_request, validate_response
 from openapi_core.contrib.requests import (
     RequestsOpenAPIRequest,
@@ -94,22 +95,22 @@ class StagingClient(RsClient):
             raise FileNotFoundError(f"The following file path was not found: {PATH_TO_YAML_OPENAPI}")
 
         openapi = OpenAPI.from_file_path(PATH_TO_YAML_OPENAPI)
-        request = RequestsOpenAPIRequest(request)
+        openapi_request: openapi_core.contrib.requests.RequestsOpenAPIRequest = RequestsOpenAPIRequest(request)
 
         # validate_request(request, spec=Spec.from_file_path(PATH_TO_YAML_OPENAPI))
-        result = openapi.unmarshal_request(request)
+        result = openapi.unmarshal_request(openapi_request)
 
         if result.errors:
-            raise StagingValidationException(
-                f"Error validating the request of the enpoint " f"{request.path}: {str(result.errors[0])}",
+            raise StagingValidationException(  # type: ignore
+                f"Error validating the request of the enpoint " f"{openapi_request.path}: {str(result.errors[0])}", # type: ignore
             )
-        if not result.data:
+        if not result.body:
             raise StagingValidationException(
                 f"Error validating the request of the enpoint "
-                f"{request.path}: 'data' field of ResponseUnmarshalResult"
+                f"{openapi_request.path}: 'data' field of ResponseUnmarshalResult"
                 f"object is empty",
             )
-        return result.data
+        return result.body
 
     def validate_and_unmarshal_response(self, response: requests.models.Response):
         """
@@ -127,20 +128,20 @@ class StagingClient(RsClient):
             raise FileNotFoundError(f"The following file path was not found: {PATH_TO_YAML_OPENAPI}")
 
         openapi = OpenAPI.from_file_path(PATH_TO_YAML_OPENAPI)
-        request = RequestsOpenAPIRequest(response.request)
-        response = RequestsOpenAPIResponse(response)
+        openapi_request = RequestsOpenAPIRequest(response.request)
+        openapi_response = RequestsOpenAPIResponse(response)
 
         # Alternative method to validate the response
         # validate_response(response=response, spec= Spec.from_file_path(PATH_TO_YAML_OPENAPI), request=request)
-        result = openapi.unmarshal_response(request, response)
+        result = openapi.unmarshal_response(openapi_request, openapi_response) # type: ignore
         if result.errors:
-            raise StagingValidationException(
-                f"Error validating the response of the enpoint " f"{request.path}: {str(result.errors[0])}",
+            raise StagingValidationException(  # type: ignore
+                f"Error validating the response of the enpoint " f"{openapi_request.path}: {str(result.errors[0])}", # type: ignore
             )
         if not result.data:
             raise StagingValidationException(
                 f"Error validating the response of the enpoint "
-                f"{request.path}: 'data' field of ResponseUnmarshalResult"
+                f"{openapi_request.path}: 'data' field of ResponseUnmarshalResult"
                 f"object is empty",
             )
         return result.data
