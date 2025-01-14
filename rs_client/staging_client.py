@@ -16,31 +16,36 @@
 
 import json
 import os
+import os.path as osp
 from typing import Any
 
 import requests
-from stac_pydantic.api import Item, ItemCollection
-from rs_client.rs_client import TIMEOUT, RsClient
 
 # openapi_core libraries used for endpoints validation
-from openapi_core import Spec
-from openapi_core import validate_request, validate_response
-from openapi_core.contrib.requests import RequestsOpenAPIRequest, RequestsOpenAPIResponse
-from openapi_core import OpenAPI
-import os.path as osp
+from openapi_core import OpenAPI, Spec, validate_request, validate_response
+from openapi_core.contrib.requests import (
+    RequestsOpenAPIRequest,
+    RequestsOpenAPIResponse,
+)
+from stac_pydantic.api import Item, ItemCollection
+
+from rs_client.rs_client import TIMEOUT, RsClient
 
 PATH_TO_YAML_OPENAPI = osp.join(
     osp.realpath(osp.dirname(__file__)),
     "staging_templates",
     "yaml",
-    "staging_openapi_schema.yaml"
-    )
+    "staging_openapi_schema.yaml",
+)
+
 
 class StagingValidationException(Exception):
     """
-    Exception raised when an error occurs during the validation 
+    Exception raised when an error occurs during the validation
     of the staging endpoints
     """
+
+
 class StagingClient(RsClient):
     """
     Class to handle the staging process in rs-client-libraries
@@ -75,36 +80,36 @@ class StagingClient(RsClient):
             raise RuntimeError("RS-Server URL is undefined")
         return self.rs_server_href.rstrip("/")
 
-    
     def validate_and_unmarshal_request(self, request: requests.models.PreparedRequest):
         """Validate an endpoint request according to the ogc specifications
 
         Args:
             request (Request): endpoint request
-        
+
         Returns:
             ResponseUnmarshalResult.data: data validated by the openapi_core
             unmarshal_response method
         """
         if not os.path.isfile(PATH_TO_YAML_OPENAPI):
             raise FileNotFoundError(f"The following file path was not found: {PATH_TO_YAML_OPENAPI}")
-        
+
         openapi = OpenAPI.from_file_path(PATH_TO_YAML_OPENAPI)
         request = RequestsOpenAPIRequest(request)
-        
-        
-        #validate_request(request, spec=Spec.from_file_path(PATH_TO_YAML_OPENAPI))
-        result = openapi.unmarshal_request(request)
-        
-        if result.errors:
-            raise StagingValidationException(f"Error validating the request of the enpoint " 
-                                             f"{request.path}: {str(result.errors[0])}")
-        if not result.data:
-            raise StagingValidationException(f"Error validating the request of the enpoint " 
-                                             f"{request.path}: \'data\' field of ResponseUnmarshalResult"
-                                             f"object is empty")
-        return result.data
 
+        # validate_request(request, spec=Spec.from_file_path(PATH_TO_YAML_OPENAPI))
+        result = openapi.unmarshal_request(request)
+
+        if result.errors:
+            raise StagingValidationException(
+                f"Error validating the request of the enpoint " f"{request.path}: {str(result.errors[0])}",
+            )
+        if not result.data:
+            raise StagingValidationException(
+                f"Error validating the request of the enpoint "
+                f"{request.path}: 'data' field of ResponseUnmarshalResult"
+                f"object is empty",
+            )
+        return result.data
 
     def validate_and_unmarshal_response(self, response: requests.models.Response):
         """
@@ -117,30 +122,33 @@ class StagingClient(RsClient):
             ResponseUnmarshalResult.data: data validated by the openapi_core
             unmarshal_response method
         """
-        
+
         if not os.path.isfile(PATH_TO_YAML_OPENAPI):
             raise FileNotFoundError(f"The following file path was not found: {PATH_TO_YAML_OPENAPI}")
-        
+
         openapi = OpenAPI.from_file_path(PATH_TO_YAML_OPENAPI)
         request = RequestsOpenAPIRequest(response.request)
         response = RequestsOpenAPIResponse(response)
-        
+
         # Alternative method to validate the response
-        #validate_response(response=response, spec= Spec.from_file_path(PATH_TO_YAML_OPENAPI), request=request)
+        # validate_response(response=response, spec= Spec.from_file_path(PATH_TO_YAML_OPENAPI), request=request)
         result = openapi.unmarshal_response(request, response)
         if result.errors:
-            raise StagingValidationException(f"Error validating the response of the enpoint " 
-                                             f"{request.path}: {str(result.errors[0])}")
+            raise StagingValidationException(
+                f"Error validating the response of the enpoint " f"{request.path}: {str(result.errors[0])}",
+            )
         if not result.data:
-            raise StagingValidationException(f"Error validating the response of the enpoint " 
-                                             f"{request.path}: \'data\' field of ResponseUnmarshalResult"
-                                             f"object is empty")
+            raise StagingValidationException(
+                f"Error validating the response of the enpoint "
+                f"{request.path}: 'data' field of ResponseUnmarshalResult"
+                f"object is empty",
+            )
         return result.data
-    
+
     ############################
     # Call RS-Server endpoints #
     ############################
-    
+
     def get_processes(self) -> requests.models.Response:
         """_summary_
 
@@ -152,7 +160,7 @@ class StagingClient(RsClient):
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
-       
+
         return self.validate_and_unmarshal_response(response)
 
     def get_process(self, process_id: str) -> requests.models.Response:
@@ -250,11 +258,7 @@ class StagingClient(RsClient):
                 "items": stac_item_collection.model_dump(mode="json"),
                 "provider": "cadip",
             },
-            "outputs":{
-                "featureCollectionOutput": {
-                    "transmissionMode": "value"
-                }
-            }
+            "outputs": {"featureCollectionOutput": {"transmissionMode": "value"}},
         }
         post_response = self.http_session.post(
             url=f"{self.href_staging}/processes/{self.resource}/execution",
@@ -263,7 +267,7 @@ class StagingClient(RsClient):
             **self.apikey_headers,
         )
         # return post_response.status_code, job_id
-        return  self.validate_and_unmarshal_response(post_response)
+        return self.validate_and_unmarshal_response(post_response)
 
     def get_jobs(self) -> requests.models.Response:
         """Method to get running jobs"""
