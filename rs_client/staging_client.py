@@ -19,10 +19,9 @@ import os
 import os.path as osp
 from typing import Any
 
-import requests
-
 # openapi_core libraries used for endpoints validation
 import openapi_core
+import requests
 from openapi_core import OpenAPI, Spec, validate_request, validate_response
 from openapi_core.contrib.requests import (
     RequestsOpenAPIRequest,
@@ -101,8 +100,9 @@ class StagingClient(RsClient):
         result = openapi.unmarshal_request(openapi_request)
 
         if result.errors:
-            raise StagingValidationException(  # type: ignore
-                f"Error validating the request of the enpoint " f"{openapi_request.path}: {str(result.errors[0])}", # type: ignore
+            raise StagingValidationException(
+                f"Error validating the request of the enpoint "
+                f"{openapi_request.path}: {str(result.errors[0])}",  # type: ignore
             )
         if not result.body:
             raise StagingValidationException(
@@ -133,10 +133,11 @@ class StagingClient(RsClient):
 
         # Alternative method to validate the response
         # validate_response(response=response, spec= Spec.from_file_path(PATH_TO_YAML_OPENAPI), request=request)
-        result = openapi.unmarshal_response(openapi_request, openapi_response) # type: ignore
+        result = openapi.unmarshal_response(openapi_request, openapi_response)  # type: ignore
         if result.errors:
             raise StagingValidationException(  # type: ignore
-                f"Error validating the response of the enpoint " f"{openapi_request.path}: {str(result.errors[0])}", # type: ignore
+                f"Error validating the response of the enpoint "
+                f"{openapi_request.path}: {str(result.errors[0])}",  # type: ignore
             )
         if not result.data:
             raise StagingValidationException(
