@@ -48,7 +48,13 @@ paths:
               $ref: './execute.yaml'
       responses:
         '200':
-          description: Returns a description of a specific process
+          description:  Result of synchronous execution
+          content:
+            application/json:
+              schema:
+                $ref: './statusInfo.yaml'
+        '201':
+          description: Started asynchronous execution. Created job.
           content:
             application/json:
               schema:
@@ -65,20 +71,21 @@ paths:
                 $ref: './jobList.yaml'
   /jobs/{job-id}:
     get:
-      summary: Returns the status of all jobs.
+      summary: Returns the status of a job.
       parameters:
         - name: job-id
           in: path
+          description: local identifier of a job
           required: true
           schema:
             type: string
       responses:
         '200':
-          description: Returns the status of all jobs.
+          description: The status of a job.
           content:
             application/json:
               schema:
-                $ref: './jobList.yaml'
+                $ref: 'statusInfo.yaml'
     delete:
       summary: Deletes a specific job.
       parameters:

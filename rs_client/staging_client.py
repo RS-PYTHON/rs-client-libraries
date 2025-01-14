@@ -24,8 +24,7 @@ from rs_client.rs_client import TIMEOUT, RsClient
 
 # openapi_core libraries used for endpoints validation
 from openapi_core import Spec
-from openapi_core import validate_request
-from openapi_core import validate_response
+from openapi_core import validate_request, validate_response
 from openapi_core.contrib.requests import RequestsOpenAPIRequest, RequestsOpenAPIResponse
 from openapi_core import OpenAPI
 import os.path as osp
@@ -37,6 +36,11 @@ PATH_TO_YAML_OPENAPI = osp.join(
     "staging_openapi_schema.yaml"
     )
 
+class StagingValidationException(Exception):
+    """
+    Exception raised when an error occurs during the validation 
+    of the staging endpoints
+    """
 class StagingClient(RsClient):
     """
     Class to handle the staging process in rs-client-libraries
@@ -71,36 +75,67 @@ class StagingClient(RsClient):
             raise RuntimeError("RS-Server URL is undefined")
         return self.rs_server_href.rstrip("/")
 
-    def validate_and_unmarshal_response(self, response):
+    
+    def validate_and_unmarshal_request(self, request: requests.models.PreparedRequest):
+        """Validate an endpoint request according to the ogc specifications
+
+        Args:
+            request (Request): endpoint request
+        
+        Returns:
+            ResponseUnmarshalResult.data: data validated by the openapi_core
+            unmarshal_response method
+        """
+        if not os.path.isfile(PATH_TO_YAML_OPENAPI):
+            raise FileNotFoundError(f"The following file path was not found: {PATH_TO_YAML_OPENAPI}")
+        
+        openapi = OpenAPI.from_file_path(PATH_TO_YAML_OPENAPI)
+        request = RequestsOpenAPIRequest(request)
+        
+        
+        #validate_request(request, spec=Spec.from_file_path(PATH_TO_YAML_OPENAPI))
+        result = openapi.unmarshal_request(request)
+        
+        if result.errors:
+            raise StagingValidationException(f"Error validating the request of the enpoint " 
+                                             f"{request.path}: {str(result.errors[0])}")
+        if not result.data:
+            raise StagingValidationException(f"Error validating the request of the enpoint " 
+                                             f"{request.path}: \'data\' field of ResponseUnmarshalResult"
+                                             f"object is empty")
+        return result.data
+
+
+    def validate_and_unmarshal_response(self, response: requests.models.Response):
         """
         Validate an endpoint response according to the ogc specifications
         (described as yaml schemas)
 
         Args:
             response (Response): endpoint response
-
         Returns:
-            ResponseUnmarshalResult: Python deserialized object allowing to easily
-            get information about the endpoint response (response content, potential
-            errors,...)
+            ResponseUnmarshalResult.data: data validated by the openapi_core
+            unmarshal_response method
         """
+        
+        if not os.path.isfile(PATH_TO_YAML_OPENAPI):
+            raise FileNotFoundError(f"The following file path was not found: {PATH_TO_YAML_OPENAPI}")
+        
         openapi = OpenAPI.from_file_path(PATH_TO_YAML_OPENAPI)
         request = RequestsOpenAPIRequest(response.request)
         response = RequestsOpenAPIResponse(response)
         
+        # Alternative method to validate the response
         #validate_response(response=response, spec= Spec.from_file_path(PATH_TO_YAML_OPENAPI), request=request)
         result = openapi.unmarshal_response(request, response)
-        
         if result.errors:
-            for error in result.errors:
-                self.logger.error(f"Validation error: {error}")
-                if hasattr(error, 'message'):
-                    self.logger.error(f"Error Message: {error.message}")
-                if hasattr(error, 'detail'):
-                    self.logger.error(f"Error Detail: {error.detail}")
-        
-        return result
-    
+            raise StagingValidationException(f"Error validating the response of the enpoint " 
+                                             f"{request.path}: {str(result.errors[0])}")
+        if not result.data:
+            raise StagingValidationException(f"Error validating the response of the enpoint " 
+                                             f"{request.path}: \'data\' field of ResponseUnmarshalResult"
+                                             f"object is empty")
+        return result.data
     
     ############################
     # Call RS-Server endpoints #
@@ -117,12 +152,6 @@ class StagingClient(RsClient):
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
-
-        if not response.ok:
-            self.logger.error(
-                f"Error to delete the - staging reponse status code: {response.status_code} - "
-                f"Reason: {response.reason}",
-            )
        
         return self.validate_and_unmarshal_response(response)
 
@@ -137,12 +166,6 @@ class StagingClient(RsClient):
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
-
-        if not response.ok:
-            self.logger.error(
-                f"Error to get resources - staging reponse status code: {response.status_code} - "
-                f"Reason: {response.reason}",
-            )
         return self.validate_and_unmarshal_response(response)
 
     def run_staging(  # pylint: disable=too-many-locals
@@ -233,29 +256,12 @@ class StagingClient(RsClient):
                 }
             }
         }
-
-        ###try:
         post_response = self.http_session.post(
             url=f"{self.href_staging}/processes/{self.resource}/execution",
             json=staging_body,
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
-
-        #     if not post_response.ok:
-        #         self.logger.warning(f"Staging response status code: {post_response.status_code}")
-
-        #     # Monitor the running job
-        #     resp = json.loads(post_response.content)
-
-        #     job_id = resp["status"]["started"]
-        #     if post_response.ok:
-        #         self.logger.info(f"Staging job {job_id} successfully launched !")
-
-        # except KeyError as e:
-        #     self.logger.exception(f"Could not launch the staging - response doesn't have the following key: {e}")
-        #     return post_response.status_code, None
-
         # return post_response.status_code, job_id
         return  self.validate_and_unmarshal_response(post_response)
 
@@ -266,13 +272,7 @@ class StagingClient(RsClient):
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
-
-        if not response.ok:
-            self.logger.error(
-                f"Error to get all jobs - staging reponse status code: {response.status_code} - "
-                f"Reason: {response.reason}",
-            )
-        return response
+        return self.validate_and_unmarshal_response(response)
 
     def get_job_info(self, job_id: str) -> requests.models.Response:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
@@ -281,13 +281,7 @@ class StagingClient(RsClient):
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
-
-        if not job_response.ok:
-            self.logger.error(
-                f"Error to get the job status - staging reponse status code: {job_response.status_code} - "
-                f"Reason: {job_response.reason}",
-            )
-        return job_response
+        return self.validate_and_unmarshal_response(job_response)
 
     def delete_job(self, job_id: str) -> requests.models.Response:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
@@ -296,14 +290,7 @@ class StagingClient(RsClient):
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
-
-        if not response.ok:
-            self.logger.error(
-                f"Error to delete the job "
-                f"- staging reponse status code: {response.status_code} - "
-                f"Reason: {response.reason}",
-            )
-        return response
+        return self.validate_and_unmarshal_response(response)
 
     def get_job_results(self, job_id: str) -> requests.models.Response:
         """Wrapper to get the result of a specfific job
@@ -316,10 +303,4 @@ class StagingClient(RsClient):
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
-
-        if not response.ok:
-            self.logger.error(
-                f"Error to get job {job_id} result - staging reponse status code: {response.status_code} - "
-                f"Reason: {response.reason}",
-            )
-        return response
+        return self.validate_and_unmarshal_response(response)
