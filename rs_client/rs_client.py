@@ -252,7 +252,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             **kwargs,
         )
 
-    def get_staging_client(self) -> "AuxipClient":  # type: ignore # noqa: F821
+    def get_staging_client(self) -> "StagingClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
         """
