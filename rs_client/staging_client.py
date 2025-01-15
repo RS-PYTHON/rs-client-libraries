@@ -37,6 +37,7 @@ PATH_TO_YAML_OPENAPI = osp.join(
     "yaml",
     "staging_openapi_schema.yaml",
 )
+RESOURCE = "staging"
 
 
 class StagingValidationException(Exception):
@@ -57,16 +58,6 @@ class StagingClient(RsClient):
     and /processes/{processId}/execution endpoints + it doesn't allow to manage apikey_header parameter which
     is passed as an extra argument).
     """
-
-    def __init__(self, rs_server_href: str | None, rs_server_api_key: str | None, owner_id: str | None, logger: Any):
-        """
-        Initialize the StagingClient parameters.
-        """
-        super().__init__(rs_server_href, rs_server_api_key, owner_id, logger)
-        # Define logger
-        self.logger = logger
-        self.resource = "staging"
-
     @property
     def href_staging(self) -> str:
         """
@@ -263,7 +254,7 @@ class StagingClient(RsClient):
             "outputs": {"featureCollectionOutput": {"transmissionMode": "value"}},
         }
         post_response = self.http_session.post(
-            url=f"{self.href_staging}/processes/{self.resource}/execution",
+            url=f"{self.href_staging}/processes/{RESOURCE}/execution",
             json=staging_body,
             timeout=TIMEOUT,
             **self.apikey_headers,
