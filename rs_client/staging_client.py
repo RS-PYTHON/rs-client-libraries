@@ -17,25 +17,26 @@
 import json
 import os
 import os.path as osp
-from typing import Any
+from typing import Any, Dict
 
 # openapi_core libraries used for endpoints validation
-import openapi_core
 import requests
 from openapi_core import OpenAPI  # Spec, validate_request, validate_response
 from openapi_core.contrib.requests import (
     RequestsOpenAPIRequest,
     RequestsOpenAPIResponse,
 )
+from requests import Response
+from requests.models import PreparedRequest
 from stac_pydantic.api import Item, ItemCollection
 
 from rs_client.rs_client import TIMEOUT, RsClient
 
-# WARNING: this env variable is temporarily added until the response of rssrver-staging endpoints are corrected 
+# WARNING: this env variable is temporarily added until the response of rssrver-staging endpoints are corrected
 # with a valid format according to ogc standard. In the meantime, we don't perform validation to make all staging
 # notebooks pass. If this env variable if not specified (for example that is the case when we launch the pytest),
 # we perform this validation by default
-DO_VALIDATE = os.getenv("RSPY_APPLY_STAGING_ENPOINTS_VALIDATION", True)
+DO_VALIDATE = os.getenv("RSPY_APPLY_STAGING_ENDPOINTS_VALIDATION", "1") == "1"
 PATH_TO_YAML_OPENAPI = osp.join(
     osp.realpath(osp.dirname(__file__)),
     "../config",
@@ -45,9 +46,10 @@ PATH_TO_YAML_OPENAPI = osp.join(
 )
 RESOURCE = "staging"
 
+
 class StagingValidationException(Exception):
     """
-    Exception raised when an error occurs during the validation
+    Exception raised when an error occurs during the OGC validation
     of the staging endpoints
     """
 
@@ -77,7 +79,7 @@ class StagingClient(RsClient):
             raise RuntimeError("RS-Server URL is undefined")
         return self.rs_server_href.rstrip("/")
 
-    def validate_and_unmarshal_request(self, request: requests.models.PreparedRequest):
+    def validate_and_unmarshal_request(self, request: PreparedRequest) -> Any:
         """Validate an endpoint request according to the ogc specifications
 
         Args:
@@ -109,10 +111,9 @@ class StagingClient(RsClient):
                     f"object is empty",
                 )
             return result.body
-        else:
-            return request.body
+        return request.body
 
-    def validate_and_unmarshal_response(self, response: requests.models.Response):
+    def validate_and_unmarshal_response(self, response: Response) -> Any:
         """
         Validate an endpoint response according to the ogc specifications
         (described as yaml schemas)
@@ -146,14 +147,16 @@ class StagingClient(RsClient):
                     f"object is empty",
                 )
             return result.data
-        else:
-            return json.loads(response.content)
+
+        if not response.content:
+            raise StagingValidationException("Response content is empty !")
+        return json.loads(response.content)
 
     ############################
     # Call RS-Server endpoints #
     ############################
 
-    def get_processes(self) -> requests.models.Response:
+    def get_processes(self) -> Dict:
         """_summary_
 
         Returns:
@@ -165,7 +168,8 @@ class StagingClient(RsClient):
             **self.apikey_headers,
         )
         return self.validate_and_unmarshal_response(response)
-    def get_process(self, process_id: str) -> requests.models.Response:
+
+    def get_process(self, process_id: str) -> Dict:
         """
         Wrapper to get a specific process
         Args:
@@ -182,7 +186,7 @@ class StagingClient(RsClient):
         self,
         stac_input: dict[Any, Any] | str,
         out_coll_name: str,
-    ) -> tuple[int, str | None]:
+    ) -> Dict:
         """Method to start the staging process from rs-client - Call the endpoint /processes/staging/execution
 
         Args:
@@ -260,19 +264,39 @@ class StagingClient(RsClient):
                 "items": stac_item_collection.model_dump(mode="json"),
                 "provider": "cadip",
             },
-            "outputs": {"featureCollectionOutput": {"transmissionMode": "value"}},
+            "outputs": {
+                "result": {
+                    "title": "Output STAC items",
+                    "id": "some_output_id",
+                    "description": "The staged STAC ItemCollection",
+                    "schema": "false",
+                    "minOccurs": 1,
+                    "maxOccurs": 1,
+                },
+            },
+            # TODO: replace the previous line with the following when rs-server-staging is updated
+            # TODO: "outputs": {"featureCollectionOutput": {"transmissionMode": "value"}},
         }
-        ### self.validate_and_unmarshal_request(request)
-        response = self.http_session.post(
-            url=f"{self.href_staging}/processes/{RESOURCE}/execution",
-            json=staging_body,
+
+        # Check that the request containing the staging body is valid
+        request = requests.Request(
+            method="POST",  # Méthode HTTP, peut être 'POST', 'GET', etc.
+            url=f"{self.href_staging}/processes/{RESOURCE}/execution",  # L'URL de l'endpoint
+            json=staging_body,  # Corps de la requête en JSON
+        ).prepare()
+
+        # TODO: uncomment when rs-server-staging is updated
+        # TODO: self.validate_and_unmarshal_request(request)
+
+        # Get the response and then validate it
+        response = self.http_session.send(
+            request,
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
-        # return post_response.status_code, job_id
         return self.validate_and_unmarshal_response(response)
 
-    def get_jobs(self) -> requests.models.Response:
+    def get_jobs(self) -> Dict:
         """Method to get running jobs"""
         response = self.http_session.get(
             url=f"{self.href_staging}/jobs",
@@ -281,7 +305,7 @@ class StagingClient(RsClient):
         )
         return self.validate_and_unmarshal_response(response)
 
-    def get_job_info(self, job_id: str) -> requests.models.Response:  # pylint: disable=too-many-locals
+    def get_job_info(self, job_id: str) -> Dict:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
         response = self.http_session.get(
             url=f"{self.href_staging}/jobs/{job_id}",
@@ -290,7 +314,7 @@ class StagingClient(RsClient):
         )
         return self.validate_and_unmarshal_response(response)
 
-    def delete_job(self, job_id: str) -> requests.models.Response:  # pylint: disable=too-many-locals
+    def delete_job(self, job_id: str) -> Dict:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
         response = self.http_session.delete(
             url=f"{self.href_staging}/jobs/{job_id}",
@@ -299,7 +323,7 @@ class StagingClient(RsClient):
         )
         return self.validate_and_unmarshal_response(response)
 
-    def get_job_results(self, job_id: str) -> requests.models.Response:
+    def get_job_results(self, job_id: str) -> Dict:
         """Wrapper to get the result of a specfific job
 
         Args:

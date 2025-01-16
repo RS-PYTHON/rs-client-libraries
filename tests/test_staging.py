@@ -661,7 +661,7 @@ def test_get_job_results(staging_client, dummy_href):
 
 @pytest.mark.unit
 @responses.activate
-def test_validate_and_unmarshal_request(staging_client, dummy_href, staging_response_sample):
+def test_validate_and_unmarshal_request(staging_client, dummy_href):
     """
     Test to check the behaviour of the method to validate endpoints responses
     """
@@ -681,37 +681,25 @@ def test_validate_and_unmarshal_request(staging_client, dummy_href, staging_resp
         "response": "raw",
     }
 
-    json_response = staging_response_sample
     # Nominal case - the json request body is valid
-    responses.add(
-        method=responses.POST,
-        url=f"{dummy_href}/processes/{process_id}/execution",
-        json=json_response,
-        status=status.HTTP_200_OK,
-    )
-    response = requests.post(
-        f"{dummy_href}/processes/{process_id}/execution",
-        timeout=TIMEOUT,
-        json=request_body,
-    )
-    result = staging_client.validate_and_unmarshal_request(response.request)
+    request = requests.Request(
+        method="POST",  # Méthode HTTP, peut être 'POST', 'GET', etc.
+        url=f"{dummy_href}/processes/{process_id}/execution",  # L'URL de l'endpoint
+        json=request_body,  # Corps de la requête en JSON
+    ).prepare()
+    result = staging_client.validate_and_unmarshal_request(request)
     assert result is not None
 
     # Check that we obtain an exception if the json request body is not valid
     request_body["response"] = "unauthorized_value"
-    responses.add(
-        method=responses.POST,
-        url=f"{dummy_href}/processes/{process_id}/execution",
-        json=json_response,
-        status=status.HTTP_200_OK,
-    )
-    response = requests.post(
-        f"{dummy_href}/processes/{process_id}/execution",
-        timeout=TIMEOUT,
-        json=request_body,
-    )
+    request = requests.Request(
+        method="POST",  # Méthode HTTP, peut être 'POST', 'GET', etc.
+        url=f"{dummy_href}/processes/{process_id}/execution",  # L'URL de l'endpoint
+        json=request_body,  # Corps de la requête en JSON
+    ).prepare()
+
     with pytest.raises(StagingValidationException) as exc_info:
-        staging_client.validate_and_unmarshal_request(response.request)
+        staging_client.validate_and_unmarshal_request(request)
     assert "Request body validation error" in str(exc_info.value)
 
 
