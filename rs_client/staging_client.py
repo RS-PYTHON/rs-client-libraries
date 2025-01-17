@@ -44,6 +44,12 @@ PATH_TO_YAML_OPENAPI = osp.join(
     "yaml",
     "staging_openapi_schema.yaml",
 )
+PATH_TO_STAGING_BODY = osp.join(
+    osp.realpath(osp.dirname(__file__)),
+    "../config",
+    "staging_templates",
+    "staging_body.json",
+)
 RESOURCE = "staging"
 
 
@@ -129,7 +135,7 @@ class StagingClient(RsClient):
             if not response.content:
                 raise StagingValidationException("Response content is empty !")
             return json.loads(response.content)
-    
+
         if not os.path.isfile(PATH_TO_YAML_OPENAPI):
             raise FileNotFoundError(f"The following file path was not found: {PATH_TO_YAML_OPENAPI}")
 
@@ -233,51 +239,18 @@ class StagingClient(RsClient):
         else:
             stac_item_collection = ItemCollection(**stac_input_dict)
 
-        staging_body = {  # pylint: disable=line-too-long
-            "version": "0.2.0",
-            "id": "staging",
-            "title": {"en": "Staging"},
-            "description": {
-                "en": "A process that takes an external STAC ItemCollection, asynchronously download"
-                "its assets into the RS catalog bucket and creates the corresponding STAC items in the RS catalog.",
-            },
-            "jobControlOptions": ["async-execute"],
-            "keywords": ["stac", "staging"],
-            "links": [
-                {
-                    "type": "text/html",
-                    "rel": "about",
-                    "title": "documentation",
-                    "href": "https://home.rs-python.eu/rs-documentation/rs-server"
-                    "/docs/doc/users/functionalities/#staging",
-                    "hreflang": "en-US",
-                },
-            ],
-            "inputs": {
-                "collection": {
-                    "title": "Target collection",
-                    "description": "The target collection identifier in the RS catalog",
-                    "id": out_coll_name,
-                    "schema": {"type": "string"},
-                    "minOccurs": 1,
-                    "maxOccurs": 1,
-                },
-                "items": stac_item_collection.model_dump(mode="json"),
-                "provider": "cadip",
-            },
-            "outputs": {
-                "result": {
-                    "title": "Output STAC items",
-                    "id": "some_output_id",
-                    "description": "The staged STAC ItemCollection",
-                    "schema": "false",
-                    "minOccurs": 1,
-                    "maxOccurs": 1,
-                },
-            },
-            # TODO: replace the previous line with the following when rs-server-staging is updated
-            # TODO: "outputs": {"featureCollectionOutput": {"transmissionMode": "value"}},
-        }
+        # Load staging body base structure and fill it with the staging content
+        if not os.path.isfile(PATH_TO_STAGING_BODY):
+            raise FileNotFoundError(f"The following file path was not found: {PATH_TO_STAGING_BODY}")
+
+        # TODO: this staging_body content will be validated with the self.validate_and_unmarshal_request(request)
+        # once rs-server-staging will be updated
+        with open(PATH_TO_STAGING_BODY, encoding="utf-8") as f:
+            staging_body = json.load(f)
+        staging_body["inputs"]["collection"]["id"] = out_coll_name
+        staging_body["inputs"]["collection"]["items"] = stac_item_collection.model_dump(mode="json")
+        # TODO: replace the staging_body "outputs" field with the following when rs-server-staging is updated
+        # TODO: "outputs": {"featureCollectionOutput": {"transmissionMode": "value"}},
 
         # Check that the request containing the staging body is valid
         request = requests.Request(
