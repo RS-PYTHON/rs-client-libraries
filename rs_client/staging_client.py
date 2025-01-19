@@ -169,6 +169,9 @@ class StagingClient(RsClient):
         Returns:
             dict: dictionary containing the content of the response
         """
+        DO_VALIDATE = os.getenv("RSPY_APPLY_STAGING_ENDPOINTS_VALIDATION", "0") == "1"
+        print("TEST")
+        print(f"DO_VALIDATE VAUT: {os.getenv('RSPY_APPLY_STAGING_ENDPOINTS_VALIDATION')}")
         response = self.http_session.get(
             url=f"{self.href_staging}/processes",
             timeout=TIMEOUT,
