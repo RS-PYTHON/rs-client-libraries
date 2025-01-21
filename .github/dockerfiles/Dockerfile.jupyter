@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 #
 # This docker installs the rs-client-libraries wheel
 # into the jupyter docker image that is used by rs-demo in local mode.
@@ -25,11 +24,20 @@ FROM ghcr.io/rs-python/jupyter/minimal-notebook:latest
 RUN mkdir -p /tmp/whl
 ADD ./*.whl /tmp/whl
 
-# Install the wheel and opentelemetry instrumentation packages for dependencies
+# Install python 3.11.7 using conda then prefect and dask.
+# The versions must be the same than the cluster images.
+RUN conda install --yes conda-forge::python="3.11.7"
+RUN pip install -U pip && \
+    pip install -U \
+        prefect[dask]=="3.1.4" \
+        dask=="2024.1.0" \
+        dask-gateway=="2024.1.0"
+
+# Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
 RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
 
 # Install other useful dependencies for rs-demo in local mode
 RUN pip install papermill boto3
 
 # Clean everything
-RUN rm -rf /tmp/whl ~/.cache/pip
+RUN rm -rf /tmp/whl ~/.cache/pip && conda clean --all --yes
