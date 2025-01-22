@@ -26,6 +26,7 @@ ADD ./*.whl /tmp/whl
 
 # Install python 3.11.7 using conda then prefect and dask.
 # The versions must be the same than the cluster images.
+# TODO: do this in rs-server/resources/apt_upgrade_images.sh for the jupyter base image
 RUN conda install --yes conda-forge::python="3.11.7"
 RUN pip install -U pip && \
     pip install -U \
