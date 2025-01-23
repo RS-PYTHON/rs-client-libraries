@@ -23,7 +23,7 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: 3.11
+  PYTHON_VERSION: 3.11.7
   SONAR_PROJECT_KEY: RS-PYTHON_rs-client-libraries_AY9yLor3vquboa54Od6W
 
 jobs:
@@ -196,15 +196,28 @@ jobs:
 
       - name: Run pytest
         run: |
-          set -x && poetry run pytest $(find . -name tests) \
+          set -x
+          poetry run pytest $(find . -name tests) \
             --durations=0 \
             --error-for-skips \
             --cov=./rs_client \
             --cov=./rs_common \
-            --cov=./rs_workflows \
             --cov-report=term \
             --cov-report=xml:./cov-report.xml \
             --junit-xml=./junit-xml-report.xml \
+
+          # There seems to be a bug in pytest cov with --cov-append.
+          # The last tested project is malformed in the report file.
+          # Use this workaround to run pytest on a dummy empty dir. This reformats the report file.
+          dummy="/tmp/empty-pytest"
+          mkdir -p $dummy
+          poetry run pytest $dummy \
+            --cov=$dummy \
+            --cov-report=term \
+            --cov-report=xml:./cov-report.xml \
+            --cov-append \
+          || true # ignore the error message that says no tests exist
+
         shell: bash
 
       - name: Display code coverage summary in this console
@@ -252,7 +265,7 @@ jobs:
       - name: Get directory names
         id: dir_names
         run: |
-          echo sources=./rs_client,./rs_common,./rs_workflows >> $GITHUB_OUTPUT
+          echo sources=./rs_client,./rs_common >> $GITHUB_OUTPUT
           echo tests=./tests >> $GITHUB_OUTPUT
         shell: bash
 

@@ -24,7 +24,6 @@ from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
 from opentelemetry.instrumentation.aws_lambda import AwsLambdaInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.instrumentation.instrumentor import BaseInstrumentor  # type: ignore
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -101,7 +100,7 @@ def init_traces(service_name: str):
             classes.add(_class)
 
             # Don't instrument these classes, they have errors, maybe we should see why
-            if _class in [AsyncioInstrumentor, AwsLambdaInstrumentor, BaseInstrumentor, HTTPXClientInstrumentor]:
+            if _class in [AsyncioInstrumentor, AwsLambdaInstrumentor, BaseInstrumentor]:
                 continue
 
             # If the "instrument" method exists, call it

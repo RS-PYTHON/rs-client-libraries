@@ -78,7 +78,7 @@ def test_server_href(mocked_stac_catalog_url):
     """Test that the Auxip, Cadip, Catalog service URLs can be passed by environment variable."""
 
     rs_client = RsClient("", RS_SERVER_API_KEY, OWNER_ID)  # no global href
-    dummy_href = "http://DUMMY_HREF"
+    dummy_href = "https://DUMMY_HREF"
 
     for env_var, client, get_href in [
         ["RSPY_HOST_ADGS", rs_client.get_auxip_client(), "href_adgs"],
@@ -177,7 +177,7 @@ def test_apikey_security(monkeypatch):
     """
 
     # Use a dummy URL to simulate the fact that we are in cluster mode (not local mode)
-    dummy_href = "http://DUMMY_HREF"
+    dummy_href = "https://DUMMY_HREF"
 
     # Mock the uac manager url
     monkeypatch.setenv("RSPY_UAC_CHECK_URL", RSPY_UAC_CHECK_URL)
@@ -232,7 +232,7 @@ def test_oauth2_security(monkeypatch):
     """
 
     # Use a dummy URL to simulate the fact that we are in cluster mode (not local mode)
-    dummy_href = "http://DUMMY_HREF"
+    dummy_href = "https://DUMMY_HREF"
 
     # Mocked user information from keycloak
     auth_info = {
@@ -261,7 +261,7 @@ def test_no_security():
     """If no apikey or oauth2 cookie is present, we should have an error."""
 
     # Use a dummy URL to simulate the fact that we are in cluster mode (not local mode)
-    dummy_href = "http://DUMMY_HREF"
+    dummy_href = "https://DUMMY_HREF"
 
     with pytest.raises(RuntimeError):
         RsClient(dummy_href)  # "API key or OAuth2 cookie is mandatory for RS-Server authentication"
