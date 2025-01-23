@@ -254,20 +254,19 @@ class StagingClient(RsClient):
         # TODO: "outputs": {"featureCollectionOutput": {"transmissionMode": "value"}},
 
         # Check that the request containing the staging body is valid
-        request = requests.Request(
+        request = requests.Request(  # pylint: disable=W0612 # noqa: F841
             method="POST",  # Méthode HTTP, peut être 'POST', 'GET', etc.
             url=f"{self.href_staging}/processes/{RESOURCE}/execution",  # L'URL de l'endpoint
             json=staging_body,  # Corps de la requête en JSON
         ).prepare()
-
         # TODO: uncomment when rs-server-staging is updated
         # TODO: self.validate_and_unmarshal_request(request)
 
-        # Get the response and then validate it
-        response = self.http_session.send(
-            request,
-            timeout=TIMEOUT,
+        response = self.http_session.post(
+            url=f"{self.href_staging}/processes/staging/execution",
+            json=staging_body,
             **self.apikey_headers,
+            timeout=TIMEOUT,
         )
         return self.validate_and_unmarshal_response(response)
 
