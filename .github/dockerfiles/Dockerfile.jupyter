@@ -31,14 +31,14 @@ RUN conda install --yes conda-forge::python="3.11.7"
 RUN pip install -U pip && \
     pip install -U \
         prefect[dask]=="3.1.4" \
-        dask=="2024.1.0" \
+        dask=="2024.5.2" \
         dask-gateway=="2024.1.0"
 
 # Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
 RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
 
 # Install other useful dependencies for rs-demo in local mode
-RUN pip install papermill boto3
+RUN pip install papermill boto3 prefect-aws
 
 # Clean everything
 RUN rm -rf /tmp/whl ~/.cache/pip && conda clean --all --yes
