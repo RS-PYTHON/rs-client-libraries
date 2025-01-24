@@ -38,7 +38,7 @@ RUN pip install -U pip && \
 RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
 
 # Install other useful dependencies for rs-demo in local mode
-RUN pip install papermill boto3 prefect-aws
+RUN pip install papermill boto3 ipywidgets
 
 # Clean everything
 RUN rm -rf /tmp/whl ~/.cache/pip && conda clean --all --yes
