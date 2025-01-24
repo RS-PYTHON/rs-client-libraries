@@ -13,39 +13,27 @@
 # limitations under the License.
 
 #
-# This docker installs the rs-client-libraries wheel
-# into the jupyter docker image that is used by rs-demo in local mode.
+# This docker installs the rs-client-libraries wheel into the prefect docker image.
 #
 
-FROM ghcr.io/rs-python/jupyter/minimal-notebook:latest
+FROM prefecthq/prefect:3.1.4-python3.11
 
 # Set labels based on the Open Containers Initiative (OCI):
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
 #
 LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
-LABEL org.opencontainers.image.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.jupyter"
+LABEL org.opencontainers.image.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.prefect"
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
 RUN mkdir -p /tmp/whl
 ADD ./*.whl /tmp/whl
 
-# Install python 3.11.7 using conda then prefect and dask.
-# The versions must be the same than the cluster images.
-# TODO: do this in rs-server/resources/apt_upgrade_images.sh for the jupyter base image
-RUN conda install --yes conda-forge::python="3.11.7"
-RUN pip install -U pip && \
-    pip install -U \
-        prefect[dask]=="3.1.4" \
-        dask=="2024.5.2" \
-        dask-gateway=="2024.1.0"
-
 # Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
-RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
+# RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
 
-# Install other useful dependencies for rs-demo in local mode.
-# NOTE: put s3fs before boto3 to have a recent version
-RUN pip install papermill ipywidgets s3fs boto3
+# Install other useful dependencies for prefect
+RUN pip install s3fs
 
 # Clean everything
-RUN rm -rf /tmp/whl ~/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/* && conda clean --all --yes
+RUN rm -rf /tmp/whl ~/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/*
