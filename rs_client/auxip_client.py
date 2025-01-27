@@ -43,17 +43,7 @@ class AuxipClient(RsClient):
     @property
     def href_search(self) -> str:
         """Return the RS-Server hostname and path where the ADGS search endpoint is deployed."""
-        return f"{self.href_adgs}/adgs/aux/search"
-
-    @property
-    def href_staging(self) -> str:
-        """Return the RS-Server hostname and path where the ADGS staging endpoint is deployed."""
-        return f"{self.href_adgs}/adgs/aux"
-
-    @property
-    def href_status(self) -> str:
-        """Return the RS-Server hostname and path where the ADGS status endpoint is deployed."""
-        return f"{self.href_adgs}/adgs/aux/status"
+        return f"{self.href_adgs}/auxip/search"
 
     @property
     def station_name(self) -> str:

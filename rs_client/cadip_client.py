@@ -64,22 +64,12 @@ class CadipClient(RsClient):
     @property
     def href_search(self) -> str:
         """Return the RS-Server hostname and path where the CADIP search endpoint is deployed."""
-        return f"{self.href_cadip}/cadip/{self.station.value}/cadu/search"
+        return f"{self.href_cadip}/cadip/search"
 
     @property
     def href_session(self) -> str:
         """Return the RS-Server hostname and path where the CADIP search session endpoint is deployed."""
         return f"{self.href_cadip}/cadip/{self.station.value}/session"
-
-    @property
-    def href_staging(self) -> str:
-        """Return the RS-Server hostname and path where the CADIP staging endpoint is deployed."""
-        return f"{self.href_cadip}/cadip/{self.station.value}/cadu"
-
-    @property
-    def href_status(self) -> str:
-        """Return the RS-Server hostname and path where the CADIP status endpoint is deployed."""
-        return f"{self.href_cadip}/cadip/{self.station.value}/cadu/status"
 
     @property
     def station_name(self) -> str:

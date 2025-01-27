@@ -26,7 +26,7 @@ import requests
 from cachetools import TTLCache, cached
 
 from rs_common import utils
-from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus
+from rs_common.config import DATETIME_FORMAT, ECadipStation
 from rs_common.logging import Logging
 from rs_common.utils import AuthInfo
 
@@ -266,93 +266,6 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     # Call RS-Server endpoints #
     ############################
 
-    def staging_status(self, filename, timeout: int = TIMEOUT) -> EDownloadStatus:
-        """Check the status of a file download from the specified rs-server endpoint.
-
-        This function sends a GET request to the rs-server endpoint with the filename as a query parameter
-        to retrieve the status of the file download. If the response is successful and contains a 'status'
-        key in the JSON response, the function returns the corresponding download status enum value. If the
-        response is not successful or does not contain the 'status' key, the function returns a FAILED status.
-
-        Args:
-            filename (str): The name of the file for which to check the status.
-            timeout (int): The timeout duration for the HTTP request.
-
-        Returns:
-            EDownloadStatus: The download status enum value based on the response from the endpoint.
-        """
-
-        # TODO: check the status for a certain timeout if http returns NOK ?
-        try:
-            response = self.http_session.get(
-                self.href_status,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
-                params={"name": filename},
-                timeout=timeout,
-                **self.apikey_headers,
-            )
-
-            eval_response = response.json()
-            if (
-                response.ok
-                and "name" in eval_response.keys()
-                and filename == eval_response["name"]
-                and "status" in eval_response.keys()
-            ):
-                return EDownloadStatus(eval_response["status"])
-
-        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-            self.logger.exception(f"Status endpoint exception: {e}")
-
-        return EDownloadStatus.FAILED
-
-    def staging(self, filename: str, s3_path: str = "", tmp_download_path: str = "", timeout: int = TIMEOUT):
-        """Stage a file for download.
-
-        This method stages a file for download by sending a request to the staging endpoint
-        with optional parameters for S3 path and temporary download path.
-
-        Args:
-            filename (str): The name of the file to be staged for download.
-            timeout (int): The timeout duration for the HTTP request.
-            s3_path (str, optional): The S3 path where the file will be stored after download.
-                Defaults to an empty string.
-            tmp_download_path (str, optional): The temporary download path for the file.
-                Defaults to an empty string.
-
-        Raises:
-            RuntimeError: If an error occurs while staging the file.
-        """
-
-        # dictionary to be used for payload request
-        payload = {}
-        # some protections for the optional args
-        if s3_path:
-            payload["obs"] = s3_path
-        if tmp_download_path:
-            payload["local"] = tmp_download_path
-
-        # update the filename to be ingested
-        payload["name"] = filename
-        try:
-            # logger.debug(f"Calling  {endpoint} with payload {payload}")
-            response = self.http_session.get(
-                self.href_staging,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
-                params=payload,
-                timeout=timeout,
-                **self.apikey_headers,
-            )
-            self.logger.debug(f"Download start endpoint returned in {response.elapsed.total_seconds()}")
-            if not response.ok:
-                self.logger.error(f"The download endpoint returned error for file {filename}\n")
-                raise RuntimeError(f"The download endpoint returned error for file {filename}")
-        except (
-            requests.exceptions.RequestException,
-            requests.exceptions.Timeout,
-            requests.exceptions.ReadTimeout,
-        ) as e:
-            self.logger.exception(f"Staging file exception for {filename}:", e)
-            raise RuntimeError(f"Staging file exception for {filename}") from e
-
     def search_stations(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         start_date: datetime,
@@ -395,6 +308,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             + "/"  # 2014-01-01T12:00:00Z/2023-12-30T12:00:00Z",
             + stop_date.strftime(DATETIME_FORMAT),
         }
+
         if limit:
             payload["limit"] = str(limit)
         if sortby:
@@ -406,21 +320,19 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
                 timeout=timeout,
                 **self.apikey_headers,
             )
+            # print(f"response.json() = {response.json()}")
         except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
             self.logger.exception(f"Could not get the response from the station search endpoint: {e}")
             raise RuntimeError("Could not get the response from the station search endpoint") from e
 
-        files = []
         try:
             if response.ok:
-                for file_info in response.json()["features"]:
-                    files.append(file_info)
-            else:
-                self.logger.error(f"Error: {response.status_code} : {response.json()}")
+                return response.json()
+            self.logger.error(f"Error: {response.status_code} : {response.json()}")
         except KeyError as e:
             raise RuntimeError("Wrong format of search endpoint answer") from e
 
-        return files
+        return []
 
     ##############################################
     # Methods to be implemented by child classes #
@@ -428,12 +340,4 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
     @property
     def href_search(self):
-        """Implemented by AuxipClient and CadipClient."""
-
-    @property
-    def href_staging(self):
-        """Implemented by AuxipClient and CadipClient."""
-
-    @property
-    def href_status(self):
         """Implemented by AuxipClient and CadipClient."""
