@@ -24,16 +24,24 @@ FROM prefecthq/prefect:3.1.4-python3.11
 LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
 LABEL org.opencontainers.image.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.prefect"
 
+# TODO: put in requirements-prefect-dask.txt
+# NOTE: we need the same numpy version as eopf
+RUN pip install -U pip && \
+    pip install -U \
+        dask[complete]=="2024.5.2" \
+        dask-gateway=="2024.1.0" \
+        prefect[dask]=="3.1.4" \
+        s3fs \
+        boto3 \
+        numpy=="1.26.4"
+
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
 RUN mkdir -p /tmp/whl
 ADD ./*.whl /tmp/whl
 
 # Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
-# RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
-
-# Install other useful dependencies for prefect
-RUN pip install s3fs
+RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
 
 # Clean everything
 RUN rm -rf /tmp/whl ~/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/*

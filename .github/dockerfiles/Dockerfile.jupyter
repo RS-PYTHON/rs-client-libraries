@@ -25,27 +25,34 @@ FROM ghcr.io/rs-python/jupyter/minimal-notebook:latest
 LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
 LABEL org.opencontainers.image.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.jupyter"
 
+# Install python 3.11.7 using conda then prefect and dask.
+# The versions must be the same than the cluster images.
+# TODO: do this in rs-server/resources/apt_upgrade_images.sh for the jupyter base image
+RUN conda install --yes conda-forge::python="3.11.7"
+
+# TODO: put in requirements-prefect-dask.txt
+# NOTES:
+#  - Put s3fs before boto3 to have a recent version
+#  - We need the same numpy version as eopf
+RUN pip install -U pip && \
+    pip install -U \
+        dask[complete]=="2024.5.2" \
+        dask-gateway=="2024.1.0" \
+        prefect[dask]=="3.1.4" \
+        s3fs \
+        boto3 \
+        numpy=="1.26.4"
+
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
 RUN mkdir -p /tmp/whl
 ADD ./*.whl /tmp/whl
 
-# Install python 3.11.7 using conda then prefect and dask.
-# The versions must be the same than the cluster images.
-# TODO: do this in rs-server/resources/apt_upgrade_images.sh for the jupyter base image
-RUN conda install --yes conda-forge::python="3.11.7"
-RUN pip install -U pip && \
-    pip install -U \
-        prefect[dask]=="3.1.4" \
-        dask=="2024.5.2" \
-        dask-gateway=="2024.1.0"
-
 # Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
 RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
 
 # Install other useful dependencies for rs-demo in local mode.
-# NOTE: put s3fs before boto3 to have a recent version
-RUN pip install papermill ipywidgets s3fs boto3
+RUN pip install papermill ipywidgets
 
 # Clean everything
-RUN rm -rf /tmp/whl ~/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/* && conda clean --all --yes
+RUN rm -rf /tmp/whl ~/.cache/pip && conda clean --all --yes
