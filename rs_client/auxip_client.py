@@ -15,9 +15,11 @@
 """AuxipClient class implementation."""
 
 import os
+import logging
 
 from rs_client.rs_client import RsClient
 from rs_common.config import AUXIP_STATION
+from rs_common.utils import get_href_service
 
 
 class AuxipClient(RsClient):
@@ -26,6 +28,21 @@ class AuxipClient(RsClient):
 
     Attributes: see :py:class:`RsClient`
     """
+    def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments
+        self,
+        rs_server_href: str | None,
+        rs_server_api_key: str | None,
+        owner_id: str | None,       
+        logger: logging.Logger | None = None,
+        **kwargs
+    ):
+        """AuxipClient class constructor."""        
+        super().__init__(rs_server_href, 
+                         rs_server_api_key, 
+                         owner_id, 
+                         logger, 
+                         get_href_service(rs_server_href, "RSPY_HOST_ADGS") + "/auxip/", 
+                         **kwargs)
 
     @property
     def href_adgs(self) -> str:
