@@ -54,5 +54,11 @@ RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
 # Install other useful dependencies for rs-demo in local mode.
 RUN pip install papermill ipywidgets
 
-# Clean everything
+# Install apt packages and clean everything
+USER root
+RUN apt install -y python3-pydot graphviz
+RUN rm -rf /tmp/whl /root/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/* && conda clean --all --yes
+USER jovyan
+
+# Clean everything for user
 RUN rm -rf /tmp/whl ~/.cache/pip && conda clean --all --yes
