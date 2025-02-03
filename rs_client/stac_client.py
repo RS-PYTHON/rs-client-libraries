@@ -52,22 +52,24 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
     ##################
     # Initialisation #
     ##################
-   
+
     def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None,
-        owner_id: str | None,       
+        owner_id: str | None,
         logger: logging.Logger | None = None,
-        **kwargs
+        **kwargs,
     ):
-        """StacClient class constructor."""        
-        super().__init__(rs_server_href, 
-                         rs_server_api_key, 
-                         owner_id, 
-                         logger, 
-                         get_href_service(rs_server_href, "RSPY_HOST_CATALOG") + "/catalog/", 
-                         **kwargs)
+        """StacClient class constructor."""
+        super().__init__(
+            rs_server_href,
+            rs_server_api_key,
+            owner_id,
+            logger,
+            get_href_service(rs_server_href, "RSPY_HOST_CATALOG") + "/catalog/",
+            **kwargs,
+        )
 
     ##############
     # Properties #
@@ -80,7 +82,6 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
         Otherwise it should just be the RS-Server URL.
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_CATALOG")
-        
 
     def full_collection_id(self, owner_id: str | None, collection_id: str):
         """
@@ -179,15 +180,16 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
 
         Returns:
             JSONResponse: The response of the request.
-        """        
+        """
         # owner_id:collection_id
         full_collection_id = self.full_collection_id(owner_id, collection_id)
 
         # Remove the collection from the "child" links of the local catalog instance
         collection_link = f"{self.stac_client.self_href.rstrip('/')}/collections/{full_collection_id}"
         self.stac_client.links = [
-            link for link in self.stac_client.links if not 
-            ((link.rel == pystac.RelType.CHILD) and (link.href == collection_link))
+            link
+            for link in self.stac_client.links
+            if not ((link.rel == pystac.RelType.CHILD) and (link.href == collection_link))
         ]
 
         # We need to clear the cache for this and parent "get_collection" methods
@@ -288,29 +290,26 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
     ) -> ItemSearch:
         """Search items inside a specific collection."""
 
-        collection_id=self.full_collection_id(owner_id, collection_id)
-        return super().search_inside_collection(            
-            collection_id = collection_id,        
-            method = method,
-            max_items = max_items,
-            limit = limit,
-            ids = ids,
-            bbox = bbox,
-            intersects = intersects,
-            timestamp = timestamp,
-            query = query,
-            stac_filter = stac_filter,
-            filter_lang = filter_lang,
-            sortby = sortby,
-            fields = fields,
+        collection_id = self.full_collection_id(owner_id, collection_id)
+        return super().search_inside_collection(
+            collection_id=collection_id,
+            method=method,
+            max_items=max_items,
+            limit=limit,
+            ids=ids,
+            bbox=bbox,
+            intersects=intersects,
+            timestamp=timestamp,
+            query=query,
+            stac_filter=stac_filter,
+            filter_lang=filter_lang,
+            sortby=sortby,
+            fields=fields,
         )
-    
+
     def get_item(  # pylint: disable=too-many-arguments
-        self,        
-        collection_id: str,        
-        item_id: str,   
-        owner_id: str | None = None     
+        self, collection_id: str, item_id: str, owner_id: str | None = None,
     ):
         """Search items inside a specific collection."""
-        collection_id=self.full_collection_id(owner_id, collection_id)
+        collection_id = self.full_collection_id(owner_id, collection_id)
         return super().get_item(collection_id=collection_id, item_id=item_id)

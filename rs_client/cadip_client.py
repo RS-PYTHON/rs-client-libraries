@@ -40,15 +40,17 @@ class CadipClient(RsClient):
         owner_id: str | None,
         station: ECadipStation,
         logger: logging.Logger | None = None,
-        **kwargs
+        **kwargs,
     ):
         """CadipClient class constructor."""
-        super().__init__(rs_server_href, 
-                         rs_server_api_key, 
-                         owner_id, 
-                         logger, 
-                         get_href_service(rs_server_href, "RSPY_HOST_CADIP") + "/cadip/", 
-                         **kwargs)
+        super().__init__(
+            rs_server_href,
+            rs_server_api_key,
+            owner_id,
+            logger,
+            get_href_service(rs_server_href, "RSPY_HOST_CADIP") + "/cadip/",
+            **kwargs,
+        )
         try:
             self.station: ECadipStation = ECadipStation[station]
         except KeyError as e:
@@ -73,12 +75,12 @@ class CadipClient(RsClient):
     def station_name(self) -> str:
         """Return the station name."""
         return self.station.value  # TO BE DISCUSSED: maybe just return "CADIP"
-    
+
     @property
     def href_landing(self):
         """Return the RS-Server hostname and path where the landing page endpoint is deployed."""
         return f"{self.href_cadip}/cadip"
-    
+
     @property
     def href_all_collections(self):
         """Return the RS-Server hostname and path from where all the existent collections can be retrieved."""
@@ -91,7 +93,7 @@ class CadipClient(RsClient):
 
     @property
     def href_collection_all_items(self, collection_id):
-        """Return the RS-Server hostname and path from where all the existent items 
+        """Return the RS-Server hostname and path from where all the existent items
         from a collection can be retrieved.
         """
         return f"{self.href_cadip}/cadip/collections/{collection_id}/items"
@@ -107,7 +109,7 @@ class CadipClient(RsClient):
     def href_collection_queryables(self, collection_id):
         """Return the RS-Server hostname and path endpoint for query a collection."""
         return f"{self.href_cadip}/cadip/collections/{collection_id}/queryables"
-    
+
     @property
     def href_queryables(self):
         """Return the RS-Server hostname and path endpoint for general query."""
@@ -116,5 +118,3 @@ class CadipClient(RsClient):
     ############################
     # Call RS-Server endpoints #
     ############################
-
-    

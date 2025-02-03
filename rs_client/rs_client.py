@@ -20,27 +20,33 @@ import os
 import re
 import sys
 from datetime import datetime
-from typing import Union
+from functools import lru_cache
+from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import requests
 from cachetools import TTLCache, cached
-from functools import lru_cache
+from pystac import CatalogType, Collection, Item, Link, RelType
+from pystac.layout import HrefLayoutStrategy
+from pystac_client import Client, CollectionSearch, Modifiable
+from pystac_client.collection_client import CollectionClient
+from pystac_client.item_search import (
+    BBoxLike,
+    DatetimeLike,
+    FieldsLike,
+    FilterLike,
+    IDsLike,
+    IntersectsLike,
+    ItemSearch,
+    QueryLike,
+    SortbyLike,
+)
+from pystac_client.stac_api_io import StacApiIO, Timeout
+from requests import Request, Response
 
 from rs_common import utils
 from rs_common.config import DATETIME_FORMAT, ECadipStation
 from rs_common.logging import Logging
 from rs_common.utils import AuthInfo
-from pystac_client import Client, Modifiable, CollectionSearch
-from pystac import CatalogType, Collection, Item, Link, RelType
-from pystac.layout import HrefLayoutStrategy
-from pystac_client.collection_client import CollectionClient
-from pystac_client.item_search import (
-    BBoxLike, DatetimeLike, FieldsLike, FilterLike, IDsLike, 
-    IntersectsLike, ItemSearch, QueryLike, SortbyLike
-)
-from pystac_client.stac_api_io import StacApiIO, Timeout
-from typing import Any, Callable, Dict, List, Optional, Union, Iterator
-from requests import Request, Response
 
 APIKEY_HEADER = "x-api-key"
 
@@ -71,10 +77,9 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     def __init__(
         self,
         rs_server_href: str | None,
-        rs_server_api_key: str | None = None,        
+        rs_server_api_key: str | None = None,
         owner_id: str | None = None,
         logger: logging.Logger | None = None,
-
         stac_href: str = None,  # Flag to enable pystac_client for specific subclasses
         headers: Optional[Dict[str, str]] = None,
         parameters: Optional[Dict[str, Any]] = None,
@@ -89,7 +94,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         self.rs_server_api_key: str | None = rs_server_api_key
         self.rs_server_oauth2_cookie: str | None = os.getenv("RSPY_OAUTH2_COOKIE")
         self.owner_id: str | None = owner_id or ""
-        self.logger: logging.Logger = logger or Logging.default(__name__)        
+        self.logger: logging.Logger = logger or Logging.default(__name__)
 
         # Remove trailing / character(s) from the URL
         if self.rs_server_href:
@@ -132,7 +137,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         # Initialize pystac_client.Client only if required (for CadipClient, AuxipClient, StacClient)
         self.stac_client: Optional[Client] = None
-        if stac_href:            
+        if stac_href:
             if stac_io is None:
                 stac_io = StacApiIO(  # This is what is done in pystac_client/client.py::from_file
                     headers=headers,
@@ -142,7 +147,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
                 )
             # Save the OAuth2 authentication cookie in the pystac client cookies
             if self.rs_server_oauth2_cookie:
-                stac_io.session.cookies.set("session", self.rs_server_oauth2_cookie)            
+                stac_io.session.cookies.set("session", self.rs_server_oauth2_cookie)
             self.stac_client = Client.open(
                 stac_href,
                 headers=self.apikey_headers,
@@ -153,7 +158,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
                 stac_io=stac_io,
                 timeout=timeout,
             )
-    
+
     def oauth2_security(self) -> AuthInfo:
         """
         Returns:
@@ -261,17 +266,9 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             AuxipClient,
         )
 
-        return AuxipClient(self.rs_server_href, 
-                           self.rs_server_api_key, 
-                           self.owner_id, 
-                           self.logger,
-                           **kwargs)
+        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger, **kwargs)
 
-    def get_cadip_client(
-        self,
-        station: ECadipStation,        
-        **kwargs
-    ) -> "CadipClient":  # type: ignore # noqa: F821
+    def get_cadip_client(self, station: ECadipStation, **kwargs) -> "CadipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class CadipClient, with the same attributes as this "self" instance.
 
@@ -281,13 +278,8 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         from rs_client.cadip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             CadipClient,
         )
-        
-        return CadipClient(self.rs_server_href, 
-                           self.rs_server_api_key,                            
-                           self.owner_id, 
-                           station, 
-                           self.logger,                           
-                           **kwargs)
+
+        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger, **kwargs)
 
     def get_stac_client(self, **kwargs) -> "StacClient":  # type: ignore # noqa: F821
         """
@@ -296,12 +288,12 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         from rs_client.stac_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             StacClient,
         )
-        
+
         return StacClient(
             self.rs_server_href,
-            self.rs_server_api_key,            
+            self.rs_server_api_key,
             self.owner_id,
-            self.logger,            
+            self.logger,
             **kwargs,
         )
 
@@ -314,7 +306,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         )
 
         return StagingClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
-    
+
     def get_collection_id(self, collection_id: str):
         """
         Return the full collection name as: <owner_id>:<collection_id>
@@ -324,7 +316,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             collection_id (str): Collection name
         """
         return collection_id
-    
+
     ############################
     # Call RS-Server endpoints #
     ############################
@@ -396,19 +388,20 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             raise RuntimeError("Wrong format of search endpoint answer") from e
 
         return []
+
     ################################
     # Specific STAC implementation #
     ################################
 
     @lru_cache()
     def get_collection(self, collection_id: str) -> Union[Collection, CollectionClient]:
-        """Get the requested collection as <owner_id>:<collection_id>"""        
+        """Get the requested collection as <owner_id>:<collection_id>"""
         return self.stac_client.get_collection(self, collection_id)
-    
+
     def search_inside_collection(  # pylint: disable=too-many-arguments
         self,
         *,
-        collection_id: str,        
+        collection_id: str,
         method: Optional[str] = "POST",
         max_items: Optional[int] = None,
         limit: Optional[int] = None,
@@ -423,8 +416,8 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         fields: Optional[FieldsLike] = None,
     ) -> ItemSearch:
         """Search items inside a specific collection."""
-        
-        return self.stac_client.search(            
+
+        return self.stac_client.search(
             method=method,
             max_items=max_items,
             limit=limit,
@@ -439,27 +432,27 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             sortby=sortby,
             fields=fields,
         )
-    
+
     def get_item(  # pylint: disable=too-many-arguments
-        self,        
-        collection_id: str,        
-        item_id: str,        
+        self,
+        collection_id: str,
+        item_id: str,
     ):
         """Get an item from a specific collection."""
-        
+
         # Retrieve the collection
         collection = self.stac_client.get_collection(collection_id)
         if collection:
             # Retrieve the specific item from the collection
-            item = collection.get_item(item_id)                        
+            item = collection.get_item(item_id)
             if not item:
                 print(f"Item with ID '{item_id}' not found in collection '{collection_id}'.")
         else:
             print(f"Collection with ID '{collection_id}' not found.")
         return item
-    
+
     def get_collections(  # pylint: disable=too-many-arguments, too-many-positional-arguments
-        self,                
+        self,
     ) -> Iterator[Collection]:
         """Retrieve a list of the available stac collections.
 
@@ -468,22 +461,21 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         Return:
             Iterator[Union[Collection, CollectionClient]]: Collections in Catalog/API
         """
-        
+
         # Get all available collections
         return self.stac_client.get_collections()
 
-    
     def get_landing(  # pylint: disable=too-many-arguments, too-many-positional-arguments
-        self,        
+        self,
         timeout: int = TIMEOUT,
     ) -> list:
         """Retrieve a list of items from the specified endpoint.
 
         This function queries the specified endpoint to retrieve all the collectionthe user is allowed to use.
 
-        Args:            
+        Args:
             timeout (int): The timeout duration for the HTTP request.
-            
+
 
         Returns:
             collections (list): The list of collections available at the station for the usage.
@@ -491,37 +483,39 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         Raises:
             RuntimeError: if the endpoint can't be reached
 
-        Notes:            
+        Notes:
             - The response is expected to be a STAC Compatible formatted JSONResponse, containing information about
              available items.
             - The function converts a STAC FeatureCollection to a Python list.
         """
-        
+
         try:
             response = self.http_session.get(
-                self.href_landing,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)                
+                self.href_landing,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
                 timeout=timeout,
                 **self.apikey_headers,
             )
-            
+
         except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
             self.logger.exception(f"Could not get the response from the endpoint {self.href_all_collections}: {e}")
-            raise RuntimeError("Could not get the response from the station search "
-                               f"endpoint {self.href_all_collections}") from e
+            raise RuntimeError(
+                "Could not get the response from the station search " f"endpoint {self.href_all_collections}",
+            ) from e
 
         try:
             if response.ok:
-                #return [Collection(**collection) for collection in response.json()["collections"]]
+                # return [Collection(**collection) for collection in response.json()["collections"]]
                 return response.json()
             self.logger.error(f"Error: {response.status_code} : {response.json()}")
         except KeyError as e:
             raise RuntimeError("Wrong format of search endpoint answer") from e
 
         return None
-    
+
     def get_queryables(self, collection_id) -> Dict[str, Any]:
         """Get quryables of a collection."""
         return self.stac_client.get_merged_queryables([collection_id])
+
     #################################################
     # Properties to be implemented by child classes #
     #################################################
@@ -556,7 +550,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     @property
     def href_collection_queryables(self, collection_id):
         """Implemented by AuxipClient and CadipClient."""
-    
+
     @property
     def href_queryables(self):
         """Implemented by AuxipClient and CadipClient."""

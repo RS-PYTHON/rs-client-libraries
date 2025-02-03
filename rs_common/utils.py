@@ -14,8 +14,8 @@
 
 """This module is used to share common functions between apis"""
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 
 
 @dataclass
@@ -45,6 +45,7 @@ def read_response_error(response):
         detail = response.content.decode("utf-8", errors="ignore")
 
     return detail
+
 
 def get_href_service(rs_server_href, env_var) -> str:
     """Get specific href link."""
