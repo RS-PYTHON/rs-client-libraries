@@ -31,3 +31,10 @@ USER user
 WORKDIR /home/user
 
 ENTRYPOINT [ "/bin/bash", "-c", "echo -e \".whl pacakges are stored under:\n$(realpath /dist/whl/*.whl)\"" ]
+
+# Set labels based on the Open Containers Initiative (OCI):
+# https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
+#
+LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
+LABEL org.opencontainers.image.ref.name="ghcr.io/rs-python/rs-client-libraries_store"
+LABEL dockerfile.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.store"

@@ -19,12 +19,6 @@
 
 FROM ghcr.io/rs-python/jupyter/minimal-notebook:latest
 
-# Set labels based on the Open Containers Initiative (OCI):
-# https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
-#
-LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
-LABEL org.opencontainers.image.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.jupyter"
-
 # Install python 3.11.7 using conda then prefect and dask.
 # The versions must be the same than the cluster images.
 # TODO: do this in rs-server/resources/apt_upgrade_images.sh for the jupyter base image
@@ -62,3 +56,10 @@ USER jovyan
 
 # Clean everything for user
 RUN rm -rf /tmp/whl ~/.cache/pip && conda clean --all --yes
+
+# Set labels based on the Open Containers Initiative (OCI):
+# https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
+#
+LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
+LABEL org.opencontainers.image.ref.name="ghcr.io/rs-python/jupyter/rs-client-libraries/local"
+LABEL dockerfile.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.jupyter"
