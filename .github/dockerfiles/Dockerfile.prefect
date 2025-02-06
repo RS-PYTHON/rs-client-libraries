@@ -23,7 +23,6 @@ FROM prefecthq/prefect:${PREFECT_TAG}-python3.11${K8S_IMAGE}
 
 ARG DASK_TAG=xxx
 ARG DASK_GATEWAY_TAG=xxx
-ARG PREFECT_TAG=xxx
 
 # Upgrande pip and install dependencies.
 # NOTES:

@@ -190,6 +190,74 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_tag: ${{ needs.set-env.outputs.docker_tag }}
 
+  publish-docker-prefect-local:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    name: "Docker image for Prefect in local mode"
+    needs: [set-env, build-whl]
+    permissions: write-all
+    outputs:
+      docker_image: ${{ steps.publish-docker.outputs.docker_image}}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download .whl files into ./whl/
+      - name: Download .whl dependencies
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-whl.outputs.package_name }}
+          path: ./whl
+
+      - id: publish-docker
+        uses: ./.github/actions/publish-docker
+        with:
+          dockerfile: ./.github/dockerfiles/Dockerfile.prefect
+          build_context_path: ./whl
+          image_basename: "${{ github.repository_owner }}/prefect"
+          image_suffix: /rs-client-libraries/local
+          version_name: ${{ needs.build-whl.outputs.version_name }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          docker_tag: ${{ needs.set-env.outputs.docker_tag }}
+          build_args: |
+            DASK_TAG=2024.5.2
+            DASK_GATEWAY_TAG=2024.1.0
+            PREFECT_TAG=3.1.4
+            K8S_IMAGE=
+
+  publish-docker-prefect-k8s:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    name: "Docker image for Prefect in k8s"
+    needs: [set-env, build-whl]
+    permissions: write-all
+    outputs:
+      docker_image: ${{ steps.publish-docker.outputs.docker_image}}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download .whl files into ./whl/
+      - name: Download .whl dependencies
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-whl.outputs.package_name }}
+          path: ./whl
+
+      - id: publish-docker
+        uses: ./.github/actions/publish-docker
+        with:
+          dockerfile: ./.github/dockerfiles/Dockerfile.prefect
+          build_context_path: ./whl
+          image_basename: "${{ github.repository_owner }}/prefect"
+          image_suffix: /rs-client-libraries/k8s
+          version_name: ${{ needs.build-whl.outputs.version_name }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          docker_tag: ${{ needs.set-env.outputs.docker_tag }}
+          build_args: |
+            DASK_TAG=2024.5.2
+            DASK_GATEWAY_TAG=2024.1.0
+            PREFECT_TAG=3.1.4
+            K8S_IMAGE=-kubernetes
+
   ###########
   # TESTING #
   ###########
