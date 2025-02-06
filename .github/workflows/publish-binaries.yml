@@ -184,7 +184,8 @@ jobs:
         with:
           dockerfile: ./.github/dockerfiles/Dockerfile.jupyter
           build_context_path: ./whl
-          image_suffix: _jupyter
+          image_basename: "${{ github.repository_owner }}/jupyter"
+          image_suffix: /rs-client-libraries/local
           version_name: ${{ needs.build-whl.outputs.version_name }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_tag: ${{ needs.set-env.outputs.docker_tag }}
