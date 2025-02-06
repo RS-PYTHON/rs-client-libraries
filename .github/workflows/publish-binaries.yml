@@ -134,7 +134,7 @@ jobs:
   #########################
 
   publish-docker-store:
-    if: github.actor != 'dependabot[bot]'
+    if: ${{ (github.actor != 'dependabot[bot]') && (needs.set-env.outputs.docker_tag == 'latest') }}
     runs-on: ubuntu-latest
     name: "Docker image for wheel storage"
     needs: [set-env, build-whl]
