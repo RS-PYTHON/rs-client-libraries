@@ -16,15 +16,24 @@
 # This docker installs the rs-client-libraries wheel into the prefect docker image.
 #
 
-FROM prefecthq/prefect:3.1.4-python3.11
+ARG PREFECT_TAG=xxx
+# K8S image suffix: -kubernetes or empty
+ARG K8S_IMAGE=xxx
+FROM prefecthq/prefect:${PREFECT_TAG}-python3.11${K8S_IMAGE}
 
-# TODO: put in requirements-prefect-dask.txt
-# NOTE: we need the same numpy version as eopf
+ARG DASK_TAG=xxx
+ARG DASK_GATEWAY_TAG=xxx
+ARG PREFECT_TAG=xxx
+
+# Upgrande pip and install dependencies.
+# NOTES:
+#   - Install s3fs before boto3 to have a recent version
+#   - We need the same numpy version as in eopf
 RUN pip install -U pip && \
-    pip install -U \
-        dask[complete]=="2024.5.2" \
-        dask-gateway=="2024.1.0" \
-        prefect[dask,aws]=="3.1.4" \
+    pip install \
+        dask[complete]=="${DASK_TAG}" \
+        dask-gateway=="${DASK_GATEWAY_TAG}" \
+        prefect[dask,aws] \
         s3fs \
         boto3 \
         numpy=="1.26.4"
@@ -46,3 +55,5 @@ RUN rm -rf /tmp/whl ~/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/*
 LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
 LABEL org.opencontainers.image.ref.name="ghcr.io/rs-python/prefect/rs-client-libraries"
 LABEL dockerfile.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.prefect"
+
+LABEL org.opencontainers.image.description="prefect image in which we installed dask and the rs-client-libraries wheel package."
