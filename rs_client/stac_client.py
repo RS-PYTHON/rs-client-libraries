@@ -17,14 +17,11 @@
 from __future__ import annotations
 
 import logging
-import os
-from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional, Union
+
+from typing import Iterator, Optional, Union
 
 import pystac
-from pystac import CatalogType, Collection, Item, Link, RelType
-from pystac.layout import HrefLayoutStrategy
-from pystac_client import Client, Modifiable
+from pystac import Collection, Item, Link, RelType
 from pystac_client.collection_client import CollectionClient
 from pystac_client.item_search import (
     BBoxLike,
@@ -36,9 +33,9 @@ from pystac_client.item_search import (
     ItemSearch,
     QueryLike,
     SortbyLike,
+    CollectionsLike,
 )
-from pystac_client.stac_api_io import StacApiIO, Timeout
-from requests import Request, Response
+from requests import Response
 
 from rs_client.rs_client import TIMEOUT, RsClient
 from rs_common.utils import get_href_service
@@ -75,15 +72,16 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
     # Properties #
     ##############
     @property
-    def href_catalog(self) -> str:
+    def href_srv(self) -> str:
         """
         Return the RS-Server CADIP URL hostname.
         This URL can be overwritten using the RSPY_HOST_CATALOG env variable (used e.g. for local mode).
         Otherwise it should just be the RS-Server URL.
         """
+
         return get_href_service(self.rs_server_href, "RSPY_HOST_CATALOG")
 
-    def full_collection_id(self, owner_id: str | None, collection_id: str):
+    def full_collection_id(self, owner_id: str | None, collection_id: str, concat_char: str | None = None):
         """
         Return the full collection name as: <owner_id>:<collection_id>
 
@@ -91,17 +89,79 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
             owner_id (str): Collection owner ID. If missing, we use self.owner_id.
             collection_id (str): Collection name
         """
-        return f"{owner_id or self.owner_id}:{collection_id}"
+
+        if not concat_char:
+            concat_char = ":"
+        return f"{owner_id or self.owner_id}{concat_char}{collection_id}"
 
     ################################
     # Specific STAC implementation #
     ################################
 
-    @lru_cache()
+    # STAC read opperations. These can be done with pystac_client (by calling super RsClient functions)
+
     def get_collection(self, collection_id: str, owner_id: str | None = None) -> Union[Collection, CollectionClient]:
-        """Get the requested collection as <owner_id>:<collection_id>"""
-        full_collection_id = self.full_collection_id(owner_id, collection_id)
-        return super().get_collection(full_collection_id)
+        """Get the requested collection"""
+
+        collection_id = self.full_collection_id(owner_id, collection_id, ":")        
+        return super().get_collection(collection_id)
+    
+    def get_items(self, collection_id: str, owner_id: str | None = None) -> Iterator["Item"]:
+        """Get all items from a specific collection."""
+
+        collection_id = self.full_collection_id(owner_id, collection_id, ":")
+        return super().get_items(collection_id)
+    
+    def get_item(self, collection_id: str, item_id: str,owner_id: str | None = None):
+        """Get an item from a specific collection."""
+
+        collection = self.full_collection_id(owner_id, collection_id, ":")
+        return super().get_item(collection, item_id)
+
+    def search(  # pylint: disable=too-many-arguments
+        self,
+        owner_id: str | None = None,
+        *,        
+        method: Optional[str] = "POST",
+        max_items: Optional[int] = None,
+        limit: Optional[int] = None,
+        collections: Optional[CollectionsLike] = None,
+        ids: Optional[IDsLike] = None,
+        bbox: Optional[BBoxLike] = None,
+        intersects: Optional[IntersectsLike] = None,
+        timestamp: Optional[DatetimeLike] = None,
+        query: Optional[QueryLike] = None,
+        stac_filter: Optional[FilterLike] = None,
+        filter_lang: Optional[str] = None,
+        sortby: Optional[SortbyLike] = None,
+        fields: Optional[FieldsLike] = None,
+    ) -> ItemSearch:
+        """Search items inside a specific collection."""
+
+        collections = [self.full_collection_id(owner_id, collection, "_") for collection in collections]
+        return super().search(
+            method=method,
+            max_items=max_items,
+            limit=limit,
+            collections=collections,
+            ids=ids,
+            bbox=bbox,
+            intersects=intersects,
+            timestamp=timestamp,
+            query=query,
+            stac_filter=stac_filter,
+            filter_lang=filter_lang,
+            sortby=sortby,
+            fields=fields,
+        )
+
+    # end of STAC read opperations    
+    
+    # STAC write opperations. These can't be done with pystac_client
+    # - add_collection   
+    # - remove_collection
+    # - add_item
+    # - remove_item
 
     def add_collection(
         self,
@@ -159,7 +219,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
 
         # Post the collection to the catalog
         return self.http_session.post(
-            f"{self.href_catalog}/catalog/collections",
+            f"{self.href_srv}/catalog/collections",
             json=collection.to_dict(),
             **self.apikey_headers,
             timeout=timeout,
@@ -194,12 +254,11 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
 
         # We need to clear the cache for this and parent "get_collection" methods
         # because their returned value must be updated.
-        self.get_collection.cache_clear()
         self.stac_client.get_collection.cache_clear()
 
         # Remove the collection from the server catalog
         return self.http_session.delete(
-            f"{self.href_catalog}/catalog/collections/{full_collection_id}",
+            f"{self.href_srv}/catalog/collections/{full_collection_id}",
             **self.apikey_headers,
             timeout=timeout,
         )
@@ -236,7 +295,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
 
         # Post the item to the catalog
         return self.http_session.post(
-            f"{self.href_catalog}/catalog/collections/{full_collection_id}/items",
+            f"{self.href_srv}/catalog/collections/{full_collection_id}/items",
             json=item.to_dict(),
             **self.apikey_headers,
             timeout=timeout,
@@ -265,51 +324,9 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
 
         # Remove the collection from the server catalog
         return self.http_session.delete(
-            f"{self.href_catalog}/catalog/collections/{full_collection_id}/items/{item_id}",
+            f"{self.href_srv}/catalog/collections/{full_collection_id}/items/{item_id}",
             **self.apikey_headers,
             timeout=timeout,
         )
-
-    def search_inside_collection(  # pylint: disable=too-many-arguments
-        self,
-        *,
-        collection_id: str,
-        owner_id: str | None = None,
-        method: Optional[str] = "POST",
-        max_items: Optional[int] = None,
-        limit: Optional[int] = None,
-        ids: Optional[IDsLike] = None,
-        bbox: Optional[BBoxLike] = None,
-        intersects: Optional[IntersectsLike] = None,
-        timestamp: Optional[DatetimeLike] = None,
-        query: Optional[QueryLike] = None,
-        stac_filter: Optional[FilterLike] = None,
-        filter_lang: Optional[str] = None,
-        sortby: Optional[SortbyLike] = None,
-        fields: Optional[FieldsLike] = None,
-    ) -> ItemSearch:
-        """Search items inside a specific collection."""
-
-        collection_id = self.full_collection_id(owner_id, collection_id)
-        return super().search_inside_collection(
-            collection_id=collection_id,
-            method=method,
-            max_items=max_items,
-            limit=limit,
-            ids=ids,
-            bbox=bbox,
-            intersects=intersects,
-            timestamp=timestamp,
-            query=query,
-            stac_filter=stac_filter,
-            filter_lang=filter_lang,
-            sortby=sortby,
-            fields=fields,
-        )
-
-    def get_item(  # pylint: disable=too-many-arguments
-        self, collection_id: str, item_id: str, owner_id: str | None = None,
-    ):
-        """Search items inside a specific collection."""
-        collection_id = self.full_collection_id(owner_id, collection_id)
-        return super().get_item(collection_id=collection_id, item_id=item_id)
+    # end of STAC write opperations
+    

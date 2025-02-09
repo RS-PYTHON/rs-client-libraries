@@ -56,64 +56,20 @@ class CadipClient(RsClient):
         except KeyError as e:
             self.logger.exception(f"There is no such CADIP station: {station}")
             raise RuntimeError(f"There is no such CADIP station: {station}") from e
-
+        
     @property
-    def href_cadip(self) -> str:
+    def href_srv(self) -> str:
         """
         Return the RS-Server CADIP URL hostname.
         This URL can be overwritten using the RSPY_HOST_CADIP env variable (used e.g. for local mode).
         Otherwise it should just be the RS-Server URL.
         """
-        return get_href_service(self.rs_server_href, "RSPY_HOST_CADIP")
-
-    @property
-    def href_search(self) -> str:
-        """Return the RS-Server hostname and path where the CADIP search endpoint is deployed."""
-        return f"{self.href_cadip}/cadip/search"
-
+        return get_href_service(self.rs_server_href, "RSPY_HOST_CADIP") + "/cadip"
+    
     @property
     def station_name(self) -> str:
         """Return the station name."""
         return self.station.value  # TO BE DISCUSSED: maybe just return "CADIP"
-
-    @property
-    def href_landing(self):
-        """Return the RS-Server hostname and path where the landing page endpoint is deployed."""
-        return f"{self.href_cadip}/cadip"
-
-    @property
-    def href_all_collections(self):
-        """Return the RS-Server hostname and path from where all the existent collections can be retrieved."""
-        return f"{self.href_cadip}/cadip/collections"
-
-    @property
-    def href_collection(self, collection_id):
-        """Return the RS-Server hostname and path from where one collection can be retrieved."""
-        return f"{self.href_cadip}/cadip/collections/{collection_id}"
-
-    @property
-    def href_collection_all_items(self, collection_id):
-        """Return the RS-Server hostname and path from where all the existent items
-        from a collection can be retrieved.
-        """
-        return f"{self.href_cadip}/cadip/collections/{collection_id}/items"
-
-    @property
-    def href_collection_item(self, collection_id, item_id):
-        """Return the RS-Server hostname and path from where one item from a collection can be retrieved.
-        The item_id is in fact a cadip session_id, which has more then one assets (files)
-        """
-        return f"{self.href_cadip}/cadip/collections/{collection_id}/items/{item_id}"
-
-    @property
-    def href_collection_queryables(self, collection_id):
-        """Return the RS-Server hostname and path endpoint for query a collection."""
-        return f"{self.href_cadip}/cadip/collections/{collection_id}/queryables"
-
-    @property
-    def href_queryables(self):
-        """Return the RS-Server hostname and path endpoint for general query."""
-        return f"{self.href_cadip}/cadip/collections/queryables"
 
     ############################
     # Call RS-Server endpoints #

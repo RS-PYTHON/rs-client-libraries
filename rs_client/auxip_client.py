@@ -40,7 +40,7 @@ class AuxipClient(RsClient):
         """AuxipClient class constructor."""
         super().__init__(
             rs_server_href,
-            rs_server_api_key,
+            "RS_SERVER_KEY_API",
             owner_id,
             logger,
             get_href_service(rs_server_href, "RSPY_HOST_ADGS") + "/auxip/",
@@ -48,23 +48,14 @@ class AuxipClient(RsClient):
         )
 
     @property
-    def href_adgs(self) -> str:
+    def href_srv(self) -> str:
         """
         Return the RS-Server ADGS URL hostname.
         This URL can be overwritten using the RSPY_HOST_ADGS env variable (used e.g. for local mode).
         Otherwise it should just be the RS-Server URL.
         """
-        if from_env := os.getenv("RSPY_HOST_ADGS", None):
-            return from_env.rstrip("/")
-        if not self.rs_server_href:
-            raise RuntimeError("RS-Server URL is undefined")
-        return self.rs_server_href.rstrip("/")
-
-    @property
-    def href_search(self) -> str:
-        """Return the RS-Server hostname and path where the ADGS search endpoint is deployed."""
-        return f"{self.href_adgs}/auxip/search"
-
+        return get_href_service(self.rs_server_href, "RSPY_HOST_ADGS") + "/auxip"
+    
     @property
     def station_name(self) -> str:
         """Return "AUXIP"."""

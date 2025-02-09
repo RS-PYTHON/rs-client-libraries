@@ -77,7 +77,7 @@ def test_station_names(auxip_client, cadip_client, stac_client):  # pylint: disa
 def test_server_href(mocked_stac_catalog_url):
     """Test that the Auxip, Cadip, Catalog service URLs can be passed by environment variable."""
 
-    rs_client = RsClient("", RS_SERVER_API_KEY, OWNER_ID)  # no global href
+    rs_client = RsClient("https://rs_server_href_dummy/", RS_SERVER_API_KEY, OWNER_ID)  # no global href
     dummy_href = "https://DUMMY_HREF"
 
     for env_var, client, get_href in [
@@ -108,7 +108,7 @@ def test_server_href(mocked_stac_catalog_url):
         RS_SERVER_API_KEY,
         OWNER_ID,
     ).get_stac_client()
-    assert stac_client.href_catalog == mocked_stac_catalog_url
+    assert stac_client.href_srv == mocked_stac_catalog_url
 
     # It can be overriden by the env var, but a dummy URL will raise a pystac exception
     with pytest.MonkeyPatch.context() as monkeypatch:
