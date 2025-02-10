@@ -25,11 +25,11 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Union, cast
 
 import requests
 from cachetools import TTLCache, cached
+from pystac.item import Item
 from pystac import CatalogType, Collection, Item, Link, RelType, ItemCollection
 from pystac.layout import HrefLayoutStrategy
 from pystac_client import Client, CollectionSearch, Modifiable
 from pystac_client.collection_client import CollectionClient
-from pystac.item import Item
 from pystac_client.item_search import (
     BBoxLike,
     DatetimeLike,
@@ -357,8 +357,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         """Get the requested collection"""
 
         collection = None
-        try:
-            self.logger.debug(f"!!!!!!!!!! collection_id = {collection_id}")
+        try:            
             collection = self.stac_client.get_collection(collection_id)
         except APIError as e:
             self.logger.exception(f"An error occurred while retrieving the collection: {e}")
@@ -368,7 +367,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         """Get all items from a specific collection."""
 
         # Retrieve the collection
-        collection = self.get_collection(collection_id)
+        collection = self.stac_client.get_collection(collection_id)
         if collection:
             # Retrieve all items
             return collection.get_items()
