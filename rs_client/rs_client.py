@@ -25,13 +25,15 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Union, cast
 
 import requests
 from cachetools import TTLCache, cached
+from pystac import CatalogType, Collection, Item, ItemCollection, Link, RelType
 from pystac.item import Item
-from pystac import CatalogType, Collection, Item, Link, RelType, ItemCollection
 from pystac.layout import HrefLayoutStrategy
 from pystac_client import Client, CollectionSearch, Modifiable
 from pystac_client.collection_client import CollectionClient
+from pystac_client.exceptions import APIError
 from pystac_client.item_search import (
     BBoxLike,
+    CollectionsLike,
     DatetimeLike,
     FieldsLike,
     FilterLike,
@@ -40,10 +42,8 @@ from pystac_client.item_search import (
     ItemSearch,
     QueryLike,
     SortbyLike,
-    CollectionsLike,
 )
 from pystac_client.stac_api_io import StacApiIO, Timeout
-from pystac_client.exceptions import APIError
 from requests import Request, Response
 
 from rs_common import utils
@@ -109,12 +109,11 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         if (not self.local_mode) and (not self.rs_server_api_key) and (not self.rs_server_oauth2_cookie):
             raise RuntimeError("API key or OAuth2 cookie is mandatory for RS-Server authentication")
-        
+
         # For HTTP request headers
         self.apikey_headers: dict = (
             {"headers": {APIKEY_HEADER: self.rs_server_api_key}} if self.rs_server_api_key else {}
         )
-        
 
         # HTTP requests session with cookies
         self.http_session = requests.Session()
@@ -173,7 +172,6 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
                 raise RuntimeError(
                     "An exception occured while creating the stac client",
                 ) from e
-
 
     def oauth2_security(self) -> AuthInfo:
         """
@@ -269,7 +267,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     def apikey_config(self) -> dict:
         """Return the config from the keycloak account, associated to the api key."""
         return self.apikey_security().apikey_config
-    
+
     @property
     def href_srv(self):
         """Implemented by child classes"""
@@ -339,7 +337,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         """Access the landing page"""
 
         return self.stac_client.to_dict()
-    
+
     def get_collections(self) -> Iterator[Collection]:
         """Retrieve a list of the available stac collections.
 
@@ -357,12 +355,12 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         """Get the requested collection"""
 
         collection = None
-        try:            
+        try:
             collection = self.stac_client.get_collection(collection_id)
         except APIError as e:
             self.logger.exception(f"An error occurred while retrieving the collection: {e}")
         return collection
-    
+
     def get_items(self, collection_id: str) -> Iterator["Item"]:
         """Get all items from a specific collection."""
 
@@ -380,14 +378,14 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         # Retrieve the collection
         collection = self.get_collection(collection_id)
-        if collection:            
-            item = collection.get_item(item_id)            
+        if collection:
+            item = collection.get_item(item_id)
             if not item:
                 self.logger.error(f"Item with ID '{item_id}' not found in collection '{collection_id}'.")
         else:
             self.logger.error(f"Collection with ID '{collection_id}' not found.")
         return item
-    
+
     def get_collection_queryables(self, collection_id) -> Dict[str, Any]:
         """Get queryables for a collection."""
 
@@ -453,6 +451,8 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
             return items_search.item_collection()
         except NotImplementedError:
-            self.logger.exception("The API does not conform to the STAC API Item Search spec"
-                                  "or does not have a link with a 'rel' type of 'search' ")
+            self.logger.exception(
+                "The API does not conform to the STAC API Item Search spec"
+                "or does not have a link with a 'rel' type of 'search' ",
+            )
         return None

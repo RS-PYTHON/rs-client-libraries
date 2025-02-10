@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import logging
-
 from typing import Iterator, Optional, Union
 
 import pystac
@@ -25,6 +24,7 @@ from pystac import Collection, Item, Link, RelType
 from pystac_client.collection_client import CollectionClient
 from pystac_client.item_search import (
     BBoxLike,
+    CollectionsLike,
     DatetimeLike,
     FieldsLike,
     FilterLike,
@@ -33,7 +33,6 @@ from pystac_client.item_search import (
     ItemSearch,
     QueryLike,
     SortbyLike,
-    CollectionsLike,
 )
 from requests import Response
 
@@ -103,16 +102,16 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
     def get_collection(self, collection_id: str, owner_id: str | None = None) -> Union[Collection, CollectionClient]:
         """Get the requested collection"""
 
-        collection_id = self.full_collection_id(owner_id, collection_id, ":")        
+        collection_id = self.full_collection_id(owner_id, collection_id, ":")
         return super().get_collection(collection_id)
-    
+
     def get_items(self, collection_id: str, owner_id: str | None = None) -> Iterator["Item"]:
         """Get all items from a specific collection."""
 
-        collection_id = self.full_collection_id(owner_id, collection_id, ":")        
+        collection_id = self.full_collection_id(owner_id, collection_id, ":")
         return super().get_items(collection_id)
-    
-    def get_item(self, collection_id: str, item_id: str,owner_id: str | None = None):
+
+    def get_item(self, collection_id: str, item_id: str, owner_id: str | None = None):
         """Get an item from a specific collection."""
 
         collection = self.full_collection_id(owner_id, collection_id, ":")
@@ -121,7 +120,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
     def search(  # pylint: disable=too-many-arguments
         self,
         owner_id: str | None = None,
-        *,        
+        *,
         method: Optional[str] = "POST",
         max_items: Optional[int] = None,
         limit: Optional[int] = None,
@@ -155,10 +154,10 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
             fields=fields,
         )
 
-    # end of STAC read opperations    
-    
+    # end of STAC read opperations
+
     # STAC write opperations. These can't be done with pystac_client
-    # - add_collection   
+    # - add_collection
     # - remove_collection
     # - add_item
     # - remove_item
@@ -328,5 +327,5 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
             **self.apikey_headers,
             timeout=timeout,
         )
+
     # end of STAC write opperations
-    

@@ -55,7 +55,7 @@ class AuxipClient(RsClient):
         Otherwise it should just be the RS-Server URL.
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_ADGS") + "/auxip"
-    
+
     @property
     def station_name(self) -> str:
         """Return "AUXIP"."""

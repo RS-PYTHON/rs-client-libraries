@@ -56,7 +56,7 @@ class CadipClient(RsClient):
         except KeyError as e:
             self.logger.exception(f"There is no such CADIP station: {station}")
             raise RuntimeError(f"There is no such CADIP station: {station}") from e
-        
+
     @property
     def href_srv(self) -> str:
         """
@@ -65,7 +65,7 @@ class CadipClient(RsClient):
         Otherwise it should just be the RS-Server URL.
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_CADIP") + "/cadip"
-    
+
     @property
     def station_name(self) -> str:
         """Return the station name."""

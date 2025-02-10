@@ -88,6 +88,7 @@ def test_create_new_collection_stac_client():  # pylint: disable=missing-functio
 
 def test_add_collection_stac_client(mocked_stac_catalog_add_collection):  # pylint: disable=missing-function-docstring
     import os
+
     print(f"RSPY_HOST_CATALOG = {os.getenv('RSPY_HOST_CATALOG', None)}")
     catalog: StacClient = RsClient(mocked_stac_catalog_add_collection, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
 

@@ -82,7 +82,7 @@ class StagingClient(RsClient):
         Otherwise it should just be the RS-Server URL.
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_STAGING")
-        
+
     def validate_and_unmarshal_request(self, request: PreparedRequest) -> Any:
         """Validate an endpoint request according to the ogc specifications
 
