@@ -109,15 +109,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
     def get_items(self, collection_id: str, owner_id: str | None = None) -> Iterator["Item"]:
         """Get all items from a specific collection."""
 
-        collection_id = self.full_collection_id(owner_id, collection_id, ":")
-        # response = self.http_session.get(
-        #     f"{self.href_srv}/catalog/collections/{collection_id}/items",            
-        #     **self.apikey_headers,
-        #     timeout=TIMEOUT,
-        # )
-        # if response.ok:
-        #     return response.json()
-        # return None
+        collection_id = self.full_collection_id(owner_id, collection_id, ":")        
         return super().get_items(collection_id)
     
     def get_item(self, collection_id: str, item_id: str,owner_id: str | None = None):
