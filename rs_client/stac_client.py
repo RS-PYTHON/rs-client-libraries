@@ -208,7 +208,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
             )
 
         # Update the links
-        self.stac_client.add_child(collection)
+        self.ps_client.add_child(collection)
 
         # Restore the short collection_id at the root of the collection
         collection.id = short_collection_id
@@ -244,16 +244,16 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
         full_collection_id = self.full_collection_id(owner_id, collection_id)
 
         # Remove the collection from the "child" links of the local catalog instance
-        collection_link = f"{self.stac_client.self_href.rstrip('/')}/collections/{full_collection_id}"
-        self.stac_client.links = [
+        collection_link = f"{self.ps_client.self_href.rstrip('/')}/collections/{full_collection_id}"
+        self.ps_client.links = [
             link
-            for link in self.stac_client.links
+            for link in self.ps_client.links
             if not ((link.rel == pystac.RelType.CHILD) and (link.href == collection_link))
         ]
 
         # We need to clear the cache for this and parent "get_collection" methods
         # because their returned value must be updated.
-        self.stac_client.get_collection.cache_clear()
+        self.ps_client.get_collection.cache_clear()
 
         # Remove the collection from the server catalog
         return self.http_session.delete(

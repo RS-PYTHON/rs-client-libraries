@@ -139,7 +139,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         self.logger.debug(f"Owner ID: {self.owner_id!r}")
 
         # Initialize pystac_client.Client only if required (for CadipClient, AuxipClient, StacClient)
-        self.stac_client: Optional[Client] = None
+        self.ps_client: Optional[Client] = None
         if stac_href:
             try:
                 self.stac_href = stac_href
@@ -157,7 +157,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
                 # Save the OAuth2 authentication cookie in the pystac client cookies
                 if self.rs_server_oauth2_cookie:
                     stac_io.session.cookies.set("session", self.rs_server_oauth2_cookie)
-                self.stac_client = Client.open(
+                self.ps_client = Client.open(
                     stac_href,
                     headers=headers,
                     parameters=parameters,
@@ -336,19 +336,19 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     def get_landing(self) -> dict:
         """Access the landing page"""
 
-        return self.stac_client.to_dict()
+        return self.ps_client.to_dict()
 
     def get_collections(self) -> Iterator[Collection]:
         """Retrieve a list of the available stac collections.
 
-        It uses the stac_client function to retrieve all collections the user has permission to access.
+        It uses the ps_client function to retrieve all collections the user has permission to access.
 
         Return:
             Iterator[Union[Collection, CollectionClient]]: Collections in Catalog/API
         """
 
         # Get all available collections
-        return self.stac_client.get_collections()
+        return self.ps_client.get_collections()
 
     @lru_cache()
     def get_collection(self, collection_id: str) -> Union[Collection, CollectionClient]:
@@ -356,7 +356,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         collection = None
         try:
-            collection = self.stac_client.get_collection(collection_id)
+            collection = self.ps_client.get_collection(collection_id)
         except APIError as e:
             self.logger.exception(f"An error occurred while retrieving the collection: {e}")
         return collection
@@ -365,7 +365,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         """Get all items from a specific collection."""
 
         # Retrieve the collection
-        collection = self.stac_client.get_collection(collection_id)
+        collection = self.ps_client.get_collection(collection_id)
         if collection:
             # Retrieve all items
             return collection.get_items()
@@ -389,7 +389,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     def get_collection_queryables(self, collection_id) -> Dict[str, Any]:
         """Get queryables for a collection."""
 
-        return self.stac_client.get_merged_queryables([collection_id])
+        return self.ps_client.get_merged_queryables([collection_id])
 
     def get_queryables(self) -> Dict[str, Any]:
         """Get terms available for use when writing filter expressions in /search endpoint for all collections."""
@@ -431,9 +431,9 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         sortby: Optional[SortbyLike] = None,
         fields: Optional[FieldsLike] = None,
     ) -> ItemCollection:
-        """Retrieve a list of items by calling the stac_client function"""
+        """Retrieve a list of items by calling the ps_client function"""
         try:
-            items_search = self.stac_client.search(
+            items_search = self.ps_client.search(
                 method=method,
                 max_items=max_items,
                 limit=limit,
