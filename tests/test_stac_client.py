@@ -30,7 +30,7 @@ def test_create_object_stac_client(mocked_stac_catalog_url):  # pylint: disable=
     # Loads the catalog #
     #####################
     catalog: StacClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
-    assert catalog.id == "stac-fastapi"
+    assert catalog.stac_client.id == "stac-fastapi"
 
 
 def test_get_collection_stac_client(mocked_stac_catalog_get_collection):  # pylint: disable=missing-function-docstring

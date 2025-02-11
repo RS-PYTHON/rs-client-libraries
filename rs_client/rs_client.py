@@ -373,7 +373,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             self.logger.error(f"Collection with ID '{collection_id}' not found.")
         return None
 
-    def get_item(self, collection_id: str, item_id: str):
+    def get_item(self, collection_id: str, item_id: str) -> Item | None:
         """Get an item from a specific collection."""
 
         # Retrieve the collection
