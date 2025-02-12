@@ -12,10 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This docker installs the rs-client-libraries wheel
-# into the jupyter docker image that is used by rs-demo in local mode.
-# This jupyter base image already contains prefect and dask.
-FROM ghcr.io/rs-python/jupyter/minimal-notebook:latest
+#
+# This docker installs the rs-client-libraries wheel into the prefect docker image.
+#
+
+ARG PREFECT_TAG=xxx
+# K8S image suffix: -kubernetes or empty
+ARG K8S_IMAGE=xxx
+FROM prefecthq/prefect:${PREFECT_TAG}-python3.11${K8S_IMAGE}
+
+ARG DASK_TAG=xxx
+ARG DASK_GATEWAY_TAG=xxx
+
+# Upgrande pip and install dependencies.
+# NOTES:
+#   - Install s3fs before boto3 to have a recent version
+#   - We need the same numpy version as in eopf
+RUN pip install -U pip && \
+    pip install \
+        dask[complete]=="${DASK_TAG}" \
+        dask-gateway=="${DASK_GATEWAY_TAG}" \
+        prefect[dask,aws] \
+        s3fs \
+        boto3 \
+        numpy=="1.26.4"
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
@@ -25,19 +45,14 @@ ADD ./*.whl /tmp/whl
 # Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
 RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
 
-# Install other useful dependencies for rs-demo in local mode.
-RUN pip install papermill
-
 # Clean everything
-USER root
-RUN rm -rf /tmp/whl /root/.cache/pip /home/*/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/*
-USER jovyan
+RUN rm -rf /tmp/whl ~/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/*
 
 # Set labels based on the Open Containers Initiative (OCI):
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
 #
 LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
-LABEL org.opencontainers.image.ref.name="ghcr.io/rs-python/jupyter/rs-client-libraries/local"
-LABEL dockerfile.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.jupyter"
+LABEL org.opencontainers.image.ref.name="ghcr.io/rs-python/prefect/rs-client-libraries"
+LABEL dockerfile.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.prefect"
 
-LABEL org.opencontainers.image.description="jupyter image for local mode in which we installed dask, prefect and the rs-client-libraries wheel package."
+LABEL org.opencontainers.image.description="prefect image in which we installed dask and the rs-client-libraries wheel package."

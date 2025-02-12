@@ -161,6 +161,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_tag: ${{ needs.set-env.outputs.docker_tag }}
 
+  # Local jupyter image with rs-client-libraries
   publish-docker-jupyter:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
@@ -184,10 +185,82 @@ jobs:
         with:
           dockerfile: ./.github/dockerfiles/Dockerfile.jupyter
           build_context_path: ./whl
-          image_suffix: _jupyter
+          image_basename: "${{ github.repository_owner }}/jupyter"
+          image_suffix: /rs-client-libraries/local
           version_name: ${{ needs.build-whl.outputs.version_name }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_tag: ${{ needs.set-env.outputs.docker_tag }}
+
+  # Local prefect image with rs-client-libraries
+  publish-docker-prefect-local:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    name: "Docker image for Prefect in local mode"
+    needs: [set-env, build-whl]
+    permissions: write-all
+    outputs:
+      docker_image: ${{ steps.publish-docker.outputs.docker_image}}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download .whl files into ./whl/
+      - name: Download .whl dependencies
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-whl.outputs.package_name }}
+          path: ./whl
+
+      - id: publish-docker
+        uses: ./.github/actions/publish-docker
+        with:
+          dockerfile: ./.github/dockerfiles/Dockerfile.prefect
+          build_context_path: ./whl
+          image_basename: "${{ github.repository_owner }}/prefect"
+          image_suffix: /rs-client-libraries/local
+          version_name: ${{ needs.build-whl.outputs.version_name }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          docker_tag: ${{ needs.set-env.outputs.docker_tag }}
+          build_args: |
+            DASK_TAG=2024.5.2
+            DASK_GATEWAY_TAG=2024.1.0
+            PREFECT_TAG=3.1.4
+            K8S_IMAGE=
+
+  # Prefect image for kubernetes with rs-client-libraries.
+  # We should need this image only for new git tags (to be discussed maybe)
+  publish-docker-prefect-k8s:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+    runs-on: ubuntu-latest
+    name: "Docker image for Prefect in k8s"
+    needs: [set-env, build-whl]
+    permissions: write-all
+    outputs:
+      docker_image: ${{ steps.publish-docker.outputs.docker_image}}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download .whl files into ./whl/
+      - name: Download .whl dependencies
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-whl.outputs.package_name }}
+          path: ./whl
+
+      - id: publish-docker
+        uses: ./.github/actions/publish-docker
+        with:
+          dockerfile: ./.github/dockerfiles/Dockerfile.prefect
+          build_context_path: ./whl
+          image_basename: "${{ github.repository_owner }}/prefect"
+          image_suffix: /rs-client-libraries/k8s
+          version_name: ${{ needs.build-whl.outputs.version_name }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          docker_tag: ${{ needs.set-env.outputs.docker_tag }}
+          build_args: |
+            DASK_TAG=2024.5.2
+            DASK_GATEWAY_TAG=2024.1.0
+            PREFECT_TAG=3.1.4
+            K8S_IMAGE=-kubernetes
 
   ###########
   # TESTING #
@@ -212,12 +285,8 @@ jobs:
         run: |
           set -x
 
-          # Clone the rs-demo repository.
-          # Use the ssh public key from: https://github.com/RS-PYTHON/rs-demo/settings/keys
-          # and the private key from: https://github.com/RS-PYTHON/rs-client-libraries/settings/secrets/actions
-          eval "$(ssh-agent -s)"
-          ssh-add - <<< "${{ secrets.RS_DEMO_PRIVATE_SSH_KEY }}"
-          git clone git@github.com:RS-PYTHON/rs-demo.git
+          # Clone the rs-demo repository
+          git clone https://github.com/RS-PYTHON/rs-demo.git
 
           # Try to checkout in rs-demo the same branch name than in rs-server.
           # If the branch doesn't exist, it's ok, we stay on the default branch.
