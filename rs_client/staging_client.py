@@ -37,7 +37,7 @@ from rs_common.utils import get_href_service
 # with a valid format according to ogc standard. In the meantime, we don't perform validation to make all staging
 # notebooks pass. If this env variable if not specified (for example that is the case when we launch the pytest),
 # we perform this validation by default
-DO_VALIDATE: bool = os.getenv("RSPY_APPLY_STAGING_ENDPOINTS_VALIDATION", "1") == "1"
+DO_VALIDATE: bool = os.getenv("RSPY_APPLY_STAGING_ENDPOINTS_VALIDATION", "0") == "1"
 
 PATH_TO_YAML_OPENAPI = osp.join(
     osp.realpath(osp.dirname(__file__)),

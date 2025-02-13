@@ -186,7 +186,7 @@ def mocked_stac_catalog_get_collection():
 
         # This is the returned content when calling a real STAC catalog service with:
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-        json_landing_page = common.json_landing_page(url, "toto:S1_L1", conforms_to=False)
+        json_landing_page = common.json_landing_page(url, "toto:S1_L1", conforms_to=True)
         resp.get(url=url + "/catalog/", json=json_landing_page, status=200)
 
         json_single_collection = {
