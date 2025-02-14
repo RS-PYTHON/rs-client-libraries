@@ -678,6 +678,8 @@ def mocked_stac_catalog_url():
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
         json_landing_page = common.json_landing_page(url, "toto:S1_L1")
         resp.get(url=url + "/catalog/", json=json_landing_page, status=200)
+        resp.get(url=url + "/auxip/", json=json_landing_page, status=200)
+        resp.get(url=url + "/cadip/", json=json_landing_page, status=200)
 
         yield url
 

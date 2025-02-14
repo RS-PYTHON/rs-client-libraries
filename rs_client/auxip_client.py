@@ -15,10 +15,9 @@
 """AuxipClient class implementation."""
 
 import logging
-import os
 
 from rs_client.rs_client import RsClient
-from rs_common.config import AUXIP_STATION
+from rs_common.config import EAuxipStation
 from rs_common.utils import get_href_service
 
 
@@ -34,18 +33,24 @@ class AuxipClient(RsClient):
         rs_server_href: str | None,
         rs_server_api_key: str | None,
         owner_id: str | None,
+        station: EAuxipStation | str,
         logger: logging.Logger | None = None,
         **kwargs,
     ):
         """AuxipClient class constructor."""
         super().__init__(
             rs_server_href,
-            "RS_SERVER_KEY_API",
+            rs_server_api_key,
             owner_id,
             logger,
             get_href_service(rs_server_href, "RSPY_HOST_ADGS") + "/auxip/",
             **kwargs,
         )
+        try:
+            self.station: EAuxipStation = EAuxipStation[station] if isinstance(station, str) else station
+        except KeyError as e:
+            self.logger.exception(f"There is no such AUXIP station: {station}")
+            raise RuntimeError(f"There is no such AUXIP station: {station}") from e
 
     @property
     def href_srv(self) -> str:
@@ -58,5 +63,5 @@ class AuxipClient(RsClient):
 
     @property
     def station_name(self) -> str:
-        """Return "AUXIP"."""
-        return AUXIP_STATION
+        """Return the station name."""
+        return self.station.value

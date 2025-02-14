@@ -14,10 +14,6 @@
 
 """Unit tests for RsClient, AuxipClient, CadipClient."""
 
-import urllib.parse
-from datetime import datetime
-
-import pystac_client
 import pytest
 import responses
 
@@ -25,13 +21,14 @@ from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
 from rs_client.rs_client import RsClient
 from rs_client.stac_client import StacClient
-from rs_common.config import DATETIME_FORMAT, ECadipStation, EPlatform
+from rs_common.config import EAuxipStation, ECadipStation, EPlatform
 
 # Use dummy values
 RSPY_UAC_CHECK_URL = "http://www.rspy-uac-manager.com"
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = "OWNER_ID"
-CADIP_STATION = ECadipStation.CADIP
+CADIP_STATION = "CADIP"
+ADGS_STATION = "ADGS"
 PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 
@@ -45,7 +42,7 @@ def generic_rs_client_(mocked_stac_catalog_url, monkeypatch):
 @pytest.fixture(name="auxip_client")
 def auxip_client_(generic_rs_client):
     """Return a generic AuxipClient instance for testing."""
-    yield generic_rs_client.get_auxip_client()
+    yield generic_rs_client.get_auxip_client(ADGS_STATION)
 
 
 @pytest.fixture(name="cadip_client")
@@ -67,106 +64,25 @@ def test_get_child_client(auxip_client, cadip_client, stac_client):  # pylint: d
     assert isinstance(stac_client, StacClient)
 
 
-def test_station_names(auxip_client, cadip_client, stac_client):  # pylint: disable=redefined-outer-name
+def test_station_names(generic_rs_client):  # pylint: disable=redefined-outer-name
     """Test the station name returned by the AuxipClient and CadipClient"""
-    assert "AUXIP" in auxip_client.station_name
-    assert "CADIP" in cadip_client.station_name
-    assert isinstance(stac_client, StacClient)
-
-
-def test_server_href(mocked_stac_catalog_url):
-    """Test that the Auxip, Cadip, Catalog service URLs can be passed by environment variable."""
-
-    rs_client = RsClient("https://rs_server_href_dummy/", RS_SERVER_API_KEY, OWNER_ID)  # no global href
-    dummy_href = "https://DUMMY_HREF"
-
-    for env_var, client, get_href in [
-        ["RSPY_HOST_ADGS", rs_client.get_auxip_client(), "href_adgs"],
-        ["RSPY_HOST_CADIP", rs_client.get_cadip_client(CADIP_STATION), "href_cadip"],
-    ]:
-        # Without the env var, we should have an error
-        with pytest.raises(RuntimeError):
-            getattr(client, get_href)
-
-        # If we set the global URL, it should be returned
-        client.rs_server_href = mocked_stac_catalog_url
-        assert getattr(client, get_href) == mocked_stac_catalog_url
-
-        # It can be overriden by the env var
-        with pytest.MonkeyPatch.context() as monkeypatch:
-            monkeypatch.setenv(env_var, dummy_href)
-            assert getattr(client, get_href) == dummy_href
-
-    # For the Stac client, we need a valid (or mocked, in our case) URL
-    # or the constructor will fail.
+    # Try with invalid stations name, should raise runtime
     with pytest.raises(RuntimeError):
-        rs_client.get_stac_client()
+        generic_rs_client.get_auxip_client("Invalid")
+    with pytest.raises(RuntimeError):
+        generic_rs_client.get_auxip_client(ECadipStation.CADIP)
+    with pytest.raises(RuntimeError):
+        generic_rs_client.get_cadip_client("Invalid")
+    with pytest.raises(RuntimeError):
+        generic_rs_client.get_cadip_client(EAuxipStation.ADGS)
 
-    # If we use the global URL, it should be returned
-    stac_client = RsClient(  # pylint: disable=redefined-outer-name
-        mocked_stac_catalog_url,
-        RS_SERVER_API_KEY,
-        OWNER_ID,
-    ).get_stac_client()
-    assert stac_client.href_srv == mocked_stac_catalog_url
-
-    # It can be overriden by the env var, but a dummy URL will raise a pystac exception
-    with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setenv("RSPY_HOST_CATALOG", dummy_href)
-        with pytest.raises(pystac_client.exceptions.APIError):
-            RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
-
-
-def test_cadip_sessions():
-    """
-    Test CadipClient.search_sessions
-    """
-
-    # Note: do some basic tests only. More extensive tests are done on the rs-server side.
-
-    # Dummy values
-    session_ids = ["id1", "id2"]
-    start_date = datetime(2000, 1, 1)
-    stop_date = datetime(2001, 1, 1)
-    url = "http://mocked_cadip_url"
-    cadip_client = RsClient(url, RS_SERVER_API_KEY, OWNER_ID).get_cadip_client(  # pylint: disable=redefined-outer-name
-        CADIP_STATION,
-    )
-
-    # Test the connection error with the dummy server
-    with pytest.raises(RuntimeError) as error:
-        cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
-    assert "ConnectionError" in str(error.getrepr())
-
-    # Mock the response, now the call should work
-    params = {
-        "id": "id1,id2",
-        "platform": "S1A,S2A",
-        "start_date": start_date.strftime(DATETIME_FORMAT),
-        "stop_date": stop_date.strftime(DATETIME_FORMAT),
-    }
-    mock_url = f"{url}/cadip/CADIP/session?{urllib.parse.urlencode(params)}"
-    features = ["feature1", "feature2"]
-    content = {"features": features}
-
-    # Test a bad response content format
-    with pytest.raises(RuntimeError) as error:
-        with responses.RequestsMock() as resp:
-            resp.get(url=mock_url, json={}, status=200)
-            cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
-    assert "KeyError" in str(error.getrepr())
-
-    # Test a bad response status code
-    with responses.RequestsMock() as resp:
-        resp.get(url=mock_url, json=content, status=500)
-        sessions = cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
-        assert not sessions
-
-    # Test the nominal case
-    with responses.RequestsMock() as resp:
-        resp.get(url=mock_url, json=content, status=200)
-        sessions = cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
-        assert sessions == features
+    # Try with station  as str
+    assert "ADGS" in generic_rs_client.get_auxip_client(ADGS_STATION).station_name
+    assert "CADIP" in generic_rs_client.get_cadip_client(CADIP_STATION).station_name
+    # Try with station as enum
+    assert "ADGS" in generic_rs_client.get_auxip_client(EAuxipStation.ADGS).station_name
+    assert "CADIP" in generic_rs_client.get_cadip_client(ECadipStation.CADIP).station_name
+    assert isinstance(generic_rs_client.get_stac_client(), StacClient)
 
 
 @responses.activate

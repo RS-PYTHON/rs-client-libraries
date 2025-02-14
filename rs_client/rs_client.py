@@ -19,16 +19,14 @@ import logging
 import os
 import re
 import sys
-from datetime import datetime
 from functools import lru_cache
-from typing import Any, Callable, Dict, Iterator, List, Optional, Union, cast
+from typing import Any, Callable, Dict, Iterator, Optional, Union, cast
 
 import requests
 from cachetools import TTLCache, cached
-from pystac import CatalogType, Collection, Item, ItemCollection, Link, RelType
+from pystac import Collection, Item, ItemCollection
 from pystac.item import Item
-from pystac.layout import HrefLayoutStrategy
-from pystac_client import Client, CollectionSearch, Modifiable
+from pystac_client import Client
 from pystac_client.collection_client import CollectionClient
 from pystac_client.exceptions import APIError
 from pystac_client.item_search import (
@@ -39,15 +37,14 @@ from pystac_client.item_search import (
     FilterLike,
     IDsLike,
     IntersectsLike,
-    ItemSearch,
     QueryLike,
     SortbyLike,
 )
 from pystac_client.stac_api_io import StacApiIO, Timeout
-from requests import Request, Response
+from requests import Request
 
 from rs_common import utils
-from rs_common.config import DATETIME_FORMAT, ECadipStation
+from rs_common.config import EAuxipStation, ECadipStation
 from rs_common.logging import Logging
 from rs_common.utils import AuthInfo
 
@@ -276,15 +273,17 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     # Get child class instances #
     #############################
 
-    def get_auxip_client(self, **kwargs) -> "AuxipClient":  # type: ignore # noqa: F821
+    def get_auxip_client(self, station: EAuxipStation, **kwargs) -> "AuxipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
+        Args:
+            station (EAuxipStation): Auxip station
         """
         from rs_client.auxip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             AuxipClient,
         )
 
-        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger, **kwargs)
+        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger, **kwargs)
 
     def get_cadip_client(self, station: ECadipStation, **kwargs) -> "CadipClient":  # type: ignore # noqa: F821
         """
@@ -369,8 +368,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         if collection:
             # Retrieve all items
             return collection.get_items()
-        else:
-            self.logger.error(f"Collection with ID '{collection_id}' not found.")
+        self.logger.error(f"Collection with ID '{collection_id}' not found.")
         return None
 
     def get_item(self, collection_id: str, item_id: str) -> Item | None:

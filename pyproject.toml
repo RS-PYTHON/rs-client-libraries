@@ -50,6 +50,7 @@ python-dateutil = "^2.9.0.post0"
 shapely = "^2.0.7"
 stac-pydantic = "^3.1.4"
 openapi-core = "^0.19.4"
+responses = "^0.25.6"
 
 [tool.poetry.group.dev]
 optional = true
@@ -70,7 +71,6 @@ sphinx = "^8.1.3"
 sphinx-rtd-theme = "^3.0.2"
 flake8 = "^7.1.1"
 flake8-pyproject = "^1.2.3"
-responses = "^0.25.6"
 
 [tool.poetry.group.demo.dependencies] # for hybrid mode
 jupyterlab = "^4.2.1"

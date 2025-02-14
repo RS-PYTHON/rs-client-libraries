@@ -53,6 +53,13 @@ class ECadipStation(str, Enum):
     SGS = "SGS"
 
 
+class EAuxipStation(str, Enum):
+    """Auxip stations enumeration."""
+
+    ADGS = "ADGS"
+    ADGS2 = "ADGS2"
+
+
 class EDownloadStatus(str, Enum):
     """Download status enumeration."""
 

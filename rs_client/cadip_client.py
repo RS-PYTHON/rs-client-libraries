@@ -15,13 +15,9 @@
 """CadipClient class implementation."""
 
 import logging
-import os
-from datetime import datetime
 
-import requests
-
-from rs_client.rs_client import TIMEOUT, RsClient
-from rs_common.config import DATETIME_FORMAT, ECadipStation, EPlatform
+from rs_client.rs_client import RsClient
+from rs_common.config import ECadipStation
 from rs_common.utils import get_href_service
 
 
@@ -38,7 +34,7 @@ class CadipClient(RsClient):
         rs_server_href: str | None,
         rs_server_api_key: str | None,
         owner_id: str | None,
-        station: ECadipStation,
+        station: str,
         logger: logging.Logger | None = None,
         **kwargs,
     ):
@@ -52,7 +48,7 @@ class CadipClient(RsClient):
             **kwargs,
         )
         try:
-            self.station: ECadipStation = ECadipStation[station]
+            self.station: ECadipStation = ECadipStation[station] if isinstance(station, str) else station
         except KeyError as e:
             self.logger.exception(f"There is no such CADIP station: {station}")
             raise RuntimeError(f"There is no such CADIP station: {station}") from e
@@ -69,8 +65,4 @@ class CadipClient(RsClient):
     @property
     def station_name(self) -> str:
         """Return the station name."""
-        return self.station.value  # TO BE DISCUSSED: maybe just return "CADIP"
-
-    ############################
-    # Call RS-Server endpoints #
-    ############################
+        return self.station.value
