@@ -180,7 +180,7 @@ def mocked_stac_catalog_add_collection():
 @pytest.fixture
 def mocked_stac_catalog_get_collection():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
-    with responses.RequestsMock() as resp:
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as resp:
         # Mocked URL
         url = "http://mocked_stac_catalog_url"
 
@@ -234,6 +234,12 @@ def mocked_stac_catalog_get_collection():
             "stac_version": "1.0.0",
         }
         resp.get(url=url + "/catalog/collections/toto:S1_L1", json=json_single_collection, status=200)
+        resp.get(
+            url=url + "/catalog/collections/toto:S1_L1/items?collections=S1_L1",
+            json=json_single_collection,
+            status=200,
+        )
+        resp.get(url=url + "/catalog/collections", json=json_single_collection, status=200)
 
         yield url
 

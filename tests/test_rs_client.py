@@ -31,6 +31,7 @@ RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = "OWNER_ID"
 CADIP_STATION = "CADIP"
 ADGS_STATION = "ADGS"
+MOCKED_URL = "http://mocked_stac_catalog_url/"
 PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 
@@ -250,8 +251,8 @@ class TestRSClient:
     @pytest.mark.parametrize(
         "client, url",
         [
-            ("auxip_client", "http://mocked_stac_catalog_url/auxip/queryables"),
-            ("cadip_client", "http://mocked_stac_catalog_url/cadip/queryables"),
+            ("auxip_client", MOCKED_URL + "auxip/queryables"),
+            ("cadip_client", MOCKED_URL + "cadip/queryables"),
         ],
     )
     @responses.activate
@@ -270,8 +271,8 @@ class TestRSClient:
     @pytest.mark.parametrize(
         "client, url",
         [
-            ("auxip_client", "http://mocked_stac_catalog_url/auxip/queryables"),
-            ("cadip_client", "http://mocked_stac_catalog_url/cadip/queryables"),
+            ("auxip_client", MOCKED_URL + "auxip/queryables"),
+            ("cadip_client", MOCKED_URL + "cadip/queryables"),
         ],
     )
     @responses.activate
@@ -287,8 +288,8 @@ class TestRSClient:
     @pytest.mark.parametrize(
         "client, url",
         [
-            ("auxip_client", "http://mocked_stac_catalog_url/auxip/queryables"),
-            ("cadip_client", "http://mocked_stac_catalog_url/cadip/queryables"),
+            ("auxip_client", MOCKED_URL + "auxip/queryables"),
+            ("cadip_client", MOCKED_URL + "cadip/queryables"),
         ],
     )
     @responses.activate
@@ -311,8 +312,8 @@ class TestRSClient:
     @pytest.mark.parametrize(
         "client, url",
         [
-            ("auxip_client", "http://mocked_stac_catalog_url/auxip/queryables"),
-            ("cadip_client", "http://mocked_stac_catalog_url/cadip/queryables"),
+            ("auxip_client", MOCKED_URL + "auxip/queryables"),
+            ("cadip_client", MOCKED_URL + "cadip/queryables"),
         ],
     )
     @responses.activate
