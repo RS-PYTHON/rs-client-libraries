@@ -15,7 +15,9 @@
 """Unit tests for RsClient, AuxipClient, CadipClient."""
 
 import pytest
+import requests
 import responses
+from pystac_client.exceptions import APIError
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
@@ -57,6 +59,7 @@ def stac_client_(generic_rs_client):
     yield generic_rs_client.get_stac_client()
 
 
+@pytest.mark.unit
 def test_get_child_client(auxip_client, cadip_client, stac_client):  # pylint: disable=redefined-outer-name
     """Test get_auxip_client, get_cadip_client, get_stac_client"""
     assert isinstance(auxip_client, AuxipClient)
@@ -64,6 +67,7 @@ def test_get_child_client(auxip_client, cadip_client, stac_client):  # pylint: d
     assert isinstance(stac_client, StacClient)
 
 
+@pytest.mark.unit
 def test_station_names(generic_rs_client):  # pylint: disable=redefined-outer-name
     """Test the station name returned by the AuxipClient and CadipClient"""
     # Try with invalid stations name, should raise runtime
@@ -85,6 +89,7 @@ def test_station_names(generic_rs_client):  # pylint: disable=redefined-outer-na
     assert isinstance(generic_rs_client.get_stac_client(), StacClient)
 
 
+@pytest.mark.unit
 @responses.activate
 def test_apikey_security(monkeypatch):
     """
@@ -141,6 +146,7 @@ def test_apikey_security(monkeypatch):
     assert rs_client.apikey_user_login == modified_response["user_login"]
 
 
+@pytest.mark.unit
 @responses.activate
 def test_oauth2_security(monkeypatch):
     """
@@ -173,6 +179,7 @@ def test_oauth2_security(monkeypatch):
     assert rs_client.owner_id == auth_info["user_login"]
 
 
+@pytest.mark.unit
 def test_no_security():
     """If no apikey or oauth2 cookie is present, we should have an error."""
 
@@ -181,3 +188,139 @@ def test_no_security():
 
     with pytest.raises(RuntimeError):
         RsClient(dummy_href)  # "API key or OAuth2 cookie is mandatory for RS-Server authentication"
+
+
+class TestRSClient:
+    """Test class to group all RSClient methods."""
+
+    @pytest.mark.unit
+    def test_cadip_auxip_get_landing(self, mocker, auxip_client, cadip_client):
+        """Test GET landing page."""
+        mock_landing = mocker.patch("rs_client.rs_client.RsClient.get_landing", return_value={})
+        auxip_client.get_landing()
+        cadip_client.get_landing()
+        assert mock_landing.call_count == 2
+
+    @pytest.mark.unit
+    def test_cadip_auxip_get_collections(self, mocker, auxip_client, cadip_client):
+        """Test to get all client collections."""
+        mock_collections = mocker.patch("rs_client.rs_client.RsClient.get_collections", return_value=[])
+        auxip_client.get_collections()
+        cadip_client.get_collections()
+        assert mock_collections.call_count == 2
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "client, collection_id",
+        [("auxip_client", "auxip_collection"), ("cadip_client", "cadip_collection")],
+    )
+    def test_cadip_auxip_get_collection(self, mocker, client, collection_id, request):
+        """Test get valid collection id."""
+        client_instance = request.getfixturevalue(client)
+
+        mock_get_collection = mocker.patch("rs_client.rs_client.RsClient.get_collection", return_value=[])
+
+        client_instance.get_collection(collection_id)
+
+        mock_get_collection.assert_called_once_with(collection_id)
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    def test_cadip_auxip_get_invalid_collection(self, mocker, client, request):
+        """Test a invalid collection, should result in a empty response."""
+        client_instance = request.getfixturevalue(client)
+
+        mock_get_collection = mocker.patch.object(client_instance.ps_client, "get_collection", side_effect=APIError)
+
+        collection = client_instance.get_collection("invalid_collection")
+
+        mock_get_collection.assert_called_once_with("invalid_collection")
+        assert not collection
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    def test_cadip_auxip_get_collection_queryables(self, mocker, client, request):
+        """Test to get a specific collection queryables."""
+        client_instance = request.getfixturevalue(client)
+        mock_get_queryables = mocker.patch.object(client_instance.ps_client, "get_merged_queryables", return_value={})
+        client_instance.get_collection_queryables("valid_collection")
+        mock_get_queryables.assert_called_once_with(["valid_collection"])
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "client, url",
+        [
+            ("auxip_client", "http://mocked_stac_catalog_url/auxip/queryables"),
+            ("cadip_client", "http://mocked_stac_catalog_url/cadip/queryables"),
+        ],
+    )
+    @responses.activate
+    def test_cadip_auxip_get_queryables_error(self, client, url, request):
+        """Test a bad response while requesting queryables."""
+        client_instance = request.getfixturevalue(client)
+        with pytest.raises(
+            RuntimeError,
+            match=f"Could not get queryables from {url}",
+        ), responses.RequestsMock() as resp:
+            # If /queryables return 404, then rs_client should raise Runtime
+            resp.add(responses.GET, url=url, json={}, status=404)
+            client_instance.get_queryables()
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "client, url",
+        [
+            ("auxip_client", "http://mocked_stac_catalog_url/auxip/queryables"),
+            ("cadip_client", "http://mocked_stac_catalog_url/cadip/queryables"),
+        ],
+    )
+    @responses.activate
+    def test_cadip_auxip_get_queryables_error_unwrapping(self, client, url, request):
+        """Test a unwrapping error while requesting queryables."""
+        client_instance = request.getfixturevalue(client)
+        with pytest.raises(RuntimeError, match=f"Invalid JSON response from {url}"), responses.RequestsMock() as resp:
+            # If /queryables return empty, then rs_client should raise Runtime
+            resp.add(responses.GET, url=url, status=200)
+            client_instance.get_queryables()
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "client, url",
+        [
+            ("auxip_client", "http://mocked_stac_catalog_url/auxip/queryables"),
+            ("cadip_client", "http://mocked_stac_catalog_url/cadip/queryables"),
+        ],
+    )
+    @responses.activate
+    def test_cadip_auxip_get_queryables_error_timeout(self, client, url, request):
+        """Test a timeout when requesting queryables."""
+        client_instance = request.getfixturevalue(client)
+
+        def timeout_callback(request):
+            raise requests.exceptions.Timeout("Request timed out")
+
+        with pytest.raises(
+            RuntimeError,
+            match=f"Could not get the response from the endpoint {url}",
+        ), responses.RequestsMock() as resp:
+            # If /queryables result in a timeout, should raise runtimeerror
+            resp.add_callback(responses.GET, url, callback=timeout_callback)
+            client_instance.get_queryables()
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "client, url",
+        [
+            ("auxip_client", "http://mocked_stac_catalog_url/auxip/queryables"),
+            ("cadip_client", "http://mocked_stac_catalog_url/cadip/queryables"),
+        ],
+    )
+    @responses.activate
+    def test_cadip_auxip_get_queryables(self, client, url, request):
+        """Test to verify the correct return of queryables."""
+        client_instance = request.getfixturevalue(client)
+        with responses.RequestsMock() as resp:
+            # Valid
+            resp.add(responses.GET, url=url, json={"Q1_name": "Q1_value"}, status=200)
+            queryables = client_instance.get_queryables()
+            assert {"Q1_name": "Q1_value"} == queryables

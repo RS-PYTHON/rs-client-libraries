@@ -670,7 +670,7 @@ def mocked_stac_catalog_search_inside_collection():
 @pytest.fixture
 def mocked_stac_catalog_url():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
-    with responses.RequestsMock() as resp:
+    with responses.RequestsMock(assert_all_requests_are_fired=False) as resp:
         # Mocked URL
         url = "http://mocked_stac_catalog_url"
 

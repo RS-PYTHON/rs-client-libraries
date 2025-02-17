@@ -25,7 +25,6 @@ from typing import Any, Callable, Dict, Iterator, Optional, Union, cast
 import requests
 from cachetools import TTLCache, cached
 from pystac import Collection, Item, ItemCollection
-from pystac.item import Item
 from pystac_client import Client
 from pystac_client.collection_client import CollectionClient
 from pystac_client.exceptions import APIError
@@ -74,17 +73,17 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         http_session (Session): HTTP requests session with cookies.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-branches, too-many-arguments, too-many-positional-arguments
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None = None,
         owner_id: str | None = None,
         logger: logging.Logger | None = None,
-        stac_href: str = None,  # Flag to enable pystac_client for specific subclasses
+        stac_href: str | None = None,  # Flag to enable pystac_client for specific subclasses
         headers: Optional[Dict[str, str]] = None,
         parameters: Optional[Dict[str, Any]] = None,
         ignore_conformance: Optional[bool] = None,
-        modifier: Optional[Callable[[Client], None]] = None,
+        modifier: Callable[[Collection | Item | ItemCollection | dict[Any, Any]], None] | None = None,
         request_modifier: Optional[Callable[[Request], Union[Request, None]]] = None,
         stac_io: Optional[StacApiIO] = None,
         timeout: Optional[Timeout] = TIMEOUT,
@@ -136,7 +135,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         self.logger.debug(f"Owner ID: {self.owner_id!r}")
 
         # Initialize pystac_client.Client only if required (for CadipClient, AuxipClient, StacClient)
-        self.ps_client: Optional[Client] = None
+        self.ps_client: Client = None  # type: ignore
         if stac_href:
             try:
                 self.stac_href = stac_href
@@ -350,7 +349,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         return self.ps_client.get_collections()
 
     @lru_cache()
-    def get_collection(self, collection_id: str) -> Union[Collection, CollectionClient]:
+    def get_collection(self, collection_id: str) -> Union[Collection, CollectionClient, None]:
         """Get the requested collection"""
 
         collection = None
@@ -360,7 +359,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             self.logger.exception(f"An error occurred while retrieving the collection: {e}")
         return collection
 
-    def get_items(self, collection_id: str) -> Iterator["Item"]:
+    def get_items(self, collection_id: str) -> Iterator["Item"] | None:
         """Get all items from a specific collection."""
 
         # Retrieve the collection
@@ -428,7 +427,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         filter_lang: Optional[str] = None,
         sortby: Optional[SortbyLike] = None,
         fields: Optional[FieldsLike] = None,
-    ) -> ItemCollection:
+    ) -> ItemCollection | None:
         """Retrieve a list of items by calling the ps_client function"""
         try:
             items_search = self.ps_client.search(

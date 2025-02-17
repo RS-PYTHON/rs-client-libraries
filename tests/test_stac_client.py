@@ -42,7 +42,7 @@ def test_get_collection_stac_client(mocked_stac_catalog_get_collection):  # pyli
     ##################################################
 
     collection = catalog.get_collection(collection_id="S1_L1", owner_id="toto")
-    assert collection.id == "S1_L1"
+    assert collection.id == "S1_L1" if collection else False
 
 
 def test_all_collections_stac_client(mocked_stac_catalog_get_collection):  # pylint: disable=missing-function-docstring
@@ -66,7 +66,7 @@ def test_get_items_stac_client(mocked_stac_catalog_get_collection):  # pylint: d
 
     collection = catalog.get_collection(collection_id="S1_L1", owner_id="toto")
 
-    items = collection.get_all_items()
+    items = collection.get_all_items()  # type: ignore
     for item in items:
         print(item)
 
@@ -194,7 +194,7 @@ def test_search_item_inside_collection_stac_client_mock(
         OWNER_ID,
     ).get_stac_client()
 
-    response = catalog.search_inside_collection(owner_id="toto", collection_id="S1_L1")
+    response = catalog.search_inside_collection(owner_id="toto", collection_id="S1_L1")  # type: ignore # pylint: disable=no-member
 
     expected_ids = [
         "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw",

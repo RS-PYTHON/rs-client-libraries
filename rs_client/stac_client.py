@@ -99,13 +99,17 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
 
     # STAC read opperations. These can be done with pystac_client (by calling super RsClient functions)
 
-    def get_collection(self, collection_id: str, owner_id: str | None = None) -> Union[Collection, CollectionClient]:
+    def get_collection(  # type: ignore
+        self,
+        collection_id: str,
+        owner_id: str | None = None,
+    ) -> Union[Collection, CollectionClient, None]:
         """Get the requested collection"""
 
         collection_id = self.full_collection_id(owner_id, collection_id, ":")
         return super().get_collection(collection_id)
 
-    def get_items(self, collection_id: str, owner_id: str | None = None) -> Iterator["Item"]:
+    def get_items(self, collection_id: str, owner_id: str | None = None) -> Union[Iterator["Item"], None]:
         """Get all items from a specific collection."""
 
         collection_id = self.full_collection_id(owner_id, collection_id, ":")
@@ -117,7 +121,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
         collection = self.full_collection_id(owner_id, collection_id, ":")
         return super().get_item(collection, item_id)
 
-    def search(  # pylint: disable=too-many-arguments
+    def search(  # type: ignore # pylint: disable=too-many-arguments
         self,
         owner_id: str | None = None,
         *,
@@ -134,11 +138,11 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
         filter_lang: Optional[str] = None,
         sortby: Optional[SortbyLike] = None,
         fields: Optional[FieldsLike] = None,
-    ) -> ItemSearch:
+    ) -> Union[ItemSearch, None]:
         """Search items inside a specific collection."""
 
-        collections = [self.full_collection_id(owner_id, collection, "_") for collection in collections]
-        return super().search(
+        collections = [self.full_collection_id(owner_id, collection, "_") for collection in collections]  # type: ignore
+        return super().search(  # type: ignore
             method=method,
             max_items=max_items,
             limit=limit,
@@ -290,7 +294,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
         collection = self.get_collection(collection_id, owner_id)
 
         # Update the item  contents
-        collection.add_item(item)
+        collection.add_item(item)  # type: ignore
 
         # Post the item to the catalog
         return self.http_session.post(
