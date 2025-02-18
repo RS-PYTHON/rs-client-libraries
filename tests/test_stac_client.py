@@ -68,8 +68,7 @@ def test_get_items_stac_client(mocked_stac_catalog_get_collection):  # pylint: d
     collection = catalog.get_collection(collection_id="S1_L1", owner_id="toto")
 
     items = collection.get_all_items()  # type: ignore
-    for item in items:
-        print(item)
+    assert items
 
 
 def test_create_new_collection_stac_client():  # pylint: disable=missing-function-docstring
@@ -162,7 +161,7 @@ def test_add_item_stac_client(mocked_stac_catalog_add_item):  # pylint: disable=
     )
     response = catalog.add_item(collection_id="S1_L1", item=item, owner_id="toto")
 
-    print(response)
+    assert response.status_code == 200
 
 
 def test_remove_item_stac_client(mocked_stac_catalog_delete_item):  # pylint: disable=missing-function-docstring
