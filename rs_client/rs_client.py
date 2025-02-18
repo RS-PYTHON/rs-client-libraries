@@ -28,17 +28,6 @@ from pystac import Collection, Item, ItemCollection
 from pystac_client import Client
 from pystac_client.collection_client import CollectionClient
 from pystac_client.exceptions import APIError
-from pystac_client.item_search import (
-    BBoxLike,
-    CollectionsLike,
-    DatetimeLike,
-    FieldsLike,
-    FilterLike,
-    IDsLike,
-    IntersectsLike,
-    QueryLike,
-    SortbyLike,
-)
 from pystac_client.stac_api_io import StacApiIO, Timeout
 from requests import Request
 
@@ -414,38 +403,12 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
     def search(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
-        *,
-        method: Optional[str] = "POST",
-        max_items: Optional[int] = None,
-        limit: Optional[int] = None,
-        collections: Optional[CollectionsLike] = None,
-        ids: Optional[IDsLike] = None,
-        bbox: Optional[BBoxLike] = None,
-        intersects: Optional[IntersectsLike] = None,
-        timestamp: Optional[DatetimeLike] = None,
-        query: Optional[QueryLike] = None,
-        stac_filter: Optional[FilterLike] = None,
-        filter_lang: Optional[str] = None,
-        sortby: Optional[SortbyLike] = None,
-        fields: Optional[FieldsLike] = None,
+        **kwargs,
     ) -> ItemCollection | None:
         """Retrieve a list of items by calling the ps_client function"""
+        kwargs.pop("owner_id")
         try:
-            items_search = self.ps_client.search(
-                method=method,
-                max_items=max_items,
-                limit=limit,
-                ids=ids,
-                collections=collections,
-                bbox=bbox,
-                intersects=intersects,
-                datetime=timestamp,
-                query=query,
-                filter=stac_filter,
-                filter_lang=filter_lang,
-                sortby=sortby,
-                fields=fields,
-            )
+            items_search = self.ps_client.search(**kwargs)
 
             return items_search.item_collection()
         except NotImplementedError:

@@ -106,14 +106,12 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
 
     def search(  # type: ignore # pylint: disable=too-many-arguments, arguments-differ
         self,
-        owner_id: str | None = None,
-        *,
-        kwargs,
+        **kwargs,
     ) -> Union[ItemSearch, None]:
         """Search items inside a specific collection."""
 
         kwargs["collections"] = [
-            self.full_collection_id(owner_id, collection, "_") for collection in kwargs["collections"]
+            self.full_collection_id(kwargs["owner_id"], collection, "_") for collection in kwargs["collections"]
         ]  # type: ignore
         return super().search(**kwargs)  # type: ignore
 
