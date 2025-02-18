@@ -17,23 +17,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterator, Optional, Union
+from typing import Iterator, Union
 
 import pystac
 from pystac import Collection, Item, Link, RelType
 from pystac_client.collection_client import CollectionClient
-from pystac_client.item_search import (
-    BBoxLike,
-    CollectionsLike,
-    DatetimeLike,
-    FieldsLike,
-    FilterLike,
-    IDsLike,
-    IntersectsLike,
-    ItemSearch,
-    QueryLike,
-    SortbyLike,
-)
+from pystac_client.item_search import ItemSearch
 from requests import Response
 
 from rs_client.rs_client import TIMEOUT, RsClient
@@ -115,42 +104,18 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
         """Get an item from a specific collection."""
         return super().get_item(self.full_collection_id(owner_id, collection_id, ":"), item_id)
 
-    def search(  # type: ignore # pylint: disable=too-many-arguments
+    def search(  # type: ignore # pylint: disable=too-many-arguments, arguments-differ
         self,
         owner_id: str | None = None,
         *,
-        method: Optional[str] = "POST",
-        max_items: Optional[int] = None,
-        limit: Optional[int] = None,
-        collections: Optional[CollectionsLike] = None,
-        ids: Optional[IDsLike] = None,
-        bbox: Optional[BBoxLike] = None,
-        intersects: Optional[IntersectsLike] = None,
-        timestamp: Optional[DatetimeLike] = None,
-        query: Optional[QueryLike] = None,
-        stac_filter: Optional[FilterLike] = None,
-        filter_lang: Optional[str] = None,
-        sortby: Optional[SortbyLike] = None,
-        fields: Optional[FieldsLike] = None,
+        kwargs,
     ) -> Union[ItemSearch, None]:
         """Search items inside a specific collection."""
 
-        collections = [self.full_collection_id(owner_id, collection, "_") for collection in collections]  # type: ignore
-        return super().search(  # type: ignore
-            method=method,
-            max_items=max_items,
-            limit=limit,
-            collections=collections,
-            ids=ids,
-            bbox=bbox,
-            intersects=intersects,
-            timestamp=timestamp,
-            query=query,
-            stac_filter=stac_filter,
-            filter_lang=filter_lang,
-            sortby=sortby,
-            fields=fields,
-        )
+        kwargs["collections"] = [
+            self.full_collection_id(owner_id, collection, "_") for collection in kwargs["collections"]
+        ]  # type: ignore
+        return super().search(**kwargs)  # type: ignore
 
     # end of STAC read opperations
 
