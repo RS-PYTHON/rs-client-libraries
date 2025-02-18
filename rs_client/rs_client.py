@@ -407,6 +407,9 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     ) -> ItemCollection | None:
         """Retrieve a list of items by calling the ps_client function"""
         kwargs.pop("owner_id", None)
+        kwargs["datetime"] = kwargs.pop("timestamp", None)
+        kwargs["filter"] = kwargs.pop("stac_filter", None)
+
         try:
             items_search = self.ps_client.search(**kwargs)
 
