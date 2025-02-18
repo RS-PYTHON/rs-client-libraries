@@ -381,6 +381,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
                 self.logger.error(f"Item with ID '{item_id}' not found in collection '{collection_id}'.")
         else:
             self.logger.error(f"Collection with ID '{collection_id}' not found.")
+            return None
         return item
 
     def get_collection_queryables(self, collection_id) -> Dict[str, Any]:

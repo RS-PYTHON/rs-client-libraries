@@ -195,12 +195,11 @@ class TestRSClient:
     """Test class to group all RSClient methods."""
 
     @pytest.mark.unit
-    def test_cadip_auxip_get_landing(self, mocker, auxip_client, cadip_client):
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    def test_cadip_auxip_get_landing(self, client, request):
         """Test GET landing page."""
-        mock_landing = mocker.patch("rs_client.rs_client.RsClient.get_landing", return_value={})
-        auxip_client.get_landing()
-        cadip_client.get_landing()
-        assert mock_landing.call_count == 2
+        client_instance = request.getfixturevalue(client)
+        assert isinstance(client_instance.get_landing(), dict)
 
     @pytest.mark.unit
     def test_cadip_auxip_get_collections(self, mocker, auxip_client, cadip_client):
@@ -237,6 +236,48 @@ class TestRSClient:
 
         mock_get_collection.assert_called_once_with("invalid_collection")
         assert not collection
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    def test_cadip_auxip_get_invalid_items(self, mocker, client, request):
+        """Test get_items from an invalid collection, should return None"""
+        client_instance = request.getfixturevalue(client)
+        mocker.patch.object(client_instance.ps_client, "get_collection", return_value=None)
+        assert not client_instance.get_items("invalid_collection")
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    def test_cadip_auxip_get_valid_items(self, mocker, client, request):
+        """Test get_items from a valid collection."""
+        client_instance = request.getfixturevalue(client)
+        mock_collection = mocker.MagicMock()
+        mock_collection.get_items.return_value = {"Item1": "data"}
+        mocker.patch.object(client_instance.ps_client, "get_collection", return_value=mock_collection)
+
+        assert client_instance.get_items("valid_collection") == {"Item1": "data"}
+        client_instance.ps_client.get_collection.assert_called_once_with("valid_collection")
+        mock_collection.get_items.assert_called_once()
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    def test_cadip_auxip_get_invalid_item(self, mocker, client, request):
+        """Test to get an invalid should return None"""
+        client_instance = request.getfixturevalue(client)
+        mocker.patch.object(client_instance.ps_client, "get_collection", return_value=None)
+        assert not client_instance.get_item("invalid_collection", "invalid_item")
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    def test_cadip_auxip_get_valid_item(self, mocker, client, request):
+        """Test valid get_item from a valid collection."""
+        client_instance = request.getfixturevalue(client)
+        mock_collection = mocker.MagicMock()
+        mock_collection.get_item.return_value = {"Item1": "data"}
+        mocker.patch.object(client_instance.ps_client, "get_collection", return_value=mock_collection)
+
+        assert client_instance.get_item("valid_collection", "Item1") == {"Item1": "data"}
+        client_instance.ps_client.get_collection.assert_called_once_with("valid_collection")
+        mock_collection.get_item.assert_called_once_with("Item1")
 
     @pytest.mark.unit
     @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
