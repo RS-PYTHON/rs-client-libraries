@@ -105,21 +105,15 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
         owner_id: str | None = None,
     ) -> Union[Collection, CollectionClient, None]:
         """Get the requested collection"""
-
-        collection_id = self.full_collection_id(owner_id, collection_id, ":")
-        return super().get_collection(collection_id)
+        return super().get_collection(self.full_collection_id(owner_id, collection_id, ":"))
 
     def get_items(self, collection_id: str, owner_id: str | None = None) -> Union[Iterator["Item"], None]:
         """Get all items from a specific collection."""
-
-        collection_id = self.full_collection_id(owner_id, collection_id, ":")
-        return super().get_items(collection_id)
+        return super().get_items(self.full_collection_id(owner_id, collection_id, ":"))
 
     def get_item(self, collection_id: str, item_id: str, owner_id: str | None = None):
         """Get an item from a specific collection."""
-
-        collection = self.full_collection_id(owner_id, collection_id, ":")
-        return super().get_item(collection, item_id)
+        return super().get_item(self.full_collection_id(owner_id, collection_id, ":"), item_id)
 
     def search(  # type: ignore # pylint: disable=too-many-arguments
         self,

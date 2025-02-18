@@ -31,7 +31,7 @@ RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = "OWNER_ID"
 CADIP_STATION = "CADIP"
 ADGS_STATION = "ADGS"
-MOCKED_URL = "http://mocked_stac_catalog_url/"
+MOCKED_URL = "https://mocked_stac_catalog_url/"
 PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 

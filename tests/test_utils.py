@@ -45,7 +45,7 @@ def test_get_href_service(
 ):
     """Test the get_href_service function."""
 
-    rs_server_href = "http://dummy-rs-server-href/endpoint/"
+    rs_server_href = "https://dummy-rs-server-href/endpoint/"
     assert get_href_service(rs_server_href, "RSPY_HOST_CATALOG") == "https://dummy-catalog/catalog"
     assert get_href_service(rs_server_href, "RSPY_HOST_CADIP") == "https://dummy-cadip/cadip"
     assert get_href_service(rs_server_href, "RSPY_HOST_AUXIP") == "https://dummy-audxip/auxip"

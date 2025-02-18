@@ -678,7 +678,7 @@ def mocked_stac_catalog_url():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
     with responses.RequestsMock(assert_all_requests_are_fired=False) as resp:
         # Mocked URL
-        url = "http://mocked_stac_catalog_url"
+        url = "https://mocked_stac_catalog_url"
 
         # This is the returned content when calling a real STAC catalog service with:
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
