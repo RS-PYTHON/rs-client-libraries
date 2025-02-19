@@ -254,7 +254,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         return self.apikey_security().apikey_config
 
     @property
-    def href_srv(self):
+    def href_service(self):
         """Implemented by child classes"""
 
     #############################
@@ -286,15 +286,15 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger, **kwargs)
 
-    def get_stac_client(self, **kwargs) -> "StacClient":  # type: ignore # noqa: F821
+    def get_catalog_client(self, **kwargs) -> "CatalogClient":  # type: ignore # noqa: F821
         """
-        Return an instance of the child class StacClient, with the same attributes as this "self" instance.
+        Return an instance of the child class CatalogClient, with the same attributes as this "self" instance.
         """
-        from rs_client.stac_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
-            StacClient,
+        from rs_client.catalog_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            CatalogClient,
         )
 
-        return StacClient(
+        return CatalogClient(
             self.rs_server_href,
             self.rs_server_api_key,
             self.owner_id,

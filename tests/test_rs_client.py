@@ -21,8 +21,8 @@ from pystac_client.exceptions import APIError
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
+from rs_client.catalog_client import CatalogClient
 from rs_client.rs_client import RsClient
-from rs_client.stac_client import StacClient
 from rs_common.config import EAuxipStation, ECadipStation, EPlatform
 
 # Use dummy values
@@ -57,7 +57,7 @@ def cadip_client_(generic_rs_client):
 @pytest.fixture(name="stac_client")
 def stac_client_(generic_rs_client):
     """Return a generic StacClient instance for testing."""
-    yield generic_rs_client.get_stac_client()
+    yield generic_rs_client.get_catalog_client()
 
 
 @pytest.mark.unit
@@ -65,7 +65,7 @@ def test_get_child_client(auxip_client, cadip_client, stac_client):  # pylint: d
     """Test get_auxip_client, get_cadip_client, get_stac_client"""
     assert isinstance(auxip_client, AuxipClient)
     assert isinstance(cadip_client, CadipClient)
-    assert isinstance(stac_client, StacClient)
+    assert isinstance(stac_client, CatalogClient)
 
 
 @pytest.mark.unit
@@ -87,7 +87,7 @@ def test_station_names(generic_rs_client):  # pylint: disable=redefined-outer-na
     # Try with station as enum
     assert "ADGS" in generic_rs_client.get_auxip_client(EAuxipStation.ADGS).station_name
     assert "CADIP" in generic_rs_client.get_cadip_client(ECadipStation.CADIP).station_name
-    assert isinstance(generic_rs_client.get_stac_client(), StacClient)
+    assert isinstance(generic_rs_client.get_catalog_client(), CatalogClient)
 
 
 @pytest.mark.unit

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Implement the class StacCLient that inherits from pystact_client Client."""
+"""Implement the class CatalogClient that inherits from pystact_client Client."""
 
 from __future__ import annotations
 
@@ -29,8 +29,8 @@ from rs_client.rs_client import TIMEOUT, RsClient
 from rs_common.utils import get_href_service
 
 
-class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
-    """StacClient inherits from both rs_client.RsClient and pystac_client.Client. The goal of this class is to
+class CatalogClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
+    """CatalogClient inherits from both rs_client.RsClient and pystac_client.Client. The goal of this class is to
     allow an user to use RS-Server services more easily than calling REST endpoints directly.
     """
 
@@ -46,7 +46,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
         logger: logging.Logger | None = None,
         **kwargs,
     ):
-        """StacClient class constructor."""
+        """CatalogClient class constructor."""
         super().__init__(
             rs_server_href,
             rs_server_api_key,
@@ -60,9 +60,9 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
     # Properties #
     ##############
     @property
-    def href_srv(self) -> str:
+    def href_service(self) -> str:
         """
-        Return the RS-Server CADIP URL hostname.
+        Return the RS-Server Catalog URL hostname.
         This URL can be overwritten using the RSPY_HOST_CATALOG env variable (used e.g. for local mode).
         Otherwise it should just be the RS-Server URL.
         """
@@ -179,7 +179,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
 
         # Post the collection to the catalog
         return self.http_session.post(
-            f"{self.href_srv}/catalog/collections",
+            f"{self.href_service}/catalog/collections",
             json=collection.to_dict(),
             **self.apikey_headers,
             timeout=timeout,
@@ -218,7 +218,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
 
         # Remove the collection from the server catalog
         return self.http_session.delete(
-            f"{self.href_srv}/catalog/collections/{full_collection_id}",
+            f"{self.href_service}/catalog/collections/{full_collection_id}",
             **self.apikey_headers,
             timeout=timeout,
         )
@@ -255,7 +255,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
 
         # Post the item to the catalog
         return self.http_session.post(
-            f"{self.href_srv}/catalog/collections/{full_collection_id}/items",
+            f"{self.href_service}/catalog/collections/{full_collection_id}/items",
             json=item.to_dict(),
             **self.apikey_headers,
             timeout=timeout,
@@ -284,7 +284,7 @@ class StacClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
 
         # Remove the collection from the server catalog
         return self.http_session.delete(
-            f"{self.href_srv}/catalog/collections/{full_collection_id}/items/{item_id}",
+            f"{self.href_service}/catalog/collections/{full_collection_id}/items/{item_id}",
             **self.apikey_headers,
             timeout=timeout,
         )
