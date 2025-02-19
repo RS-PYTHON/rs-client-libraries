@@ -20,8 +20,8 @@ from datetime import datetime
 
 from pystac import Collection, Extent, Item, SpatialExtent, TemporalExtent
 
-from rs_client.rs_client import RsClient
 from rs_client.catalog_client import CatalogClient
+from rs_client.rs_client import RsClient
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = "OWNER_ID"
@@ -35,10 +35,14 @@ def test_create_object_catalog_client(mocked_stac_catalog_url):  # pylint: disab
     assert catalog.ps_client.id == "stac-fastapi"
 
 
-def test_get_collection_catalog_client(mocked_stac_catalog_get_collection):  # pylint: disable=missing-function-docstring
-    catalog: CatalogClient = RsClient(mocked_stac_catalog_get_collection,
-                                      RS_SERVER_API_KEY,
-                                      OWNER_ID).get_catalog_client()
+def test_get_collection_catalog_client(
+    mocked_stac_catalog_get_collection,
+):  # pylint: disable=missing-function-docstring
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_get_collection,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
 
     ##################################################
     # Get the collection S1_L1 from toto catalog #
@@ -48,9 +52,14 @@ def test_get_collection_catalog_client(mocked_stac_catalog_get_collection):  # p
     assert collection.id == "S1_L1" if collection else False
 
 
-def test_all_collections_catalog_client(mocked_stac_catalog_get_collection):  # pylint: disable=missing-function-docstring
-    catalog: CatalogClient = RsClient(mocked_stac_catalog_get_collection,
-                                      RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
+def test_all_collections_catalog_client(
+    mocked_stac_catalog_get_collection,
+):  # pylint: disable=missing-function-docstring
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_get_collection,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
 
     #######################################################
     # Get all the collections accessible from pyteam user #
@@ -62,8 +71,11 @@ def test_all_collections_catalog_client(mocked_stac_catalog_get_collection):  # 
 
 
 def test_get_items_catalog_client(mocked_stac_catalog_get_collection):  # pylint: disable=missing-function-docstring
-    catalog: CatalogClient = RsClient(mocked_stac_catalog_get_collection,
-                                      RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_get_collection,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
 
     ###################################################
     # Get all the item from the collection toto:S1_L1 #
@@ -91,10 +103,15 @@ def test_create_new_collection_catalog_client():  # pylint: disable=missing-func
     assert new_collection_jgaucher.id == "S3_L3"
 
 
-def test_add_collection_catalog_client(mocked_stac_catalog_add_collection):  # pylint: disable=missing-function-docstring
+def test_add_collection_catalog_client(
+    mocked_stac_catalog_add_collection,
+):  # pylint: disable=missing-function-docstring
     print(f"RSPY_HOST_CATALOG = {os.getenv('RSPY_HOST_CATALOG', None)}")
-    catalog: CatalogClient = RsClient(mocked_stac_catalog_add_collection,
-                                      RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_add_collection,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
 
     spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
     date_strings = ["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]
@@ -121,8 +138,11 @@ def test_add_collection_catalog_client(mocked_stac_catalog_add_collection):  # p
 def test_delete_collection_catalog_client(
     mocked_stac_catalog_delete_collection,
 ):  # pylint: disable=missing-function-docstring
-    catalog: CatalogClient = RsClient(mocked_stac_catalog_delete_collection,
-                                      RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_delete_collection,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
 
     #######################
     # Delete a collection #
