@@ -25,11 +25,12 @@ from pystac_client.collection_client import CollectionClient
 from pystac_client.item_search import ItemSearch
 from requests import Response
 
-from rs_client.rs_client import TIMEOUT, RsClient
+from rs_client.rs_client import TIMEOUT
+from rs_client.stac_base import StacBase
 from rs_common.utils import get_href_service
 
 
-class CatalogClient(RsClient):  # type: ignore # pylint: disable=too-many-ancestors
+class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancestors
     """CatalogClient inherits from both rs_client.RsClient and pystac_client.Client. The goal of this class is to
     allow an user to use RS-Server services more easily than calling REST endpoints directly.
     """

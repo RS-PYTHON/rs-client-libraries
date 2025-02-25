@@ -16,12 +16,12 @@
 
 import logging
 
-from rs_client.rs_client import RsClient
+from rs_client.stac_base import StacBase
 from rs_common.config import ECadipStation
 from rs_common.utils import get_href_service
 
 
-class CadipClient(RsClient):
+class CadipClient(StacBase):
     """
     CadipClient class implementation.
 

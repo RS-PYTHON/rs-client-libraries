@@ -24,6 +24,16 @@ import pytest
 import responses
 
 from tests import common
+from rs_client.rs_client import RsClient
+from rs_common.config import EPlatform
+
+# Use dummy values
+RSPY_UAC_CHECK_URL = "http://www.rspy-uac-manager.com"
+RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
+OWNER_ID = "OWNER_ID"
+CADIP_STATION = "CADIP"
+ADGS_STATION = "ADGS"
+PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -708,3 +718,28 @@ def set_db_env_var_fixture(monkeypatch):
     for key, val in envvars.items():
         monkeypatch.setenv(key, val)
     yield  # restore the environment
+
+
+@pytest.fixture(name="generic_rs_client")
+def generic_rs_client_(mocked_stac_catalog_url, monkeypatch):
+    """Return a generic RsClient instance for testing."""
+    monkeypatch.setenv("RSPY_OAUTH2_COOKIE", "RSPY_OAUTH2_COOKIE")
+    yield RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID)  # will be used to test the StacClient
+
+
+@pytest.fixture(name="auxip_client")
+def auxip_client_(generic_rs_client):
+    """Return a generic AuxipClient instance for testing."""
+    yield generic_rs_client.get_auxip_client(ADGS_STATION)
+
+
+@pytest.fixture(name="cadip_client")
+def cadip_client_(generic_rs_client):
+    """Return a generic CadipClient instance for testing."""
+    yield generic_rs_client.get_cadip_client(CADIP_STATION)
+
+
+@pytest.fixture(name="stac_client")
+def stac_client_(generic_rs_client):
+    """Return a generic StacClient instance for testing."""
+    yield generic_rs_client.get_catalog_client()
