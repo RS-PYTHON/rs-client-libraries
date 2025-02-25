@@ -56,7 +56,7 @@ class StacBase(RsClient):
         # call RsClient init
         super().__init__(rs_server_href, rs_server_api_key, owner_id, logger)
 
-        # Initialize pystac_client.Client only if required (for CadipClient, AuxipClient, StacClient)        
+        # Initialize pystac_client.Client only if required (for CadipClient, AuxipClient, StacClient)
         if not stac_href:
             raise RuntimeError("No stac href provided")
         try:
