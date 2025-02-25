@@ -23,7 +23,7 @@ FROM prefecthq/prefect:${PREFECT_TAG}-python3.11${K8S_IMAGE}
 
 ARG DASK_TAG=xxx
 ARG DASK_GATEWAY_TAG=xxx
-ARG PREFECT_DASK=xxx
+ARG PREFECT_DASK_TAG=xxx
 
 # Upgrande pip and install dependencies.
 # NOTES:
@@ -33,7 +33,7 @@ RUN pip install -U pip && \
     pip install \
         dask[complete]=="${DASK_TAG}" \
         dask-gateway=="${DASK_GATEWAY_TAG}" \
-        prefect-dask=="${PREFECT_DASK}" \
+        prefect-dask=="${PREFECT_DASK_TAG}" \
         prefect-aws \
         s3fs \
         boto3 \
