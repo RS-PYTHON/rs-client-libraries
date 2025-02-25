@@ -19,12 +19,9 @@ import logging
 import os
 import re
 import sys
-from functools import lru_cache
-from typing import Any, Callable, Dict, Iterator, Optional, Union, cast
 
 import requests
 from cachetools import TTLCache, cached
-from requests import Request
 
 from rs_common import utils
 from rs_common.config import EAuxipStation, ECadipStation
@@ -62,7 +59,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         rs_server_href: str | None,
         rs_server_api_key: str | None = None,
         owner_id: str | None = None,
-        logger: logging.Logger | None = None,        
+        logger: logging.Logger | None = None,
     ):
         """RsClient class constructor."""
         self.rs_server_href: str | None = rs_server_href
@@ -109,7 +106,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             raise RuntimeError("The owner ID is empty or only contains special characters")
 
         self.logger.debug(f"Owner ID: {self.owner_id!r}")
-        
+
     def oauth2_security(self) -> AuthInfo:
         """
         Returns:
@@ -263,5 +260,3 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         )
 
         return StagingClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
-
-    

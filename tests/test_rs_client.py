@@ -22,14 +22,8 @@ from rs_client.cadip_client import CadipClient
 from rs_client.catalog_client import CatalogClient
 from rs_client.rs_client import RsClient
 from rs_common.config import EAuxipStation, ECadipStation
-from .conftest import (
-    RSPY_UAC_CHECK_URL,
-    RS_SERVER_API_KEY,
-    ADGS_STATION,
-    CADIP_STATION
-)
 
-
+from .conftest import ADGS_STATION, CADIP_STATION, RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL
 
 
 @pytest.mark.unit
@@ -161,5 +155,3 @@ def test_no_security():
 
     with pytest.raises(RuntimeError):
         RsClient(dummy_href)  # "API key or OAuth2 cookie is mandatory for RS-Server authentication"
-
-

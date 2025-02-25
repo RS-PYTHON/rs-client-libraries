@@ -21,6 +21,7 @@ from pystac_client.exceptions import APIError
 
 MOCKED_URL = "https://mocked_stac_catalog_url/"
 
+
 class TestStacBase:
     """Test class to group all StacBase methods."""
 

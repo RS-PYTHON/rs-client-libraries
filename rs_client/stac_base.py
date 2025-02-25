@@ -14,17 +14,11 @@
 
 """StacBase class implementation."""
 
-import getpass
 import logging
-import os
-import re
-import sys
 from functools import lru_cache
 from typing import Any, Callable, Dict, Iterator, Optional, Union, cast
 
 import requests
-from rs_client.rs_client import RsClient, APIKEY_HEADER
-from cachetools import TTLCache, cached
 from pystac import Collection, Item, ItemCollection
 from pystac_client import Client
 from pystac_client.collection_client import CollectionClient
@@ -32,21 +26,15 @@ from pystac_client.exceptions import APIError
 from pystac_client.stac_api_io import StacApiIO, Timeout
 from requests import Request
 
-from rs_common import utils
-from rs_common.config import EAuxipStation, ECadipStation
-from rs_common.logging import Logging
-from rs_common.utils import AuthInfo
-
-# Timeout in seconds
-TIMEOUT = 30
+from rs_client.rs_client import APIKEY_HEADER, TIMEOUT, RsClient
 
 
-class StacBase(RsClient):  # pylint: disable=too-many-instance-attributes
+class StacBase(RsClient):
     """
     StacBase class implementation.
 
     Attributes:
-    
+
     """
 
     def __init__(  # pylint: disable=too-many-branches, too-many-arguments, too-many-positional-arguments
@@ -54,8 +42,8 @@ class StacBase(RsClient):  # pylint: disable=too-many-instance-attributes
         rs_server_href: str | None,
         rs_server_api_key: str | None = None,
         owner_id: str | None = None,
-        logger: logging.Logger | None = None,   
-        stac_href: str| None = None,  # Flag to enable pystac_client for specific subclasses
+        logger: logging.Logger | None = None,
+        stac_href: str | None = None,  # Flag to enable pystac_client for specific subclasses
         headers: Optional[Dict[str, str]] = None,
         parameters: Optional[Dict[str, Any]] = None,
         ignore_conformance: Optional[bool] = None,
@@ -67,9 +55,8 @@ class StacBase(RsClient):  # pylint: disable=too-many-instance-attributes
         """StacBase class constructor."""
         # call RsClient init
         super().__init__(rs_server_href, rs_server_api_key, owner_id, logger)
-        
-        # Initialize pystac_client.Client only if required (for CadipClient, AuxipClient, StacClient)
-        self.ps_client: Client = None  # type: ignore
+
+        # Initialize pystac_client.Client only if required (for CadipClient, AuxipClient, StacClient)        
         if not stac_href:
             raise RuntimeError("No stac href provided")
         try:
@@ -103,7 +90,6 @@ class StacBase(RsClient):  # pylint: disable=too-many-instance-attributes
             raise RuntimeError(
                 "An exception occured while creating the stac client",
             ) from e
-    
 
     ################################
     # Specific STAC implementation #
