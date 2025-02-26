@@ -227,3 +227,29 @@ def test_search_item_inside_collection_catalog_client_mock(
         assert item.collection_id == "S1_L1"
         assert item.id == expected_ids[count]
     assert count == 1  # count should be 1 for two items
+
+
+def test_get_invalid_item(mocked_stac_catalog_invalid_get_item):
+    """Test that a invalid item from a valid collection result in None."""
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_invalid_get_item,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
+    item_id = "invalid_item"
+
+    item = catalog.get_item("S1_L1", item_id, owner_id="toto")
+    assert not item
+
+
+def test_get_valid_item(mocked_stac_catalog_get_item):
+    """Test get_item from a valid collection and a valid item."""
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_get_item,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
+    item_id = "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.EOF"
+
+    item = catalog.get_item("S1_L1", item_id, owner_id="toto")
+    assert item.id == item_id
