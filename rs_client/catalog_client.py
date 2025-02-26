@@ -97,9 +97,9 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         """Get the requested collection"""
         return super().get_collection(self.full_collection_id(owner_id, collection_id, ":"))
 
-    def get_items(self, collection_id: str, owner_id: str | None = None) -> Union[Iterator["Item"], None]:
+    def get_items(self, collection_id: str, items_ids: Union[str, None] = None, owner_id: str | None = None) -> Union[Iterator["Item"], None]:
         """Get all items from a specific collection."""
-        return super().get_items(self.full_collection_id(owner_id, collection_id, ":"))
+        return super().get_items(self.full_collection_id(owner_id, collection_id, ":"), items_ids)
 
     def get_item(self, collection_id: str, item_id: str, owner_id: str | None = None):
         """Get an item from a specific collection."""

@@ -158,14 +158,17 @@ class StacBase(RsClient):
         return collection
 
     @handle_api_error
-    def get_items(self, collection_id: str) -> Iterator["Item"] | None:
+    def get_items(self, collection_id: str, items_ids: Union[str, None] = None) -> Iterator["Item"] | None:
         """Get all items from a specific collection."""
 
         # Retrieve the collection
         collection = self.ps_client.get_collection(collection_id)
         if collection:
             # Retrieve all items
-            return collection.get_items()
+            if items_ids:
+                return collection.get_items(*items_ids)
+            else:
+                return collection.get_items()
         self.logger.error(f"Collection with ID '{collection_id}' not found.")
         return None
 
