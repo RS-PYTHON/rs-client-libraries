@@ -15,7 +15,7 @@
 """StacBase class implementation."""
 
 import logging
-from functools import lru_cache
+from functools import lru_cache, wraps
 from typing import Any, Callable, Dict, Iterator, Optional, Union, cast
 
 import requests
@@ -27,6 +27,38 @@ from pystac_client.stac_api_io import StacApiIO, Timeout
 from requests import Request
 
 from rs_client.rs_client import APIKEY_HEADER, TIMEOUT, RsClient
+
+
+def handle_api_error(func):
+    """
+    Decorator to handle APIError exceptions in methods that interact with pystac-client.
+
+    This decorator wraps methods of the StacBase class that call `self.ps_client`,
+    catching `APIError` exceptions and logging them using the instance's `logger`.
+
+    If the `logger` attribute is not found or is `None`, it falls back to printing the error.
+
+    Args:
+        func (Callable): The method to be wrapped.
+
+    Returns:
+        Callable: The wrapped method that catches and logs `APIError` exceptions,
+        then raises a RuntimeError.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        except APIError as e:
+            error_message = f"Pystac client returned exception: {e}"
+            if hasattr(self, "logger") and self.logger:
+                self.logger.exception(error_message)
+            else:
+                print(error_message)  # Fallback logging
+            raise RuntimeError(error_message) from e
+
+    return wrapper
 
 
 class StacBase(RsClient):
@@ -94,12 +126,13 @@ class StacBase(RsClient):
     ################################
     # Specific STAC implementation #
     ################################
-
+    @handle_api_error
     def get_landing(self) -> dict:
         """Access the landing page"""
 
         return self.ps_client.to_dict()
 
+    @handle_api_error
     def get_collections(self) -> Iterator[Collection]:
         """Retrieve a list of the available stac collections.
 
@@ -113,6 +146,7 @@ class StacBase(RsClient):
         return self.ps_client.get_collections()
 
     @lru_cache()
+    @handle_api_error
     def get_collection(self, collection_id: str) -> Union[Collection, CollectionClient, None]:
         """Get the requested collection"""
 
@@ -123,6 +157,7 @@ class StacBase(RsClient):
             self.logger.exception(f"An error occurred while retrieving the collection: {e}")
         return collection
 
+    @handle_api_error
     def get_items(self, collection_id: str) -> Iterator["Item"] | None:
         """Get all items from a specific collection."""
 
@@ -134,11 +169,12 @@ class StacBase(RsClient):
         self.logger.error(f"Collection with ID '{collection_id}' not found.")
         return None
 
+    @handle_api_error
     def get_item(self, collection_id: str, item_id: str) -> Item | None:
         """Get an item from a specific collection."""
 
         # Retrieve the collection
-        collection = self.get_collection(collection_id)
+        collection = self.ps_client.get_collection(collection_id)
         if collection:
             item = collection.get_item(item_id)
             if not item:
@@ -148,6 +184,7 @@ class StacBase(RsClient):
             return None
         return item
 
+    @handle_api_error
     def get_collection_queryables(self, collection_id) -> Dict[str, Any]:
         """Get queryables for a collection."""
 
@@ -176,6 +213,7 @@ class StacBase(RsClient):
         except ValueError as e:
             raise RuntimeError(f"Invalid JSON response from {href_queryables}") from e
 
+    @handle_api_error
     def search(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         **kwargs,
