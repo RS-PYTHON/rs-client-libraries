@@ -197,3 +197,12 @@ class TestStacBase:
             resp.add(responses.GET, url=url, json={"Q1_name": "Q1_value"}, status=200)
             queryables = client_instance.get_queryables()
             assert {"Q1_name": "Q1_value"} == queryables
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    def test_handle_api_error_decorator(self, client, mocker, request):
+        """Test APIError while GET landing page."""
+        client_instance = request.getfixturevalue(client)
+        mocker.patch.object(client_instance.ps_client, "to_dict", side_effect=APIError)
+        with pytest.raises(RuntimeError, match="Pystac client returned exception:"):
+            client_instance.get_landing()
