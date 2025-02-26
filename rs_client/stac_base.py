@@ -167,8 +167,7 @@ class StacBase(RsClient):
             # Retrieve all items
             if items_ids:
                 return collection.get_items(*items_ids)
-            else:
-                return collection.get_items()
+            return collection.get_items()
         self.logger.error(f"Collection with ID '{collection_id}' not found.")
         return None
 
