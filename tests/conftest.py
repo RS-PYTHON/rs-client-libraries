@@ -28,7 +28,7 @@ from rs_common.config import EPlatform
 from tests import common
 
 # Use dummy values
-RSPY_UAC_CHECK_URL = "http://www.rspy-uac-manager.com"
+RSPY_UAC_CHECK_URL = "https://www.rspy-uac-manager.com"
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 CADIP_STATION = "CADIP"
 ADGS_STATION = "ADGS"
