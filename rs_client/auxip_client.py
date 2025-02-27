@@ -53,7 +53,7 @@ class AuxipClient(StacBase):
             raise RuntimeError(f"There is no such AUXIP station: {station}") from e
 
     @property
-    def href_srv(self) -> str:
+    def href_service(self) -> str:
         """
         Return the RS-Server ADGS URL hostname.
         This URL can be overwritten using the RSPY_HOST_ADGS env variable (used e.g. for local mode).

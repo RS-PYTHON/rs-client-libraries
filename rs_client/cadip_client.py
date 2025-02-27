@@ -54,7 +54,7 @@ class CadipClient(StacBase):
             raise RuntimeError(f"There is no such CADIP station: {station}") from e
 
     @property
-    def href_srv(self) -> str:
+    def href_service(self) -> str:
         """
         Return the RS-Server CADIP URL hostname.
         This URL can be overwritten using the RSPY_HOST_CADIP env variable (used e.g. for local mode).

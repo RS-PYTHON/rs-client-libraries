@@ -75,7 +75,7 @@ class StagingClient(RsClient):
     """
 
     @property
-    def href_srv(self) -> str:
+    def href_service(self) -> str:
         """
         Return the RS-Server staging URL hostname.
         This URL can be overwritten using the RSPY_HOST_STAGING env variable (used e.g. for local mode).
@@ -168,7 +168,7 @@ class StagingClient(RsClient):
             dict: dictionary containing the content of the response
         """
         response = self.http_session.get(
-            url=f"{self.href_srv}/processes",
+            url=f"{self.href_service}/processes",
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
@@ -181,7 +181,7 @@ class StagingClient(RsClient):
             process_id (str): name of the resource
         """
         response = self.http_session.get(
-            url=f"{self.href_srv}/processes/{process_id}",
+            url=f"{self.href_service}/processes/{process_id}",
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
@@ -253,14 +253,14 @@ class StagingClient(RsClient):
         # Check that the request containing the staging body is valid
         request = requests.Request(  # pylint: disable=W0612 # noqa: F841
             method="POST",  # Méthode HTTP, peut être 'POST', 'GET', etc.
-            url=f"{self.href_srv}/processes/{RESOURCE}/execution",  # L'URL de l'endpoint
+            url=f"{self.href_service}/processes/{RESOURCE}/execution",  # L'URL de l'endpoint
             json=staging_body,  # Corps de la requête en JSON
         ).prepare()
         # TODO: uncomment when rs-server-staging is updated
         # TODO: self.validate_and_unmarshal_request(request)
 
         response = self.http_session.post(
-            url=f"{self.href_srv}/processes/staging/execution",
+            url=f"{self.href_service}/processes/staging/execution",
             json=staging_body,
             **self.apikey_headers,
             timeout=TIMEOUT,
@@ -270,7 +270,7 @@ class StagingClient(RsClient):
     def get_jobs(self) -> Dict:
         """Method to get running jobs"""
         response = self.http_session.get(
-            url=f"{self.href_srv}/jobs",
+            url=f"{self.href_service}/jobs",
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
@@ -279,7 +279,7 @@ class StagingClient(RsClient):
     def get_job_info(self, job_id: str) -> Dict:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
         response = self.http_session.get(
-            url=f"{self.href_srv}/jobs/{job_id}",
+            url=f"{self.href_service}/jobs/{job_id}",
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
@@ -288,7 +288,7 @@ class StagingClient(RsClient):
     def delete_job(self, job_id: str) -> Dict:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
         response = self.http_session.delete(
-            url=f"{self.href_srv}/jobs/{job_id}",
+            url=f"{self.href_service}/jobs/{job_id}",
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
@@ -301,7 +301,7 @@ class StagingClient(RsClient):
             job_id (str): _description_
         """
         response = self.http_session.get(
-            url=f"{self.href_srv}/jobs/{job_id}/results",
+            url=f"{self.href_service}/jobs/{job_id}/results",
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
