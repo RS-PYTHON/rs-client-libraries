@@ -147,29 +147,23 @@ class StacBase(RsClient):
 
     @lru_cache()
     @handle_api_error
-    def get_collection(self, collection_id: str) -> Union[Collection, CollectionClient, None]:
+    def get_collection(self, collection_id: str) -> Union[Collection, CollectionClient]:
         """Get the requested collection"""
-
-        collection = None
-        try:
-            collection = self.ps_client.get_collection(collection_id)
-        except APIError as e:
-            self.logger.exception(f"An error occurred while retrieving the collection: {e}")
-        return collection
+        return self.ps_client.get_collection(collection_id)
 
     @handle_api_error
-    def get_items(self, collection_id: str, items_ids: Union[str, None] = None) -> Iterator["Item"] | None:
+    def get_items(self, collection_id: str, items_ids: Union[str, None] = None) -> Iterator["Item"]:
         """Get all items from a specific collection."""
 
         # Retrieve the collection
         collection = self.ps_client.get_collection(collection_id)
-        if collection:
-            # Retrieve all items
-            if items_ids:
-                return collection.get_items(*items_ids)
-            return collection.get_items()
-        self.logger.error(f"Collection with ID '{collection_id}' not found.")
-        return None
+        # Retrieve a list of items
+        if items_ids:
+            self.logger.info(f"Retrieving specific items from collection '{collection_id}'.")
+            return collection.get_items(*items_ids)
+        # Retrieve all items
+        self.logger.info(f"Retrieving all items from collection '{collection_id}'.")
+        return collection.get_items()
 
     @handle_api_error
     def get_item(self, collection_id: str, item_id: str) -> Item | None:
@@ -177,13 +171,9 @@ class StacBase(RsClient):
 
         # Retrieve the collection
         collection = self.ps_client.get_collection(collection_id)
-        if collection:
-            item = collection.get_item(item_id)
-            if not item:
-                self.logger.error(f"Item with ID '{item_id}' not found in collection '{collection_id}'.")
-        else:
-            self.logger.error(f"Collection with ID '{collection_id}' not found.")
-            return None
+        item = collection.get_item(item_id)
+        if not item:
+            self.logger.error(f"Item with ID '{item_id}' not found in collection '{collection_id}'.")
         return item
 
     @handle_api_error

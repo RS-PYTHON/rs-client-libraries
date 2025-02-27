@@ -17,6 +17,7 @@
 import pytest
 import requests
 import responses
+from pystac import Collection
 from pystac_client.exceptions import APIError
 
 MOCKED_URL = "https://mocked_stac_catalog_url/"
@@ -61,20 +62,29 @@ class TestStacBase:
         """Test a invalid collection, should result in a empty response."""
         client_instance = request.getfixturevalue(client)
 
-        mock_get_collection = mocker.patch.object(client_instance.ps_client, "get_collection", side_effect=APIError)
-
-        collection = client_instance.get_collection("invalid_collection")
+        mock_get_collection = mocker.patch.object(
+            client_instance.ps_client,
+            "get_collection",
+            side_effect=APIError("API failure"),
+        )
+        with pytest.raises(RuntimeError, match="Pystac client returned exception: API failure"):
+            client_instance.get_collection("invalid_collection")
 
         mock_get_collection.assert_called_once_with("invalid_collection")
-        assert not collection
 
     @pytest.mark.unit
     @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
     def test_cadip_auxip_get_invalid_items(self, mocker, client, request):
         """Test get_items from an invalid collection, should return None"""
         client_instance = request.getfixturevalue(client)
-        mocker.patch.object(client_instance.ps_client, "get_collection", return_value=None)
-        assert not client_instance.get_items("invalid_collection")
+        mock_collection = mocker.MagicMock(spec=Collection)
+        mock_collection.get_items.side_effect = APIError("API failure")  # Simulate APIError
+        mocker.patch.object(client_instance.ps_client, "get_collection", return_value=mock_collection)
+
+        with pytest.raises(RuntimeError, match="Pystac client returned exception: API failure"):
+            list(client_instance.get_items("test-collection"))
+
+        mock_collection.get_items.assert_called_once()
 
     @pytest.mark.unit
     @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
@@ -94,7 +104,10 @@ class TestStacBase:
     def test_cadip_auxip_get_invalid_item(self, mocker, client, request):
         """Test to get an invalid should return None"""
         client_instance = request.getfixturevalue(client)
-        mocker.patch.object(client_instance.ps_client, "get_collection", return_value=None)
+        mock_collection = mocker.MagicMock(spec=Collection)
+        mock_collection.get_item.return_value = None  # Simulate missing item
+        mocker.patch.object(client_instance.ps_client, "get_collection", return_value=mock_collection)
+
         assert not client_instance.get_item("invalid_collection", "invalid_item")
 
     @pytest.mark.unit

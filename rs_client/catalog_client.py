@@ -72,11 +72,29 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
 
     def full_collection_id(self, owner_id: str | None, collection_id: str, concat_char: str | None = None):
         """
-        Return the full collection name as: <owner_id>:<collection_id>
+        Generates a full collection identifier by concatenating the owner ID and collection ID.
 
-        Args:
-            owner_id (str): Collection owner ID. If missing, we use self.owner_id.
-            collection_id (str): Collection name
+        This function constructs a full collection ID by combining the provided `owner_id` (or a
+        default owner ID from `self.owner_id`) with `collection_id` using a specified separator.
+
+        Parameters:
+            owner_id (str | None): The owner identifier. If `None`, it defaults to `self.owner_id`.
+            collection_id (str): The collection identifier that must always be provided.
+            concat_char (str | None, optional): The character used to concatenate `owner_id`
+                                                and `collection_id`. Defaults to ":".
+
+        Returns:
+            str: A string representing the full collection ID, formatted as:
+                `"owner_id:collection_id"` by default or using the specified `concat_char`, that may
+                be `_`.
+
+        Raises:
+            - **AttributeError**: If `self.owner_id` is not set and `owner_id` is `None`,
+            causing an attempt to concatenate a `NoneType` with a string.
+
+        Notes:
+            - This function is useful in scenarios where collections are stored with unique
+            identifiers that require owner prefixes for proper scoping.
         """
 
         if not concat_char:
@@ -87,13 +105,13 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     # Specific STAC implementation #
     ################################
 
-    # STAC read opperations. These can be done with pystac_client (by calling super RsClient functions)
+    # STAC read opperations. These can be done with pystac_client (by calling super StacBase functions)
 
     def get_collection(  # type: ignore
         self,
         collection_id: str,
         owner_id: str | None = None,
-    ) -> Union[Collection, CollectionClient, None]:
+    ) -> Union[Collection, CollectionClient]:
         """Get the requested collection"""
         return super().get_collection(self.full_collection_id(owner_id, collection_id, ":"))
 
@@ -102,7 +120,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         collection_id: str,
         items_ids: Union[str, None] = None,
         owner_id: str | None = None,
-    ) -> Union[Iterator["Item"], None]:
+    ) -> Iterator["Item"]:
         """Get all items from a specific collection."""
         return super().get_items(self.full_collection_id(owner_id, collection_id, ":"), items_ids)
 
