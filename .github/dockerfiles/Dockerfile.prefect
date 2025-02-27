@@ -23,6 +23,7 @@ FROM prefecthq/prefect:${PREFECT_TAG}-python3.11${K8S_IMAGE}
 
 ARG DASK_TAG=xxx
 ARG DASK_GATEWAY_TAG=xxx
+ARG PREFECT_DASK_TAG=xxx
 
 # Upgrande pip and install dependencies.
 # NOTES:
@@ -32,7 +33,8 @@ RUN pip install -U pip && \
     pip install \
         dask[complete]=="${DASK_TAG}" \
         dask-gateway=="${DASK_GATEWAY_TAG}" \
-        prefect[dask,aws] \
+        prefect-dask=="${PREFECT_DASK_TAG}" \
+        prefect-aws \
         s3fs \
         boto3 \
         numpy=="1.26.4"
@@ -52,7 +54,7 @@ RUN rm -rf /tmp/whl ~/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/*
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
 #
 LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
-LABEL org.opencontainers.image.ref.name="ghcr.io/rs-python/prefect/rs-client-libraries"
+LABEL org.opencontainers.image.ref.name="ghcr.io/rs-python/prefect/rs-client-libraries/local;ghcr.io/rs-python/prefect/rs-client-libraries/k8s"
 LABEL dockerfile.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.prefect"
 
 LABEL org.opencontainers.image.description="prefect image in which we installed dask and the rs-client-libraries wheel package."
