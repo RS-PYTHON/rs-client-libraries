@@ -14,6 +14,7 @@
 
 """This module is used to share common functions between apis"""
 
+import os
 from dataclasses import dataclass
 
 
@@ -44,3 +45,12 @@ def read_response_error(response):
         detail = response.content.decode("utf-8", errors="ignore")
 
     return detail
+
+
+def get_href_service(rs_server_href, env_var) -> str:
+    """Get specific href link."""
+    if from_env := os.getenv(env_var, None):
+        return from_env.rstrip("/")
+    if not rs_server_href:
+        raise RuntimeError("RS-Server URL is undefined")
+    return rs_server_href.rstrip("/")

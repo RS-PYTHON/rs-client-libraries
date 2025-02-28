@@ -14,161 +14,49 @@
 
 """Unit tests for RsClient, AuxipClient, CadipClient."""
 
-import urllib.parse
-from datetime import datetime
-
-import pystac_client
 import pytest
 import responses
 
 from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
+from rs_client.catalog_client import CatalogClient
 from rs_client.rs_client import RsClient
-from rs_client.stac_client import StacClient
-from rs_common.config import DATETIME_FORMAT, ECadipStation, EPlatform
+from rs_common.config import EAuxipStation, ECadipStation
 
-# Use dummy values
-RSPY_UAC_CHECK_URL = "http://www.rspy-uac-manager.com"
-RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
-OWNER_ID = "OWNER_ID"
-CADIP_STATION = ECadipStation.CADIP
-PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
+from .conftest import ADGS_STATION, CADIP_STATION, RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL
 
 
-@pytest.fixture(name="generic_rs_client")
-def generic_rs_client_(mocked_stac_catalog_url, monkeypatch):
-    """Return a generic RsClient instance for testing."""
-    monkeypatch.setenv("RSPY_OAUTH2_COOKIE", "RSPY_OAUTH2_COOKIE")
-    yield RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID)  # will be used to test the StacClient
-
-
-@pytest.fixture(name="auxip_client")
-def auxip_client_(generic_rs_client):
-    """Return a generic AuxipClient instance for testing."""
-    yield generic_rs_client.get_auxip_client()
-
-
-@pytest.fixture(name="cadip_client")
-def cadip_client_(generic_rs_client):
-    """Return a generic CadipClient instance for testing."""
-    yield generic_rs_client.get_cadip_client(CADIP_STATION)
-
-
-@pytest.fixture(name="stac_client")
-def stac_client_(generic_rs_client):
-    """Return a generic StacClient instance for testing."""
-    yield generic_rs_client.get_stac_client()
-
-
+@pytest.mark.unit
 def test_get_child_client(auxip_client, cadip_client, stac_client):  # pylint: disable=redefined-outer-name
     """Test get_auxip_client, get_cadip_client, get_stac_client"""
     assert isinstance(auxip_client, AuxipClient)
     assert isinstance(cadip_client, CadipClient)
-    assert isinstance(stac_client, StacClient)
+    assert isinstance(stac_client, CatalogClient)
 
 
-def test_station_names(auxip_client, cadip_client, stac_client):  # pylint: disable=redefined-outer-name
+@pytest.mark.unit
+def test_station_names(generic_rs_client):  # pylint: disable=redefined-outer-name
     """Test the station name returned by the AuxipClient and CadipClient"""
-    assert "AUXIP" in auxip_client.station_name
-    assert "CADIP" in cadip_client.station_name
-    assert isinstance(stac_client, StacClient)
-
-
-def test_server_href(mocked_stac_catalog_url):
-    """Test that the Auxip, Cadip, Catalog service URLs can be passed by environment variable."""
-
-    rs_client = RsClient("", RS_SERVER_API_KEY, OWNER_ID)  # no global href
-    dummy_href = "https://DUMMY_HREF"
-
-    for env_var, client, get_href in [
-        ["RSPY_HOST_ADGS", rs_client.get_auxip_client(), "href_adgs"],
-        ["RSPY_HOST_CADIP", rs_client.get_cadip_client(CADIP_STATION), "href_cadip"],
-    ]:
-        # Without the env var, we should have an error
-        with pytest.raises(RuntimeError):
-            getattr(client, get_href)
-
-        # If we set the global URL, it should be returned
-        client.rs_server_href = mocked_stac_catalog_url
-        assert getattr(client, get_href) == mocked_stac_catalog_url
-
-        # It can be overriden by the env var
-        with pytest.MonkeyPatch.context() as monkeypatch:
-            monkeypatch.setenv(env_var, dummy_href)
-            assert getattr(client, get_href) == dummy_href
-
-    # For the Stac client, we need a valid (or mocked, in our case) URL
-    # or the constructor will fail.
+    # Try with invalid stations name, should raise runtime
     with pytest.raises(RuntimeError):
-        rs_client.get_stac_client()
+        generic_rs_client.get_auxip_client("Invalid")
+    with pytest.raises(RuntimeError):
+        generic_rs_client.get_auxip_client(ECadipStation.CADIP)
+    with pytest.raises(RuntimeError):
+        generic_rs_client.get_cadip_client("Invalid")
+    with pytest.raises(RuntimeError):
+        generic_rs_client.get_cadip_client(EAuxipStation.ADGS)
 
-    # If we use the global URL, it should be returned
-    stac_client = RsClient(  # pylint: disable=redefined-outer-name
-        mocked_stac_catalog_url,
-        RS_SERVER_API_KEY,
-        OWNER_ID,
-    ).get_stac_client()
-    assert stac_client.href_catalog == mocked_stac_catalog_url
-
-    # It can be overriden by the env var, but a dummy URL will raise a pystac exception
-    with pytest.MonkeyPatch.context() as monkeypatch:
-        monkeypatch.setenv("RSPY_HOST_CATALOG", dummy_href)
-        with pytest.raises(pystac_client.exceptions.APIError):
-            RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_stac_client()
-
-
-def test_cadip_sessions():
-    """
-    Test CadipClient.search_sessions
-    """
-
-    # Note: do some basic tests only. More extensive tests are done on the rs-server side.
-
-    # Dummy values
-    session_ids = ["id1", "id2"]
-    start_date = datetime(2000, 1, 1)
-    stop_date = datetime(2001, 1, 1)
-    url = "http://mocked_cadip_url"
-    cadip_client = RsClient(url, RS_SERVER_API_KEY, OWNER_ID).get_cadip_client(  # pylint: disable=redefined-outer-name
-        CADIP_STATION,
-    )
-
-    # Test the connection error with the dummy server
-    with pytest.raises(RuntimeError) as error:
-        cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
-    assert "ConnectionError" in str(error.getrepr())
-
-    # Mock the response, now the call should work
-    params = {
-        "id": "id1,id2",
-        "platform": "S1A,S2A",
-        "start_date": start_date.strftime(DATETIME_FORMAT),
-        "stop_date": stop_date.strftime(DATETIME_FORMAT),
-    }
-    mock_url = f"{url}/cadip/CADIP/session?{urllib.parse.urlencode(params)}"
-    features = ["feature1", "feature2"]
-    content = {"features": features}
-
-    # Test a bad response content format
-    with pytest.raises(RuntimeError) as error:
-        with responses.RequestsMock() as resp:
-            resp.get(url=mock_url, json={}, status=200)
-            cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
-    assert "KeyError" in str(error.getrepr())
-
-    # Test a bad response status code
-    with responses.RequestsMock() as resp:
-        resp.get(url=mock_url, json=content, status=500)
-        sessions = cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
-        assert not sessions
-
-    # Test the nominal case
-    with responses.RequestsMock() as resp:
-        resp.get(url=mock_url, json=content, status=200)
-        sessions = cadip_client.search_sessions(session_ids, start_date, stop_date, PLATFORMS)
-        assert sessions == features
+    # Try with station  as str
+    assert "ADGS" in generic_rs_client.get_auxip_client(ADGS_STATION).station_name
+    assert "CADIP" in generic_rs_client.get_cadip_client(CADIP_STATION).station_name
+    # Try with station as enum
+    assert "ADGS" in generic_rs_client.get_auxip_client(EAuxipStation.ADGS).station_name
+    assert "CADIP" in generic_rs_client.get_cadip_client(ECadipStation.CADIP).station_name
+    assert isinstance(generic_rs_client.get_catalog_client(), CatalogClient)
 
 
+@pytest.mark.unit
 @responses.activate
 def test_apikey_security(monkeypatch):
     """
@@ -225,6 +113,7 @@ def test_apikey_security(monkeypatch):
     assert rs_client.apikey_user_login == modified_response["user_login"]
 
 
+@pytest.mark.unit
 @responses.activate
 def test_oauth2_security(monkeypatch):
     """
@@ -257,6 +146,7 @@ def test_oauth2_security(monkeypatch):
     assert rs_client.owner_id == auth_info["user_login"]
 
 
+@pytest.mark.unit
 def test_no_security():
     """If no apikey or oauth2 cookie is present, we should have an error."""
 
@@ -265,3 +155,30 @@ def test_no_security():
 
     with pytest.raises(RuntimeError):
         RsClient(dummy_href)  # "API key or OAuth2 cookie is mandatory for RS-Server authentication"
+
+
+def test_log_and_raise_runtime_error(generic_rs_client, mocker):
+    """Test log_and_raise logs the message and raises RuntimeError."""
+    mock_logger = mocker.patch.object(generic_rs_client.logger, "exception")  # Mock logger.exception
+    original_exception = ValueError("Original exception")
+
+    with pytest.raises(RuntimeError, match="Test exception message") as exc_info:
+        generic_rs_client.log_and_raise("Test exception message", original_exception)
+
+    # Ensure logger.exception was called with the correct message
+    mock_logger.assert_called_once_with("Test exception message")
+
+    # Verify the RuntimeError was raised
+    assert isinstance(exc_info.value, RuntimeError)
+
+
+def test_log_and_raise_exception_chaining(generic_rs_client):
+    """Ensure log_and_raise correctly chains exceptions."""
+    original_exception = ValueError("Original exception")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        generic_rs_client.log_and_raise("Test exception message", original_exception)
+
+    # Check if the cause of RuntimeError is the original exception
+    assert isinstance(exc_info.value.__cause__, ValueError)
+    assert str(exc_info.value.__cause__) == "Original exception"

@@ -31,6 +31,7 @@ from requests.models import PreparedRequest
 from stac_pydantic.api import Item, ItemCollection
 
 from rs_client.rs_client import TIMEOUT, RsClient
+from rs_common.utils import get_href_service
 
 # WARNING: this env variable is temporarily added until the response of rssrver-staging endpoints are corrected
 # with a valid format according to ogc standard. In the meantime, we don't perform validation to make all staging
@@ -74,17 +75,13 @@ class StagingClient(RsClient):
     """
 
     @property
-    def href_staging(self) -> str:
+    def href_service(self) -> str:
         """
         Return the RS-Server staging URL hostname.
         This URL can be overwritten using the RSPY_HOST_STAGING env variable (used e.g. for local mode).
         Otherwise it should just be the RS-Server URL.
         """
-        if from_env := os.getenv("RSPY_HOST_STAGING", None):
-            return from_env.rstrip("/")
-        if not self.rs_server_href:
-            raise RuntimeError("RS-Server URL is undefined")
-        return self.rs_server_href.rstrip("/")
+        return get_href_service(self.rs_server_href, "RSPY_HOST_STAGING")
 
     def validate_and_unmarshal_request(self, request: PreparedRequest) -> Any:
         """Validate an endpoint request according to the ogc specifications
@@ -171,7 +168,7 @@ class StagingClient(RsClient):
             dict: dictionary containing the content of the response
         """
         response = self.http_session.get(
-            url=f"{self.href_staging}/processes",
+            url=f"{self.href_service}/processes",
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
@@ -184,7 +181,7 @@ class StagingClient(RsClient):
             process_id (str): name of the resource
         """
         response = self.http_session.get(
-            url=f"{self.href_staging}/processes/{process_id}",
+            url=f"{self.href_service}/processes/{process_id}",
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
@@ -256,14 +253,14 @@ class StagingClient(RsClient):
         # Check that the request containing the staging body is valid
         request = requests.Request(  # pylint: disable=W0612 # noqa: F841
             method="POST",  # Méthode HTTP, peut être 'POST', 'GET', etc.
-            url=f"{self.href_staging}/processes/{RESOURCE}/execution",  # L'URL de l'endpoint
+            url=f"{self.href_service}/processes/{RESOURCE}/execution",  # L'URL de l'endpoint
             json=staging_body,  # Corps de la requête en JSON
         ).prepare()
         # TODO: uncomment when rs-server-staging is updated
         # TODO: self.validate_and_unmarshal_request(request)
 
         response = self.http_session.post(
-            url=f"{self.href_staging}/processes/staging/execution",
+            url=f"{self.href_service}/processes/staging/execution",
             json=staging_body,
             **self.apikey_headers,
             timeout=TIMEOUT,
@@ -273,7 +270,7 @@ class StagingClient(RsClient):
     def get_jobs(self) -> Dict:
         """Method to get running jobs"""
         response = self.http_session.get(
-            url=f"{self.href_staging}/jobs",
+            url=f"{self.href_service}/jobs",
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
@@ -282,7 +279,7 @@ class StagingClient(RsClient):
     def get_job_info(self, job_id: str) -> Dict:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
         response = self.http_session.get(
-            url=f"{self.href_staging}/jobs/{job_id}",
+            url=f"{self.href_service}/jobs/{job_id}",
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
@@ -291,7 +288,7 @@ class StagingClient(RsClient):
     def delete_job(self, job_id: str) -> Dict:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
         response = self.http_session.delete(
-            url=f"{self.href_staging}/jobs/{job_id}",
+            url=f"{self.href_service}/jobs/{job_id}",
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
@@ -304,7 +301,7 @@ class StagingClient(RsClient):
             job_id (str): _description_
         """
         response = self.http_session.get(
-            url=f"{self.href_staging}/jobs/{job_id}/results",
+            url=f"{self.href_service}/jobs/{job_id}/results",
             timeout=TIMEOUT,
             **self.apikey_headers,
         )

@@ -17,7 +17,7 @@
 import requests  # type: ignore
 import responses
 
-from rs_common.utils import read_response_error
+from rs_common.utils import get_href_service, read_response_error
 
 
 @responses.activate
@@ -38,3 +38,16 @@ def test_response_error():
 
     responses.get(url=dummy_href, status=500, body=content)
     assert read_response_error(requests.get(dummy_href, timeout=timeout)) == content
+
+
+def test_get_href_service(
+    set_db_env_var,  # pylint: disable=unused-argument
+):
+    """Test the get_href_service function."""
+
+    rs_server_href = "https://dummy-rs-server-href/endpoint/"
+    assert get_href_service(rs_server_href, "RSPY_HOST_CATALOG") == "https://dummy-catalog/catalog"
+    assert get_href_service(rs_server_href, "RSPY_HOST_CADIP") == "https://dummy-cadip/cadip"
+    assert get_href_service(rs_server_href, "RSPY_HOST_AUXIP") == "https://dummy-audxip/auxip"
+    assert get_href_service(rs_server_href, "RSPY_HOST_STAGING") == "https://dummy-staging/staging"
+    assert get_href_service(rs_server_href, "RSPY_HOST_UNKNWON") == rs_server_href.rstrip("/")

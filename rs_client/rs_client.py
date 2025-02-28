@@ -19,14 +19,12 @@ import logging
 import os
 import re
 import sys
-from datetime import datetime
-from typing import Union
 
 import requests
 from cachetools import TTLCache, cached
 
 from rs_common import utils
-from rs_common.config import DATETIME_FORMAT, ECadipStation, EDownloadStatus
+from rs_common.config import EAuxipStation, ECadipStation
 from rs_common.logging import Logging
 from rs_common.utils import AuthInfo
 
@@ -38,32 +36,53 @@ TIMEOUT = 30
 
 class RsClient:  # pylint: disable=too-many-instance-attributes
     """
-    RsClient class implementation.
+    Client for interacting with the RS-Server services:
+    - rs-server-staging
+    - rs-server-cadip
+    - rs-server-auxip
+    - rs-server-catalog
+
+    This class provides methods to authenticate and interact with RS-Server,
+    manage STAC collections, and handle API requests.
 
     Attributes:
-        rs_server_href (str): RS-Server URL. In local mode, pass None.
-        rs_server_api_key (str): API key for RS-Server authentication.
-        rs_server_oauth2_cookie (str): session cookie that contains the OAuth2 authentication read from the
-                                       RSPY_OAUTH2_COOKIE environment variable.
-        owner_id (str): ID of the owner of the STAC catalog collections (no special characters allowoed).
+        rs_server_href (str | None): RS-Server URL. Pass None for local mode.
+        rs_server_api_key (str | None): API key for RS-Server authentication.
+        rs_server_oauth2_cookie (str | None): OAuth2 session cookie read from
+                the `RSPY_OAUTH2_COOKIE` environment variable.
+        owner_id (str): The owner of the STAC catalog collections (no special characters allowed):
+                        - In local mode, this is the system username.
+                        - In remote mode, this is derived from the API key or OAuth2 login. .
                         By default, this is the user login from the keycloak account, associated to the API key.
                         Or, in local mode, this is the local system username.
                         Else, your API Key must give you the rights to read/write on this catalog owner.
                         This owner ID is also used in the RS-Client logging.
-        logger (logging.Logger): Logging instance.
-        local_mode (bool): Local mode or hybrid/cluster mode.
-        apikey_headers (dict): API key in a dict, ready-to-use in HTTP request headers.
-        http_session (Session): HTTP requests session with cookies.
+        logger (logging.Logger): Logger instance for logging messages.
+        local_mode (bool): Indicates whether the client is running in local mode.
+        apikey_headers (dict): API key headers for HTTP requests.
+        http_session (requests.Session): HTTP session for handling requests.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-branches, too-many-arguments, too-many-positional-arguments
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None = None,
         owner_id: str | None = None,
         logger: logging.Logger | None = None,
     ):
-        """RsClient class constructor."""
+        """
+        Initializes an RsClient instance.
+
+        Args:
+            rs_server_href (str | None): The URL of the RS-Server. Pass None for local mode.
+            rs_server_api_key (str | None, optional): API key for authentication (default: None).
+            owner_id (str | None, optional): ID of the catalog owner (default: None).
+            logger (logging.Logger | None, optional): Logger instance (default: None).
+
+        Raises:
+            RuntimeError: If neither an API key nor an OAuth2 cookie is provided for RS-Server authentication.
+            RuntimeError: If the computed owner ID is empty or contains only special characters.
+        """
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
         self.rs_server_oauth2_cookie: str | None = os.getenv("RSPY_OAUTH2_COOKIE")
@@ -108,6 +127,23 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             raise RuntimeError("The owner ID is empty or only contains special characters")
 
         self.logger.debug(f"Owner ID: {self.owner_id!r}")
+
+    def log_and_raise(self, message: str, original: Exception):
+        """
+        Logs an error message and raises a RuntimeError.
+
+        This method logs the provided error message using the class logger
+        and raises a `RuntimeError`, preserving the original exception as the cause.
+
+        Args:
+            message (str): The error message to log.
+            original (Exception): The original exception that caused the error.
+
+        Raises:
+            RuntimeError: The logged error message, with the original exception as the cause.
+        """
+        self.logger.exception(message)
+        raise RuntimeError(message) from original
 
     def oauth2_security(self) -> AuthInfo:
         """
@@ -204,24 +240,27 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         """Return the config from the keycloak account, associated to the api key."""
         return self.apikey_security().apikey_config
 
+    @property
+    def href_service(self):
+        """Implemented by child classes"""
+
     #############################
     # Get child class instances #
     #############################
 
-    def get_auxip_client(self) -> "AuxipClient":  # type: ignore # noqa: F821
+    def get_auxip_client(self, station: EAuxipStation, **kwargs) -> "AuxipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
+        Args:
+            station (EAuxipStation): Auxip station
         """
         from rs_client.auxip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             AuxipClient,
         )
 
-        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
+        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger, **kwargs)
 
-    def get_cadip_client(
-        self,
-        station: ECadipStation,
-    ) -> "CadipClient":  # type: ignore # noqa: F821
+    def get_cadip_client(self, station: ECadipStation, **kwargs) -> "CadipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class CadipClient, with the same attributes as this "self" instance.
 
@@ -232,23 +271,21 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             CadipClient,
         )
 
-        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger)
+        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger, **kwargs)
 
-    def get_stac_client(self, *args, **kwargs) -> "StacClient":  # type: ignore # noqa: F821
+    def get_catalog_client(self, **kwargs) -> "CatalogClient":  # type: ignore # noqa: F821
         """
-        Return an instance of the child class StacClient, with the same attributes as this "self" instance.
+        Return an instance of the child class CatalogClient, with the same attributes as this "self" instance.
         """
-        from rs_client.stac_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
-            StacClient,
+        from rs_client.catalog_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            CatalogClient,
         )
 
-        return StacClient.open(
+        return CatalogClient(
             self.rs_server_href,
             self.rs_server_api_key,
-            self.rs_server_oauth2_cookie,
             self.owner_id,
             self.logger,
-            *args,
             **kwargs,
         )
 
@@ -261,179 +298,3 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         )
 
         return StagingClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
-
-    ############################
-    # Call RS-Server endpoints #
-    ############################
-
-    def staging_status(self, filename, timeout: int = TIMEOUT) -> EDownloadStatus:
-        """Check the status of a file download from the specified rs-server endpoint.
-
-        This function sends a GET request to the rs-server endpoint with the filename as a query parameter
-        to retrieve the status of the file download. If the response is successful and contains a 'status'
-        key in the JSON response, the function returns the corresponding download status enum value. If the
-        response is not successful or does not contain the 'status' key, the function returns a FAILED status.
-
-        Args:
-            filename (str): The name of the file for which to check the status.
-            timeout (int): The timeout duration for the HTTP request.
-
-        Returns:
-            EDownloadStatus: The download status enum value based on the response from the endpoint.
-        """
-
-        # TODO: check the status for a certain timeout if http returns NOK ?
-        try:
-            response = self.http_session.get(
-                self.href_status,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
-                params={"name": filename},
-                timeout=timeout,
-                **self.apikey_headers,
-            )
-
-            eval_response = response.json()
-            if (
-                response.ok
-                and "name" in eval_response.keys()
-                and filename == eval_response["name"]
-                and "status" in eval_response.keys()
-            ):
-                return EDownloadStatus(eval_response["status"])
-
-        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-            self.logger.exception(f"Status endpoint exception: {e}")
-
-        return EDownloadStatus.FAILED
-
-    def staging(self, filename: str, s3_path: str = "", tmp_download_path: str = "", timeout: int = TIMEOUT):
-        """Stage a file for download.
-
-        This method stages a file for download by sending a request to the staging endpoint
-        with optional parameters for S3 path and temporary download path.
-
-        Args:
-            filename (str): The name of the file to be staged for download.
-            timeout (int): The timeout duration for the HTTP request.
-            s3_path (str, optional): The S3 path where the file will be stored after download.
-                Defaults to an empty string.
-            tmp_download_path (str, optional): The temporary download path for the file.
-                Defaults to an empty string.
-
-        Raises:
-            RuntimeError: If an error occurs while staging the file.
-        """
-
-        # dictionary to be used for payload request
-        payload = {}
-        # some protections for the optional args
-        if s3_path:
-            payload["obs"] = s3_path
-        if tmp_download_path:
-            payload["local"] = tmp_download_path
-
-        # update the filename to be ingested
-        payload["name"] = filename
-        try:
-            # logger.debug(f"Calling  {endpoint} with payload {payload}")
-            response = self.http_session.get(
-                self.href_staging,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
-                params=payload,
-                timeout=timeout,
-                **self.apikey_headers,
-            )
-            self.logger.debug(f"Download start endpoint returned in {response.elapsed.total_seconds()}")
-            if not response.ok:
-                self.logger.error(f"The download endpoint returned error for file {filename}\n")
-                raise RuntimeError(f"The download endpoint returned error for file {filename}")
-        except (
-            requests.exceptions.RequestException,
-            requests.exceptions.Timeout,
-            requests.exceptions.ReadTimeout,
-        ) as e:
-            self.logger.exception(f"Staging file exception for {filename}:", e)
-            raise RuntimeError(f"Staging file exception for {filename}") from e
-
-    def search_stations(  # pylint: disable=too-many-arguments, too-many-positional-arguments
-        self,
-        start_date: datetime,
-        stop_date: datetime,
-        limit: Union[int, None] = None,
-        sortby: Union[str, None] = None,
-        timeout: int = TIMEOUT,
-    ) -> list:
-        """Retrieve a list of files from the specified endpoint.
-
-        This function queries the specified endpoint to retrieve a list of files available in the
-        station (CADIP, ADGS, LTA ...) that were collected by the satellite within the provided time range,
-        starting from 'start_date' up to 'stop_date' (inclusive).
-
-        Args:
-            start_date (datetime): The start date of the time range.
-            stop_date (datetime): The stop date of the time range.
-            timeout (int): The timeout duration for the HTTP request.
-            limit (int, optional): The maximum number of results to return. Defaults to None.
-            sortby (str, optional): The attribute to sort the results by. Defaults to None.
-
-        Returns:
-            files (list): The list of files available at the station within the specified time range.
-
-        Raises:
-            RuntimeError: if the endpoint can't be reached
-
-        Notes:
-            - This function queries the specified endpoint with a time range to retrieve information about
-            available files.
-            - It constructs a payload with the start and stop dates in ISO 8601 format and sends a GET
-            request to the endpoint.
-            - The response is expected to be a STAC Compatible formatted JSONResponse, containing information about
-             available files.
-            - The function converts a STAC FeatureCollection to a Python list.
-        """
-
-        payload = {
-            "datetime": start_date.strftime(DATETIME_FORMAT)
-            + "/"  # 2014-01-01T12:00:00Z/2023-12-30T12:00:00Z",
-            + stop_date.strftime(DATETIME_FORMAT),
-        }
-        if limit:
-            payload["limit"] = str(limit)
-        if sortby:
-            payload["sortby"] = str(sortby)
-        try:
-            response = self.http_session.get(
-                self.href_search,  # pylint: disable=no-member # ("self" is AuxipClient or CadipClient)
-                params=payload,
-                timeout=timeout,
-                **self.apikey_headers,
-            )
-        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-            self.logger.exception(f"Could not get the response from the station search endpoint: {e}")
-            raise RuntimeError("Could not get the response from the station search endpoint") from e
-
-        files = []
-        try:
-            if response.ok:
-                for file_info in response.json()["features"]:
-                    files.append(file_info)
-            else:
-                self.logger.error(f"Error: {response.status_code} : {response.json()}")
-        except KeyError as e:
-            raise RuntimeError("Wrong format of search endpoint answer") from e
-
-        return files
-
-    ##############################################
-    # Methods to be implemented by child classes #
-    ##############################################
-
-    @property
-    def href_search(self):
-        """Implemented by AuxipClient and CadipClient."""
-
-    @property
-    def href_staging(self):
-        """Implemented by AuxipClient and CadipClient."""
-
-    @property
-    def href_status(self):
-        """Implemented by AuxipClient and CadipClient."""
