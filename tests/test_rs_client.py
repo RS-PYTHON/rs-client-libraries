@@ -155,3 +155,29 @@ def test_no_security():
 
     with pytest.raises(RuntimeError):
         RsClient(dummy_href)  # "API key or OAuth2 cookie is mandatory for RS-Server authentication"
+
+
+def test_log_and_raise_runtime_error(generic_rs_client, mocker):
+    """Test log_and_raise logs the message and raises RuntimeError."""
+    mock_logger = mocker.patch.object(generic_rs_client.logger, "exception")  # Mock logger.exception
+    original_exception = ValueError("Original exception")
+
+    with pytest.raises(RuntimeError, match="Test exception message") as exc_info:
+        generic_rs_client.log_and_raise("Test exception message", original_exception)
+
+    # Ensure logger.exception was called with the correct message
+    mock_logger.assert_called_once_with("Test exception message")
+
+    # Verify the RuntimeError was raised
+    assert isinstance(exc_info.value, RuntimeError)
+
+def test_log_and_raise_exception_chaining(generic_rs_client):
+    """Ensure log_and_raise correctly chains exceptions."""
+    original_exception = ValueError("Original exception")
+
+    with pytest.raises(RuntimeError) as exc_info:
+        generic_rs_client.log_and_raise("Test exception message", original_exception)
+
+    # Check if the cause of RuntimeError is the original exception
+    assert isinstance(exc_info.value.__cause__, ValueError)
+    assert str(exc_info.value.__cause__) == "Original exception"

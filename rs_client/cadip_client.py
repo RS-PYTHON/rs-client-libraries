@@ -50,8 +50,7 @@ class CadipClient(StacBase):
         try:
             self.station: ECadipStation = ECadipStation[station] if isinstance(station, str) else station
         except KeyError as e:
-            self.logger.exception(f"There is no such CADIP station: {station}")
-            raise RuntimeError(f"There is no such CADIP station: {station}") from e
+            self.log_and_raise(f"There is no such CADIP station: {station}", e)
 
     @property
     def href_service(self) -> str:

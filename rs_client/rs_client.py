@@ -36,22 +36,31 @@ TIMEOUT = 30
 
 class RsClient:  # pylint: disable=too-many-instance-attributes
     """
-    RsClient class implementation.
+    Client for interacting with the RS-Server services:
+    - rs-server-staging
+    - rs-server-cadip
+    - rs-server-auxip
+    - rs-server-catalog
+
+    This class provides methods to authenticate and interact with RS-Server,
+    manage STAC collections, and handle API requests.
 
     Attributes:
-        rs_server_href (str): RS-Server URL. In local mode, pass None.
-        rs_server_api_key (str): API key for RS-Server authentication.
-        rs_server_oauth2_cookie (str): session cookie that contains the OAuth2 authentication read from the
-                                       RSPY_OAUTH2_COOKIE environment variable.
-        owner_id (str): ID of the owner of the STAC catalog collections (no special characters allowoed).
+        rs_server_href (str | None): RS-Server URL. Pass None for local mode.
+        rs_server_api_key (str | None): API key for RS-Server authentication.
+        rs_server_oauth2_cookie (str | None): OAuth2 session cookie read from
+                the `RSPY_OAUTH2_COOKIE` environment variable.
+        owner_id (str): The owner of the STAC catalog collections (no special characters allowed):
+                        - In local mode, this is the system username.
+                        - In remote mode, this is derived from the API key or OAuth2 login. .
                         By default, this is the user login from the keycloak account, associated to the API key.
                         Or, in local mode, this is the local system username.
                         Else, your API Key must give you the rights to read/write on this catalog owner.
                         This owner ID is also used in the RS-Client logging.
-        logger (logging.Logger): Logging instance.
-        local_mode (bool): Local mode or hybrid/cluster mode.
-        apikey_headers (dict): API key in a dict, ready-to-use in HTTP request headers.
-        http_session (Session): HTTP requests session with cookies.
+        logger (logging.Logger): Logger instance for logging messages.
+        local_mode (bool): Indicates whether the client is running in local mode.
+        apikey_headers (dict): API key headers for HTTP requests.
+        http_session (requests.Session): HTTP session for handling requests.
     """
 
     def __init__(  # pylint: disable=too-many-branches, too-many-arguments, too-many-positional-arguments
@@ -61,7 +70,19 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         owner_id: str | None = None,
         logger: logging.Logger | None = None,
     ):
-        """RsClient class constructor."""
+        """
+        Initializes an RsClient instance.
+
+        Args:
+            rs_server_href (str | None): The URL of the RS-Server. Pass None for local mode.
+            rs_server_api_key (str | None, optional): API key for authentication (default: None).
+            owner_id (str | None, optional): ID of the catalog owner (default: None).
+            logger (logging.Logger | None, optional): Logger instance (default: None).
+
+        Raises:
+            RuntimeError: If neither an API key nor an OAuth2 cookie is provided for RS-Server authentication.
+            RuntimeError: If the computed owner ID is empty or contains only special characters.
+        """
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
         self.rs_server_oauth2_cookie: str | None = os.getenv("RSPY_OAUTH2_COOKIE")
@@ -106,6 +127,23 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             raise RuntimeError("The owner ID is empty or only contains special characters")
 
         self.logger.debug(f"Owner ID: {self.owner_id!r}")
+
+    def log_and_raise(self, message: str, original: Exception):
+        """
+        Logs an error message and raises a RuntimeError.
+
+        This method logs the provided error message using the class logger
+        and raises a `RuntimeError`, preserving the original exception as the cause.
+
+        Args:
+            message (str): The error message to log.
+            original (Exception): The original exception that caused the error.
+
+        Raises:
+            RuntimeError: The logged error message, with the original exception as the cause.
+        """
+        self.logger.exception(message)
+        raise RuntimeError(message) from original
 
     def oauth2_security(self) -> AuthInfo:
         """

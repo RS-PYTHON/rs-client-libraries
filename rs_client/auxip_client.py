@@ -37,7 +37,20 @@ class AuxipClient(StacBase):
         logger: logging.Logger | None = None,
         **kwargs,
     ):
-        """AuxipClient class constructor."""
+        """
+        Initializes an AuxipClient instance.
+
+        Args:
+            rs_server_href (str | None): The URL of the RS-Server. Pass None for local mode.
+            rs_server_api_key (str | None): API key for authentication.
+            owner_id (str | None): ID of the catalog owner.
+            station (EAuxipStation | str): The AUXIP station identifier.
+            logger (logging.Logger | None, optional): Logger instance (default: None).
+            **kwargs: Additional keyword arguments.
+
+        Raises:
+            RuntimeError: If the provided station is not a valid AUXIP station.
+        """
         super().__init__(
             rs_server_href,
             rs_server_api_key,
@@ -49,8 +62,7 @@ class AuxipClient(StacBase):
         try:
             self.station: EAuxipStation = EAuxipStation[station] if isinstance(station, str) else station
         except KeyError as e:
-            self.logger.exception(f"There is no such AUXIP station: {station}")
-            raise RuntimeError(f"There is no such AUXIP station: {station}") from e
+            self.log_and_raise(f"There is no such AUXIP station: {station}", e)
 
     @property
     def href_service(self) -> str:
