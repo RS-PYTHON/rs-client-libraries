@@ -171,6 +171,7 @@ def test_log_and_raise_runtime_error(generic_rs_client, mocker):
     # Verify the RuntimeError was raised
     assert isinstance(exc_info.value, RuntimeError)
 
+
 def test_log_and_raise_exception_chaining(generic_rs_client):
     """Ensure log_and_raise correctly chains exceptions."""
     original_exception = ValueError("Original exception")
