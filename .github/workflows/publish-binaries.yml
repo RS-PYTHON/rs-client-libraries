@@ -228,9 +228,8 @@ jobs:
             K8S_IMAGE=
 
   # Prefect image for kubernetes with rs-client-libraries.
-  # We should need this image only for new git tags (to be discussed maybe)
   publish-docker-prefect-k8s:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     name: "Docker image for Prefect in k8s"
     needs: [set-env, build-whl]
