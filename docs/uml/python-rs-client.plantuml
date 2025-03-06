@@ -4,20 +4,12 @@ Class RsClient {
 - rs_server_api_key : UUID
 - rs_server_href : str
 - owner_id : str
-- catalog_client:CatalogClient = None;
-- cadip_client:CadipClient = None;
-- auxip_client:AuxipClient = None;
-- staging_client:AuxipClient = None;
 ==
 + __init__ (api_key:UUID, href: str, owner_id:str)
 + get_catalog_client() -> CatalogClient
 + get_cadip_client(station:str) -> CadipClient
 + get_auxip_client(station:str) -> AuxipClient
 + get_staging_client() -> StagingClient
-}
-
-Class pystac_client {
-
 }
 
 Class StacBase {
@@ -35,19 +27,19 @@ Class StacBase {
 + get_items(collection_id:str, items_id:str) -> pystac.Item
 + get_queryables()-> dict
 + get_collection_queryables(collection_id:str) -> dict
-+ search (method:str | None = "POST",
-        max_items: int | None = None,
-        limit: int | None = None,
-        ids: IDsLike | None = None,
-        collections: CollectionsLike | None = None,
-        bbox: BBoxLike | None = None,
-        intersects: IntersectsLike | None = None,
-        datetime: DatetimeLike | None = None,
-        query: QueryLike | None = None,
-        filter: FilterLike | None = None,
-        filter_lang: FilterLangLike | None = None,
-        sortby: SortbyLike | None = None,
-        fields: FieldsLike | None = None)  -> pystac.ItemCollection
++ search (method:str = "POST",
+        max_items: int = None,
+        limit: int = None,
+        ids: IDsLike = None,
+        collections: CollectionsLike = None,
+        bbox: BBoxLike = None,
+        intersects: IntersectsLike = None,
+        datetime: DatetimeLike = None,
+        query: QueryLike = None,
+        filter: FilterLike = None,
+        filter_lang: FilterLangLike = None,
+        sortby: SortbyLike = None,
+        fields: FieldsLike = None)  -> pystac.ItemCollection
 }
 
 Class AuxipClient {
@@ -124,19 +116,23 @@ remove_item(collection_id: str,
     ) -> Response:
 }
 
+Class pystac_client {
+
+}
+
 Class StacApiIO {
  - headers:[Dict[str, str]] = [["API-KEY", "myKey"]]
 }
 
-RsClient "1" *-- "0,1" StacBase
-RsClient "1" *-- "0,1" StagingClient
-StacBase "1" *-- "0,1" CadipClient
-StacBase "1" *-- "0,1" CatalogClient
-StacBase "1" *-- "0,1" AuxipClient
-pystac_client <|-- StacBase
-StacBase "1" *-- "1"  StacApiIO
+RsClient <|-- StacBase
+RsClient <|-- StagingClient
+StacBase <|-- CadipClient
+StacBase <|-- CatalogClient
+StacBase <|-- AuxipClient
+StacBase "1" *-- "1" pystac_client
+pystac_client "1" *-- "1"  StacApiIO
 
-note right
+note bottom
 `StacApiIO` object is used for I/O requests.
 For RS project, we will inject the API-KEY in the x-api-key HTTP header.
 end note
