@@ -15,6 +15,7 @@
 """CadipClient class implementation."""
 
 import logging
+from typing import Any
 
 from rs_client.stac_base import StacBase
 from rs_common.config import ECadipStation
@@ -36,9 +37,29 @@ class CadipClient(StacBase):
         owner_id: str | None,
         station: str,
         logger: logging.Logger | None = None,
-        **kwargs,
+        **kwargs: dict[str, Any],
     ):
-        """CadipClient class constructor."""
+        """
+        Initializes a CadipClient instance.
+
+        Args:
+            rs_server_href (str | None): The URL of the RS-Server. Pass None for local mode.
+            rs_server_api_key (str | None): API key for authentication.
+            owner_id (str | None): ID of the catalog owner.
+            station (EAuxipStation | str): The CADIP station identifier.
+            logger (logging.Logger | None, optional): Logger instance (default: None).
+            **kwargs: Arbitrary keyword arguments that may include:
+                - `headers` (Optional[Dict[str, str]])
+                - `parameters` (Optional[Dict[str, Any]])
+                - `ignore_conformance` (Optional[bool])
+                - `modifier` (Callable[[Collection | Item | ItemCollection | dict[Any, Any]], None] | None)
+                - `request_modifier` (Optional[Callable[[Request], Union[Request, None]]])
+                - `stac_io` (Optional[StacApiIO])
+                - `timeout` (Optional[Timeout])
+
+        Raises:
+            RuntimeError: If the provided station is not a valid CADIP station.
+        """
         super().__init__(
             rs_server_href,
             rs_server_api_key,

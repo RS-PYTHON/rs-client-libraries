@@ -15,6 +15,7 @@
 """AuxipClient class implementation."""
 
 import logging
+from typing import Any
 
 from rs_client.stac_base import StacBase
 from rs_common.config import EAuxipStation
@@ -35,7 +36,7 @@ class AuxipClient(StacBase):
         owner_id: str | None,
         station: EAuxipStation | str,
         logger: logging.Logger | None = None,
-        **kwargs,
+        **kwargs: dict[str, Any],
     ):
         """
         Initializes an AuxipClient instance.
@@ -46,7 +47,14 @@ class AuxipClient(StacBase):
             owner_id (str | None): ID of the catalog owner.
             station (EAuxipStation | str): The AUXIP station identifier.
             logger (logging.Logger | None, optional): Logger instance (default: None).
-            **kwargs: Additional keyword arguments.
+            **kwargs: Arbitrary keyword arguments that may include:
+                - `headers` (Optional[Dict[str, str]])
+                - `parameters` (Optional[Dict[str, Any]])
+                - `ignore_conformance` (Optional[bool])
+                - `modifier` (Callable[[Collection | Item | ItemCollection | dict[Any, Any]], None] | None)
+                - `request_modifier` (Optional[Callable[[Request], Union[Request, None]]])
+                - `stac_io` (Optional[StacApiIO])
+                - `timeout` (Optional[Timeout])
 
         Raises:
             RuntimeError: If the provided station is not a valid AUXIP station.

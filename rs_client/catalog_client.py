@@ -70,7 +70,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
 
         return get_href_service(self.rs_server_href, "RSPY_HOST_CATALOG")
 
-    def full_collection_id(self, owner_id: str | None, collection_id: str, concat_char: str | None = None):
+    def full_collection_id(self, owner_id: str | None, collection_id: str, concat_char: str | None = None) -> str:
         """
         Generates a full collection identifier by concatenating the owner ID and collection ID.
 
@@ -90,11 +90,11 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
 
         Raises:
             - **AttributeError**: If `self.owner_id` is not set and `owner_id` is `None`,
-            causing an attempt to concatenate a `NoneType` with a string.
+                causing an attempt to concatenate a `NoneType` with a string.
 
         Notes:
             - This function is useful in scenarios where collections are stored with unique
-            identifiers that require owner prefixes for proper scoping.
+                identifiers that require owner prefixes for proper scoping.
         """
 
         if not concat_char:
