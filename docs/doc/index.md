@@ -4,7 +4,7 @@ The RS-Client library enables users to interact with all RS-Server services. It 
 
 ![Python Components](../images/python-components.png)
 
-The **RsClient** class is a base class for interacting with the RS-Server. It provides the the check of the user's API key. It also provides methods for creating instances of its child classes: AuxipClient, CadipClient, CatalogClient and StagingClient.
+The **RsClient** class is a base class for interacting with the RS-Server. It provides the check of the user's API key. It also provides methods for creating instances of its child classes: AuxipClient, CadipClient, CatalogClient and StagingClient.
 
 The **StagingClient** class extends the RsClient class and provides specific functionality for interfacing with the RS-Server Staging endpoints.
 
