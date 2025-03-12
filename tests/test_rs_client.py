@@ -202,12 +202,15 @@ def test_owner_id(mode, mocker, monkeypatch):
     # Try setting owner_id from lowest to hight priority ways. It can be deduced from the oauth2.
     monkeypatch.setenv("RSPY_OAUTH2_COOKIE", "RSPY_OAUTH2_COOKIE")
     responses.get(url=f"{dummy_href}/auth/me", status=200, json={"user_login": by_oauth2, "iam_roles": []})
+    # In local mode we don't use neither apikey or oauth2
     if local:
         assert RsClient(rs_server_href).owner_id == getpass.getuser()
+    # In hybrid mode and don't use oauth2 and the URL to get api key info is unreachable
     elif hybrid:
         with pytest.raises(RuntimeError) as e:
             RsClient(rs_server_href)
         assert error_hybrid in str(e.value)
+    # In cluster mode we deduce the owner id from the oauth2 cookie
     elif cluster:
         assert RsClient(rs_server_href).owner_id == by_oauth2
 
