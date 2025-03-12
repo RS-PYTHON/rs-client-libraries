@@ -33,6 +33,10 @@ APIKEY_HEADER = "x-api-key"
 # Timeout in seconds
 TIMEOUT = 30
 
+# API Key Manager URL used to get an API Key information.
+# Works only in cluster mode. This endpoint is not exposed outside the cluster.
+RSPY_UAC_CHECK_URL = os.getenv("RSPY_UAC_CHECK_URL")
+
 
 class RsClient:  # pylint: disable=too-many-instance-attributes
     """
@@ -49,14 +53,15 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         rs_server_href (str | None): RS-Server URL. Pass None for local mode.
         rs_server_api_key (str | None): API key for RS-Server authentication.
         rs_server_oauth2_cookie (str | None): OAuth2 session cookie read from
-                the `RSPY_OAUTH2_COOKIE` environment variable.
-        owner_id (str): The owner of the STAC catalog collections (no special characters allowed):
-                        - In local mode, this is the system username.
-                        - In remote mode, this is derived from the API key or OAuth2 login. .
-                        By default, this is the user login from the keycloak account, associated to the API key.
-                        Or, in local mode, this is the local system username.
-                        Else, your API Key must give you the rights to read/write on this catalog owner.
-                        This owner ID is also used in the RS-Client logging.
+            the `RSPY_OAUTH2_COOKIE` environment variable.
+        owner_id (str): The owner of the STAC catalog collections (no special characters allowed).
+            If not set, we try to read it from the RSPY_HOST_USER environment variable. If still not set:
+            - In local mode, it takes the system username.
+            - In cluster mode, it is deduced from the API key or OAuth2 login = your keycloak username.
+            - In hybrid mode, we raise an Exception.
+            If owner_id is different than your keycloak username, then make sure that your keycloak account has
+            the rights to read/write on this catalog owner.
+            owner_id is also used in the RS-Client logging.
         logger (logging.Logger): Logger instance for logging messages.
         local_mode (bool): Indicates whether the client is running in local mode.
         apikey_headers (dict): API key headers for HTTP requests.
@@ -86,7 +91,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
         self.rs_server_oauth2_cookie: str | None = os.getenv("RSPY_OAUTH2_COOKIE")
-        self.owner_id: str | None = owner_id or ""
+        self.owner_id: str | None = owner_id or os.getenv("RSPY_HOST_USER")
         self.logger: logging.Logger = logger or Logging.default(__name__)
 
         # Remove trailing / character(s) from the URL
@@ -96,6 +101,10 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         # We are in local mode if the URL is undefined.
         # Env vars are used instead to determine the different services URL.
         self.local_mode = not bool(self.rs_server_href)
+
+        # We are in hybrid mode if not on local mode and the API Key Manager check URL is undefined.
+        # NOTE: maybe later we could define define this hybrid mode in a different way.
+        self.hybrid_mode = (not self.local_mode) and (not RSPY_UAC_CHECK_URL)
 
         if (not self.local_mode) and (not self.rs_server_api_key) and (not self.rs_server_oauth2_cookie):
             raise RuntimeError("API key or OAuth2 cookie is mandatory for RS-Server authentication")
@@ -116,7 +125,14 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             if self.local_mode:
                 self.owner_id = getpass.getuser()
 
-            # In hybrid/cluster mode, we retrieve the OAuth2 or API key login
+            # In hybrid mode, the API Key Manager check URL is not accessible and there is no OAuth2
+            # so the owner id must be set explicitly by the user.
+            elif self.hybrid_mode:
+                raise ValueError(
+                    "In hybrid mode, the owner_id must be set explicitly by parameter or environment variable",
+                )
+
+            # In cluster mode, we retrieve the OAuth2 or API key login
             else:
                 self.owner_id = self.apikey_user_login if self.rs_server_api_key else self.oauth2_user_login
 
@@ -184,17 +200,9 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         if self.local_mode:
             return AuthInfo(user_login="", iam_roles=[], apikey_config={})
 
-        # self.logger.warning(
-        #     f"TODO: use {self.rs_server_href}/apikeymanager/auth/check_key instead, see: "
-        #     "https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-257",
-        # )
-        # Does not work in hybrid mode for now because this URL is not exposed.
-        check_url = os.environ["RSPY_UAC_CHECK_URL"]
-
         # Request the API key manager, pass user-defined api key in http header
-        # check_url = f"{self.rs_server_href}/apikeymanager/auth/check_key"
         self.logger.debug("Call the API key manager")
-        response = self.http_session.get(check_url, **self.apikey_headers, timeout=TIMEOUT)
+        response = self.http_session.get(RSPY_UAC_CHECK_URL, **self.apikey_headers, timeout=TIMEOUT)
         if not response.ok:
             raise RuntimeError(
                 f"API key manager status code {response.status_code}: {utils.read_response_error(response)}",
