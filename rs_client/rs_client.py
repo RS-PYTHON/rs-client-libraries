@@ -103,7 +103,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         self.local_mode = not bool(self.rs_server_href)
 
         # We are in hybrid mode if not on local mode and the API Key Manager check URL is undefined.
-        # NOTE: maybe later we could define define this hybrid mode in a different way.
+        # NOTE: maybe later we could define this hybrid mode in a different way.
         self.hybrid_mode = (not self.local_mode) and (not RSPY_UAC_CHECK_URL)
 
         if (not self.local_mode) and (not self.rs_server_api_key) and (not self.rs_server_oauth2_cookie):
@@ -128,7 +128,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             # In hybrid mode, the API Key Manager check URL is not accessible and there is no OAuth2
             # so the owner id must be set explicitly by the user.
             elif self.hybrid_mode:
-                raise ValueError(
+                raise RuntimeError(
                     "In hybrid mode, the owner_id must be set explicitly by parameter or environment variable",
                 )
 
