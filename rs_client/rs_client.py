@@ -35,7 +35,7 @@ TIMEOUT = 30
 
 # API Key Manager URL used to get an API Key information.
 # Works only in cluster mode. This endpoint is not exposed outside the cluster.
-RSPY_UAC_CHECK_URL = os.getenv("RSPY_UAC_CHECK_URL")
+RSPY_UAC_CHECK_URL = os.getenv("RSPY_UAC_CHECK_URL", "")
 
 
 class RsClient:  # pylint: disable=too-many-instance-attributes
