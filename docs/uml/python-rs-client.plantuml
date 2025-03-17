@@ -1,0 +1,140 @@
+@startuml python-rs-client
+
+Class RsClient {
+- rs_server_api_key : UUID
+- rs_server_href : str
+- owner_id : str
+==
++ __init__ (api_key:UUID, href: str, owner_id:str)
++ get_catalog_client() -> CatalogClient
++ get_cadip_client(station:str) -> CadipClient
++ get_auxip_client(station:str) -> AuxipClient
++ get_staging_client() -> StagingClient
+}
+
+Class StacBase {
+- rs_server_api_key : UUID
+- rs_server_href : str
+- owner_id : str
+- stac_href: str
+- ps_client: pystac_client.Client
+==
++ __init__ (api_key:UUID, href:str, owner_id:str, station:str, stac_href:str)
++ get_landing() -> dict
++ get_collections() -> Iterator[pystac.Collection]
++ get_collection(collection_id:str) -> pystac.Collection
++ get_items(collection_id:str, items_ids:[str]) -> Iterator[pystac.Item]
++ get_items(collection_id:str, items_id:str) -> pystac.Item
++ get_queryables()-> dict
++ get_collection_queryables(collection_id:str) -> dict
++ search (method:str = "POST",
+        max_items: int = None,
+        limit: int = None,
+        ids: IDsLike = None,
+        collections: CollectionsLike = None,
+        bbox: BBoxLike = None,
+        intersects: IntersectsLike = None,
+        datetime: DatetimeLike = None,
+        query: QueryLike = None,
+        filter: FilterLike = None,
+        filter_lang: FilterLangLike = None,
+        sortby: SortbyLike = None,
+        fields: FieldsLike = None)  -> pystac.ItemCollection
+}
+
+Class AuxipClient {
+- rs_server_api_key : UUID
+- rs_server_href : str
+- owner_id : str
+- station : str
+- stac_href : str
+==
++ __init__ (api_key:UUID, href:str, owner_id:str, station:str, stac_href:str)
+}
+
+Class CadipClient {
+- rs_server_api_key : UUID
+- rs_server_href : str
+- owner_id : str
+- station : str
+- stac_href : str
+==
++ __init__ (api_key:UUID, href:str, owner_id:str, station:str, stac_href:str)
+}
+
+Class CatalogClient {
+- rs_server_api_key : UUID
+- rs_server_href : str
+- owner_id : str
+==
++ __init__ (api_key:UUID, href:str, owner_id:str, station:str, stac_href:str)
+add_collection(collection: pystac.Collection,
+        add_public_license: bool,
+        owner_id: str,
+        timeout: int,
+    ) -> Response:
+remove_collection(collection_id: str,
+        owner_id: str,
+        timeout: int,
+    ) -> Response:
+add_item(collection_id: str,
+        item: pystac.Item,
+        owner_id: str,
+        timeout: int,
+    ) -> Response
+remove_item(collection_id: str,
+        item_id: str,
+        owner_id: str,
+        timeout: int,
+    ) -> Response:
+}
+
+Class StagingClient {
+- rs_server_api_key : UUID
+- rs_server_href : str
+- owner_id : str
+==
++ __init__ (api_key:UUID, href:str, owner_id:str, station:str, stac_href:str)
+add_collection(collection: pystac.Collection,
+        add_public_license: bool,
+        owner_id: str,
+        timeout: int,
+    ) -> Response:
+remove_collection(collection_id: str,
+        owner_id: str,
+        timeout: int,
+    ) -> Response:
+add_item(collection_id: str,
+        item: pystac.Item,
+        owner_id: str,
+        timeout: int,
+    ) -> Response
+remove_item(collection_id: str,
+        item_id: str,
+        owner_id: str,
+        timeout: int,
+    ) -> Response:
+}
+
+Class pystac_client {
+
+}
+
+Class StacApiIO {
+ - headers:[Dict[str, str]] = [["API-KEY", "myKey"]]
+}
+
+RsClient <|-- StacBase
+RsClient <|-- StagingClient
+StacBase <|-- CadipClient
+StacBase <|-- CatalogClient
+StacBase <|-- AuxipClient
+StacBase "1" *-- "1" pystac_client
+pystac_client "1" *-- "1"  StacApiIO
+
+note bottom
+`StacApiIO` object is used for I/O requests.
+For RS project, we will inject the API-KEY in the x-api-key HTTP header.
+end note
+
+@enduml
