@@ -16,14 +16,14 @@
 # This docker installs the rs-client-libraries wheel into the prefect docker image.
 #
 
-ARG PREFECT_TAG=xxx
+ARG PREFECT_TAG=3.2.13
 # K8S image suffix: -kubernetes or empty
 ARG K8S_IMAGE=xxx
 FROM prefecthq/prefect:${PREFECT_TAG}-python3.11${K8S_IMAGE}
 
-ARG DASK_TAG=xxx
-ARG DASK_GATEWAY_TAG=xxx
-ARG PREFECT_DASK_TAG=xxx
+ARG DASK_TAG=2024.5.2
+ARG DASK_GATEWAY_TAG=2024.1.0
+ARG PREFECT_DASK_TAG=0.3.3
 
 # Upgrande pip and install dependencies.
 # NOTES:
@@ -45,7 +45,7 @@ RUN mkdir -p /tmp/whl
 ADD ./*.whl /tmp/whl
 
 # Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
-RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
+RUN pip install /tmp/whl/rs_client_libraries-*.whl && opentelemetry-bootstrap -a install
 
 # Clean everything
 RUN rm -rf /tmp/whl ~/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/*
