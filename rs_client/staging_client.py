@@ -246,7 +246,7 @@ class StagingClient(RsClient):
         with open(PATH_TO_STAGING_BODY, encoding="utf-8") as f:
             staging_body = json.load(f)
         staging_body["inputs"]["collection"]["id"] = out_coll_name
-        staging_body["inputs"]["items"].update(stac_item_collection.model_dump(mode="json"))
+        staging_body["inputs"]["items"]["value"].update(stac_item_collection.model_dump(mode="json"))
         # TODO: replace the staging_body "outputs" field with the following when rs-server-staging is updated
         # TODO: "outputs": {"featureCollectionOutput": {"transmissionMode": "value"}},
 

@@ -45,7 +45,7 @@ paths:
                 $ref: './process.yaml'
   /processes/{process_id}/execution:
     post:
-      summary: Get information on a specific process
+      summary: Execute a process
       parameters:
         - name: process_id
           in: path
@@ -55,11 +55,12 @@ paths:
       # Here both the request and the response need to be validates according to yaml schemas
       requestBody:
         description: Check the body from the request used to execute the process
-        required: true
         content:
           application/json:
             schema:
               $ref: './execute.yaml'
+        required: true
+
       responses:
         '200':
           description:  Result of synchronous execution
