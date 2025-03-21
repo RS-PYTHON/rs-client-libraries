@@ -37,7 +37,6 @@ from rs_common.utils import get_href_service
 # with a valid format according to ogc standard. In the meantime, we don't perform validation to make all staging
 # notebooks pass. If this env variable if not specified (for example that is the case when we launch the pytest),
 # we perform this validation by default
-DO_VALIDATE: bool = os.getenv("RSPY_APPLY_STAGING_ENDPOINTS_VALIDATION", "1") == "1"
 
 PATH_TO_YAML_OPENAPI = osp.join(
     osp.realpath(osp.dirname(__file__)),
@@ -93,8 +92,6 @@ class StagingClient(RsClient):
             ResponseUnmarshalResult.data: data validated by the openapi_core
             unmarshal_response method
         """
-        if not DO_VALIDATE:
-            return request.body
 
         if not os.path.isfile(PATH_TO_YAML_OPENAPI):
             raise FileNotFoundError(f"The following file path was not found: {PATH_TO_YAML_OPENAPI}")
@@ -129,11 +126,6 @@ class StagingClient(RsClient):
             ResponseUnmarshalResult.data: data validated by the openapi_core
             unmarshal_response method
         """
-        if not DO_VALIDATE:
-            if not response.content:
-                raise StagingValidationException("Response content is empty !")
-            return json.loads(response.content)
-
         if not os.path.isfile(PATH_TO_YAML_OPENAPI):
             raise FileNotFoundError(f"The following file path was not found: {PATH_TO_YAML_OPENAPI}")
 
@@ -245,7 +237,7 @@ class StagingClient(RsClient):
         # once rs-server-staging will be updated
         with open(PATH_TO_STAGING_BODY, encoding="utf-8") as f:
             staging_body = json.load(f)
-        staging_body["inputs"]["collection"]["id"] = out_coll_name
+        staging_body["inputs"]["collection"] = out_coll_name
         staging_body["inputs"]["items"]["value"].update(stac_item_collection.model_dump(mode="json"))
         # TODO: replace the staging_body "outputs" field with the following when rs-server-staging is updated
         # TODO: "outputs": {"featureCollectionOutput": {"transmissionMode": "value"}},
