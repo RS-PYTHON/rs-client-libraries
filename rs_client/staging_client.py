@@ -233,14 +233,10 @@ class StagingClient(RsClient):
         if not os.path.isfile(PATH_TO_STAGING_BODY):
             raise FileNotFoundError(f"The following file path was not found: {PATH_TO_STAGING_BODY}")
 
-        # TODO: this staging_body content will be validated with the self.validate_and_unmarshal_request(request)
-        # once rs-server-staging will be updated
         with open(PATH_TO_STAGING_BODY, encoding="utf-8") as f:
             staging_body = json.load(f)
         staging_body["inputs"]["collection"] = out_coll_name
         staging_body["inputs"]["items"]["value"].update(stac_item_collection.model_dump(mode="json"))
-        # TODO: replace the staging_body "outputs" field with the following when rs-server-staging is updated
-        # TODO: "outputs": {"featureCollectionOutput": {"transmissionMode": "value"}},
 
         # Check that the request containing the staging body is valid
         request = requests.Request(  # pylint: disable=W0612 # noqa: F841
@@ -248,8 +244,8 @@ class StagingClient(RsClient):
             url=f"{self.href_service}/processes/{RESOURCE}/execution",  # L'URL de l'endpoint
             json=staging_body,  # Corps de la requête en JSON
         ).prepare()
-        # TODO: uncomment when rs-server-staging is updated
-        # TODO: self.validate_and_unmarshal_request(request)
+        # Validate the body of the request that will be sent to the staging
+        self.validate_and_unmarshal_request(request)
 
         response = self.http_session.post(
             url=f"{self.href_service}/processes/staging/execution",
