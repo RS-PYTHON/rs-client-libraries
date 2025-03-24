@@ -23,7 +23,7 @@ RUN mkdir -p /tmp/whl
 ADD ./*.whl /tmp/whl
 
 # Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
-RUN pip install /tmp/whl/*.whl && opentelemetry-bootstrap -a install
+RUN pip install /tmp/whl/rs_client_libraries-*.whl && opentelemetry-bootstrap -a install
 
 # Install other useful dependencies for rs-demo in local mode.
 RUN pip install papermill
