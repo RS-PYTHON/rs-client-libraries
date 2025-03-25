@@ -17,7 +17,7 @@
 import json
 import os
 import os.path as osp
-from typing import Any, Dict
+from typing import Any
 
 # openapi_core libraries used for endpoints validation
 import requests
@@ -161,7 +161,7 @@ class StagingClient(RsClient):
     # Call RS-Server endpoints #
     ############################
 
-    def get_processes(self) -> Dict:
+    def get_processes(self) -> dict:
         """_summary_
 
         Returns:
@@ -174,7 +174,7 @@ class StagingClient(RsClient):
         )
         return self.validate_and_unmarshal_response(response)
 
-    def get_process(self, process_id: str) -> Dict:
+    def get_process(self, process_id: str) -> dict:
         """
         Wrapper to get a specific process
         Args:
@@ -191,7 +191,7 @@ class StagingClient(RsClient):
         self,
         stac_input: dict[Any, Any] | str,
         out_coll_name: str,
-    ) -> Dict:
+    ) -> dict:
         """Method to start the staging process from rs-client - Call the endpoint /processes/staging/execution
 
         Args:
@@ -267,7 +267,7 @@ class StagingClient(RsClient):
         )
         return self.validate_and_unmarshal_response(response)
 
-    def get_jobs(self) -> Dict:
+    def get_jobs(self) -> dict:
         """Method to get running jobs"""
         response = self.http_session.get(
             url=f"{self.href_service}/jobs",
@@ -276,7 +276,7 @@ class StagingClient(RsClient):
         )
         return self.validate_and_unmarshal_response(response)
 
-    def get_job_info(self, job_id: str) -> Dict:  # pylint: disable=too-many-locals
+    def get_job_info(self, job_id: str) -> dict:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
         response = self.http_session.get(
             url=f"{self.href_service}/jobs/{job_id}",
@@ -285,7 +285,7 @@ class StagingClient(RsClient):
         )
         return self.validate_and_unmarshal_response(response)
 
-    def delete_job(self, job_id: str) -> Dict:  # pylint: disable=too-many-locals
+    def delete_job(self, job_id: str) -> dict:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
         response = self.http_session.delete(
             url=f"{self.href_service}/jobs/{job_id}",
@@ -294,7 +294,7 @@ class StagingClient(RsClient):
         )
         return self.validate_and_unmarshal_response(response)
 
-    def get_job_results(self, job_id: str) -> Dict:
+    def get_job_results(self, job_id: str) -> dict:
         """Wrapper to get the result of a specfific job
 
         Args:
