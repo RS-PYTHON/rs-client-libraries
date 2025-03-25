@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Test rs-client-libraries staging functions """
+"""Test rs-client-libraries staging functions"""
 
 import getpass
 import json

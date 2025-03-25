@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterator, Union
+from collections.abc import Iterator
 
 import pystac
 from pystac import Collection, Item, Link, RelType
@@ -111,16 +111,16 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         self,
         collection_id: str,
         owner_id: str | None = None,
-    ) -> Union[Collection, CollectionClient]:
+    ) -> Collection | CollectionClient:
         """Get the requested collection"""
         return super().get_collection(self.full_collection_id(owner_id, collection_id, ":"))
 
     def get_items(
         self,
         collection_id: str,
-        items_ids: Union[str, None] = None,
+        items_ids: str | None = None,
         owner_id: str | None = None,
-    ) -> Iterator["Item"]:
+    ) -> Iterator[Item]:
         """Get all items from a specific collection."""
         return super().get_items(self.full_collection_id(owner_id, collection_id, ":"), items_ids)
 
@@ -131,7 +131,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     def search(  # type: ignore # pylint: disable=too-many-arguments, arguments-differ
         self,
         **kwargs,
-    ) -> Union[ItemSearch, None]:
+    ) -> ItemSearch | None:
         """Search items inside a specific collection."""
 
         kwargs["collections"] = [

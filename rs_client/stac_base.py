@@ -15,8 +15,9 @@
 """StacBase class implementation."""
 
 import logging
+from collections.abc import Callable, Iterator
 from functools import lru_cache, wraps
-from typing import Any, Callable, Dict, Iterator, Optional, Union, cast
+from typing import Any, cast
 
 import requests
 from pystac import Collection, Item, ItemCollection
@@ -76,13 +77,13 @@ class StacBase(RsClient):
         owner_id: str | None = None,
         logger: logging.Logger | None = None,
         stac_href: str | None = None,  # Flag to enable pystac_client for specific subclasses
-        headers: Optional[Dict[str, str]] = None,
-        parameters: Optional[Dict[str, Any]] = None,
-        ignore_conformance: Optional[bool] = None,
+        headers: dict[str, str] | None = None,
+        parameters: dict[str, Any] | None = None,
+        ignore_conformance: bool | None = None,
         modifier: Callable[[Collection | Item | ItemCollection | dict[Any, Any]], None] | None = None,
-        request_modifier: Optional[Callable[[Request], Union[Request, None]]] = None,
-        stac_io: Optional[StacApiIO] = None,
-        timeout: Optional[Timeout] = TIMEOUT,
+        request_modifier: Callable[[Request], Request | None] | None = None,
+        stac_io: StacApiIO | None = None,
+        timeout: Timeout | None = TIMEOUT,
     ):
         """
         Initialize the StacBase instance.
@@ -167,9 +168,9 @@ class StacBase(RsClient):
         # Get all the available collections
         return self.ps_client.get_collections()
 
-    @lru_cache()
+    @lru_cache
     @handle_api_error
-    def get_collection(self, collection_id: str) -> Union[Collection, CollectionClient]:
+    def get_collection(self, collection_id: str) -> Collection | CollectionClient:
         """
         Retrieve a specific STAC collection by ID.
 
@@ -185,7 +186,7 @@ class StacBase(RsClient):
         return self.ps_client.get_collection(collection_id)
 
     @handle_api_error
-    def get_items(self, collection_id: str, items_ids: Union[str, None] = None) -> Iterator["Item"]:
+    def get_items(self, collection_id: str, items_ids: str | None = None) -> Iterator["Item"]:
         """
         Retrieve all items or specific items from a collection.
 
@@ -233,7 +234,7 @@ class StacBase(RsClient):
         return item
 
     @handle_api_error
-    def get_collection_queryables(self, collection_id) -> Dict[str, Any]:
+    def get_collection_queryables(self, collection_id) -> dict[str, Any]:
         """
         Retrieve queryable fields for a specific collection.
 
@@ -249,7 +250,7 @@ class StacBase(RsClient):
 
         return self.ps_client.get_merged_queryables([collection_id])
 
-    def get_queryables(self) -> Dict[str, Any]:
+    def get_queryables(self) -> dict[str, Any]:
         """
         Retrieve queryable fields for all collections in the STAC API. These are the available terms for
         usage when writing filter expressions in /search endpoint for all the collections
@@ -278,7 +279,7 @@ class StacBase(RsClient):
             raise RuntimeError(f"Could not get queryables from {href_queryables}")
         try:
             json_data = response.json()
-            return cast(Dict[str, Any], json_data)  # Explicitly cast to Dict[str, Any]
+            return cast(dict[str, Any], json_data)  # Explicitly cast to Dict[str, Any]
         except ValueError as e:
             raise RuntimeError(f"Invalid JSON response from {href_queryables}") from e
 
