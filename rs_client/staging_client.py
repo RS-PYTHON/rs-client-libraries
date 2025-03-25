@@ -18,6 +18,7 @@ import json
 import os
 import os.path as osp
 from typing import Any, Dict
+from urllib.parse import urlparse
 
 # openapi_core libraries used for endpoints validation
 import requests
@@ -45,14 +46,15 @@ PATH_TO_YAML_OPENAPI = osp.join(
     "yaml",
     "staging_openapi_schema.yaml",
 )
-PATH_TO_STAGING_BODY = osp.join(
-    osp.realpath(osp.dirname(__file__)),
-    "../config",
-    "staging_templates",
-    "staging_body.json",
-)
 RESOURCE = "staging"
 
+
+def is_url(path):
+    """
+    Function to check if a string is an url
+    """
+    parsed = urlparse(path)
+    return bool(parsed.scheme and parsed.netloc) 
 
 class StagingValidationException(Exception):
     """
@@ -192,58 +194,92 @@ class StagingClient(RsClient):
                   the output of a search for Cadip or Auxip sessions)
                 - A json string corresponding to a Feature or a FeatureCollection
                 - A string corresponding to a path to a json file containing a Feature or a FeatureCollection
-            out_coll_name (): _description_
-
+                - A single link that returns a STAC itemCollection: this link should be an url to search a
+                  itemCollection, for example:
+                  http://localhost:8002/cadip/search?ids=S1A_20231120061537234567&collections=cadip_sentinel1
+        out_coll_name (str): name of the output collection
         Return:
             job_id (int, str): Returns the status code of the staging request + the identifier
             (or None if staging endpoint fails) of the running job
         """
         stac_input_dict = {}
-        # If stac_input is a file, load this file to a dictionary
-        if isinstance(stac_input, str):
-            # If the input is a valid path to a json_file, load this file
-            if os.path.exists(os.path.dirname(stac_input)) and stac_input.endswith(".json"):
-                # Read the yaml or json file
-                with open(stac_input, encoding="utf-8") as opened:
-                    stac_file_to_dict = json.loads(opened.read())
-                    stac_input_dict = stac_file_to_dict
-            # If the input string is not a path, try to convert the content of the string to a json dictionary
+        try:
+            is_an_url = is_url(stac_input)
+        except Exception:
+            is_an_url = False
+        
+        # ----- Case 1: we only load a link (that refers to a STAC itemCollection) in the staging request body
+        if is_an_url:
+            staging_body = {
+                "inputs":{
+                    "collection": out_coll_name,
+                    "items":{
+                        "href": stac_input
+                    }
+                }
+            }
+        # ----- Case 2: we directly load a STAC ItemCollection in the staging request body
+        else:
+            # If stac_input is a file, load this file to a dictionary
+            if isinstance(stac_input, str):
+                # If the input is a valid path to a json_file, load this file
+                if os.path.exists(os.path.dirname(stac_input)) and stac_input.endswith(".json"):
+                    # Read the yaml or json file
+                    with open(stac_input, encoding="utf-8") as opened:
+                        stac_file_to_dict = json.loads(opened.read())
+                        stac_input_dict = stac_file_to_dict
+                # If the input string is not a path, try to convert the content of the string to a json dictionary
+                else:
+                    try:
+                        stac_input_dict = json.loads(stac_input)
+                    except json.JSONDecodeError as e:
+                        raise StagingValidationException(
+                            f"""Invalid input format: {stac_input} - Input data must be either:
+                                    - A Python dictionary corresponding to a Feature or a FeatureCollection (that can be for example
+                                    the output of a search for Cadip or Auxip sessions)
+                                    - A json string corresponding to a Feature or a FeatureCollection
+                                    - A string corresponding to a path to a json file containing a Feature or a FeatureCollection
+                                    out_coll_name (): _description_
+                                    - A single link that returns a STAC itemCollection: this link should be an url to search a
+                                    itemCollection, for example:
+                                    http://localhost:8002/cadip/search?ids=S1A_20231120061537234567&collections=cadip_sentinel1
+                            """.strip()
+                        )
             else:
-                stac_input_dict = json.loads(stac_input)
-        else:
-            stac_input_dict = stac_input
+                stac_input_dict = stac_input
 
-        if "type" not in stac_input_dict:
-            raise KeyError("Key 'type' is missing from the staging input data")
+            if "type" not in stac_input_dict:
+                raise KeyError("Key 'type' is missing from the staging input data")
 
-        # Validate input data using Pydantic
-        if stac_input_dict["type"] == "Feature":
-            stac_item = Item(**stac_input_dict)
-            stac_item_collection = ItemCollection(
-                **{
-                    "type": "FeatureCollection",
-                    "context": {"limit": 1000, "returned": 2},
-                    "features": [stac_item],
-                },  # type: ignore
-            )
-        else:
-            stac_item_collection = ItemCollection(**stac_input_dict)
-
-        # Load staging body base structure and fill it with the staging content
-        if not os.path.isfile(PATH_TO_STAGING_BODY):
-            raise FileNotFoundError(f"The following file path was not found: {PATH_TO_STAGING_BODY}")
-
-        with open(PATH_TO_STAGING_BODY, encoding="utf-8") as f:
-            staging_body = json.load(f)
-        staging_body["inputs"]["collection"] = out_coll_name
-        staging_body["inputs"]["items"]["value"].update(stac_item_collection.model_dump(mode="json"))
-
+            # Validate input data using Pydantic
+            if stac_input_dict["type"] == "Feature":
+                stac_item = Item(**stac_input_dict)
+                stac_item_collection = ItemCollection(
+                    **{
+                        "type": "FeatureCollection",
+                        "context": {"limit": 1000, "returned": 2},
+                        "features": [stac_item],
+                    },  # type: ignore
+                )
+            else:
+                stac_item_collection = ItemCollection(**stac_input_dict)
+            
+            staging_body = {
+                "inputs":{
+                    "collection": out_coll_name,
+                    "items":{
+                        "value": stac_item_collection.model_dump(mode="json")
+                    }
+                }
+            }
+        
         # Check that the request containing the staging body is valid
         request = requests.Request(  # pylint: disable=W0612 # noqa: F841
             method="POST",  # Méthode HTTP, peut être 'POST', 'GET', etc.
             url=f"{self.href_service}/processes/{RESOURCE}/execution",  # L'URL de l'endpoint
             json=staging_body,  # Corps de la requête en JSON
         ).prepare()
+        
         # Validate the body of the request that will be sent to the staging
         self.validate_and_unmarshal_request(request)
 

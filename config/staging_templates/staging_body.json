@@ -1,6 +1,0 @@
-{
-   "inputs":{
-      "collection": "my_target_collection",
-      "items":{"value": {}}
-   }
-}
