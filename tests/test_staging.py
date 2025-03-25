@@ -101,7 +101,11 @@ def get_auxip_data_link():
     """
     Return cadip link pointing to a FeatureCollection
     """
-    return "http://localhost:8001/auxip/search?ids=S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.EOF&collections=adgs"
+    return (
+        "http://localhost:8001/auxip/search?"
+        "ids=S1A_OPER_AUX_PREORB_OPOD_20240527T062732_"
+        "V20240527T062732_20240527T062732.EOF&collections=adgs"
+    )
 
 
 @pytest.fixture(name="staging_response_sample")
@@ -432,7 +436,7 @@ def test_staging_fails_wrong_data_format(  # pylint: disable=R0913, R0917
     # ------ Check that the right exception is raised if we use an unvalid link for the staging
     data_link_to_stage = request.getfixturevalue(data_link_fixture)
     unvalid_link = data_link_to_stage.replace("http://", "")
-    with pytest.raises(StagingValidationException) as exc_info:
+    with pytest.raises(StagingValidationException) as exc_info:  # type: ignore
         staging_client.run_staging(unvalid_link, OUTPUT_COLLECTION)
     assert "Invalid input format" in str(exc_info.value)
 

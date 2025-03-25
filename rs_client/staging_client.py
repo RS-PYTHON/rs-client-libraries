@@ -17,7 +17,7 @@
 import json
 import os
 import os.path as osp
-from typing import Any, Dict
+from typing import Any
 from urllib.parse import urlparse
 
 # openapi_core libraries used for endpoints validation
@@ -206,7 +206,7 @@ class StagingClient(RsClient):
         stac_input_dict = {}
         try:
             is_an_url = is_url(stac_input)
-        except Exception:
+        except ValueError:
             is_an_url = False
 
         # ----- Case 1: we only load a link (that refers to a STAC itemCollection) in the staging request body
@@ -229,16 +229,15 @@ class StagingClient(RsClient):
                     except json.JSONDecodeError as e:
                         raise StagingValidationException(
                             f"""Invalid input format: {stac_input} - Input data must be either:
-                                    - A Python dictionary corresponding to a Feature or a FeatureCollection (that can be for example
-                                    the output of a search for Cadip or Auxip sessions)
-                                    - A json string corresponding to a Feature or a FeatureCollection
-                                    - A string corresponding to a path to a json file containing a Feature or a FeatureCollection
-                                    out_coll_name (): _description_
-                                    - A single link that returns a STAC itemCollection: this link should be an url to search a
-                                    itemCollection, for example:
-                                    http://localhost:8002/cadip/search?ids=S1A_20231120061537234567&collections=cadip_sentinel1
+                                - A Python dictionary corresponding to a Feature or a FeatureCollection
+                                (that can be for example the output of a search for Cadip or Auxip sessions)
+                                - A json string corresponding to a Feature or a FeatureCollection
+                                - A string corresponding to a path to a json file containing a Feature or a
+                                FeatureCollection
+                                - A single link that returns a STAC ItemCollection: this link should be an
+                                url to search an ItemCollection
                             """.strip(),
-                        )
+                        ) from e
             else:
                 stac_input_dict = stac_input
 
