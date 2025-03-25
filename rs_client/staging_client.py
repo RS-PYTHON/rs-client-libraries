@@ -54,7 +54,8 @@ def is_url(path):
     Function to check if a string is an url
     """
     parsed = urlparse(path)
-    return bool(parsed.scheme and parsed.netloc) 
+    return bool(parsed.scheme and parsed.netloc)
+
 
 class StagingValidationException(Exception):
     """
@@ -207,17 +208,10 @@ class StagingClient(RsClient):
             is_an_url = is_url(stac_input)
         except Exception:
             is_an_url = False
-        
+
         # ----- Case 1: we only load a link (that refers to a STAC itemCollection) in the staging request body
         if is_an_url:
-            staging_body = {
-                "inputs":{
-                    "collection": out_coll_name,
-                    "items":{
-                        "href": stac_input
-                    }
-                }
-            }
+            staging_body = {"inputs": {"collection": out_coll_name, "items": {"href": stac_input}}}
         # ----- Case 2: we directly load a STAC ItemCollection in the staging request body
         else:
             # If stac_input is a file, load this file to a dictionary
@@ -243,7 +237,7 @@ class StagingClient(RsClient):
                                     - A single link that returns a STAC itemCollection: this link should be an url to search a
                                     itemCollection, for example:
                                     http://localhost:8002/cadip/search?ids=S1A_20231120061537234567&collections=cadip_sentinel1
-                            """.strip()
+                            """.strip(),
                         )
             else:
                 stac_input_dict = stac_input
@@ -263,23 +257,21 @@ class StagingClient(RsClient):
                 )
             else:
                 stac_item_collection = ItemCollection(**stac_input_dict)
-            
+
             staging_body = {
-                "inputs":{
+                "inputs": {
                     "collection": out_coll_name,
-                    "items":{
-                        "value": stac_item_collection.model_dump(mode="json")
-                    }
-                }
+                    "items": {"value": stac_item_collection.model_dump(mode="json")},
+                },
             }
-        
+
         # Check that the request containing the staging body is valid
         request = requests.Request(  # pylint: disable=W0612 # noqa: F841
             method="POST",  # Méthode HTTP, peut être 'POST', 'GET', etc.
             url=f"{self.href_service}/processes/{RESOURCE}/execution",  # L'URL de l'endpoint
             json=staging_body,  # Corps de la requête en JSON
         ).prepare()
-        
+
         # Validate the body of the request that will be sent to the staging
         self.validate_and_unmarshal_request(request)
 

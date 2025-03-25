@@ -77,6 +77,7 @@ def get_cadip_data():
     with open(cadip_data_json, encoding="utf-8") as file:
         return json.loads(file.read())
 
+
 @pytest.fixture(name="cadip_data_link")
 def get_cadip_data_link():
     """
@@ -93,6 +94,7 @@ def get_auxip_data():
     auxip_data_json = osp.join(RESOURCES_FOLDER, "staging", "auxip_data.json")
     with open(auxip_data_json, encoding="utf-8") as file:
         return json.loads(file.read())
+
 
 @pytest.fixture(name="auxip_data_link")
 def get_auxip_data_link():
@@ -352,11 +354,12 @@ def test_staging_ok(
     staging_resp = staging_client.run_staging(json.dumps(data_to_stage), OUTPUT_COLLECTION)
     assert staging_resp is not None
 
-    # Nominal case - check that the test pass if the input data is a valid url pointing to 
-    # a link that returns a STAC itemCollection 
+    # Nominal case - check that the test pass if the input data is a valid url pointing to
+    # a link that returns a STAC itemCollection
     # (for example https://rspy.ops.rs-python.eu/cadip/search?ids=S1A_20241123044108056677&collections=s1_mti)
     staging_resp = staging_client.run_staging(data_link_to_stage, OUTPUT_COLLECTION)
     assert staging_resp is not None
+
 
 @pytest.mark.unit
 @responses.activate
@@ -383,7 +386,7 @@ def test_staging_fails_stage_empty_dict(dummy_href, staging_client):
 @pytest.mark.unit
 @responses.activate
 @pytest.mark.parametrize(
-     "station, data_fixture, data_link_fixture",
+    "station, data_fixture, data_link_fixture",
     [
         (CADIP, "cadip_data", "cadip_data_link"),
         (AUXIP, "auxip_data", "auxip_data_link"),
@@ -428,10 +431,11 @@ def test_staging_fails_wrong_data_format(  # pylint: disable=R0913, R0917
 
     # ------ Check that the right exception is raised if we use an unvalid link for the staging
     data_link_to_stage = request.getfixturevalue(data_link_fixture)
-    unvalid_link  = data_link_to_stage.replace("http://", "")
+    unvalid_link = data_link_to_stage.replace("http://", "")
     with pytest.raises(StagingValidationException) as exc_info:
         staging_client.run_staging(unvalid_link, OUTPUT_COLLECTION)
     assert "Invalid input format" in str(exc_info.value)
+
 
 @pytest.mark.unit
 @responses.activate
