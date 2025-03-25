@@ -204,14 +204,17 @@ class StagingClient(RsClient):
             (or None if staging endpoint fails) of the running job
         """
         stac_input_dict = {}
-        try:
-            is_an_url = is_url(stac_input)
-        except ValueError:
-            is_an_url = False
+        is_an_url = False
 
         # ----- Case 1: we only load a link (that refers to a STAC itemCollection) in the staging request body
+        if isinstance(stac_input, str):
+            try:
+                is_an_url = is_url(stac_input)
+            except ValueError:
+                is_an_url = False
         if is_an_url:
             staging_body = {"inputs": {"collection": out_coll_name, "items": {"href": stac_input}}}
+
         # ----- Case 2: we directly load a STAC ItemCollection in the staging request body
         else:
             # If stac_input is a file, load this file to a dictionary
