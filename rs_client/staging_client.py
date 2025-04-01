@@ -150,7 +150,7 @@ class StagingClient(RsClient):
                 f"{openapi_request.path}: 'data' field of ResponseUnmarshalResult"
                 f"object is empty",
             )
-        return result.data
+        return json.loads(response.content)
 
     ############################
     # Call RS-Server endpoints #
