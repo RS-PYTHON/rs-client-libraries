@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# -------------- CAUTON: the same schema is defined in rs-server repo
+# (/config/staging_templates/yaml/staging_openapi_schema.yaml) - if the
+# current file is updated, don't forget to update this last file too
+
 openapi: 3.0.0
 info:
   title: RS Staging API
@@ -74,6 +78,18 @@ paths:
             application/json:
               schema:
                 $ref: './statusInfo.yaml'
+        "404":
+          description: The requested URI was not found.
+          content:
+            application/json:
+              schema:
+                $ref: './exception.yaml'
+        "500":
+          description: A server error occurred.
+          content:
+            application/json:
+              schema:
+                $ref: './exception.yaml'
   /jobs:
     get:
       summary: Returns the status of all jobs.
