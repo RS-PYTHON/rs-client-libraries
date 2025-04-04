@@ -43,7 +43,6 @@ PATH_TO_YAML_OPENAPI = osp.join(
     osp.realpath(osp.dirname(__file__)),
     "../config",
     "staging_templates",
-    "yaml",
     "staging_openapi_schema.yaml",
 )
 RESOURCE = "staging"
