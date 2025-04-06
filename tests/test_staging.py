@@ -688,7 +688,7 @@ def test_get_job_results(staging_client, dummy_href):
     assert job_result_resp == json_response
 
     # ----- Check that we obtain the right error status_code when wanting to get results from unexisting job
-    ob_id = "0000000"
+    job_id = "0000000"
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/jobs/{job_id}/results",
