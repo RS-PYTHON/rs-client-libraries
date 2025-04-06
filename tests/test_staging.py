@@ -256,7 +256,7 @@ def test_get_process(staging_client, dummy_href):
         },
     }
 
-    # Check that the process information are returned if we specify a valid job identifier in input
+    # ----- Check that the process information are returned if we specify a valid job identifier in input
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/processes/{process_id}",
@@ -266,20 +266,23 @@ def test_get_process(staging_client, dummy_href):
     process_resp = staging_client.get_process(process_id)
     assert process_resp is not None
 
-    # Check that the right error status code is returned if trying to get an unexisting resource
+    # ----- Check that the right error status code is returned if trying to get an unexisting resource
     process_id = "process_that_doesnt_exist"
-    not_found_response = {"type": "string", "title": "string", "status": 0, "detail": "string", "instance": "string"}
+    not_found_response = {
+        "type": "https://developer.mozilla.org/en/docs/Web/HTTP/Reference/Status/404",
+        "status": 404,
+        "detail": '"Resource process_that_doesnt_exist not found',
+    }
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/processes/{process_id}",
         json=not_found_response,
         status=status.HTTP_404_NOT_FOUND,
     )
-    with pytest.raises(StagingValidationException) as exc_info:
-        staging_client.get_process(process_id)
-    assert "Unknown response http status: 404" in str(exc_info.value)
+    process_resp = staging_client.get_process(process_id)
+    assert '"Resource process_that_doesnt_exist not found' in process_resp["detail"]
 
-    # Check that we get a validation error if the server sends a response with an unvalid format
+    # ----- Check that we get a validation error if the server sends a response with an unvalid format
     # (e.g. we add a wrong key in the expected data)
     json_response = {
         "id": "EchoProcess",
@@ -452,7 +455,11 @@ def test_staging_fails_endpoint_send_error(data_fixture, request, dummy_href, st
     Failing case where the staging endpoint fails and return an error status code
     """
     data_to_stage = request.getfixturevalue(data_fixture)
-    json_response: dict[Any, Any] = {}
+    json_response: dict[Any, Any] = {
+        "type": "https://developer.mozilla.org/en/docs/Web/HTTP/Reference/Status/500",
+        "status": 500,
+        "detail": "Request body validation error",
+    }
     process_id = "staging"
 
     # Case of a timeout for the staging
@@ -462,9 +469,8 @@ def test_staging_fails_endpoint_send_error(data_fixture, request, dummy_href, st
         json=json_response,
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
-    with pytest.raises(StagingValidationException) as exc_info:
-        staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION)
-    assert "Unknown response http status: 500" in str(exc_info.value)
+    response = staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION)
+    assert "Request body validation error" in response["detail"]
 
 
 @pytest.mark.unit
@@ -502,7 +508,7 @@ def test_get_jobs(staging_client, dummy_href):
         ],
     }
 
-    # Check that the jobs information are sent if the endpoints returns a valid response
+    # ----- Check that the jobs information are sent if the endpoints returns a valid response
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/jobs",
@@ -510,18 +516,21 @@ def test_get_jobs(staging_client, dummy_href):
         status=status.HTTP_200_OK,
     )
     jobs_resp = staging_client.get_jobs()
-    assert jobs_resp is not None
+    assert jobs_resp == json_response
 
-    # Check that an exception is raised if the endpoints returns a status error code
+    # ----- Check that an exception is raised if the endpoints returns a status error code
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/jobs",
-        json=json_response,
+        json={
+            "type": "https://developer.mozilla.org/en/docs/Web/HTTP/Reference/Status/500",
+            "status": 500,
+            "detail": "jobs not found",
+        },
         status=status.HTTP_404_NOT_FOUND,
     )
-    with pytest.raises(StagingValidationException) as exc_info:
-        staging_client.get_jobs()
-    assert "Unknown response http status: 404" in str(exc_info.value)
+    jobs_resp = staging_client.get_jobs()
+    assert "jobs not found" in jobs_resp["detail"]
 
     # Check that an exception is raised if the endpoints returns an unvalid response
     # e.g. we remove the mandatory attribute "jobID"
@@ -558,7 +567,7 @@ def test_get_job(staging_client, dummy_href):
             {"href": "string", "rel": "service", "type": "application/json", "hreflang": "en", "title": "string"},
         ],
     }
-    # Check that the job information are returned if we specify a valid job identifier in input
+    # ----- Check that the job information are returned if we specify a valid job identifier in input
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/jobs/{job_id}",
@@ -566,42 +575,35 @@ def test_get_job(staging_client, dummy_href):
         status=status.HTTP_200_OK,
     )
     job_resp = staging_client.get_job_info(job_id)
-    assert job_resp is not None
+    assert job_resp == json_response
 
-    # Check that an exception is raised if we don't specify a valid job identifier
+    # ----- Check that an exception is raised if we don't specify a valid job identifier
     job_id = "0000000"
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/jobs/{job_id}",
-        json=json_response,
+        json={
+            "type": "https://developer.mozilla.org/en/docs/Web/HTTP/Reference/Status/404",
+            "status": 404,
+            "detail": "Job with ID 0000000 not found",
+        },
         status=status.HTTP_404_NOT_FOUND,
     )
-    with pytest.raises(StagingValidationException) as exc_info:
-        staging_client.get_job_info(job_id)
-    assert "Unknown response http status: 404" in str(exc_info.value)
-
-    # Check that the right download status is sent back
-    json_response["status"] = "running"
-    responses.add(
-        method=responses.GET,
-        url=f"{dummy_href}/jobs/{job_id}",
-        json=json_response,
-        status=status.HTTP_200_OK,
-    )
     job_resp = staging_client.get_job_info(job_id)
-    assert job_resp["status"] == "running"
+    assert "Job with ID 0000000 not found" in job_resp["detail"]
 
-    # Check that an exception is raised if the endpoints returns an unvalid response
+    # ----- Check that an exception is raised if the endpoints returns an unvalid response
     # e.g. we remove the mandatory attribute "jobID"
+    json_response.pop("jobID")
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/jobs",
-        json=json_response.pop("jobID"),
+        json=json_response,
         status=status.HTTP_200_OK,
     )
     with pytest.raises(StagingValidationException) as exc_info:
         staging_client.get_jobs()
-    assert "Failed to cast value to object type" in str(exc_info.value)
+    assert "'jobs' is a required property" in str(exc_info.value)
 
 
 @pytest.mark.unit
@@ -626,7 +628,7 @@ def test_delete_job(staging_client, dummy_href):
             {"href": "string", "rel": "service", "type": "application/json", "hreflang": "en", "title": "string"},
         ],
     }
-    # Check that the job information are returned if we specify a valid job identifier in input
+    # ----- Check that the job information are returned if we specify a valid job identifier in input
     responses.add(
         method=responses.DELETE,
         url=f"{dummy_href}/jobs/{job_id}",
@@ -638,27 +640,32 @@ def test_delete_job(staging_client, dummy_href):
 
     # Check that we obtain the right error status_code when wanting to
     # delete a job with an identifier that doesn't exist
+    job_id = "0000000"
     responses.add(
         method=responses.DELETE,
         url=f"{dummy_href}/jobs/{job_id}",
-        json={},
+        json={
+            "type": "https://developer.mozilla.org/en/docs/Web/HTTP/Reference/Status/404",
+            "status": 404,
+            "detail": "Job with ID 0000000 not found",
+        },
         status=status.HTTP_404_NOT_FOUND,
     )
-    with pytest.raises(StagingValidationException) as exc_info:
-        staging_client.delete_job(job_id)
-    assert "Unknown response http status: 404" in str(exc_info.value)
+    job_resp = staging_client.delete_job(job_id)
+    assert "Job with ID 0000000 not found" in job_resp["detail"]
 
-    # Check that an exception is raised if the endpoints returns an unvalid response
+    # ----- Check that an exception is raised if the endpoints returns an unvalid response
     # e.g. we remove the mandatory attribute "jobID"
+    json_response.pop("jobID")
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/jobs",
-        json=json_response.pop("jobID"),
+        json=json_response,
         status=status.HTTP_200_OK,
     )
     with pytest.raises(StagingValidationException) as exc_info:
         staging_client.get_jobs()
-    assert "Failed to cast value to object type" in str(exc_info.value)
+    assert "'jobs' is a required property" in str(exc_info.value)
 
 
 @pytest.mark.unit
@@ -668,9 +675,9 @@ def test_get_job_results(staging_client, dummy_href):
     Test to check the behaviour of the function to get the status of a specific job
     """
     job_id = "0474d453-3306-48e2-ab32-ac00bafb3115"
-    json_response = {"property1": "string", "property2": "string"}
+    json_response = "successful"
 
-    # Check that the job results are returned if we specify a valid job identifier in input
+    # ----- Check that the job results are returned if we specify a valid job identifier in input
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/jobs/{job_id}/results",
@@ -678,18 +685,22 @@ def test_get_job_results(staging_client, dummy_href):
         status=status.HTTP_200_OK,
     )
     job_result_resp = staging_client.get_job_results(job_id)
-    assert job_result_resp is not None
+    assert job_result_resp == json_response
 
-    # Check that we obtain the right error status_code when wanting to get results from unexisting job
+    # ----- Check that we obtain the right error status_code when wanting to get results from unexisting job
+    ob_id = "0000000"
     responses.add(
         method=responses.GET,
         url=f"{dummy_href}/jobs/{job_id}/results",
-        json=None,
+        json={
+            "type": "https://developer.mozilla.org/en/docs/Web/HTTP/Reference/Status/404",
+            "status": 404,
+            "detail": "Job with ID 0000000 not found",
+        },
         status=status.HTTP_404_NOT_FOUND,
     )
-    with pytest.raises(StagingValidationException) as exc_info:
-        staging_client.get_job_results(job_id)
-    assert "Unknown response http status: 404" in str(exc_info.value)
+    job_result_resp = staging_client.get_job_results(job_id)
+    assert "Job with ID 0000000 not found" in job_result_resp["detail"]
 
 
 # -------------------------- Test for methods used in the staging process --------------------------
