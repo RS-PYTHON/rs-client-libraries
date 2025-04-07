@@ -1,0 +1,35 @@
+@startuml dpr-as-a-service
+
+actor John
+
+actor JupyterLab_Python_3.12 as Jupyter
+actor Prefect_Python_3.12 as Prefect
+actor DPR_service_Python_3.11 as DPR
+
+activate Jupyter
+activate Prefect
+activate DPR
+
+John -> Jupyter: Edit/Run flow in notebook
+
+Jupyter -> Prefect: Run flow
+
+Prefect -> DPR: GET /processes/{processor}
+DPR -> DPR: eopf trigger tasktable
+DPR --> Prefect: tasktable
+
+Prefect -> Prefect: generate EOPF payload
+
+Prefect -> DPR: POST /processes/{processor}/execution(payload)
+DPR --> Prefect: acknowledge (job_id)
+DPR -> DPR: async processing
+
+loop until_complete
+  Prefect -> DPR: GET /jobs/{job_id}
+  DPR --> Prefect: progress (%)
+end
+
+Prefect --> Jupyter: flow result
+Jupyter --> John: flow result
+
+@enduml
