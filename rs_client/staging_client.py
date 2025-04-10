@@ -142,7 +142,7 @@ class StagingClient(RsClient):
         if result.errors:
             raise StagingValidationException(  # type: ignore
                 f"Error validating the response of the enpoint "
-                f"{openapi_request.path}: {str(result.errors[0])}",  # type: ignore
+                f"{openapi_request.path}: {response.content}",  # type: ignore
             )
         if not result.data:
             raise StagingValidationException(
