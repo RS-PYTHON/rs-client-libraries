@@ -141,8 +141,9 @@ class StagingClient(RsClient):
         result = openapi.unmarshal_response(openapi_request, openapi_response)  # type: ignore
         if result.errors:
             raise StagingValidationException(  # type: ignore
-                f"Error validating the response of the enpoint "
-                f"{openapi_request.path}: {response.json()}",  # type: ignore
+                f"Error validating the response of the enpoint {openapi_request.path} - "
+                f"Server response content: {response.json()} - "
+                f"Validation error of the server response: {str(result.errors[0])}",  # type: ignore
             )
         if not result.data:
             raise StagingValidationException(
