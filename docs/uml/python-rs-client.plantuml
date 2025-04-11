@@ -7,8 +7,8 @@ Class RsClient {
 ==
 + __init__ (api_key:UUID, href: str, owner_id:str)
 + get_catalog_client() -> CatalogClient
-+ get_cadip_client(station:str) -> CadipClient
-+ get_auxip_client(station:str) -> AuxipClient
++ get_cadip_client() -> CadipClient
++ get_auxip_client() -> AuxipClient
 + get_staging_client() -> StagingClient
 }
 
@@ -19,7 +19,7 @@ Class StacBase {
 - stac_href: str
 - ps_client: pystac_client.Client
 ==
-+ __init__ (api_key:UUID, href:str, owner_id:str, station:str, stac_href:str)
++ __init__ (api_key:UUID, href:str, owner_id:str, stac_href:str)
 + get_landing() -> dict
 + get_collections() -> Iterator[pystac.Collection]
 + get_collection(collection_id:str) -> pystac.Collection
@@ -46,20 +46,18 @@ Class AuxipClient {
 - rs_server_api_key : UUID
 - rs_server_href : str
 - owner_id : str
-- station : str
 - stac_href : str
 ==
-+ __init__ (api_key:UUID, href:str, owner_id:str, station:str, stac_href:str)
++ __init__ (api_key:UUID, href:str, owner_id:str, stac_href:str)
 }
 
 Class CadipClient {
 - rs_server_api_key : UUID
 - rs_server_href : str
 - owner_id : str
-- station : str
 - stac_href : str
 ==
-+ __init__ (api_key:UUID, href:str, owner_id:str, station:str, stac_href:str)
++ __init__ (api_key:UUID, href:str, owner_id:str, stac_href:str)
 }
 
 Class CatalogClient {
@@ -67,7 +65,7 @@ Class CatalogClient {
 - rs_server_href : str
 - owner_id : str
 ==
-+ __init__ (api_key:UUID, href:str, owner_id:str, station:str, stac_href:str)
++ __init__ (api_key:UUID, href:str, owner_id:str, stac_href:str)
 add_collection(collection: pystac.Collection,
         add_public_license: bool,
         owner_id: str,
@@ -94,7 +92,7 @@ Class StagingClient {
 - rs_server_href : str
 - owner_id : str
 ==
-+ __init__ (api_key:UUID, href:str, owner_id:str, station:str, stac_href:str)
++ __init__ (api_key:UUID, href:str, owner_id:str, stac_href:str)
 add_collection(collection: pystac.Collection,
         add_public_license: bool,
         owner_id: str,

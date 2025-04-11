@@ -23,9 +23,8 @@ from rs_client.auxip_client import AuxipClient
 from rs_client.cadip_client import CadipClient
 from rs_client.catalog_client import CatalogClient
 from rs_client.rs_client import RsClient
-from rs_common.config import EAuxipStation, ECadipStation
 
-from .conftest import ADGS_STATION, CADIP_STATION, RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL
+from .conftest import RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL
 
 
 @pytest.mark.unit
@@ -34,28 +33,6 @@ def test_get_child_client(auxip_client, cadip_client, stac_client):  # pylint: d
     assert isinstance(auxip_client, AuxipClient)
     assert isinstance(cadip_client, CadipClient)
     assert isinstance(stac_client, CatalogClient)
-
-
-@pytest.mark.unit
-def test_station_names(generic_rs_client):  # pylint: disable=redefined-outer-name
-    """Test the station name returned by the AuxipClient and CadipClient"""
-    # Try with invalid stations name, should raise runtime
-    with pytest.raises(RuntimeError):
-        generic_rs_client.get_auxip_client("Invalid")
-    with pytest.raises(RuntimeError):
-        generic_rs_client.get_auxip_client(ECadipStation.CADIP)
-    with pytest.raises(RuntimeError):
-        generic_rs_client.get_cadip_client("Invalid")
-    with pytest.raises(RuntimeError):
-        generic_rs_client.get_cadip_client(EAuxipStation.ADGS)
-
-    # Try with station  as str
-    assert "ADGS" in generic_rs_client.get_auxip_client(ADGS_STATION).station_name
-    assert "CADIP" in generic_rs_client.get_cadip_client(CADIP_STATION).station_name
-    # Try with station as enum
-    assert "ADGS" in generic_rs_client.get_auxip_client(EAuxipStation.ADGS).station_name
-    assert "CADIP" in generic_rs_client.get_cadip_client(ECadipStation.CADIP).station_name
-    assert isinstance(generic_rs_client.get_catalog_client(), CatalogClient)
 
 
 @pytest.mark.unit

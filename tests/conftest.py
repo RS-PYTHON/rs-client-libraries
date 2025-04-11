@@ -30,8 +30,6 @@ from tests import common
 # Use dummy values
 RSPY_UAC_CHECK_URL = "https://www.rspy-uac-manager.com"
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
-CADIP_STATION = "CADIP"
-ADGS_STATION = "ADGS"
 PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 
@@ -443,13 +441,13 @@ def generic_rs_client_(mocked_stac_catalog_url, monkeypatch):
 @pytest.fixture(name="auxip_client")
 def auxip_client_(generic_rs_client):
     """Return a generic AuxipClient instance for testing."""
-    yield generic_rs_client.get_auxip_client(ADGS_STATION)
+    yield generic_rs_client.get_auxip_client()
 
 
 @pytest.fixture(name="cadip_client")
 def cadip_client_(generic_rs_client):
     """Return a generic CadipClient instance for testing."""
-    yield generic_rs_client.get_cadip_client(CADIP_STATION)
+    yield generic_rs_client.get_cadip_client()
 
 
 @pytest.fixture(name="stac_client")
