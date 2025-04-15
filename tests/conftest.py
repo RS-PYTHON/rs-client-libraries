@@ -159,7 +159,7 @@ def before_and_after(session_mocker):
 def clear_caches():
     """Clear caches at the end of each test"""
     yield
-    StacBase.get_collection.cache_clear()
+    StacBase.get_collection.cache_clear()  # pylint:disable=no-member
 
 
 @pytest.fixture
