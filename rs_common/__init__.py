@@ -15,6 +15,6 @@
 """Common modules."""
 
 # Configure OpenTelemetry
-from rs_common import opentelemetry
+from rs_common import init_opentelemetry
 
-opentelemetry.init_traces("rs.client")
+init_opentelemetry.init_traces("rs.client")
