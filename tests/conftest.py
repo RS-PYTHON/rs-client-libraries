@@ -24,6 +24,7 @@ import pytest
 import responses
 
 from rs_client.rs_client import RsClient
+from rs_client.stac_base import StacBase
 from rs_common.config import EPlatform
 from tests import common
 
@@ -152,6 +153,13 @@ def before_and_after(session_mocker):
     ###################
     # After all tests #
     ###################
+
+
+@pytest.fixture(scope="function", autouse=True)
+def clear_caches():
+    """Clear caches at the end of each test"""
+    yield
+    StacBase.get_collection.cache_clear()
 
 
 @pytest.fixture
