@@ -36,13 +36,13 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-opentelemetry-distro = "^0.53b0" # then run 'poetry run opentelemetry-bootstrap -a install'
-opentelemetry-instrumentation-aws-lambda = "^0.53b0"
-opentelemetry-test-utils = "^0.53b0"
-opentelemetry-exporter-otlp = "^1.32.0"
+opentelemetry-distro = "^0.53b1" # then run 'poetry run opentelemetry-bootstrap -a install'
+opentelemetry-instrumentation-aws-lambda = "^0.53b1"
+opentelemetry-test-utils = "^0.53b1"
+opentelemetry-exporter-otlp = "^1.32.1"
 python-logging-loki = "^0.3.1" # to avoid otl error: No module named 'logging_loki'
 cachetools = "^5.5.2"
-pystac = "^1.12.2"
+pystac = "^1.13.0"
 pystac-client = "^0.8.6"
 python-dateutil = "^2.9.0.post0"
 stac-pydantic = "^3.1.5"
