@@ -32,7 +32,7 @@
                     "href": "https://rs-server/catalog/TestUser/collections/s1_chunk/items/CADU1.raw/download/file",
                     "alternate": {
                         "s3": {
-                            "href": "s3://rs-cluster-catalog/stations/CADIP/CADU1.raw"
+                            "href": "s3://rs-dev-cluster-catalog/stations/CADIP/CADU1.raw"
                         }
                     },
                     "file:size": 58
@@ -96,7 +96,7 @@
                     "href": "https://rs-server/catalog/TestUser/collections/s1_chunk/items/CADU2.raw/download/file",
                     "alternate": {
                         "s3": {
-                            "href": "s3://rs-cluster-catalog/stations/CADIP/CADU2.raw"
+                            "href": "s3://rs-dev-cluster-catalog/stations/CADIP/CADU2.raw"
                         }
                     },
                     "file:size": 63
