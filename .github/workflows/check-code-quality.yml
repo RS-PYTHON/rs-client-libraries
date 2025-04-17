@@ -133,7 +133,9 @@ jobs:
       - id: safety
         name: Run safety
         if: always()
-        run: poetry run safety check --full-report
+        run: |
+          set -x
+          poetry run safety --key ${{ secrets.SAFETY_API_KEY }} scan --detailed-output
         shell: bash
 
       - name: Run Trivy vulnerability scanner
