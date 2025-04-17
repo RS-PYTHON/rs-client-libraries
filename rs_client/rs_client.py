@@ -24,7 +24,6 @@ import requests
 from cachetools import TTLCache, cached
 
 from rs_common import utils
-from rs_common.config import EAuxipStation, ECadipStation
 from rs_common.logging import Logging
 from rs_common.utils import AuthInfo
 
@@ -256,30 +255,25 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     # Get child class instances #
     #############################
 
-    def get_auxip_client(self, station: EAuxipStation, **kwargs) -> "AuxipClient":  # type: ignore # noqa: F821
+    def get_auxip_client(self, **kwargs) -> "AuxipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
-        Args:
-            station (EAuxipStation): Auxip station
         """
         from rs_client.auxip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             AuxipClient,
         )
 
-        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger, **kwargs)
+        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger, **kwargs)
 
-    def get_cadip_client(self, station: ECadipStation, **kwargs) -> "CadipClient":  # type: ignore # noqa: F821
+    def get_cadip_client(self, **kwargs) -> "CadipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class CadipClient, with the same attributes as this "self" instance.
-
-        Args:
-            station (ECadipStation): Cadip station
         """
         from rs_client.cadip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             CadipClient,
         )
 
-        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger, **kwargs)
+        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger, **kwargs)
 
     def get_catalog_client(self, **kwargs) -> "CatalogClient":  # type: ignore # noqa: F821
         """

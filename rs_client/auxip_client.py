@@ -18,7 +18,6 @@ import logging
 from typing import Any
 
 from rs_client.stac_base import StacBase
-from rs_common.config import EAuxipStation
 from rs_common.utils import get_href_service
 
 
@@ -34,7 +33,6 @@ class AuxipClient(StacBase):
         rs_server_href: str | None,
         rs_server_api_key: str | None,
         owner_id: str | None,
-        station: EAuxipStation | str,
         logger: logging.Logger | None = None,
         **kwargs: dict[str, Any],
     ):
@@ -45,7 +43,6 @@ class AuxipClient(StacBase):
             rs_server_href (str | None): The URL of the RS-Server. Pass None for local mode.
             rs_server_api_key (str | None): API key for authentication.
             owner_id (str | None): ID of the catalog owner.
-            station (EAuxipStation | str): The AUXIP station identifier.
             logger (logging.Logger | None, optional): Logger instance (default: None).
             **kwargs: Arbitrary keyword arguments that may include:
                 - `headers` (Optional[Dict[str, str]])
@@ -55,9 +52,6 @@ class AuxipClient(StacBase):
                 - `request_modifier` (Optional[Callable[[Request], Union[Request, None]]])
                 - `stac_io` (Optional[StacApiIO])
                 - `timeout` (Optional[Timeout])
-
-        Raises:
-            RuntimeError: If the provided station is not a valid AUXIP station.
         """
         super().__init__(
             rs_server_href,
@@ -67,10 +61,6 @@ class AuxipClient(StacBase):
             get_href_service(rs_server_href, "RSPY_HOST_ADGS") + "/auxip/",
             **kwargs,
         )
-        try:
-            self.station: EAuxipStation = EAuxipStation[station] if isinstance(station, str) else station
-        except KeyError as e:
-            self.log_and_raise(f"There is no such AUXIP station: {station}", e)
 
     @property
     def href_service(self) -> str:
@@ -80,8 +70,3 @@ class AuxipClient(StacBase):
         Otherwise it should just be the RS-Server URL.
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_ADGS") + "/auxip"
-
-    @property
-    def station_name(self) -> str:
-        """Return the station name."""
-        return self.station.value

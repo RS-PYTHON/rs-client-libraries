@@ -14,7 +14,7 @@
 
 """Unit tests for OpenTelemetry."""
 
-from rs_common import opentelemetry
+from rs_common import init_opentelemetry
 from rs_common.logging import Logging
 
 
@@ -25,7 +25,7 @@ def test_opentelemetry(mocker):
     """
 
     # Patch the global variables. See: https://stackoverflow.com/a/69685866
-    mocker.patch("rs_common.opentelemetry.FROM_PYTEST", new=True, autospec=False)
+    mocker.patch("rs_common.init_opentelemetry.FROM_PYTEST", new=True, autospec=False)
 
     Logging.default(__name__)
-    opentelemetry.init_traces("pytest")
+    init_opentelemetry.init_traces("pytest")
