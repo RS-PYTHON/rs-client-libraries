@@ -31,24 +31,35 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace.span import NonRecordingSpan, SpanContext, TraceFlags
 from opentelemetry.util._decorator import _agnosticcontextmanager
 
+try:
+    from rs_common.logging import Logging
+
+    default_logger = Logging.default(__name__)
+except ModuleNotFoundError:
+    import logging
+
+    default_logger = logging.getLogger(__name__)
+
 FROM_PYTEST = False
 
 
-def init_traces(service_name: str):
+def init_traces(service_name: str, logger=None):
     """
     Init instrumentation of OpenTelemetry traces.
 
     Args:
         service_name (str): service name
     """
-
     # See: https://github.com/softwarebloat/python-tracing-demo/tree/main
+
+    logger = logger or default_logger
 
     # Don't call this line from pytest because it causes errors:
     # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:4317, retrying in ..s.
     if not FROM_PYTEST:
         tempo_endpoint = os.getenv("TEMPO_ENDPOINT")
         if not tempo_endpoint:
+            logger.warning("'TEMPO_ENDPOINT' variable is missing, cannot initialize OpenTelemetry")
             return
 
         # TODO: to avoid errors in local mode:
