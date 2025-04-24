@@ -126,7 +126,7 @@ def init_traces(service_name: str, logger=None):
 def start_span(
     instrumenting_module_name: str,
     name: str,
-    span_context: SpanContext = None,
+    span_context: SpanContext | None = None,
 ):
     """
     Context manager for creating a new main or child OpenTelemetry span and set it
@@ -153,7 +153,7 @@ def start_span(
             trace_flags=TraceFlags(TraceFlags.SAMPLED),
         )
         main_span = NonRecordingSpan(main_span_context)
-        with trace.use_span(main_span):
+        with trace.use_span(main_span):  # pylint: disable=not-context-manager
             # Optionnaly, we could use the main span instead of creating
             # a new one, to be discussed.
             with tracer.start_as_current_span(name) as span:
