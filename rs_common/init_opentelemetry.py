@@ -28,25 +28,38 @@ from opentelemetry.instrumentation.instrumentor import BaseInstrumentor  # type:
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.trace.span import NonRecordingSpan, SpanContext, TraceFlags
+from opentelemetry.util._decorator import _agnosticcontextmanager
+
+try:
+    from rs_common.logging import Logging
+
+    default_logger = Logging.default(__name__)
+except ModuleNotFoundError:
+    import logging
+
+    default_logger = logging.getLogger(__name__)
 
 FROM_PYTEST = False
 
 
-def init_traces(service_name: str):
+def init_traces(service_name: str, logger=None):
     """
     Init instrumentation of OpenTelemetry traces.
 
     Args:
         service_name (str): service name
     """
-
     # See: https://github.com/softwarebloat/python-tracing-demo/tree/main
+
+    logger = logger or default_logger
 
     # Don't call this line from pytest because it causes errors:
     # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:4317, retrying in ..s.
     if not FROM_PYTEST:
         tempo_endpoint = os.getenv("TEMPO_ENDPOINT")
         if not tempo_endpoint:
+            logger.warning("'TEMPO_ENDPOINT' variable is missing, cannot initialize OpenTelemetry")
             return
 
         # TODO: to avoid errors in local mode:
@@ -107,3 +120,41 @@ def init_traces(service_name: str):
                     _class_instance.instrument(tracer_provider=otel_tracer)
                 # name = f"{module_str}.{_class.__name__}".removeprefix(prefix)
                 # logger.debug(f"OpenTelemetry instrumentation of {name!r}")
+
+
+@_agnosticcontextmanager
+def start_span(
+    instrumenting_module_name: str,
+    name: str,
+    span_context: SpanContext | None = None,
+):
+    """
+    Context manager for creating a new main or child OpenTelemetry span and set it
+    as the current span in this tracer's context.
+
+    Args:
+        instrumenting_module_name: Caller module name, just pass __name__
+        name: The name of the span to be created (use a custom name)
+        span_context: Parent span context. Only to create a child span.
+    """
+    tracer = trace.get_tracer(instrumenting_module_name)
+
+    # Create a main span
+    if not span_context:
+        with tracer.start_as_current_span(name) as span:
+            yield span
+
+    # Create a child span
+    else:
+        main_span_context = SpanContext(
+            trace_id=span_context.trace_id,
+            span_id=span_context.span_id,
+            is_remote=True,
+            trace_flags=TraceFlags(TraceFlags.SAMPLED),
+        )
+        main_span = NonRecordingSpan(main_span_context)
+        with trace.use_span(main_span):  # pylint: disable=not-context-manager
+            # Optionnaly, we could use the main span instead of creating
+            # a new one, to be discussed.
+            with tracer.start_as_current_span(name) as span:
+                yield span
