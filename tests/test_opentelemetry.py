@@ -14,11 +14,14 @@
 
 """Unit tests for OpenTelemetry."""
 
+import requests
+from requests.exceptions import ConnectionError as RequestsConnectionError
+
 from rs_common import init_opentelemetry
 from rs_common.logging import Logging
 
 
-def test_opentelemetry(mocker):
+def test_opentelemetry(mocker, monkeypatch):
     """
     For now, just test that the otel init code passes without errors.
     Don't check the generated logs, traces and metrics.
@@ -27,5 +30,15 @@ def test_opentelemetry(mocker):
     # Patch the global variables. See: https://stackoverflow.com/a/69685866
     mocker.patch("rs_common.init_opentelemetry.FROM_PYTEST", new=True, autospec=False)
 
+    # Patch the env variables
+    monkeypatch.setenv("OTEL_PYTHON_REQUESTS_TRACE_HEADERS", "1")
+    monkeypatch.setenv("OTEL_PYTHON_REQUESTS_TRACE_BODY", "1")
+
     Logging.default(__name__)
     init_opentelemetry.init_traces("pytest")
+
+    # Run a dummy http request to be instrumented by opentelemetry
+    try:
+        requests.get("http://dummy", timeout=1)
+    except RequestsConnectionError:
+        pass
