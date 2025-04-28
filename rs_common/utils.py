@@ -54,3 +54,17 @@ def get_href_service(rs_server_href, env_var) -> str:
     if not rs_server_href:
         raise RuntimeError("RS-Server URL is undefined")
     return rs_server_href.rstrip("/")
+
+
+def env_bool(var: str, default: bool) -> bool:
+    """
+    Return True if an environemnt variable is set to 1, true or yes (case insensitive).
+    Return False if set to 0, false or no (case insensitive).
+    Return the default value if not set or set to a different value.
+    """
+    val = os.getenv(var, str(default)).lower()
+    if val in ("y", "yes", "t", "true", "on", "1"):
+        return True
+    if val in ("n", "no", "f", "false", "off", "0"):
+        return False
+    return default
