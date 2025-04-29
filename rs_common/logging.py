@@ -19,8 +19,6 @@ import os
 from multiprocessing import Queue
 from threading import Lock
 
-import logging_loki
-
 
 class Logging:  # pylint: disable=too-few-public-methods
     """
@@ -63,6 +61,8 @@ class Logging:  # pylint: disable=too-few-public-methods
             # Export logs to Loki, see: https://pypi.org/project/python-logging-loki/
             loki_endpoint = os.getenv("LOKI_ENDPOINT")
             if loki_endpoint:
+                import logging_loki  # pylint: disable=import-outside-toplevel
+
                 handler = logging_loki.LokiQueueHandler(
                     Queue(-1),
                     url=loki_endpoint,
