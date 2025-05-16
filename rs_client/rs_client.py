@@ -14,10 +14,8 @@
 
 """RsClient class implementation."""
 
-import getpass
 import logging
 import os
-import re
 import sys
 
 import requests
@@ -53,14 +51,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         rs_server_api_key (str | None): API key for RS-Server authentication.
         rs_server_oauth2_cookie (str | None): OAuth2 session cookie read from
             the `RSPY_OAUTH2_COOKIE` environment variable.
-        owner_id (str): The owner of the STAC catalog collections (no special characters allowed).
-            If not set, we try to read it from the RSPY_HOST_USER environment variable. If still not set:
-            - In local mode, it takes the system username.
-            - In cluster mode, it is deduced from the API key or OAuth2 login = your keycloak username.
-            - In hybrid mode, we raise an Exception.
-            If owner_id is different than your keycloak username, then make sure that your keycloak account has
-            the rights to read/write on this catalog owner.
-            owner_id is also used in the RS-Client logging.
+        owner_id (str | None): Only used in catalog client, see description there
         logger (logging.Logger): Logger instance for logging messages.
         local_mode (bool): Indicates whether the client is running in local mode.
         apikey_headers (dict): API key headers for HTTP requests.
@@ -85,7 +76,6 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         Raises:
             RuntimeError: If neither an API key nor an OAuth2 cookie is provided for RS-Server authentication.
-            RuntimeError: If the computed owner ID is empty or contains only special characters.
         """
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
@@ -117,31 +107,6 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         self.http_session = requests.Session()
         if self.rs_server_oauth2_cookie:
             self.http_session.cookies.set("session", self.rs_server_oauth2_cookie)
-
-        # Determine automatically the owner id
-        if not self.owner_id:
-            # In local mode, we use the local system username
-            if self.local_mode:
-                self.owner_id = getpass.getuser()
-
-            # In hybrid mode, the API Key Manager check URL is not accessible and there is no OAuth2
-            # so the owner id must be set explicitly by the user.
-            elif self.hybrid_mode:
-                raise RuntimeError(
-                    "In hybrid mode, the owner_id must be set explicitly by parameter or environment variable",
-                )
-
-            # In cluster mode, we retrieve the OAuth2 or API key login
-            else:
-                self.owner_id = self.apikey_user_login if self.rs_server_api_key else self.oauth2_user_login
-
-        # Remove special characters
-        self.owner_id = re.sub(r"[^a-zA-Z0-9]+", "", self.owner_id)
-
-        if not self.owner_id:
-            raise RuntimeError("The owner ID is empty or only contains special characters")
-
-        self.logger.debug(f"Owner ID: {self.owner_id!r}")
 
     def log_and_raise(self, message: str, original: Exception):
         """
@@ -263,7 +228,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             AuxipClient,
         )
 
-        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger, **kwargs)
+        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.logger, **kwargs)
 
     def get_cadip_client(self, **kwargs) -> "CadipClient":  # type: ignore # noqa: F821
         """
@@ -273,7 +238,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             CadipClient,
         )
 
-        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger, **kwargs)
+        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.logger, **kwargs)
 
     def get_catalog_client(self, **kwargs) -> "CatalogClient":  # type: ignore # noqa: F821
         """
@@ -299,4 +264,4 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
             StagingClient,
         )
 
-        return StagingClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
+        return StagingClient(self.rs_server_href, self.rs_server_api_key, None, self.logger)

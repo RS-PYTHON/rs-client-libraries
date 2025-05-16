@@ -34,7 +34,7 @@ from stac_pydantic.api import Item, ItemCollection
 from rs_client.rs_client import TIMEOUT, RsClient
 from rs_common.utils import get_href_service
 
-# WARNING: this env variable is temporarily added until the response of rssrver-staging endpoints are corrected
+# WARNING: this env variable is temporarily added until the response of rs-server-staging endpoints are corrected
 # with a valid format according to ogc standard. In the meantime, we don't perform validation to make all staging
 # notebooks pass. If this env variable if not specified (for example that is the case when we launch the pytest),
 # we perform this validation by default

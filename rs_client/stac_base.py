@@ -109,7 +109,7 @@ class StacBase(RsClient):
         # Initialize pystac_client.Client only if required (for CadipClient, AuxipClient, StacClient)
         if not stac_href:
             raise RuntimeError("No stac href provided")
-        # pystac_client may throw APIError exception this is handled bu the decorator handle_api_error
+        # pystac_client may throw APIError exception this is handled by the decorator handle_api_error
         self.stac_href = stac_href
         if rs_server_api_key:
             if headers is None:

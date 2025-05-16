@@ -32,7 +32,6 @@ class AuxipClient(StacBase):
         self,
         rs_server_href: str | None,
         rs_server_api_key: str | None,
-        owner_id: str | None,
         logger: logging.Logger | None = None,
         **kwargs: dict[str, Any],
     ):
@@ -42,7 +41,6 @@ class AuxipClient(StacBase):
         Args:
             rs_server_href (str | None): The URL of the RS-Server. Pass None for local mode.
             rs_server_api_key (str | None): API key for authentication.
-            owner_id (str | None): ID of the catalog owner.
             logger (logging.Logger | None, optional): Logger instance (default: None).
             **kwargs: Arbitrary keyword arguments that may include:
                 - `headers` (Optional[Dict[str, str]])
@@ -56,7 +54,7 @@ class AuxipClient(StacBase):
         super().__init__(
             rs_server_href,
             rs_server_api_key,
-            owner_id,
+            None,
             logger,
             get_href_service(rs_server_href, "RSPY_HOST_ADGS") + "/auxip/",
             **kwargs,
