@@ -16,7 +16,9 @@
 
 from __future__ import annotations
 
+import getpass
 import logging
+import re
 from collections.abc import Iterator
 
 import pystac
@@ -33,6 +35,16 @@ from rs_common.utils import get_href_service
 class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancestors
     """CatalogClient inherits from both rs_client.RsClient and pystac_client.Client. The goal of this class is to
     allow an user to use RS-Server services more easily than calling REST endpoints directly.
+
+    Attributes:
+        owner_id (str): The owner of the STAC catalog collections (no special characters allowed).
+            If not set, we try to read it from the RSPY_HOST_USER environment variable. If still not set:
+            - In local mode, it takes the system username.
+            - In cluster mode, it is deduced from the API key or OAuth2 login = your keycloak username.
+            - In hybrid mode, we raise an Exception.
+            If owner_id is different than your keycloak username, then make sure that your keycloak account has
+            the rights to read/write on this catalog owner.
+            owner_id is also used in the RS-Client logging.
     """
 
     ##################
@@ -47,7 +59,18 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         logger: logging.Logger | None = None,
         **kwargs,
     ):
-        """CatalogClient class constructor."""
+        """CatalogClient class constructor.
+
+        Args:
+            rs_server_href (str | None): The URL of the RS-Server. Pass None for local mode.
+            rs_server_api_key (str | None, optional): API key for authentication (default: None).
+            owner_id (str | None, optional): ID of the catalog owner (default: None).
+            logger (logging.Logger | None, optional): Logger instance (default: None).
+
+        Raises:
+            RuntimeError: If neither an API key nor an OAuth2 cookie is provided for RS-Server authentication.
+            RuntimeError: If the computed owner ID is empty or contains only special characters.
+        """
         super().__init__(
             rs_server_href,
             rs_server_api_key,
@@ -56,6 +79,31 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             get_href_service(rs_server_href, "RSPY_HOST_CATALOG") + "/catalog/",
             **kwargs,
         )
+
+        # Determine automatically the owner id
+        if not self.owner_id:
+            # In local mode, we use the local system username
+            if self.local_mode:
+                self.owner_id = getpass.getuser()
+
+            # In hybrid mode, the API Key Manager check URL is not accessible and there is no OAuth2
+            # so the owner id must be set explicitly by the user.
+            elif self.hybrid_mode:
+                raise RuntimeError(
+                    "In hybrid mode, the owner_id must be set explicitly by parameter or environment variable",
+                )
+
+            # In cluster mode, we retrieve the OAuth2 or API key login
+            else:
+                self.owner_id = self.apikey_user_login if self.rs_server_api_key else self.oauth2_user_login
+
+        # Remove special characters
+        self.owner_id = re.sub(r"[^a-zA-Z0-9]+", "", self.owner_id)
+
+        if not self.owner_id:
+            raise RuntimeError("The owner ID is empty or only contains special characters")
+
+        self.logger.debug(f"Owner ID: {self.owner_id!r}")
 
     ##############
     # Properties #

@@ -13,17 +13,22 @@
 # limitations under the License.
 
 # pylint: disable=no-member
-"""All tests for the Stac Client."""
+"""All tests for the Stac Catalog Client."""
 
+import getpass
 import os
 from datetime import datetime
 
+import pytest
+import responses
 from pystac import Collection, Extent, Item, SpatialExtent, TemporalExtent
 
 from rs_client.catalog_client import CatalogClient
 from rs_client.rs_client import RsClient
+from tests.common import json_landing_page
 
-RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
+from .conftest import RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL
+
 OWNER_ID = "OWNER_ID"
 
 
@@ -253,3 +258,79 @@ def test_get_valid_item(mocked_stac_catalog_get_item):
 
     item = catalog.get_item("S1_L1", item_id, owner_id="toto")
     assert item.id == item_id
+
+
+@responses.activate
+@pytest.mark.parametrize("mode", ["local", "hybrid", "cluster"])
+def test_owner_id(mode, mocker, monkeypatch):  # pylint: disable=too-many-locals
+    """
+    Test different ways to set the owner_id, in local, hybrid and cluster mode.
+    """
+    local = mode == "local"
+    hybrid = mode == "hybrid"
+    cluster = mode == "cluster"
+
+    # Configure the mode. The server URL is set only in hybrid and cluster modes.
+    dummy_href = "https://DUMMY_HREF"
+    rs_server_href = None if local else dummy_href
+
+    # The uac manager url is set only in cluster mode
+    if cluster:
+        mocker.patch("rs_client.rs_client.RSPY_UAC_CHECK_URL", new=RSPY_UAC_CHECK_URL, autospec=False)
+
+    # Different owner_id values, depending on how it is set. Don't use special characters.
+    by_param = "param"
+    by_envvar = "envvar"
+    by_apikey = "apikey"
+    by_oauth2 = "oauth2"
+
+    # Error messages
+    error_auth = "API key or OAuth2 cookie is mandatory"
+    error_hybrid = "In hybrid mode, the owner_id must be set explicitly"
+
+    # If the owner_id is not set, in local mode, it takes the system username
+    if local:
+        local_href = "https://dummy-catalog"
+        monkeypatch.setenv("RSPY_HOST_CATALOG", local_href)
+        responses.get(url=f"{local_href}/catalog/", status=200, json=json_landing_page(local_href, "foo:bar"))
+        assert RsClient(rs_server_href).get_catalog_client().owner_id == getpass.getuser()
+    # In hybrid or cluster mode, we have an exception saying the apikey or oauth2 must be set
+    else:
+        responses.get(url=f"{rs_server_href}/catalog/", status=200, json=json_landing_page(dummy_href, "foo:bar"))
+        with pytest.raises(RuntimeError) as e:
+            RsClient(rs_server_href).get_catalog_client()
+        assert error_auth in str(e.value)
+
+    # Try setting owner_id from lowest to hight priority ways. It can be deduced from the oauth2.
+    monkeypatch.setenv("RSPY_OAUTH2_COOKIE", "RSPY_OAUTH2_COOKIE")
+    responses.get(url=f"{dummy_href}/auth/me", status=200, json={"user_login": by_oauth2, "iam_roles": []})
+    # In local mode we don't use neither apikey or oauth2
+    if local:
+        assert RsClient(rs_server_href).get_catalog_client().owner_id == getpass.getuser()
+    # In hybrid mode and don't use oauth2 and the URL to get api key info is unreachable
+    elif hybrid:
+        with pytest.raises(RuntimeError) as e:
+            RsClient(rs_server_href).get_catalog_client()
+        assert error_hybrid in str(e.value)
+    # In cluster mode we deduce the owner id from the oauth2 cookie
+    elif cluster:
+        assert RsClient(rs_server_href).get_catalog_client().owner_id == by_oauth2
+
+    # owner_id deduced from the API key has higher priority than from oauth2.
+    RsClient.apikey_security_cache.clear()
+    responses.get(url=RSPY_UAC_CHECK_URL, status=200, json={"user_login": by_apikey, "iam_roles": [], "config": {}})
+    if local:
+        assert RsClient(rs_server_href, RS_SERVER_API_KEY).get_catalog_client().owner_id == getpass.getuser()
+    elif hybrid:
+        with pytest.raises(RuntimeError) as e:
+            RsClient(rs_server_href, RS_SERVER_API_KEY).get_catalog_client()
+        assert error_hybrid in str(e.value)
+    elif cluster:
+        assert RsClient(rs_server_href, RS_SERVER_API_KEY).get_catalog_client().owner_id == by_apikey
+
+    # owner_id set by env var has higher priority than deduced from api key or oauth2
+    monkeypatch.setenv("RSPY_HOST_USER", by_envvar)
+    assert RsClient(rs_server_href, RS_SERVER_API_KEY).get_catalog_client().owner_id == by_envvar
+
+    # owner_id set by parameter has higher priority than all others
+    assert RsClient(rs_server_href, RS_SERVER_API_KEY, by_param).get_catalog_client().owner_id == by_param
