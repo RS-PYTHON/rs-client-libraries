@@ -270,9 +270,9 @@ class StagingClient(RsClient):
 
         # Check that the request containing the staging body is valid
         request = requests.Request(  # pylint: disable=W0612 # noqa: F841
-            method="POST",  # Méthode HTTP, peut être 'POST', 'GET', etc.
-            url=f"{self.href_service}/processes/{RESOURCE}/execution",  # L'URL de l'endpoint
-            json=staging_body,  # Corps de la requête en JSON
+            method="POST",
+            url=f"{self.href_service}/processes/{RESOURCE}/execution",
+            json=staging_body,
         ).prepare()
 
         # Validate the body of the request that will be sent to the staging
