@@ -25,8 +25,8 @@ import requests
 import responses
 from starlette import status
 
+from rs_client.ogcapi.staging_client import StagingValidationException
 from rs_client.rs_client import RsClient
-from rs_client.staging_client import StagingValidationException
 
 RESOURCES_FOLDER = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 AUXIP = "AUXIP"

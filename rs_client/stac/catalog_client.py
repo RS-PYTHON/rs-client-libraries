@@ -28,7 +28,7 @@ from pystac_client.item_search import ItemSearch
 from requests import Response
 
 from rs_client.rs_client import TIMEOUT
-from rs_client.stac_base import StacBase
+from rs_client.stac.stac_base import StacBase
 from rs_common.utils import get_href_service
 
 

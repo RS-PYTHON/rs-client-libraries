@@ -25,7 +25,7 @@ import socket
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from botocore.utils import calculate_md5
 from fastapi.concurrency import run_in_threadpool
@@ -41,12 +41,10 @@ from prefect_aws import AwsCredentials, S3Bucket
 LOCAL_MODE: bool
 CLUSTER_MODE: bool
 
-# Current user name
-OWNER_ID: str
-
 # Prefect block names
-BLOCK_NAME_S3_SHARE = "s3-share"
-BLOCK_NAME_ENV_VARS = "env-vars-{OWNER_ID}"
+BLOCK_NAME_DASK_AUTH: str = "dask-auth"
+BLOCK_NAME_S3_SHARE: str = "s3-share"
+BLOCK_NAME_ENV_VARS: str = "env-vars-{owner_id}"
 
 # S3 bucket object for each bucket name.
 S3_BUCKETS: dict[str, S3Bucket] = {}
@@ -55,22 +53,92 @@ S3_BUCKETS: dict[str, S3Bucket] = {}
 PREFECT_SHARE_BUCKET: S3Bucket = None
 
 
-def init_global_vars():
+def get_s3_bucket(s3_path: str) -> tuple[S3Bucket, str]:
     """
-    Init the global variables above.
+    Return a prefect S3 bucket object and S3 "object name" (= S3 path without s3://bucket-name)
+    from the given S3 path.
+    We use the prefect higher-level functions instead of those from boto3.
+    """
+
+    # Remove the s3:// prefix and split by /
+    split = s3_path.removeprefix("s3").removeprefix("S3").strip(":/").split("/")
+
+    # Filter empty elements (if we had double //)
+    split = list(filter(None, split))
+
+    if not split:
+        raise Exception(f"Invalid S3 path: {s3_path!r}")
+
+    bucket_name = split[0]
+    object_name = "/".join(split[1:])
+
+    # Try to return an existing bucket object
+    try:
+        return S3_BUCKETS[bucket_name], object_name
+
+    # Else create a new one
+    except KeyError:
+        aws_credentials = AwsCredentials(
+            aws_access_key_id=os.environ["S3_ACCESSKEY"],
+            aws_secret_access_key=os.environ["S3_SECRETKEY"],
+            region_name=os.environ["S3_REGION"],
+            aws_client_parameters={"endpoint_url": os.environ["S3_ENDPOINT"]},
+        )
+        s3_bucket = S3Bucket(
+            bucket_name=bucket_name,
+            credentials=aws_credentials,
+            bucket_folder="",  # no prefixed folder
+        )
+        S3_BUCKETS[bucket_name] = s3_bucket
+        return s3_bucket, object_name
+
+
+def init_env(owner_id: str | None = None):
+    """
+    Init the environment and global variables above.
     Needs to be called from the client, then called again from the prefect worker.
+
+    Args:
+        owner_id: When called from the client, the owner_id is read from the env vars.
+        When called from a prefect flow, its value must be given explicitly.
+        It will be used to read a prefect block that contains the env vars.
+
     """
-    global LOCAL_MODE, CLUSTER_MODE, OWNER_ID, BLOCK_NAME_ENV_VARS
+    global LOCAL_MODE, CLUSTER_MODE, BLOCK_NAME_ENV_VARS, PREFECT_SHARE_BUCKET
 
-    LOCAL_MODE: bool = os.getenv("RSPY_LOCAL_MODE") == "1"
-    CLUSTER_MODE: bool = not LOCAL_MODE
+    LOCAL_MODE = os.getenv("RSPY_LOCAL_MODE") == "1"
+    CLUSTER_MODE = not LOCAL_MODE
 
-    OWNER_ID = os.environ["JUPYTERHUB_USER"] if CLUSTER_MODE else os.environ["RSPY_HOST_USER"]
+    # When called from the client, read the owner_id from the env vars
+    if not owner_id:
+        owner_id = os.getenv("JUPYTERHUB_USER") if CLUSTER_MODE else os.getenv("RSPY_HOST_USER")
 
-    BLOCK_NAME_ENV_VARS = BLOCK_NAME_ENV_VARS.format(OWNER_ID=OWNER_ID)
+    BLOCK_NAME_ENV_VARS = BLOCK_NAME_ENV_VARS.format(owner_id=owner_id)
+
+    bucket_name = os.getenv("PREFECT_BUCKET_NAME")
+    bucket_folder = os.getenv("PREFECT_BUCKET_FOLDER")
+
+    # In local mode, hardcode the env vars for share bucket name and folder
+    if LOCAL_MODE:
+        if not bucket_name:
+            bucket_name = os.environ["RSPY_TEMP_BUCKET"]
+            os.environ["PREFECT_BUCKET_NAME"] = bucket_name
+        if not bucket_folder:
+            bucket_folder = "prefect-share"
+            os.environ["PREFECT_BUCKET_FOLDER"] = bucket_folder
+
+    # Get a s3 bucket object from its name
+    generic_bucket, _ = get_s3_bucket(bucket_name)
+
+    # Create a new object with the same credentials and a prefixed folder
+    PREFECT_SHARE_BUCKET = S3Bucket(
+        bucket_name=bucket_name,
+        bucket_folder=bucket_folder,
+        credentials=generic_bucket.credentials,
+    )
 
 
-init_global_vars()  # call it from the client
+init_env()  # call it from the client
 
 
 def get_ip_address() -> str:
@@ -112,7 +180,7 @@ async def read_apikey(optional: bool = True, save_to_env: bool = True) -> None:
 
 @sync_compatible
 async def init_prefect_blocks():
-    """Init the prefect blocks from the client environment (= from jupyter)"""
+    """Init prefect blocks from the client environment (= from jupyter)"""
 
     # In cluster mode, read the API key
     if CLUSTER_MODE:
@@ -122,64 +190,91 @@ async def init_prefect_blocks():
     # They are optional.
     env_vars = {}
     for key in (
-        "RSPY_LOCAL_MODE",
-        "JUPYTERHUB_USER",
-        "RSPY_HOST_USER",
-        "RSPY_APIKEY",
-        "RSPY_OAUTH2_COOKIE",
         "AWS_REQUEST_CHECKSUM_CALCULATION",
         "AWS_RESPONSE_CHECKSUM_VALIDATION",
-        "RSPY_WEBSITE",
-        "RSPY_UAC_CHECK_URL",
-        "TEMPO_ENDPOINT",
+        "JUPYTERHUB_API_TOKEN",
         "OTEL_PYTHON_REQUESTS_TRACE_HEADERS",
         "OTEL_PYTHON_REQUESTS_TRACE_BODY",
+        "RSPY_APIKEY",
+        "RSPY_LOCAL_MODE",
+        "RSPY_OAUTH2_COOKIE",
+        "RSPY_UAC_CHECK_URL",
+        "RSPY_WEBSITE",
+        "TEMPO_ENDPOINT",
     ):
-        if value := os.environ.get(key):
+        if value := os.getenv(key):
             env_vars[key] = value
 
-    # In local mode, some secret env vars are known from the client env or hard-coded
+    # In local mode, the s3 env vars are known from the client env
     if LOCAL_MODE:
-        secret_env = os.environ | {"PREFECT_SHARE_FOLDER": "prefect-share"}  # merge dicts
+        s3_env = os.environ
 
     # In cluster mode, they should be defined in a block
     else:
-        secret_env: dict = await Secret.load(BLOCK_NAME_S3_SHARE)
+        s3_env: dict = await Secret.load(BLOCK_NAME_S3_SHARE)
 
-        # Also read the rspy api key and oauth2 cookie
-        if value := await read_apikey():
-            env_vars["RSPY_APIKEY"] = value
-
-    # Read the secret env vars. They are mandatory.
+    # Read the s3 env vars. They are mandatory.
     for key in (
-        "PREFECT_SHARE_BUCKET",
-        "PREFECT_SHARE_FOLDER",
+        "PREFECT_BUCKET_NAME",
+        "PREFECT_BUCKET_FOLDER",
         "S3_ACCESSKEY",
         "S3_SECRETKEY",
         "S3_REGION",
         "S3_ENDPOINT",
     ):
-        env_vars[key] = secret_env[key]
+        env_vars[key] = s3_env[key]
 
     # Save env vars in a secret block for the current user
-    Secret(value=env_vars).save(BLOCK_NAME_ENV_VARS)
+    await Secret(value=env_vars).save(BLOCK_NAME_ENV_VARS, overwrite=True)
+
+    # In local mode, save the dask authentication as env vars
+    if LOCAL_MODE:
+
+        # Try to read the existing variables
+        try:
+            username = os.environ["LOCAL_DASK_USERNAME"]
+            password = os.environ["LOCAL_DASK_PASSWORD"]
+
+        # If they don't already exist, generate a random password for dask.
+        # Maybe this is overkill and we could just use a hardcoded password.
+        except KeyError:
+            username = os.environ["RSPY_HOST_USER"]
+            password = secrets.token_urlsafe(32)
+            os.environ["LOCAL_DASK_USERNAME"] = username
+            os.environ["LOCAL_DASK_PASSWORD"] = password
+
+        # Save the block
+        try:
+            secret = Secret(
+                value={
+                    "LOCAL_DASK_USERNAME": username,
+                    "LOCAL_DASK_PASSWORD": password,
+                },
+            )
+            await secret.save(BLOCK_NAME_DASK_AUTH, overwrite=False)
+        except ValueError:  # do nothing if the block was already saved
+            pass
 
 
 @sync_compatible
-async def blocks_to_env_vars():
+async def read_prefect_blocks(owner_id: str | None = None):
     """
-    Convert the prefect blocks into environment variables.
+    Read prefect blocks from the prefect flow and tasks into env vars and global vars.
+
+    Args:
+        owner_id: Read prefect blocks for a specific user.
     """
 
-    #
-    # User authentication = api key and oauth2 cookie
+    # Read the env vars that contain the dask authentication.
+    # NOTE: this is used only to use dask clusters from prefect flows, for testing.
+    os.environ = os.environ | (await Secret.load(BLOCK_NAME_DASK_AUTH)).get()  # merge dicts
 
-    # Only for cluster mode. Don't overwrite existing environment, if any.
-    if cluster_mode:
-        auth_user = (await read_block(Secret, get_block_auth_user())).get()
-        for key, value in auth_user.items():
-            if key not in os.environ:
-                os.environ[key] = value
+    # Read the env vars for the given user
+    if owner_id:
+        os.environ = os.environ | (await Secret.load(BLOCK_NAME_ENV_VARS.format(owner_id))).get()  # merge dicts
+
+        # Init the env of the current module from the env vars we just read
+        init_env(owner_id)
 
 
 def hack_for_jupyter(func: Callable, *args, **kwargs) -> asyncio.Task:
@@ -208,46 +303,6 @@ async def wait_for_deployment(name: str, wait=1, max_retry=30):
 
 #
 # Utility functions for s3 bucket operations.
-
-
-def get_s3_bucket(s3_path: str) -> tuple[S3Bucket, str]:
-    """
-    Return a prefect S3 bucket object and S3 "object name" (= S3 path without s3://bucket-name)
-    from the given S3 path.
-    We use the prefect higher-level functions instead of those from boto3.
-    Maybe this is not optimized and we should use boto3 instead... but it's only for the demos.
-    """
-
-    # Remove the s3:// prefix and split by /
-    split = s3_path.removeprefix("s3").removeprefix("S3").strip(":/").split("/")
-
-    # Filter empty elements (if we had double //)
-    split = list(filter(None, split))
-
-    if not split:
-        raise Exception(f"Invalid S3 path: {s3_path!r}")
-
-    bucket_name = split[0]
-    object_name = "/".join(split[1:])
-
-    # Init a new prefect object for this bucket, or create a new one
-    # with the same credentials as the configured one, with no prefixed folder.
-    try:
-        return S3_BUCKETS[bucket_name], object_name
-    except KeyError:
-        aws_credentials = AwsCredentials(
-            aws_access_key_id=os.environ["S3_ACCESSKEY"],
-            aws_secret_access_key=os.environ["S3_SECRETKEY"],
-            region_name=os.environ["S3_REGION"],
-            aws_client_parameters={"endpoint_url": os.environ["S3_ENDPOINT"]},
-        )
-        s3_bucket = S3Bucket(
-            bucket_name=bucket_name,
-            credentials=aws_credentials,
-            bucket_folder="",
-        )
-        S3_BUCKETS[bucket_name] = s3_bucket
-        return s3_bucket, object_name
 
 
 @sync_compatible

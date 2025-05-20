@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Lauch staging with rs-client-libraries"""
+"""Launch staging with rs-client-libraries"""
 
 import json
 import os
