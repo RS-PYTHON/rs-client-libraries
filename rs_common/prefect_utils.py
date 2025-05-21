@@ -20,7 +20,6 @@ WARNING: AFTER EACH MODIFICATION, RESTART THE JUPYTER NOTEBOOK KERNEL !
 import asyncio
 import getpass
 import os
-import secrets
 import socket
 import tempfile
 from collections.abc import Callable
@@ -38,41 +37,43 @@ from prefect_aws import AwsCredentials, S3Bucket
 # In local mode, all your services are running locally.
 # In cluster mode, we use the services deployed on the RS-Server website.
 # This configuration is set in an environment variable.
-LOCAL_MODE: bool
-CLUSTER_MODE: bool
+local_mode: bool
+cluster_mode: bool
+
+# Current user
+owner_id: str
 
 # Prefect block names
-BLOCK_NAME_AUTH: str = "dask-auth"
-BLOCK_NAME_ENV_VARS: str = "env-vars-{owner_id}"
+BLOCK_NAME_AUTH: str = "auth"
+BLOCK_NAME_ENV_VARS: str = "env-vars-{0}"  # env variables for the owner_id
+BLOCK_NAME_SHARE_BUCKET: str = "share-bucket"
 
 # S3 bucket object for each bucket name.
 S3_BUCKETS: dict[str, S3Bucket] = {}
 
 
-def init_env(owner_id: str | None = None):
+def init_global_env(new_owner_id: str | None = None):
     """
-    Init the environment and global variables above.
-    Needs to be called from the client, then called again from the prefect worker.
+    Init the global variables above from the env vars.
+    Needs to be called from the client, then called again from the prefect workers.
 
     Args:
-        owner_id: When called from the client, the owner_id is read from the env vars.
-        When called from a prefect flow, its value must be given explicitly.
-        It will be used to read a prefect block that contains the env vars.
-
+        new_owner_id: new ower/user id, if known.
     """
-    global LOCAL_MODE, CLUSTER_MODE, BLOCK_NAME_ENV_VARS
+    global local_mode, cluster_mode, owner_id
 
-    LOCAL_MODE = os.getenv("RSPY_LOCAL_MODE") == "1"
-    CLUSTER_MODE = not LOCAL_MODE
+    local_mode = os.getenv("RSPY_LOCAL_MODE") == "1"
+    cluster_mode = not local_mode
 
-    # When called from the client, read the owner_id from the env vars
-    if not owner_id:
-        owner_id = os.getenv("JUPYTERHUB_USER") if CLUSTER_MODE else os.getenv("RSPY_HOST_USER")
+    # Override the owner id or read it from the env vars
+    if new_owner_id:
+        owner_id = new_owner_id
+    else:
+        owner_id = os.getenv("JUPYTERHUB_USER") if cluster_mode else os.getenv("RSPY_HOST_USER")
 
-    BLOCK_NAME_ENV_VARS = BLOCK_NAME_ENV_VARS.format(owner_id=owner_id)
 
-
-init_env()  # call it from the client
+# Init the global variables
+init_global_env()
 
 
 def get_ip_address() -> str:
@@ -90,7 +91,7 @@ async def read_apikey(optional: bool = True, save_to_env: bool = True) -> None:
         save_to_env (bool): If True, saves the API key to the ~/.env file.
     """
     # No API key in local mode
-    if LOCAL_MODE:
+    if local_mode:
         return
 
     # If the API is saved as an env var in the ~/.env file, then it has already
@@ -99,7 +100,7 @@ async def read_apikey(optional: bool = True, save_to_env: bool = True) -> None:
     if (not apikey) and (not optional):
 
         # Else read it from user input
-        apikey = getpass.getpass(f"Enter your API key:")
+        apikey = getpass.getpass("Enter your API key:")
 
         # Save the env var
         os.environ["RSPY_APIKEY"] = apikey
@@ -107,7 +108,7 @@ async def read_apikey(optional: bool = True, save_to_env: bool = True) -> None:
         # Append it to the ~/.env file, if requested.
         # Don't overwrite the full ~/.env file because it can contain other user info.
         if save_to_env:
-            with open(os.path.expanduser("~/.env"), "a") as env_file:
+            with open(os.path.expanduser("~/.env"), "a", encoding="utf-8") as env_file:
                 env_file.write(f"\nRSPY_APIKEY={apikey}\n")
                 print("API key saved to ~/.env.")
 
@@ -117,7 +118,7 @@ async def init_prefect_blocks():
     """Init prefect blocks from the client environment (= from jupyter)"""
 
     # In cluster mode, read the API key
-    if CLUSTER_MODE:
+    if cluster_mode:
         await read_apikey()
 
     # Read environment variables that are available from the client env in both local and cluster mode.
@@ -139,12 +140,12 @@ async def init_prefect_blocks():
             env_vars[key] = value
 
     # Save env vars in a secret block for the current user
-    await Secret(value=env_vars).save(BLOCK_NAME_ENV_VARS, overwrite=True)
+    await Secret(value=env_vars).save(BLOCK_NAME_ENV_VARS.format(owner_id), overwrite=True)
 
     # In local mode, also create the block for authentication from the env vars.
     # In cluster mode, this block has already been created by an admin.
     # All fields are mandatory.
-    if LOCAL_MODE:
+    if local_mode:
         await Secret(
             value={
                 "PREFECT_BUCKET_NAME": os.getenv("PREFECT_BUCKET_NAME", os.environ["RSPY_TEMP_BUCKET"]),
@@ -158,6 +159,13 @@ async def init_prefect_blocks():
             },
         ).save(BLOCK_NAME_AUTH, overwrite=True)
 
+    # Get the prefect share bucket folder, save it as a prefect block
+    try:
+        share_bucket = await get_share_bucket()
+        await share_bucket.save(BLOCK_NAME_SHARE_BUCKET, overwrite=False)
+    except ValueError:  # do nothing if the block was already saved
+        pass
+
 
 @sync_compatible
 async def read_prefect_blocks(owner_id: str | None = None):
@@ -169,14 +177,14 @@ async def read_prefect_blocks(owner_id: str | None = None):
     """
 
     # Read the env vars that contain the authentication
-    os.environ = os.environ | (await Secret.load(BLOCK_NAME_AUTH)).get()  # merge dicts
+    os.environ.update((await Secret.load(BLOCK_NAME_AUTH)).get())
 
     # Read the env vars for the given user
     if owner_id:
-        os.environ = os.environ | (await Secret.load(BLOCK_NAME_ENV_VARS.format(owner_id))).get()  # merge dicts
+        os.environ.update((await Secret.load(BLOCK_NAME_ENV_VARS.format(owner_id))).get())
 
         # Init the env of the current module from the env vars we have just read
-        init_env(owner_id)
+        init_global_env(owner_id)
 
 
 def hack_for_jupyter(func: Callable, *args, **kwargs) -> asyncio.Task:
@@ -221,7 +229,7 @@ def get_s3_bucket(s3_path: str) -> tuple[S3Bucket, str]:
     split = list(filter(None, split))
 
     if not split:
-        raise Exception(f"Invalid S3 path: {s3_path!r}")
+        raise ValueError(f"Invalid S3 path: {s3_path!r}")
 
     bucket_name = split[0]
     object_name = "/".join(split[1:])
@@ -340,10 +348,10 @@ def s3_delete(s3_prefix: str):
     objects_to_delete = [{"Key": obj.key} for obj in s3_bucket._get_bucket_resource().objects.filter(Prefix=prefix)]
 
     if not objects_to_delete:
-        return
+        return None
 
     # Hook to compute Content-MD5 from actual serialized body
-    def inject_md5_on_real_payload(request, **kwargs):
+    def inject_md5_on_real_payload(request, **_):
         request.headers["Content-MD5"] = calculate_md5(request.body)
 
     s3_client = s3_bucket._get_s3_client()
