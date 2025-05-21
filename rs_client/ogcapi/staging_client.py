@@ -41,7 +41,7 @@ from rs_common.utils import get_href_service
 
 PATH_TO_YAML_OPENAPI = osp.join(
     osp.realpath(osp.dirname(__file__)),
-    "../config",
+    "../../config",
     "staging_templates",
     "yaml",
     "staging_openapi_schema.yaml",
