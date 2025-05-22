@@ -34,6 +34,8 @@ from prefect.exceptions import ObjectNotFound
 from prefect.utilities.asyncutils import sync_compatible
 from prefect_aws import AwsCredentials, S3Bucket
 
+from rs_common.utils import env_bool
+
 # In local mode, all your services are running locally.
 # In cluster mode, we use the services deployed on the RS-Server website.
 # This configuration is set in an environment variable.
@@ -44,8 +46,8 @@ cluster_mode: bool
 owner_id: str
 
 # Prefect block names
-BLOCK_NAME_AUTH: str = "auth"
-BLOCK_NAME_ENV_VARS: str = "env-vars-{0}"  # env variables for the owner_id
+BLOCK_NAME_ENV_GLOBAL: str = "env-vars"
+BLOCK_NAME_ENV_USER: str = "env-vars-{0}"  # env variables for the user/owner_id
 BLOCK_NAME_SHARE_BUCKET: str = "share-bucket"
 
 # S3 bucket object for each bucket name.
@@ -62,7 +64,7 @@ def init_global_env(new_owner_id: str | None = None):
     """
     global local_mode, cluster_mode, owner_id
 
-    local_mode = os.getenv("RSPY_LOCAL_MODE") == "1"
+    local_mode = env_bool("RSPY_LOCAL_MODE", default=False)
     cluster_mode = not local_mode
 
     # Override the owner id or read it from the env vars
@@ -117,6 +119,40 @@ async def read_apikey(optional: bool = True, save_to_env: bool = True) -> None:
 async def init_prefect_blocks():
     """Init prefect blocks from the client environment (= from jupyter)"""
 
+    #
+    # Env vars for all users
+
+    # In local mode, create the block that contains the environment variables for all users.
+    # In cluster mode, this block has already been created by an admin.
+    # All fields are mandatory.
+    if local_mode:
+        await Secret(
+            value={
+                "RSPY_LOCAL_MODE": "1",
+                "PREFECT_BUCKET_NAME": os.getenv("PREFECT_BUCKET_NAME", os.environ["RSPY_TEMP_BUCKET"]),
+                "PREFECT_BUCKET_FOLDER": os.getenv("PREFECT_BUCKET_FOLDER", "prefect-share"),
+                "S3_ACCESSKEY": os.environ["S3_ACCESSKEY"],
+                "S3_SECRETKEY": os.environ["S3_SECRETKEY"],
+                "S3_REGION": os.environ["S3_REGION"],
+                "S3_ENDPOINT": os.environ["S3_ENDPOINT"],
+                "LOCAL_DASK_USERNAME": os.environ["LOCAL_DASK_USERNAME"],
+                "LOCAL_DASK_PASSWORD": os.environ["LOCAL_DASK_PASSWORD"],
+            },
+        ).save(BLOCK_NAME_ENV_GLOBAL, overwrite=True)
+
+    # Now read to block so we get the env vars from the block.
+    await read_prefect_blocks()
+
+    # Get the prefect share bucket folder, save it as a prefect block
+    try:
+        share_bucket = await get_share_bucket()
+        await share_bucket.save(BLOCK_NAME_SHARE_BUCKET, overwrite=False)
+    except ValueError:  # do nothing if the block was already saved
+        pass
+
+    #
+    # Env vars for current user/owner_id
+
     # In cluster mode, read the API key
     if cluster_mode:
         await read_apikey()
@@ -130,7 +166,6 @@ async def init_prefect_blocks():
         "OTEL_PYTHON_REQUESTS_TRACE_HEADERS",
         "OTEL_PYTHON_REQUESTS_TRACE_BODY",
         "RSPY_APIKEY",
-        "RSPY_LOCAL_MODE",
         "RSPY_OAUTH2_COOKIE",
         "RSPY_UAC_CHECK_URL",
         "RSPY_WEBSITE",
@@ -140,31 +175,7 @@ async def init_prefect_blocks():
             env_vars[key] = value
 
     # Save env vars in a secret block for the current user
-    await Secret(value=env_vars).save(BLOCK_NAME_ENV_VARS.format(owner_id), overwrite=True)
-
-    # In local mode, also create the block for authentication from the env vars.
-    # In cluster mode, this block has already been created by an admin.
-    # All fields are mandatory.
-    if local_mode:
-        await Secret(
-            value={
-                "PREFECT_BUCKET_NAME": os.getenv("PREFECT_BUCKET_NAME", os.environ["RSPY_TEMP_BUCKET"]),
-                "PREFECT_BUCKET_FOLDER": os.getenv("PREFECT_BUCKET_FOLDER", "prefect-share"),
-                "S3_ACCESSKEY": os.environ["S3_ACCESSKEY"],
-                "S3_SECRETKEY": os.environ["S3_SECRETKEY"],
-                "S3_REGION": os.environ["S3_REGION"],
-                "S3_ENDPOINT": os.environ["S3_ENDPOINT"],
-                "LOCAL_DASK_USERNAME": os.environ["LOCAL_DASK_USERNAME"],
-                "LOCAL_DASK_PASSWORD": os.environ["LOCAL_DASK_PASSWORD"],
-            },
-        ).save(BLOCK_NAME_AUTH, overwrite=True)
-
-    # Get the prefect share bucket folder, save it as a prefect block
-    try:
-        share_bucket = await get_share_bucket()
-        await share_bucket.save(BLOCK_NAME_SHARE_BUCKET, overwrite=False)
-    except ValueError:  # do nothing if the block was already saved
-        pass
+    await Secret(value=env_vars).save(BLOCK_NAME_ENV_USER.format(owner_id), overwrite=True)
 
 
 @sync_compatible
@@ -176,15 +187,15 @@ async def read_prefect_blocks(owner_id: str | None = None):
         owner_id: Read prefect blocks for a specific user.
     """
 
-    # Read the env vars that contain the authentication
-    os.environ.update((await Secret.load(BLOCK_NAME_AUTH)).get())
+    # Read the env vars for all users
+    os.environ.update((await Secret.load(BLOCK_NAME_ENV_GLOBAL)).get())
 
     # Read the env vars for the given user
     if owner_id:
-        os.environ.update((await Secret.load(BLOCK_NAME_ENV_VARS.format(owner_id))).get())
+        os.environ.update((await Secret.load(BLOCK_NAME_ENV_USER.format(owner_id))).get())
 
-        # Init the env of the current module from the env vars we have just read
-        init_global_env(owner_id)
+    # Init the env of the current module from the env vars we have just read
+    init_global_env(owner_id)
 
 
 def hack_for_jupyter(func: Callable, *args, **kwargs) -> asyncio.Task:
@@ -260,7 +271,6 @@ async def get_share_bucket() -> S3Bucket:
     """Get the prefect share bucket folder"""
 
     # Read the prefect blocks that contain the S3 authentication
-    await read_prefect_blocks()
     bucket_name = os.getenv("PREFECT_BUCKET_NAME")
     bucket_folder = os.getenv("PREFECT_BUCKET_FOLDER")
 
