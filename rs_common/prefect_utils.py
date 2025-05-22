@@ -140,16 +140,6 @@ async def init_prefect_blocks():
             },
         ).save(BLOCK_NAME_ENV_GLOBAL, overwrite=True)
 
-    # Now read to block so we get the env vars from the block.
-    await read_prefect_blocks()
-
-    # Get the prefect share bucket folder, save it as a prefect block
-    try:
-        share_bucket = await get_share_bucket()
-        await share_bucket.save(BLOCK_NAME_SHARE_BUCKET, overwrite=False)
-    except ValueError:  # do nothing if the block was already saved
-        pass
-
     #
     # Env vars for current user/owner_id
 
@@ -185,6 +175,9 @@ async def init_prefect_blocks():
 
     # Save env vars in a secret block for the current user
     await Secret(value=env_vars).save(BLOCK_NAME_ENV_USER.format(owner_id), overwrite=True)
+
+    # Now read back the blocks so we are sure our env vars are up-to-date
+    await read_prefect_blocks(owner_id)
 
 
 @sync_compatible
@@ -279,6 +272,14 @@ def get_s3_bucket(s3_path: str) -> tuple[S3Bucket, str]:
 async def get_share_bucket() -> S3Bucket:
     """Get the prefect share bucket folder"""
 
+    # Try to read it from the prefect block
+    try:
+        return await S3Bucket.load(BLOCK_NAME_SHARE_BUCKET)
+
+    # If it doesn't exist yet, create and return it
+    except ValueError:
+        pass
+
     # Read the prefect blocks that contain the S3 authentication
     bucket_name = os.getenv("PREFECT_BUCKET_NAME")
     bucket_folder = os.getenv("PREFECT_BUCKET_FOLDER")
@@ -287,11 +288,15 @@ async def get_share_bucket() -> S3Bucket:
     generic_bucket, _ = get_s3_bucket(bucket_name)
 
     # Create a new object with the same credentials and a prefixed folder
-    return S3Bucket(
+    share_bucket = S3Bucket(
         bucket_name=bucket_name,
         bucket_folder=bucket_folder,
         credentials=generic_bucket.credentials,
     )
+
+    # Save it as a prefect block and return it
+    await share_bucket.save(BLOCK_NAME_SHARE_BUCKET, overwrite=True)
+    return share_bucket
 
 
 @sync_compatible
