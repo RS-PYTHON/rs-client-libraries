@@ -14,12 +14,35 @@
 
 """Use "DPR as a service" implemented by rs-dpr-service"""
 
+import ast
+import os.path as osp
 
-from rs_client.rs_client import RsClient
+from openapi_core import OpenAPI  # Spec, validate_request, validate_response
+
+from rs_client.ogcapi.ogcapi_client import OgcApiClient
 from rs_common.utils import get_href_service
 
+PATH_TO_YAML_OPENAPI = osp.realpath(
+    osp.join(
+        osp.dirname(__file__),
+        "../../config",
+        "staging_templates",
+        "yaml",
+        "dpr_openapi_schema.yaml",
+    ),
+)
 
-class DprClient(RsClient):
+
+class DprClient(OgcApiClient):
+    """Implement the OGC API client for 'DPR as a service'."""
+
+    # Init the OpenAPI instance from config file
+    openapi = OpenAPI.from_file_path(PATH_TO_YAML_OPENAPI)
+
+    @property
+    def endpoint_prefix(self) -> str:
+        """Return the endpoints prefix, if any."""
+        return "dpr"
 
     @property
     def href_service(self) -> str:
@@ -29,3 +52,33 @@ class DprClient(RsClient):
         Otherwise it should just be the RS-Server URL.
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE")
+
+    def wait_for_job(self, *args, **kwargs) -> list[dict]:
+        """
+        Wait for job to finish.
+
+        Returns:
+            EOPF results
+        """
+        # Call parent method
+        job_ok, job_status = super().wait_for_job(*args, **kwargs)
+
+        # Check and parse results
+        if not job_ok:
+            raise RuntimeError("DPR service failed")
+        return ast.literal_eval(job_status["message"])
+
+    #
+    # These endpoints are not implemented by the service
+
+    def get_processes(self) -> dict:
+        raise NotImplementedError
+
+    def get_jobs(self) -> dict:
+        raise NotImplementedError
+
+    def delete_job(self, _: str) -> dict:
+        raise NotImplementedError
+
+    def get_job_results(self, _: str) -> dict:
+        raise NotImplementedError

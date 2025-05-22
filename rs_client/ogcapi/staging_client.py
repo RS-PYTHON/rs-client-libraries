@@ -18,63 +18,31 @@ import json
 import os
 import os.path as osp
 from typing import Any
-from urllib.parse import urlparse
 
 # openapi_core libraries used for endpoints validation
-import requests
 from openapi_core import OpenAPI  # Spec, validate_request, validate_response
-from openapi_core.contrib.requests import (
-    RequestsOpenAPIRequest,
-    RequestsOpenAPIResponse,
-)
-from requests import Response
-from requests.models import PreparedRequest
 from stac_pydantic.api import Item, ItemCollection
 
-from rs_client.rs_client import TIMEOUT, RsClient
+from rs_client.ogcapi.ogcapi_client import OgcApiClient, OgcValidationException
 from rs_common.utils import get_href_service
 
-# WARNING: this env variable is temporarily added until the response of rs-server-staging endpoints are corrected
-# with a valid format according to ogc standard. In the meantime, we don't perform validation to make all staging
-# notebooks pass. If this env variable if not specified (for example that is the case when we launch the pytest),
-# we perform this validation by default
-
-PATH_TO_YAML_OPENAPI = osp.join(
-    osp.realpath(osp.dirname(__file__)),
-    "../../config",
-    "staging_templates",
-    "yaml",
-    "staging_openapi_schema.yaml",
+PATH_TO_YAML_OPENAPI = osp.realpath(
+    osp.join(
+        osp.dirname(__file__),
+        "../../config",
+        "staging_templates",
+        "yaml",
+        "staging_openapi_schema.yaml",
+    ),
 )
 RESOURCE = "staging"
 
 
-def is_url(path):
-    """
-    Function to check if a string is an url
-    """
-    parsed = urlparse(path)
-    return bool(parsed.scheme and parsed.netloc)
+class StagingClient(OgcApiClient):
+    """Implement the OGC API client for the staging."""
 
-
-class StagingValidationException(Exception):
-    """
-    Exception raised when an error occurs during the OGC validation
-    of the staging endpoints
-    """
-
-
-class StagingClient(RsClient):
-    """
-    Class to handle the staging process in rs-client-libraries
-
-    This class provides python methods to call the different endpoints of the rs-server-staging method.
-
-    Remark: this class don't inherits from the owslib.ogcapi.processes.Processes class because the latter
-    doesn't provide wrapping for all endpoints defined in rs-server-staging (it only provides the  /processes
-    and /processes/{processId}/execution endpoints + it doesn't allow to manage apikey_header parameter which
-    is passed as an extra argument).
-    """
+    # Init the OpenAPI instance from config file
+    openapi = OpenAPI.from_file_path(PATH_TO_YAML_OPENAPI)
 
     @property
     def href_service(self) -> str:
@@ -84,104 +52,6 @@ class StagingClient(RsClient):
         Otherwise it should just be the RS-Server URL.
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_STAGING")
-
-    def validate_and_unmarshal_request(self, request: PreparedRequest) -> Any:
-        """Validate an endpoint request according to the ogc specifications
-
-        Args:
-            request (Request): endpoint request
-
-        Returns:
-            ResponseUnmarshalResult.data: data validated by the openapi_core
-            unmarshal_response method
-        """
-
-        if not os.path.isfile(PATH_TO_YAML_OPENAPI):
-            raise FileNotFoundError(f"The following file path was not found: {PATH_TO_YAML_OPENAPI}")
-
-        openapi = OpenAPI.from_file_path(PATH_TO_YAML_OPENAPI)
-        openapi_request = RequestsOpenAPIRequest(request)
-
-        # validate_request(request, spec=Spec.from_file_path(PATH_TO_YAML_OPENAPI))
-        result = openapi.unmarshal_request(openapi_request)
-
-        if result.errors:
-            raise StagingValidationException(
-                f"Error validating the request of the enpoint "
-                f"{openapi_request.path}: {str(result.errors[0])}",  # type: ignore
-            )
-        if not result.body:
-            raise StagingValidationException(
-                f"Error validating the request of the enpoint "
-                f"{openapi_request.path}: 'data' field of ResponseUnmarshalResult"
-                f"object is empty",
-            )
-        return result.body
-
-    def validate_and_unmarshal_response(self, response: Response) -> Any:
-        """
-        Validate an endpoint response according to the ogc specifications
-        (described as yaml schemas)
-
-        Args:
-            response (Response): endpoint response
-        Returns:
-            ResponseUnmarshalResult.data: data validated by the openapi_core
-            unmarshal_response method
-        """
-        if not os.path.isfile(PATH_TO_YAML_OPENAPI):
-            raise FileNotFoundError(f"The following file path was not found: {PATH_TO_YAML_OPENAPI}")
-
-        openapi = OpenAPI.from_file_path(PATH_TO_YAML_OPENAPI)
-        openapi_request = RequestsOpenAPIRequest(response.request)
-        openapi_response = RequestsOpenAPIResponse(response)
-
-        # Alternative method to validate the response
-        # validate_response(response=response, spec= Spec.from_file_path(PATH_TO_YAML_OPENAPI), request=request)
-        result = openapi.unmarshal_response(openapi_request, openapi_response)  # type: ignore
-        if result.errors:
-            raise StagingValidationException(  # type: ignore
-                f"Error validating the response of the enpoint {openapi_request.path} - "
-                f"Server response content: {response.json()} - "
-                f"Validation error of the server response: {str(result.errors[0])}",  # type: ignore
-            )
-        if not result.data:
-            raise StagingValidationException(
-                f"Error validating the response of the enpoint "
-                f"{openapi_request.path}: 'data' field of ResponseUnmarshalResult"
-                f"object is empty",
-            )
-        return json.loads(response.content)
-
-    ############################
-    # Call RS-Server endpoints #
-    ############################
-
-    def get_processes(self) -> dict:
-        """_summary_
-
-        Returns:
-            dict: dictionary containing the content of the response
-        """
-        response = self.http_session.get(
-            url=f"{self.href_service}/processes",
-            timeout=TIMEOUT,
-            **self.apikey_headers,
-        )
-        return self.validate_and_unmarshal_response(response)
-
-    def get_process(self, process_id: str) -> dict:
-        """
-        Wrapper to get a specific process
-        Args:
-            process_id (str): name of the resource
-        """
-        response = self.http_session.get(
-            url=f"{self.href_service}/processes/{process_id}",
-            timeout=TIMEOUT,
-            **self.apikey_headers,
-        )
-        return self.validate_and_unmarshal_response(response)
 
     def run_staging(  # pylint: disable=too-many-locals
         self,
@@ -210,7 +80,7 @@ class StagingClient(RsClient):
         # ----- Case 1: we only load a link (that refers to a STAC itemCollection) in the staging request body
         if isinstance(stac_input, str):
             try:
-                is_an_url = is_url(stac_input)
+                is_an_url = self.is_url(stac_input)
             except ValueError:
                 is_an_url = False
         if is_an_url:
@@ -231,7 +101,7 @@ class StagingClient(RsClient):
                     try:
                         stac_input_dict = json.loads(stac_input)
                     except json.JSONDecodeError as e:
-                        raise StagingValidationException(
+                        raise OgcValidationException(
                             f"""Invalid input format: {stac_input} - Input data must be either:
                                 - A Python dictionary corresponding to a Feature or a FeatureCollection
                                 (that can be for example the output of a search for Cadip or Auxip sessions)
@@ -268,60 +138,15 @@ class StagingClient(RsClient):
                 },
             }
 
-        # Check that the request containing the staging body is valid
-        request = requests.Request(  # pylint: disable=W0612 # noqa: F841
-            method="POST",
-            url=f"{self.href_service}/processes/{RESOURCE}/execution",
-            json=staging_body,
-        ).prepare()
+        # Run the process
+        return self.run_process(RESOURCE, staging_body)
 
-        # Validate the body of the request that will be sent to the staging
-        self.validate_and_unmarshal_request(request)
-
-        response = self.http_session.post(
-            url=f"{self.href_service}/processes/staging/execution",
-            json=staging_body,
-            **self.apikey_headers,
-            timeout=TIMEOUT,
-        )
-        return self.validate_and_unmarshal_response(response)
-
-    def get_jobs(self) -> dict:
-        """Method to get running jobs"""
-        response = self.http_session.get(
-            url=f"{self.href_service}/jobs",
-            **self.apikey_headers,
-            timeout=TIMEOUT,
-        )
-        return self.validate_and_unmarshal_response(response)
-
-    def get_job_info(self, job_id: str) -> dict:  # pylint: disable=too-many-locals
-        """Method to get a specific job response"""
-        response = self.http_session.get(
-            url=f"{self.href_service}/jobs/{job_id}",
-            **self.apikey_headers,
-            timeout=TIMEOUT,
-        )
-        return self.validate_and_unmarshal_response(response)
-
-    def delete_job(self, job_id: str) -> dict:  # pylint: disable=too-many-locals
-        """Method to get a specific job response"""
-        response = self.http_session.delete(
-            url=f"{self.href_service}/jobs/{job_id}",
-            **self.apikey_headers,
-            timeout=TIMEOUT,
-        )
-        return self.validate_and_unmarshal_response(response)
-
-    def get_job_results(self, job_id: str) -> dict:
-        """Wrapper to get the result of a specfific job
-
-        Args:
-            job_id (str): _description_
+    def wait_for_job(self, *args, **kwargs) -> bool:
         """
-        response = self.http_session.get(
-            url=f"{self.href_service}/jobs/{job_id}/results",
-            timeout=TIMEOUT,
-            **self.apikey_headers,
-        )
-        return self.validate_and_unmarshal_response(response)
+        Wait for job to finish.
+
+        Returns:
+            True if the job succeeded
+        """
+        job_ok, _ = super().wait_for_job(*args, **kwargs)
+        return job_ok
