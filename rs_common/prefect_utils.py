@@ -170,6 +170,15 @@ async def init_prefect_blocks():
         "RSPY_UAC_CHECK_URL",
         "RSPY_WEBSITE",
         "TEMPO_ENDPOINT",
+        # dask in cluster mode
+        "DASK_GATEWAY_ADDRESS",
+        # dask in local mode
+        "DASK_GATEWAY_STAGING_ADDRESS",
+        "DASK_GATEWAY_EOPF_ADDRESS",
+        "DASK_GATEWAY_EOPF_MOCKUP_ADDRESS",
+        "DASK_GATEWAY_STAGING_PUBLIC",
+        "DASK_GATEWAY_EOPF_PUBLIC",
+        "DASK_GATEWAY_EOPF_MOCKUP_PUBLIC",
     ):
         if value := os.getenv(key):
             env_vars[key] = value
