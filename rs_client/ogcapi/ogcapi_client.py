@@ -139,7 +139,7 @@ class OgcApiClient(RsClient):
             dict: dictionary containing the content of the response
         """
         response = self.http_session.get(
-            url=f"{self.href_service}/{self.endpoint_prefix}/processes",
+            url=f"{self.href_service}/{self.endpoint_prefix}processes",
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
@@ -152,7 +152,7 @@ class OgcApiClient(RsClient):
             process_id (str): name of the resource
         """
         response = self.http_session.get(
-            url=f"{self.href_service}/{self.endpoint_prefix}/processes/{process_id}",
+            url=f"{self.href_service}/{self.endpoint_prefix}processes/{process_id}",
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
@@ -173,7 +173,7 @@ class OgcApiClient(RsClient):
         # Check that the request containing the body is valid
         request = requests.Request(
             method="POST",
-            url=f"{self.href_service}/{self.endpoint_prefix}/processes/{process}/execution",
+            url=f"{self.href_service}/{self.endpoint_prefix}processes/{process}/execution",
             json=body,
         ).prepare()
 
@@ -181,7 +181,7 @@ class OgcApiClient(RsClient):
         self.validate_and_unmarshal_request(request)
 
         response = self.http_session.post(
-            url=f"{self.href_service}/{self.endpoint_prefix}/processes/{process}/execution",
+            url=f"{self.href_service}/{self.endpoint_prefix}processes/{process}/execution",
             json=body,
             **self.apikey_headers,
             timeout=TIMEOUT,
@@ -191,7 +191,7 @@ class OgcApiClient(RsClient):
     def get_jobs(self) -> dict:
         """Method to get running jobs"""
         response = self.http_session.get(
-            url=f"{self.href_service}/{self.endpoint_prefix}/jobs",
+            url=f"{self.href_service}/{self.endpoint_prefix}jobs",
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
@@ -200,7 +200,7 @@ class OgcApiClient(RsClient):
     def get_job_info(self, job_id: str) -> dict:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
         response = self.http_session.get(
-            url=f"{self.href_service}/{self.endpoint_prefix}/jobs/{job_id}",
+            url=f"{self.href_service}/{self.endpoint_prefix}jobs/{job_id}",
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
@@ -209,7 +209,7 @@ class OgcApiClient(RsClient):
     def delete_job(self, job_id: str) -> dict:  # pylint: disable=too-many-locals
         """Method to get a specific job response"""
         response = self.http_session.delete(
-            url=f"{self.href_service}/{self.endpoint_prefix}/jobs/{job_id}",
+            url=f"{self.href_service}/{self.endpoint_prefix}jobs/{job_id}",
             **self.apikey_headers,
             timeout=TIMEOUT,
         )
@@ -222,7 +222,7 @@ class OgcApiClient(RsClient):
             job_id (str): _description_
         """
         response = self.http_session.get(
-            url=f"{self.href_service}/{self.endpoint_prefix}/jobs/{job_id}/results",
+            url=f"{self.href_service}/{self.endpoint_prefix}jobs/{job_id}/results",
             timeout=TIMEOUT,
             **self.apikey_headers,
         )
@@ -235,7 +235,7 @@ class OgcApiClient(RsClient):
         job_name: str = "",
         timeout: int = math.inf,
         poll_interval: int = 2,
-    ) -> (bool, dict):
+    ) -> dict:
         """
         Wait for job to finish.
 
@@ -247,20 +247,22 @@ class OgcApiClient(RsClient):
             poll_interval: When to check again for job completion in seconds
 
         Returns:
-            bool=True if the job succeeded, Job status
+            Job status
+
+        Raises:
+            RuntimeError in case of error
         """
         try:
             status_type, job_identifier = job_status["status"], job_status["jobID"]
             if not job_identifier:
-                logger and logger.error("Job identifier is missing.")
-                return False, job_status
+                raise RuntimeError("Job identifier is missing.")
 
-            while timeout > 0:
+            while True:
                 job_status = self.get_job_info(job_identifier)
-                logger and logger.info(f"job_status = {job_status}")
+                logger and logger.info(f"job_status: {job_status}")
                 status_type = job_status.get("status")
                 logger and logger.info(
-                    f"----- {job_name} job for {job_identifier}: {status_type.upper()} \n",
+                    f"----- {job_name} job {job_identifier!r}: {status_type.upper()} \n",
                 )
 
                 # Exit the loop
@@ -268,16 +270,19 @@ class OgcApiClient(RsClient):
                     break
 
                 # Or sleep n seconds and try again
-                time.sleep(poll_interval)
                 timeout -= poll_interval
+                if timeout <= 0:
+                    raise TimeoutError(f"Timed out while waiting for {job_name} job {job_identifier!r}")
+                time.sleep(poll_interval)
 
+        # Log all exceptions except the timeout
+        except TimeoutError:
+            raise
         except Exception as e:
-            logger and logger.exception(f"Exception while monitoring job: {e}")
-            return False, job_status
+            raise RuntimeError(f"Exception while monitoring job {job_name}: {job_status}") from e
 
         if status_type == "successful":
-            logger and logger.info(f"----- {job_name} job for {job_identifier}: COMPLETED \n")
-            return True, job_status
-        else:
-            logger.info(f"----- {job_name} job for {job_identifier}: FAILED \n")
-            return False, job_status
+            logger and logger.info(f"----- {job_name} job {job_identifier!r}: COMPLETED \n")
+            return job_status
+
+        raise RuntimeError(f"{job_name} job {job_identifier!r}: FAILED")

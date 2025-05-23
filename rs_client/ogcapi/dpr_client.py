@@ -42,7 +42,7 @@ class DprClient(OgcApiClient):
     @property
     def endpoint_prefix(self) -> str:
         """Return the endpoints prefix, if any."""
-        return "dpr"
+        return "dpr/"
 
     @property
     def href_service(self) -> str:
@@ -60,12 +60,8 @@ class DprClient(OgcApiClient):
         Returns:
             EOPF results
         """
-        # Call parent method
-        job_ok, job_status = super().wait_for_job(*args, **kwargs)
-
-        # Check and parse results
-        if not job_ok:
-            raise RuntimeError("DPR service failed")
+        # Call parent method and parse results
+        job_status = super().wait_for_job(*args, **kwargs)
         return ast.literal_eval(job_status["message"])
 
     #

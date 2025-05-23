@@ -140,13 +140,3 @@ class StagingClient(OgcApiClient):
 
         # Run the process
         return self.run_process(RESOURCE, staging_body)
-
-    def wait_for_job(self, *args, **kwargs) -> bool:
-        """
-        Wait for job to finish.
-
-        Returns:
-            True if the job succeeded
-        """
-        job_ok, _ = super().wait_for_job(*args, **kwargs)
-        return job_ok
