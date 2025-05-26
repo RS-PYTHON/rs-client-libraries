@@ -18,42 +18,40 @@ from prefect import flow, get_run_logger
 from prefect.client import get_client
 from prefect.deployments.flow_runs import run_deployment
 
+from rs_workflows import cadip_flow
 from rs_workflows.flow_utils import FlowEnv, FlowEnvSerialized
 
 
 @flow
 async def on_demand_processing(
-    extra_args: FlowEnvSerialized,
+    env: FlowEnvSerialized,
     cadip_collection_identifier: str,
     session_identifier: str,
+    payload_file: str,
     catalog_collection_identifier: str,
 ):
     """
     Prefect flow for on-demand processing.
 
     Args:
-        extra_args: Prefect flow environment (at least the owner_id is required)
+        env: Prefect flow environment (at least the owner_id is required)
         cadip_collection_identifier: CADIP collection identifier (to know the station)
         session_identifier: Session identifier
+        payload_file: S3 bucket location of the DPR payload file template.
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
 
     """
     logger = get_run_logger()
 
     # Init flow environment and opentelemetry span
-    flow_env = FlowEnv(extra_args)
+    flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "on-demand-processing"):
 
-        flow_run = await run_deployment(
-            name="cadip-search-stage/Cadip search and stage",
-            parameters={
-                "cadip_collection_identifier": cadip_collection_identifier,
-                "session_identifier": session_identifier,
-                "extra_args": flow_env.serialize(),
-            },
-        )
+        cadip_data = await cadip_flow.search_task.submit(
+            env=flow_env.serialize(),
+            cadip_collection_identifier=cadip_collection_identifier,
+            session_identifier=session_identifier,
+            error_if_empty=True,
+        ).result()
 
-        # Obtain the state of the flow run
-        client = get_client()
-        results = [await state.result() for state in await client.read_flow_run_states(flow_run.id)]
-        logger.critical(results)
+        bp = 0

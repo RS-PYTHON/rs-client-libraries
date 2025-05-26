@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Cadip flow implementation"""
+"""Auxip flow implementation"""
 
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
@@ -20,20 +20,20 @@ from pystac import ItemCollection
 from rs_workflows.flow_utils import FlowEnv, FlowEnvSerialized
 
 
-@flow(name="cadip-search")
+@flow(name="auxip-search")
 async def search(
     env: FlowEnvSerialized,
-    cadip_collection_identifier: str,
-    session_identifier: str,
+    payload_file: str,
+    cadip_data: ItemCollection,
     error_if_empty: bool = False,
 ) -> ItemCollection | None:
     """
-    Search Cadip sessions.
+    Search Auxip products.
 
     Args:
         env: Prefect flow environment (at least the owner_id is required)
-        cadip_collection_identifier: CADIP collection identifier (to know the station)
-        session_identifier: Session identifier
+        payload_file: S3 bucket location of the DPR payload file template.
+        cadip_data: Results of the Cadip search
         error_if_empty: Raise a ValueError if the results are empty.
     """
     logger = get_run_logger()
@@ -55,6 +55,41 @@ async def search(
             )
         logger.info(f"Cadip search found {len(found)} results: {found}")
         return found
+
+
+@task
+def extract_module_and_processing_unit(payload_file: str):
+    """Extract module and processing unit from the payload file."""
+    logger = get_run_logger()
+
+    with open(os.path.join(THIS_DIR, "l0", "config", payload_file)) as file:
+        payload = yaml.safe_load(file)
+
+    workflow = payload.get("workflow", [])
+    for step in workflow:
+        if "name" not in step:
+            continue
+        module = step.get("module")
+        processing_unit = step.get("processing_unit")
+        if not module:
+            logger.error(
+                f"Missing 'module' in processor payload configuration: {step['name']}",
+            )
+            return None, None
+        if not processing_unit:
+            logger.error(
+                f"Missing 'processing_unit' in processor payload configuration: {step['name']}",
+            )
+            return None, None
+        logger.info(
+            f"For {step['name']} found module: {module} and processing_unit: {processing_unit}",
+        )
+        return module, processing_unit
+
+    logger.error(
+        f"No processor defined in the workflow of payload file {payload_file}.",
+    )
+    return None, None
 
 
 ###########################
