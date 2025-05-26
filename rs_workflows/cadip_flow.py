@@ -14,28 +14,38 @@
 
 """CadipFlow implementation"""
 
-from dataclasses import dataclass
+from prefect import flow, get_run_logger
+from pystac import ItemCollection
 
-from prefect import flow, get_run_logger, task
+from rs_workflows.flow_utils import FlowEnv, FlowEnvSerialized
 
 
-class CadipFlow:
-    """Cadip prefect flows and tasks."""
+@flow(name="cadip-search-stage")
+async def search_and_stage(
+    extra_args: FlowEnvSerialized,
+    cadip_collection_identifier: str,
+    session_identifier: str,
+) -> ItemCollection | None:
+    """
+    Search and stage Cadip products.
 
-    def __init__(
-        self,
-        cadip_collection_identifier: str,
-        session_identifier: str,
-        catalog_collection_identifier: str,
-    ):
-        self.cadip_col = cadip_collection_identifier
-        self.session = session_identifier
-        self.catalog_col = catalog_collection_identifier
+    Args:
+        extra_args: Prefect flow environment (at least the owner_id is required)
+        cadip_collection_identifier: CADIP collection identifier (to know the station)
+        session_identifier: Session identifier
+    """
+    logger = get_run_logger()
 
-    @task
-    def myrun(self):
-        logger = get_run_logger()
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(extra_args)
+    with flow_env.start_span(__name__, "cadip-search-stage"):
 
-        logger.critical(self.cadip_col)
-        logger.critical(self.session)
-        logger.critical(self.catalog_col)
+        # Search products
+        logger.info("Start Cadip search")
+        found = flow_env.rs_client.get_cadip_client().search(
+            method="GET",
+            ids=[session_identifier],
+            collections=[cadip_collection_identifier],
+        )
+        logger.info(f"Cadip search found {len(found)} results: {found}")
+        return found

@@ -19,6 +19,7 @@ import json
 import os
 import pkgutil
 import sys
+from collections.abc import Iterator
 
 import opentelemetry.instrumentation
 from opentelemetry import trace
@@ -30,7 +31,7 @@ from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.trace.span import NonRecordingSpan, SpanContext, TraceFlags
+from opentelemetry.trace.span import NonRecordingSpan, Span, SpanContext, TraceFlags
 from opentelemetry.util._decorator import _agnosticcontextmanager
 
 from rs_common.logging import Logging
@@ -208,7 +209,7 @@ def start_span(
     instrumenting_module_name: str,
     name: str,
     span_context: SpanContext | None = None,
-):
+) -> Iterator[Span]:
     """
     Context manager for creating a new main or child OpenTelemetry span and set it
     as the current span in this tracer's context.
@@ -217,6 +218,9 @@ def start_span(
         instrumenting_module_name: Caller module name, just pass __name__
         name: The name of the span to be created (use a custom name)
         span_context: Parent span context. Only to create a child span.
+
+    Yields:
+        The newly-created span.
     """
     tracer = trace.get_tracer(instrumenting_module_name)
 
