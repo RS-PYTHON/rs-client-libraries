@@ -27,6 +27,7 @@ classifiers = [
 packages = [
     { include = "rs_client" },
     { include = "rs_common" },
+    { include = "rs_workflows" },
 ]
 
 # Add configuration files to the .whl package

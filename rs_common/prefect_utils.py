@@ -33,7 +33,6 @@ from prefect.client.orchestration import get_client
 from prefect.exceptions import ObjectNotFound
 from prefect.utilities.asyncutils import sync_compatible
 from prefect_aws import AwsCredentials, S3Bucket
-from pydantic import SecretStr
 
 from rs_common.utils import env_bool
 
