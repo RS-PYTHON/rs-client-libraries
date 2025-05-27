@@ -39,11 +39,11 @@ from rs_common.utils import env_bool
 # In local mode, all your services are running locally.
 # In cluster mode, we use the services deployed on the RS-Server website.
 # This configuration is set in an environment variable.
-local_mode: bool
-cluster_mode: bool
+local_mode: bool = False
+cluster_mode: bool = not local_mode
 
 # Current user
-owner_id: str
+owner_id: str = ""
 
 # Prefect block names
 BLOCK_NAME_ENV_GLOBAL: str = "env-vars"
@@ -181,7 +181,7 @@ async def init_prefect_blocks():
 
 
 @sync_compatible
-async def read_prefect_blocks(owner_id: str | None = None):
+async def read_prefect_blocks(any_owner_id: str | None = None):
     """
     Read prefect blocks from the prefect flow and tasks into env vars and global vars.
 
@@ -193,11 +193,11 @@ async def read_prefect_blocks(owner_id: str | None = None):
     os.environ.update((await Secret.load(BLOCK_NAME_ENV_GLOBAL)).get())
 
     # Read the env vars for the given user
-    if owner_id:
-        os.environ.update((await Secret.load(BLOCK_NAME_ENV_USER.format(owner_id).lower())).get())
+    if any_owner_id:
+        os.environ.update((await Secret.load(BLOCK_NAME_ENV_USER.format(any_owner_id).lower())).get())
 
     # Init the env of the current module from the env vars we have just read
-    init_global_env(owner_id)
+    init_global_env(any_owner_id)
 
 
 def hack_for_jupyter(func: Callable, *args, **kwargs) -> asyncio.Task:
@@ -369,7 +369,10 @@ def s3_delete(s3_prefix: str):
     s3_bucket, prefix = get_s3_bucket(s3_prefix)
     if not prefix.endswith("/"):
         prefix += "/"
-    objects_to_delete = [{"Key": obj.key} for obj in s3_bucket._get_bucket_resource().objects.filter(Prefix=prefix)]
+    objects_to_delete = [
+        {"Key": obj.key}
+        for obj in s3_bucket._get_bucket_resource().objects.filter(Prefix=prefix)  # pylint: disable=protected-access
+    ]
 
     if not objects_to_delete:
         return None
@@ -378,7 +381,7 @@ def s3_delete(s3_prefix: str):
     def inject_md5_on_real_payload(request, **_):
         request.headers["Content-MD5"] = calculate_md5(request.body)
 
-    s3_client = s3_bucket._get_s3_client()
+    s3_client = s3_bucket._get_s3_client()  # pylint: disable=protected-access
     s3_client.meta.events.register(
         "before-sign.s3.DeleteObjects",
         inject_md5_on_real_payload,

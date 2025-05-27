@@ -38,11 +38,9 @@ from opentelemetry.util._decorator import _agnosticcontextmanager
 from rs_common.logging import Logging
 from rs_common.utils import env_bool
 
-default_logger = Logging.default(__name__)
-
-# Don't init several times for the same service
 lock = Lock()
-initialized = []
+
+default_logger = Logging.default(__name__)
 
 FROM_PYTEST = False
 
@@ -133,15 +131,10 @@ def init_traces(service_name: str, logger=None):
 
     # No concurrent threads
     with lock:
-        # Don't init several times for the same service
-        if service_name in initialized:
-            return
-        initialized.append(service_name)
-
         logger = logger or default_logger
 
         # Don't call this line from pytest because it causes errors:
-        # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:4317, retrying in ..s.
+        # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to ...
         if not FROM_PYTEST:
             tempo_endpoint = os.getenv("TEMPO_ENDPOINT")
             if not tempo_endpoint:
@@ -149,7 +142,7 @@ def init_traces(service_name: str, logger=None):
                 return
 
             # TODO: to avoid errors in local mode:
-            # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:4317, retrying in ..s.
+            # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to ...
             #
             # The below line does not work either but at least we have less error messages.
             # See: https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-221?focusedId=162092&

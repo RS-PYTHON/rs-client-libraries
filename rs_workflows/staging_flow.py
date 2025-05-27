@@ -17,12 +17,12 @@
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
-from rs_workflows.flow_utils import FlowEnv, FlowEnv_
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
 @flow(name="Staging")
 async def staging(
-    env: FlowEnv_,
+    env: FlowEnvArgs,
     items: ItemCollection,
     catalog_collection_identifier: str,
     timeout: int = 120,

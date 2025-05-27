@@ -112,7 +112,16 @@ max-line-length = 120
 
 [tool.pylint.messages_control]
 max-line-length=120
-disable = "logging-fstring-interpolation"
+disable = [
+    "logging-fstring-interpolation",
+    "global-statement",
+    "too-many-arguments",
+    "too-many-positional-arguments",
+    "not-context-manager",
+    "too-many-locals",
+    "too-many-branches",
+    "too-many-statements",
+]
 
 [tool.pylint.MASTER]
 ignore-paths = '^docs/.*$'

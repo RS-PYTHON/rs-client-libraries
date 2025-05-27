@@ -25,13 +25,13 @@ from rs_workflows.dpr_flow import (
     run_processor,
     write_payload,
 )
-from rs_workflows.flow_utils import FlowEnv, FlowEnv_, ProcessorEnum
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
 from rs_workflows.staging_flow import staging_task
 
 
 @flow(name="On-demand processing")
 async def on_demand_processing(
-    env: FlowEnv_,
+    env: FlowEnvArgs,
     processor_enum: ProcessorEnum,
     cadip_collection_identifier: str,
     session_identifier: str,

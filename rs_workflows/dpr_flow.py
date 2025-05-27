@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from pystac import ItemCollection
 
 from rs_common import prefect_utils
-from rs_workflows.flow_utils import FlowEnv, FlowEnv_, ProcessorEnum
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
 
 
 class PayloadValues(BaseModel):
@@ -69,14 +69,14 @@ async def read_payload_values(s3_payload: str) -> PayloadValues:
 
 @task(name="Read TaskTable")
 async def read_tasktable(
-    env: FlowEnv_,
-    processor_enum: ProcessorEnum,
-    payload_values: PayloadValues,
-    cadip_items: ItemCollection,
+    env: FlowEnvArgs,
+    processor_enum: ProcessorEnum,  # pylint: disable=unused-argument
+    payload_values: PayloadValues,  # pylint: disable=unused-argument
+    cadip_items: ItemCollection,  # pylint: disable=unused-argument
 ) -> dict:
     """
-    Read Auxip CQL2 filter from the processor tasktable.
-    See https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/blob/main/docs/source/processor-orchestration-guide/tasktables.rst
+    Read Auxip CQL2 filter from the processor tasktable. See:
+    https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/blob/main/docs/source/processor-orchestration-guide/tasktables.rst
 
     Args:
         env: Prefect flow environment
@@ -98,7 +98,7 @@ async def read_tasktable(
 
 @task(name="Write payload file")
 async def write_payload(
-    env: FlowEnv_,
+    env: FlowEnvArgs,
     s3_payload_template: str,
     item_ids: list[str],
     catalog_collection_identifier: str,
@@ -154,7 +154,7 @@ async def write_payload(
                 # Merge outputs from all workflows; keys are not used here, only the values (output IDs)
                 output_ids.update(outputs)
             else:
-                raise ValueError(f"At least on output should be in outputs workflow")
+                raise ValueError("At least on output should be in outputs workflow")
 
         new_input_products = []
         workflow_inputs = {}
@@ -223,7 +223,7 @@ async def write_payload(
 
             with open(temp.name, encoding="utf-8") as opened:
                 payload_after = opened.read()
-            logger.info("Payload file after 'write_payload':\n" + payload_after)
+            logger.info(f"Payload file after 'write_payload':\n {payload_after}")
 
             # Upload the new config payload file back to S3
             await prefect_utils.s3_upload_file(temp.name, s3_payload_run)
@@ -231,7 +231,7 @@ async def write_payload(
 
 @task(name="Run DPR processor")
 async def run_processor(
-    env: FlowEnv_,
+    env: FlowEnvArgs,
     processor_enum: ProcessorEnum,
     s3_payload_run: str,
     use_dpr_mockup: bool = False,

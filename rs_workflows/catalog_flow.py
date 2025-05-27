@@ -17,15 +17,15 @@
 import json
 from datetime import datetime
 
-from prefect import flow, get_run_logger, task
-from pystac import Asset, Item, ItemCollection
+from prefect import get_run_logger, task
+from pystac import Asset, Item
 
-from rs_workflows.flow_utils import FlowEnv, FlowEnv_
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
 @task(name="Publish to catalog")
 async def publish(
-    env: FlowEnv_,
+    env: FlowEnvArgs,
     catalog_collection_identifier: str,
     items: list[dict],
     s3_output_data: str,
@@ -60,11 +60,11 @@ async def publish(
                 item.assets = {f"{item.id}.zarr.zip": asset}
                 catalog_client.add_item(catalog_collection_identifier, item)
             except Exception as e:
-                raise RuntimeError(f"Exception while publishing: {json.dumps(feature_dict, indent=2)}")
+                raise RuntimeError(f"Exception while publishing: {json.dumps(feature_dict, indent=2)}") from e
 
     collections = catalog_client.get_collections()
-    logger.info(f"\nCollections response:")
+    logger.info("\nCollections response:")
     for collection in collections:
         logger.info(f"ID: {collection.id}, Title: {collection.title}")
 
-    logger.info(f"End catalog publishing")
+    logger.info("End catalog publishing")

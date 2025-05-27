@@ -15,7 +15,6 @@
 """Utility module for the Prefect flows."""
 
 import os
-import typing
 from collections.abc import Iterator
 from enum import Enum
 
@@ -37,22 +36,7 @@ class ProcessorEnum(str, Enum):
     S3L0 = "s3_l0"
 
 
-class FlowEnv_(BaseModel):
-    """
-    Prefect flow environment, as a Pydantic serializable object.
-
-    Attributes:
-        owner_id: User/owner ID (necessary to retrieve the user info: API key and OAuth2 cookie)
-        from the right Prefect block. NOTE: may be useless after each user has their own prefect
-        server because there will be only one block.
-        calling_span (tuple): Serialized OpenTelemetry span of the calling flow, if any.
-    """
-
-    owner_id: str = Field(description="User/owner ID")
-    calling_span: tuple[int, int, bool] | None = None
-
-
-class FlowEnv_(BaseModel):
+class FlowEnvArgs(BaseModel):
     """
     Prefect flow environment, as a Pydantic serializable object.
 
@@ -78,7 +62,7 @@ class FlowEnv:
         rs_client (RsClient): RsClient instance
     """
 
-    def __init__(self, args: FlowEnv_):
+    def __init__(self, args: FlowEnvArgs):
         """Constructor."""
         self.owner_id: str = args.owner_id
         self.calling_span: SpanContext | None = None
@@ -102,7 +86,7 @@ class FlowEnv:
             logger=get_run_logger(),
         )
 
-    def serialize(self) -> FlowEnv_:
+    def serialize(self) -> FlowEnvArgs:
         """Serialize this object with Pydantic."""
 
         # The serialized object will be used by a new opentelemetry span.
@@ -114,7 +98,7 @@ class FlowEnv:
         else:
             serialized_span = None
 
-        return FlowEnv_(owner_id=self.owner_id, calling_span=serialized_span)
+        return FlowEnvArgs(owner_id=self.owner_id, calling_span=serialized_span)
 
     @_agnosticcontextmanager
     def start_span(
@@ -134,6 +118,10 @@ class FlowEnv:
             The newly-created span.
         """
         # Create new span and save it
-        with init_opentelemetry.start_span(instrumenting_module_name, name, self.calling_span) as span:
+        with init_opentelemetry.start_span(  # pylint: disable=contextmanager-generator-missing-cleanup
+            instrumenting_module_name,
+            name,
+            self.calling_span,
+        ) as span:
             self.this_span = trace.get_current_span().get_span_context()
             yield span

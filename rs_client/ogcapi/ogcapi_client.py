@@ -67,7 +67,7 @@ class OgcApiClient(RsClient):
     @classmethod
     def get_openapi(cls) -> OpenAPI:
         """Return the OpenAPI instance of the subclass"""
-        return cls.openapi
+        return cls.openapi  # pylint: disable=no-member
 
     def validate_and_unmarshal_request(self, request: PreparedRequest) -> Any:
         """Validate an endpoint request according to the ogc specifications
@@ -259,11 +259,13 @@ class OgcApiClient(RsClient):
 
             while True:
                 job_status = self.get_job_info(job_identifier)
-                logger and logger.info(f"job_status: {job_status}")
+                if logger:
+                    logger.info(f"job_status: {job_status}")
                 status_type = job_status.get("status")
-                logger and logger.info(
-                    f"----- {job_name} job {job_identifier!r}: {status_type.upper()} \n",
-                )
+                if logger:
+                    logger.info(
+                        f"----- {job_name} job {job_identifier!r}: {status_type.upper()} \n",
+                    )
 
                 # Exit the loop
                 if status_type in {"successful", "failed", "dismissed"}:
@@ -282,7 +284,8 @@ class OgcApiClient(RsClient):
             raise RuntimeError(f"Exception while monitoring job {job_name}: {job_status}") from e
 
         if status_type == "successful":
-            logger and logger.info(f"----- {job_name} job {job_identifier!r}: COMPLETED \n")
+            if logger:
+                logger.info(f"----- {job_name} job {job_identifier!r}: COMPLETED \n")
             return job_status
 
         raise RuntimeError(f"{job_name} job {job_identifier!r}: FAILED")

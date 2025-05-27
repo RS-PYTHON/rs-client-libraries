@@ -17,12 +17,12 @@
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
-from rs_workflows.flow_utils import FlowEnv, FlowEnv_
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
 @flow(name="Cadip search")
 async def search(
-    env: FlowEnv_,
+    env: FlowEnvArgs,
     cadip_collection_identifier: str,
     session_identifier: str,
     error_if_empty: bool = False,
