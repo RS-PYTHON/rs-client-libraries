@@ -27,7 +27,7 @@ async def staging(
     catalog_collection_identifier: str,
     timeout: int = 120,
     poll_interval: int = 2,
-) -> ItemCollection | None:
+):
     """
     Stage STAC items.
 

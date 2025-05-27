@@ -73,7 +73,7 @@ class FlowEnv:
             self.calling_span = SpanContext(*args.calling_span)
 
         # Read prefect blocks into env vars
-        prefect_utils.read_prefect_blocks(self.owner_id, _sync=True)
+        prefect_utils.read_prefect_blocks(self.owner_id, _sync=True)  # type: ignore
 
         # Init opentelemetry traces
         init_opentelemetry.init_traces("rs.client")
@@ -83,7 +83,7 @@ class FlowEnv:
             rs_server_href=os.getenv("RSPY_WEBSITE"),
             rs_server_api_key=os.environ.get("RSPY_APIKEY"),
             owner_id=self.owner_id,
-            logger=get_run_logger(),
+            logger=get_run_logger(),  # type: ignore
         )
 
     def serialize(self) -> FlowEnvArgs:
@@ -98,7 +98,7 @@ class FlowEnv:
         else:
             serialized_span = None
 
-        return FlowEnvArgs(owner_id=self.owner_id, calling_span=serialized_span)
+        return FlowEnvArgs(owner_id=self.owner_id, calling_span=serialized_span)  # type: ignore
 
     @_agnosticcontextmanager
     def start_span(

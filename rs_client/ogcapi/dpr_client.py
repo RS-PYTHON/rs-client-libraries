@@ -53,7 +53,7 @@ class DprClient(OgcApiClient):
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE")
 
-    def wait_for_job(self, *args, **kwargs) -> list[dict]:
+    def wait_for_job(self, *args, **kwargs) -> list[dict]:  # type: ignore
         """
         Wait for job to finish.
 

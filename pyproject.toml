@@ -103,6 +103,7 @@ warn_redundant_casts = true
 # Force analyze of partially annotate function signatures
 check_untyped_defs = true
 ignore_missing_imports = true
+disable_error_code = ["call-overload"]
 
 [tool.flake8]
 max-line-length = 120

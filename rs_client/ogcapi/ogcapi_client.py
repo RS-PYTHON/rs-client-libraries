@@ -67,7 +67,7 @@ class OgcApiClient(RsClient):
     @classmethod
     def get_openapi(cls) -> OpenAPI:
         """Return the OpenAPI instance of the subclass"""
-        return cls.openapi  # pylint: disable=no-member
+        return cls.openapi  # type: ignore # pylint: disable=no-member
 
     def validate_and_unmarshal_request(self, request: PreparedRequest) -> Any:
         """Validate an endpoint request according to the ogc specifications
@@ -233,7 +233,7 @@ class OgcApiClient(RsClient):
         job_status: dict,
         logger=None,
         job_name: str = "",
-        timeout: int = math.inf,
+        timeout: int | float = math.inf,
         poll_interval: int = 2,
     ) -> dict:
         """

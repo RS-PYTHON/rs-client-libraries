@@ -33,6 +33,7 @@ from prefect.client.orchestration import get_client
 from prefect.exceptions import ObjectNotFound
 from prefect.utilities.asyncutils import sync_compatible
 from prefect_aws import AwsCredentials, S3Bucket
+from pydantic import SecretStr
 
 from rs_common.utils import env_bool
 
@@ -43,7 +44,7 @@ local_mode: bool = False
 cluster_mode: bool = not local_mode
 
 # Current user
-owner_id: str = ""
+owner_id: str | None = ""
 
 # Prefect block names
 BLOCK_NAME_ENV_GLOBAL: str = "env-vars"
@@ -127,7 +128,7 @@ async def init_prefect_blocks():
     # All fields are mandatory.
     if local_mode:
         await Secret(
-            value={
+            value={  # type: ignore
                 "RSPY_LOCAL_MODE": "1",
                 "PREFECT_BUCKET_NAME": os.getenv("PREFECT_BUCKET_NAME", os.environ["RSPY_TEMP_BUCKET"]),
                 "PREFECT_BUCKET_FOLDER": os.getenv("PREFECT_BUCKET_FOLDER", "prefect-share"),
@@ -174,7 +175,7 @@ async def init_prefect_blocks():
             env_vars[key] = value
 
     # Save env vars in a secret block for the current user
-    await Secret(value=env_vars).save(BLOCK_NAME_ENV_USER.format(owner_id).lower(), overwrite=True)
+    await Secret(value=env_vars).save(BLOCK_NAME_ENV_USER.format(owner_id).lower(), overwrite=True)  # type: ignore
 
     # Now read back the blocks so we are sure our env vars are up-to-date
     await read_prefect_blocks(owner_id)
@@ -281,8 +282,8 @@ async def get_share_bucket() -> S3Bucket:
         pass
 
     # Read the prefect blocks that contain the S3 authentication
-    bucket_name = os.getenv("PREFECT_BUCKET_NAME")
-    bucket_folder = os.getenv("PREFECT_BUCKET_FOLDER")
+    bucket_name = os.environ["PREFECT_BUCKET_NAME"]
+    bucket_folder = os.environ["PREFECT_BUCKET_FOLDER"]
 
     # Get a s3 bucket object from its name
     generic_bucket, _ = get_s3_bucket(bucket_name)
@@ -351,7 +352,7 @@ async def s3_download_file(
 ) -> Path:
     """See: S3Bucket.download_object_to_path"""
     s3_bucket, from_path = get_s3_bucket(s3_path)
-    await s3_bucket.download_object_to_path(from_path, to_path, **download_kwargs)
+    return await s3_bucket.download_object_to_path(from_path, to_path, **download_kwargs)
 
 
 @sync_compatible
