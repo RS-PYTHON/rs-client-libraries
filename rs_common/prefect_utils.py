@@ -174,7 +174,7 @@ async def init_prefect_blocks():
             env_vars[key] = value
 
     # Save env vars in a secret block for the current user
-    await Secret(value=env_vars).save(BLOCK_NAME_ENV_USER.format(owner_id), overwrite=True)
+    await Secret(value=env_vars).save(BLOCK_NAME_ENV_USER.format(owner_id).lower(), overwrite=True)
 
     # Now read back the blocks so we are sure our env vars are up-to-date
     await read_prefect_blocks(owner_id)
@@ -194,7 +194,7 @@ async def read_prefect_blocks(owner_id: str | None = None):
 
     # Read the env vars for the given user
     if owner_id:
-        os.environ.update((await Secret.load(BLOCK_NAME_ENV_USER.format(owner_id))).get())
+        os.environ.update((await Secret.load(BLOCK_NAME_ENV_USER.format(owner_id).lower())).get())
 
     # Init the env of the current module from the env vars we have just read
     init_global_env(owner_id)

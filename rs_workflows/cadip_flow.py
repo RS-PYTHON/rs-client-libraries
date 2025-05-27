@@ -17,16 +17,16 @@
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
-from rs_workflows.flow_utils import FlowEnv, FlowEnvSerialized
+from rs_workflows.flow_utils import FlowEnv, FlowEnv_
 
 
-@flow(name="cadip-search")
+@flow(name="Cadip search")
 async def search(
-    env: FlowEnvSerialized,
+    env: FlowEnv_,
     cadip_collection_identifier: str,
     session_identifier: str,
     error_if_empty: bool = False,
-) -> ItemCollection | None:
+) -> ItemCollection:
     """
     Search Cadip sessions.
 
@@ -42,7 +42,6 @@ async def search(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "cadip-search"):
 
-        # Search products
         logger.info("Start Cadip search")
         found = flow_env.rs_client.get_cadip_client().search(
             method="GET",
@@ -62,7 +61,7 @@ async def search(
 ###########################
 
 
-@task
+@task(name="Cadip search")
 async def search_task(*args, **kwargs):
     """See: search"""
-    return search.fn(*args, **kwargs)
+    return await search.fn(*args, **kwargs)

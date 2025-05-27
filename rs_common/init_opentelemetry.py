@@ -20,6 +20,7 @@ import os
 import pkgutil
 import sys
 from collections.abc import Iterator
+from threading import Lock
 
 import opentelemetry.instrumentation
 from opentelemetry import trace
@@ -38,6 +39,10 @@ from rs_common.logging import Logging
 from rs_common.utils import env_bool
 
 default_logger = Logging.default(__name__)
+
+# Don't init several times for the same service
+lock = Lock()
+initialized = []
 
 FROM_PYTEST = False
 
@@ -126,82 +131,89 @@ def init_traces(service_name: str, logger=None):
     """
     # See: https://github.com/softwarebloat/python-tracing-demo/tree/main
 
-    logger = logger or default_logger
-
-    # Don't call this line from pytest because it causes errors:
-    # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:4317, retrying in ..s.
-    if not FROM_PYTEST:
-        tempo_endpoint = os.getenv("TEMPO_ENDPOINT")
-        if not tempo_endpoint:
-            logger.warning("'TEMPO_ENDPOINT' variable is missing, cannot initialize OpenTelemetry")
+    # No concurrent threads
+    with lock:
+        # Don't init several times for the same service
+        if service_name in initialized:
             return
+        initialized.append(service_name)
 
-        # TODO: to avoid errors in local mode:
+        logger = logger or default_logger
+
+        # Don't call this line from pytest because it causes errors:
         # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:4317, retrying in ..s.
-        #
-        # The below line does not work either but at least we have less error messages.
-        # See: https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-221?focusedId=162092&
-        # page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-162092
-        #
-        # Now we have a single line error, which is less worst:
-        # Failed to export metrics to tempo:4317, error code: StatusCode.UNIMPLEMENTED
-        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = tempo_endpoint
+        if not FROM_PYTEST:
+            tempo_endpoint = os.getenv("TEMPO_ENDPOINT")
+            if not tempo_endpoint:
+                logger.warning("'TEMPO_ENDPOINT' variable is missing, cannot initialize OpenTelemetry")
+                return
 
-    otel_resource = Resource(attributes={"service.name": service_name})
-    otel_tracer = TracerProvider(resource=otel_resource)
-    trace.set_tracer_provider(otel_tracer)
+            # TODO: to avoid errors in local mode:
+            # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:4317, retrying in ..s.
+            #
+            # The below line does not work either but at least we have less error messages.
+            # See: https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-221?focusedId=162092&
+            # page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-162092
+            #
+            # Now we have a single line error, which is less worst:
+            # Failed to export metrics to tempo:4317, error code: StatusCode.UNIMPLEMENTED
+            os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = tempo_endpoint
 
-    if not FROM_PYTEST:
-        otel_tracer.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=tempo_endpoint)))
+        otel_resource = Resource(attributes={"service.name": service_name})
+        otel_tracer = TracerProvider(resource=otel_resource)
+        trace.set_tracer_provider(otel_tracer)
 
-    # Instrument all the dependencies under opentelemetry.instrumentation.*
-    # NOTE: we need 'poetry run opentelemetry-bootstrap -a install' to install these.
+        if not FROM_PYTEST:
+            otel_tracer.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=tempo_endpoint)))
 
-    package = opentelemetry.instrumentation
-    prefix = package.__name__ + "."
-    classes = set()
+        # Instrument all the dependencies under opentelemetry.instrumentation.*
+        # NOTE: we need 'poetry run opentelemetry-bootstrap -a install' to install these.
 
-    # We need an empty PYTHONPATH if the env var is missing
-    os.environ["PYTHONPATH"] = os.getenv("PYTHONPATH", "")
+        package = opentelemetry.instrumentation
+        prefix = package.__name__ + "."
+        classes = set()
 
-    # Recursively find all package modules
-    for _, module_str, _ in pkgutil.walk_packages(path=package.__path__, prefix=prefix, onerror=None):
+        # We need an empty PYTHONPATH if the env var is missing
+        os.environ["PYTHONPATH"] = os.getenv("PYTHONPATH", "")
 
-        # Don't instrument these modules, they have errors, maybe we should see why
-        if module_str in [
-            "opentelemetry.instrumentation.tortoiseorm",
-            "opentelemetry.instrumentation.auto_instrumentation.sitecustomize",
-        ]:
-            continue
+        # Recursively find all package modules
+        for _, module_str, _ in pkgutil.walk_packages(path=package.__path__, prefix=prefix, onerror=None):
 
-        # Import and find all module classes
-        __import__(module_str)
-        for _, _class in inspect.getmembers(sys.modules[module_str]):
-            if (not inspect.isclass(_class)) or (_class in classes):
+            # Don't instrument these modules, they have errors, maybe we should see why
+            if module_str in [
+                "opentelemetry.instrumentation.tortoiseorm",
+                "opentelemetry.instrumentation.auto_instrumentation.sitecustomize",
+            ]:
                 continue
 
-            # Save the class (classes are found several times when imported by other modules)
-            classes.add(_class)
+            # Import and find all module classes
+            __import__(module_str)
+            for _, _class in inspect.getmembers(sys.modules[module_str]):
+                if (not inspect.isclass(_class)) or (_class in classes):
+                    continue
 
-            # Don't instrument these classes, they have errors, maybe we should see why
-            if _class in [AsyncioInstrumentor, AwsLambdaInstrumentor, BaseInstrumentor]:
-                continue
+                # Save the class (classes are found several times when imported by other modules)
+                classes.add(_class)
 
-            # If the "instrument" method exists, call it
-            _instrument = getattr(_class, "instrument", None)
-            if callable(_instrument):
+                # Don't instrument these classes, they have errors, maybe we should see why
+                if _class in [AsyncioInstrumentor, AwsLambdaInstrumentor, BaseInstrumentor]:
+                    continue
 
-                _class_instance = _class()
-                if _class == RequestsInstrumentor and (trace_headers() or trace_body()):
-                    _class_instance.instrument(
-                        tracer_provider=otel_tracer,
-                        request_hook=request_hook,
-                        response_hook=response_hook,
-                    )
-                elif not _class_instance.is_instrumented_by_opentelemetry:
-                    _class_instance.instrument(tracer_provider=otel_tracer)
-                # name = f"{module_str}.{_class.__name__}".removeprefix(prefix)
-                # logger.debug(f"OpenTelemetry instrumentation of {name!r}")
+                # If the "instrument" method exists, call it
+                _instrument = getattr(_class, "instrument", None)
+                if callable(_instrument):
+
+                    _class_instance = _class()
+                    if _class == RequestsInstrumentor and (trace_headers() or trace_body()):
+                        _class_instance.instrument(
+                            tracer_provider=otel_tracer,
+                            request_hook=request_hook,
+                            response_hook=response_hook,
+                        )
+                    elif not _class_instance.is_instrumented_by_opentelemetry:
+                        _class_instance.instrument(tracer_provider=otel_tracer)
+                    # name = f"{module_str}.{_class.__name__}".removeprefix(prefix)
+                    # logger.debug(f"OpenTelemetry instrumentation of {name!r}")
 
 
 @_agnosticcontextmanager

@@ -14,17 +14,18 @@
 
 """Auxip flow implementation"""
 
+import json
+
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
-from rs_workflows.flow_utils import FlowEnv, FlowEnvSerialized
+from rs_workflows.flow_utils import FlowEnv, FlowEnv_
 
 
-@flow(name="auxip-search")
+@flow(name="Auxip search")
 async def search(
-    env: FlowEnvSerialized,
-    payload_file: str,
-    cadip_data: ItemCollection,
+    env: FlowEnv_,
+    auxip_cql2: dict,
     error_if_empty: bool = False,
 ) -> ItemCollection | None:
     """
@@ -32,64 +33,28 @@ async def search(
 
     Args:
         env: Prefect flow environment (at least the owner_id is required)
-        payload_file: S3 bucket location of the DPR payload file template.
-        cadip_data: Results of the Cadip search
+        auxip_cql2: Auxip CQL2 filter read from the processor tasktable.
         error_if_empty: Raise a ValueError if the results are empty.
     """
     logger = get_run_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "cadip-search"):
+    with flow_env.start_span(__name__, "auxip-search"):
 
-        # Search products
-        logger.info("Start Cadip search")
-        found = flow_env.rs_client.get_cadip_client().search(
-            method="GET",
-            ids=[session_identifier],
-            collections=[cadip_collection_identifier],
+        logger.info("Start Auxip search")
+        found = flow_env.rs_client.get_auxip_client().search(
+            method="POST",
+            stac_filter=auxip_cql2.get("filter"),
+            max_items=auxip_cql2.get("limit"),
+            sortby=auxip_cql2.get("sortby"),
         )
         if (not found) and error_if_empty:
             raise ValueError(
-                f"No Cadip session found for id={session_identifier!r} collection={cadip_collection_identifier!r}",
+                f"No Auxip session found for CQL2 filter: {json.dumps(auxip_cql2, indent=2)}",
             )
-        logger.info(f"Cadip search found {len(found)} results: {found}")
+        logger.info(f"Auxip search found {len(found)} results: {found}")
         return found
-
-
-@task
-def extract_module_and_processing_unit(payload_file: str):
-    """Extract module and processing unit from the payload file."""
-    logger = get_run_logger()
-
-    with open(os.path.join(THIS_DIR, "l0", "config", payload_file)) as file:
-        payload = yaml.safe_load(file)
-
-    workflow = payload.get("workflow", [])
-    for step in workflow:
-        if "name" not in step:
-            continue
-        module = step.get("module")
-        processing_unit = step.get("processing_unit")
-        if not module:
-            logger.error(
-                f"Missing 'module' in processor payload configuration: {step['name']}",
-            )
-            return None, None
-        if not processing_unit:
-            logger.error(
-                f"Missing 'processing_unit' in processor payload configuration: {step['name']}",
-            )
-            return None, None
-        logger.info(
-            f"For {step['name']} found module: {module} and processing_unit: {processing_unit}",
-        )
-        return module, processing_unit
-
-    logger.error(
-        f"No processor defined in the workflow of payload file {payload_file}.",
-    )
-    return None, None
 
 
 ###########################
@@ -97,7 +62,7 @@ def extract_module_and_processing_unit(payload_file: str):
 ###########################
 
 
-@task
+@task(name="Auxip search")
 async def search_task(*args, **kwargs):
     """See: search"""
-    return search.fn(*args, **kwargs)
+    return await search.fn(*args, **kwargs)

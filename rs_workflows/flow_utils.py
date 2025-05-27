@@ -17,6 +17,7 @@
 import os
 import typing
 from collections.abc import Iterator
+from enum import Enum
 
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanContext
@@ -28,7 +29,15 @@ from rs_client.rs_client import RsClient
 from rs_common import init_opentelemetry, prefect_utils
 
 
-class FlowEnvSerialized(BaseModel):
+class ProcessorEnum(str, Enum):
+    """DPR processor name"""
+
+    # String value = resource name in the rs-dpr-service
+    S1L0 = "s1_l0"
+    S3L0 = "s3_l0"
+
+
+class FlowEnv_(BaseModel):
     """
     Prefect flow environment, as a Pydantic serializable object.
 
@@ -39,7 +48,22 @@ class FlowEnvSerialized(BaseModel):
         calling_span (tuple): Serialized OpenTelemetry span of the calling flow, if any.
     """
 
-    owner_id: str = Field(description="my description")
+    owner_id: str = Field(description="User/owner ID")
+    calling_span: tuple[int, int, bool] | None = None
+
+
+class FlowEnv_(BaseModel):
+    """
+    Prefect flow environment, as a Pydantic serializable object.
+
+    Attributes:
+        owner_id: User/owner ID (necessary to retrieve the user info: API key and OAuth2 cookie)
+        from the right Prefect block. NOTE: may be useless after each user has their own prefect
+        server because there will be only one block.
+        calling_span (tuple): Serialized OpenTelemetry span of the calling flow, if any.
+    """
+
+    owner_id: str = Field(description="User/owner ID")
     calling_span: tuple[int, int, bool] | None = None
 
 
@@ -54,7 +78,7 @@ class FlowEnv:
         rs_client (RsClient): RsClient instance
     """
 
-    def __init__(self, args: FlowEnvSerialized):
+    def __init__(self, args: FlowEnv_):
         """Constructor."""
         self.owner_id: str = args.owner_id
         self.calling_span: SpanContext | None = None
@@ -75,10 +99,10 @@ class FlowEnv:
             rs_server_href=os.getenv("RSPY_WEBSITE"),
             rs_server_api_key=os.environ.get("RSPY_APIKEY"),
             owner_id=self.owner_id,
-            logger=get_run_logger,
+            logger=get_run_logger(),
         )
 
-    def serialize(self) -> FlowEnvSerialized:
+    def serialize(self) -> FlowEnv_:
         """Serialize this object with Pydantic."""
 
         # The serialized object will be used by a new opentelemetry span.
@@ -90,7 +114,7 @@ class FlowEnv:
         else:
             serialized_span = None
 
-        return FlowEnvSerialized(owner_id=self.owner_id, calling_span=serialized_span)
+        return FlowEnv_(owner_id=self.owner_id, calling_span=serialized_span)
 
     @_agnosticcontextmanager
     def start_span(
