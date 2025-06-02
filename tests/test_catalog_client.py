@@ -23,8 +23,8 @@ import pytest
 import responses
 from pystac import Collection, Extent, Item, SpatialExtent, TemporalExtent
 
-from rs_client.catalog_client import CatalogClient
 from rs_client.rs_client import RsClient
+from rs_client.stac.catalog_client import CatalogClient
 from tests.common import json_landing_page
 
 from .conftest import RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL

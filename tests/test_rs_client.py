@@ -17,10 +17,10 @@
 import pytest
 import responses
 
-from rs_client.auxip_client import AuxipClient
-from rs_client.cadip_client import CadipClient
-from rs_client.catalog_client import CatalogClient
 from rs_client.rs_client import RsClient
+from rs_client.stac.auxip_client import AuxipClient
+from rs_client.stac.cadip_client import CadipClient
+from rs_client.stac.catalog_client import CatalogClient
 from tests.common import json_landing_page
 
 from .conftest import RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL

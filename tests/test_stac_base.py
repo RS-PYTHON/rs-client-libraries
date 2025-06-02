@@ -36,7 +36,7 @@ class TestStacBase:
     @pytest.mark.unit
     def test_cadip_auxip_get_collections(self, mocker, auxip_client, cadip_client):
         """Test to get all client collections."""
-        mock_collections = mocker.patch("rs_client.stac_base.StacBase.get_collections", return_value=[])
+        mock_collections = mocker.patch("rs_client.stac.stac_base.StacBase.get_collections", return_value=[])
         auxip_client.get_collections()
         cadip_client.get_collections()
         assert mock_collections.call_count == 2
@@ -50,7 +50,7 @@ class TestStacBase:
         """Test get valid collection id."""
         client_instance = request.getfixturevalue(client)
 
-        mock_get_collection = mocker.patch("rs_client.stac_base.StacBase.get_collection", return_value=[])
+        mock_get_collection = mocker.patch("rs_client.stac.stac_base.StacBase.get_collection", return_value=[])
 
         client_instance.get_collection(collection_id)
 

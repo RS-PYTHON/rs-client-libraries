@@ -25,8 +25,8 @@ import requests
 import responses
 from starlette import status
 
+from rs_client.ogcapi.ogcapi_client import OgcValidationException
 from rs_client.rs_client import RsClient
-from rs_client.staging_client import StagingValidationException
 
 RESOURCES_FOLDER = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 AUXIP = "AUXIP"
@@ -196,7 +196,7 @@ def test_get_processes(staging_client, dummy_href, processes_sample):
         json=json_response,
         status=status.HTTP_200_OK,
     )
-    with pytest.raises(StagingValidationException) as exc_info:
+    with pytest.raises(OgcValidationException) as exc_info:
         staging_client.get_processes()
     assert "'links' is a required property" in str(exc_info.value)
 
@@ -303,7 +303,7 @@ def test_get_process(staging_client, dummy_href):
         json=json_response,
         status=status.HTTP_200_OK,
     )
-    with pytest.raises(StagingValidationException) as exc_info:
+    with pytest.raises(OgcValidationException) as exc_info:
         staging_client.get_process(process_id)
     assert "{'wrong_key': False} is not valid under any of the given schemas" in str(exc_info.value)
 
@@ -439,7 +439,7 @@ def test_staging_fails_wrong_data_format(  # pylint: disable=R0913, R0917
     # ------ Check that the right exception is raised if we use an unvalid link for the staging
     data_link_to_stage = request.getfixturevalue(data_link_fixture)
     unvalid_link = data_link_to_stage.replace("http://", "")
-    with pytest.raises(StagingValidationException) as exc_info:  # type: ignore
+    with pytest.raises(OgcValidationException) as exc_info:  # type: ignore
         staging_client.run_staging(unvalid_link, OUTPUT_COLLECTION)
     assert "Invalid input format" in str(exc_info.value)
 
@@ -540,7 +540,7 @@ def test_get_jobs(staging_client, dummy_href):
         json=json_response["jobs"][0].pop("jobID"),  # type: ignore
         status=status.HTTP_200_OK,
     )
-    with pytest.raises(StagingValidationException) as exc_info:
+    with pytest.raises(OgcValidationException) as exc_info:
         staging_client.get_jobs()
     assert "Failed to cast value to object type" in str(exc_info.value)
 
@@ -601,7 +601,7 @@ def test_get_job(staging_client, dummy_href):
         json=json_response,
         status=status.HTTP_200_OK,
     )
-    with pytest.raises(StagingValidationException) as exc_info:
+    with pytest.raises(OgcValidationException) as exc_info:
         staging_client.get_jobs()
     assert "'jobs' is a required property" in str(exc_info.value)
 
@@ -663,7 +663,7 @@ def test_delete_job(staging_client, dummy_href):
         json=json_response,
         status=status.HTTP_200_OK,
     )
-    with pytest.raises(StagingValidationException) as exc_info:
+    with pytest.raises(OgcValidationException) as exc_info:
         staging_client.get_jobs()
     assert "'jobs' is a required property" in str(exc_info.value)
 
@@ -745,7 +745,7 @@ def test_validate_and_unmarshal_request(staging_client, dummy_href):
         json=request_body,  # Corps de la requête en JSON
     ).prepare()
 
-    with pytest.raises(StagingValidationException) as exc_info:
+    with pytest.raises(OgcValidationException) as exc_info:
         staging_client.validate_and_unmarshal_request(request)
     assert "Request body validation error" in str(exc_info.value)
 
@@ -787,7 +787,7 @@ def test_validate_and_unmarshal_response(staging_client, dummy_href, processes_s
         status=status.HTTP_200_OK,
     )
     response = requests.get(url=f"{dummy_href}/processes", timeout=TIMEOUT)
-    with pytest.raises(StagingValidationException) as exc_info:
+    with pytest.raises(OgcValidationException) as exc_info:
         staging_client.validate_and_unmarshal_response(response)
     assert "'links' is a required property" in str(exc_info.value)
 
@@ -803,6 +803,6 @@ def test_validate_and_unmarshal_response(staging_client, dummy_href, processes_s
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
     response = requests.get(url=f"{dummy_href}/processes", timeout=TIMEOUT)
-    with pytest.raises(StagingValidationException) as exc_info:
+    with pytest.raises(OgcValidationException) as exc_info:
         staging_client.validate_and_unmarshal_response(response)
     assert "Unknown response http status: 500" in str(exc_info.value)

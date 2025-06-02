@@ -224,7 +224,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         """
         Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
         """
-        from rs_client.auxip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+        from rs_client.stac.auxip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             AuxipClient,
         )
 
@@ -234,7 +234,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         """
         Return an instance of the child class CadipClient, with the same attributes as this "self" instance.
         """
-        from rs_client.cadip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+        from rs_client.stac.cadip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             CadipClient,
         )
 
@@ -244,7 +244,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         """
         Return an instance of the child class CatalogClient, with the same attributes as this "self" instance.
         """
-        from rs_client.catalog_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+        from rs_client.stac.catalog_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             CatalogClient,
         )
 
@@ -258,10 +258,20 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
     def get_staging_client(self) -> "StagingClient":  # type: ignore # noqa: F821
         """
-        Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
+        Return an instance of the child class StagingClient, with the same attributes as this "self" instance.
         """
-        from rs_client.staging_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+        from rs_client.ogcapi.staging_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             StagingClient,
         )
 
         return StagingClient(self.rs_server_href, self.rs_server_api_key, None, self.logger)
+
+    def get_dpr_client(self) -> "DprClient":  # type: ignore # noqa: F821
+        """
+        Return an instance of the child class DprClient, with the same attributes as this "self" instance.
+        """
+        from rs_client.ogcapi.dpr_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            DprClient,
+        )
+
+        return DprClient(self.rs_server_href, self.rs_server_api_key, None, self.logger)

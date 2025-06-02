@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""AuxipClient class implementation."""
+"""CadipClient class implementation."""
 
 import logging
 from typing import Any
 
-from rs_client.stac_base import StacBase
+from rs_client.stac.stac_base import StacBase
 from rs_common.utils import get_href_service
 
 
-class AuxipClient(StacBase):
+class CadipClient(StacBase):
     """
-    AuxipClient class implementation.
+    CadipClient class implementation.
 
     Attributes: see :py:class:`RsClient`
     """
@@ -36,7 +36,7 @@ class AuxipClient(StacBase):
         **kwargs: dict[str, Any],
     ):
         """
-        Initializes an AuxipClient instance.
+        Initializes a CadipClient instance.
 
         Args:
             rs_server_href (str | None): The URL of the RS-Server. Pass None for local mode.
@@ -56,15 +56,15 @@ class AuxipClient(StacBase):
             rs_server_api_key,
             None,
             logger,
-            get_href_service(rs_server_href, "RSPY_HOST_ADGS") + "/auxip/",
+            get_href_service(rs_server_href, "RSPY_HOST_CADIP") + "/cadip/",
             **kwargs,
         )
 
     @property
     def href_service(self) -> str:
         """
-        Return the RS-Server ADGS URL hostname.
-        This URL can be overwritten using the RSPY_HOST_ADGS env variable (used e.g. for local mode).
+        Return the RS-Server CADIP URL hostname.
+        This URL can be overwritten using the RSPY_HOST_CADIP env variable (used e.g. for local mode).
         Otherwise it should just be the RS-Server URL.
         """
-        return get_href_service(self.rs_server_href, "RSPY_HOST_ADGS") + "/auxip"
+        return get_href_service(self.rs_server_href, "RSPY_HOST_CADIP") + "/cadip"

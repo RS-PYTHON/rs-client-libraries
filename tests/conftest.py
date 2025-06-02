@@ -24,7 +24,7 @@ import pytest
 import responses
 
 from rs_client.rs_client import RsClient
-from rs_client.stac_base import StacBase
+from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from tests import common
 

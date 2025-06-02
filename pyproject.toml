@@ -27,6 +27,7 @@ classifiers = [
 packages = [
     { include = "rs_client" },
     { include = "rs_common" },
+    { include = "rs_workflows" },
 ]
 
 # Add configuration files to the .whl package
@@ -48,6 +49,7 @@ python-dateutil = "^2.9.0.post0"
 stac-pydantic = "^3.1.5"
 openapi-core = "^0.19.5"
 click = "8.1.8"
+prefect = { version = "3.2.13", extras = ["aws"] }
 
 [tool.poetry.group.dev]
 optional = true
@@ -102,6 +104,7 @@ warn_redundant_casts = true
 # Force analyze of partially annotate function signatures
 check_untyped_defs = true
 ignore_missing_imports = true
+disable_error_code = ["call-overload"]
 
 [tool.flake8]
 max-line-length = 120
@@ -111,7 +114,16 @@ max-line-length = 120
 
 [tool.pylint.messages_control]
 max-line-length=120
-disable = "logging-fstring-interpolation"
+disable = [
+    "logging-fstring-interpolation",
+    "global-statement",
+    "too-many-arguments",
+    "too-many-positional-arguments",
+    "not-context-manager",
+    "too-many-locals",
+    "too-many-branches",
+    "too-many-statements",
+]
 
 [tool.pylint.MASTER]
 ignore-paths = '^docs/.*$'
