@@ -78,7 +78,11 @@ async def on_demand_processing(
 
         # Stage Cadip and Auxip items
         staged = [
-            staging_task_fn.submit(flow_env.serialize(), items, catalog_collection_identifier)
+            staging_task_fn.submit(  # type: ignore[attr-defined]
+                flow_env.serialize(),
+                items,
+                catalog_collection_identifier,
+            )
             for staging_task_fn, items in [[staging_task_cadip, cadip_items], [staging_task_auxip, auxip_items]]
         ]
 
