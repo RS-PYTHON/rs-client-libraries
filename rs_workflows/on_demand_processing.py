@@ -26,7 +26,7 @@ from rs_workflows.dpr_flow import (
     write_payload,
 )
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
-from rs_workflows.staging_flow import staging_task
+from rs_workflows.staging_flow import staging_task_auxip, staging_task_cadip
 
 
 @flow(name="On-demand processing")
@@ -78,8 +78,12 @@ async def on_demand_processing(
 
         # Stage Cadip and Auxip items
         staged = [
-            staging_task.submit(flow_env.serialize(), items, catalog_collection_identifier)
-            for items in [cadip_items, auxip_items]
+            staging_task_fn.submit(  # type: ignore[attr-defined]
+                flow_env.serialize(),
+                items,
+                catalog_collection_identifier,
+            )
+            for staging_task_fn, items in [[staging_task_cadip, cadip_items], [staging_task_auxip, auxip_items]]
         ]
 
         # Staged item ids

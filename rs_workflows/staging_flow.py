@@ -66,7 +66,13 @@ async def staging(
 ###########################
 
 
-@task(name="Staging")
-async def staging_task(*args, **kwargs):
+@task(name="Auxip staging")
+async def staging_task_auxip(*args, **kwargs):
+    """See: staging"""
+    return await staging.fn(*args, **kwargs)
+
+
+@task(name="Cadip staging")
+async def staging_task_cadip(*args, **kwargs):
     """See: staging"""
     return await staging.fn(*args, **kwargs)
