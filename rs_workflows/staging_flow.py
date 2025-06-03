@@ -55,7 +55,8 @@ async def staging(
         for item in items:
             assets = list(item.assets.values())
             if assets:
-                domains[urlparse(assets[0].href).hostname].append(item)
+                domain = urlparse(assets[0].href).hostname or ""
+                domains[domain].append(item)
 
         # Trigger staging for each domain items
         all_job_status: dict[str, dict] = {}
