@@ -76,14 +76,20 @@ async def on_demand_processing(
         # Search Auxip products
         auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
 
-        # Stage Cadip and Auxip items
+        # Stage Cadip and Auxip items.
+        # Note: the only difference between staging_task_auxip and
+        # staging_task_cadip is the task name in the prefect dashboard.
         staged = [
-            staging_task_fn.submit(  # type: ignore[attr-defined]
+            staging_task_auxip.submit(
                 flow_env.serialize(),
-                items,
+                auxip_items,
                 catalog_collection_identifier,
-            )
-            for staging_task_fn, items in [[staging_task_cadip, cadip_items], [staging_task_auxip, auxip_items]]
+            ),
+            staging_task_cadip.submit(
+                flow_env.serialize(),
+                cadip_items,
+                catalog_collection_identifier,
+            ),
         ]
 
         # Staged item ids
