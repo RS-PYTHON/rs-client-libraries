@@ -14,6 +14,10 @@
 
 """Staging flow implementation"""
 
+from collections import defaultdict
+from urllib.parse import urlparse
+
+import pystac
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
@@ -44,21 +48,30 @@ async def staging(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "staging"):
 
-        # Trigger staging
         staging_client = flow_env.rs_client.get_staging_client()
-        job_status = staging_client.run_staging(
-            items.to_dict(),
-            catalog_collection_identifier,
-        )
 
-        # Wait for the job to finish
-        staging_client.wait_for_job(
-            job_status,
-            logger,
-            "Staging",
-            timeout,
-            poll_interval,
-        )
+        # Order the items by station url domain
+        domains: dict[str, list[pystac.Item]] = defaultdict(list)
+        for item in items:
+            assets = list(item.assets.values())
+            if assets:
+                domains[urlparse(assets[0].href).hostname].append(item)
+
+        # Trigger staging for each domain items
+        all_job_status: dict[str, dict] = {}
+        for domain, domain_items in domains.items():
+            as_dict = ItemCollection(domain_items).to_dict()
+            all_job_status[domain] = staging_client.run_staging(as_dict, catalog_collection_identifier)
+
+        # Wait for jobs to finish
+        for domain, job_status in all_job_status.items():
+            staging_client.wait_for_job(
+                job_status,
+                logger,
+                f"Staging from {domain!r}",
+                timeout,
+                poll_interval,
+            )
 
 
 ###########################
