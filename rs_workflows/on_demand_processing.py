@@ -127,4 +127,4 @@ async def on_demand_processing(
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        published.result()
+        published.result()  # type: ignore[unused-coroutine]
