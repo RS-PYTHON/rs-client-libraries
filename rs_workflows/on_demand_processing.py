@@ -125,5 +125,6 @@ async def on_demand_processing(
             s3_output_data,
         )
 
-        # Wait for last task to end
-        published.wait()
+        # Wait for last task to end.
+        # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
+        published.result()
