@@ -22,6 +22,8 @@ from prefect import get_run_logger, task
 from pydantic import BaseModel
 from pystac import ItemCollection
 
+from rs_client.ogcapi.dpr_client import DprClient
+from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
 
@@ -162,7 +164,8 @@ async def write_payload(
         auxip_index = 1
 
         # Get the staged items from the catalog
-        catalog_items = flow_env.rs_client.get_catalog_client().get_items(catalog_collection_identifier, item_ids)
+        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+        catalog_items = catalog_client.get_items(catalog_collection_identifier, item_ids)
 
         # For each staged item
         for item in catalog_items:
@@ -263,7 +266,7 @@ async def run_processor(
         body.update({"use_mockup": use_dpr_mockup})
 
         # Trigger the processor run from the dpr service
-        dpr_client = flow_env.rs_client.get_dpr_client()
+        dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
         job_status = dpr_client.run_process(processor_enum.value, body)
 
         # Wait for the job to finish

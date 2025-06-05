@@ -17,6 +17,7 @@
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
+from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
@@ -43,7 +44,8 @@ async def search(
     with flow_env.start_span(__name__, "cadip-search"):
 
         logger.info("Start Cadip search")
-        found = flow_env.rs_client.get_cadip_client().search(
+        cadip_client: CadipClient = flow_env.rs_client.get_cadip_client()
+        found = cadip_client.search(
             method="GET",
             ids=[session_identifier],
             collections=[cadip_collection_identifier],

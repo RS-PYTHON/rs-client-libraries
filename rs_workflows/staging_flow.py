@@ -21,6 +21,7 @@ import pystac
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
+from rs_client.ogcapi.staging_client import StagingClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
@@ -48,7 +49,7 @@ async def staging(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "staging"):
 
-        staging_client = flow_env.rs_client.get_staging_client()
+        staging_client: StagingClient = flow_env.rs_client.get_staging_client()
 
         # Order the items by station url domain
         domains: dict[str, list[pystac.Item]] = defaultdict(list)
