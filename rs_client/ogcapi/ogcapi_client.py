@@ -18,7 +18,6 @@ import json
 import math
 import time
 from typing import Any
-from urllib.parse import urlparse
 
 # openapi_core libraries used for endpoints validation
 import requests
@@ -50,14 +49,6 @@ class OgcApiClient(RsClient):
     and /processes/{processId}/execution endpoints + it doesn't allow to manage apikey_header parameter which
     is passed as an extra argument).
     """
-
-    @staticmethod
-    def is_url(path):
-        """
-        Function to check if a string is an url
-        """
-        parsed = urlparse(path)
-        return bool(parsed.scheme and parsed.netloc)
 
     @property
     def endpoint_prefix(self) -> str:

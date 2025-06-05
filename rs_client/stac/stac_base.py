@@ -186,7 +186,7 @@ class StacBase(RsClient):
         return self.ps_client.get_collection(collection_id)
 
     @handle_api_error
-    def get_items(self, collection_id: str, items_ids: str | None = None) -> Iterator["Item"]:
+    def get_items(self, collection_id: str, items_ids: list[str] | None = None) -> Iterator["Item"]:
         """
         Retrieve all items or specific items from a collection.
 

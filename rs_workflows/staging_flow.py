@@ -14,10 +14,6 @@
 
 """Staging flow implementation"""
 
-from collections import defaultdict
-from urllib.parse import urlparse
-
-import pystac
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
@@ -28,7 +24,7 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 @flow(name="Staging")
 async def staging(
     env: FlowEnvArgs,
-    items: ItemCollection,
+    stac_input: str | ItemCollection | dict,  # warning: dict as last choice for prefect ui
     catalog_collection_identifier: str,
     timeout: int = 120,
     poll_interval: int = 2,
@@ -38,7 +34,12 @@ async def staging(
 
     Args:
         env: Prefect flow environment (at least the owner_id is required)
-        items: STAC items to stage, resulting from the Auxip or Cadip search.
+        stac_input (dict | str): it can be:<br>
+            - A Python dictionary corresponding to a Feature or a FeatureCollection (that can be for example
+                the output of a search for Cadip or Auxip sessions)<br>
+            - A json string corresponding to a Feature or a FeatureCollection<br>
+            - A string corresponding to a path to a json file containing a Feature or a FeatureCollection<br>
+            - A single link that returns a STAC ItemCollection: this link should be an url to search an ItemCollection
         catalog_collection_identifier: Catalog collection identifier where items are staged
         timeout: Job completion timeout in seconds
         poll_interval: When to check again for job completion in seconds
@@ -51,26 +52,19 @@ async def staging(
 
         staging_client: StagingClient = flow_env.rs_client.get_staging_client()
 
-        # Order the items by station url domain
-        domains: dict[str, list[pystac.Item]] = defaultdict(list)
-        for item in items:
-            assets = list(item.assets.values())
-            if assets:
-                domain = urlparse(assets[0].href).hostname or ""
-                domains[domain].append(item)
+        # Convert pystac object into dict
+        if isinstance(stac_input, ItemCollection):
+            stac_input = stac_input.to_dict()
 
-        # Trigger staging for each domain items
-        all_job_status: dict[str, dict] = {}
-        for domain, domain_items in domains.items():
-            as_dict = ItemCollection(domain_items).to_dict()
-            all_job_status[domain] = staging_client.run_staging(as_dict, catalog_collection_identifier)
+        # Trigger the staging
+        all_job_status = staging_client.run_staging(stac_input, catalog_collection_identifier)
 
         # Wait for jobs to finish
-        for domain, job_status in all_job_status.items():
+        for hostname, job_status in all_job_status.items():
             staging_client.wait_for_job(
                 job_status,
                 logger,
-                f"Staging from {domain!r}",
+                f"Staging from {hostname!r}",
                 timeout,
                 poll_interval,
             )

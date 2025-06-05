@@ -65,6 +65,6 @@ async def search(
 
 
 @task(name="Auxip search")
-async def search_task(*args, **kwargs):
+async def search_task(*args, **kwargs) -> ItemCollection | None:
     """See: search"""
     return await search.fn(*args, **kwargs)

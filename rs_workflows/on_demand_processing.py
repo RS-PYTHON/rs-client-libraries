@@ -50,7 +50,8 @@ async def on_demand_processing(
         session_identifier: Session identifier
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
         s3_payload_template: S3 bucket location of the DPR payload file template.
-        s3_output_data: S3 bucket location of the output processed products.
+        s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
+        catalog bucket.
         use_dpr_mockup: Use the real or the mockup DPR processor ?
     """
     # logger = get_run_logger()
@@ -76,7 +77,13 @@ async def on_demand_processing(
         # Search Auxip products
         auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
 
-        # Stage Cadip and Auxip items.
+        # Auxip and Cadip item ids
+        item_ids = []
+        for items in [cadip_items.result(), auxip_items.result()]:
+            for item in (await items) or []:
+                item_ids.append(item.id)
+
+        # Stage Auxip and Cadip items.
         # Note: the only difference between staging_task_auxip and
         # staging_task_cadip is the task name in the prefect dashboard.
         staged = [
@@ -91,9 +98,6 @@ async def on_demand_processing(
                 catalog_collection_identifier,
             ),
         ]
-
-        # Staged item ids
-        item_ids = [item.id for items in [cadip_items.result(), auxip_items.result()] for item in items]
 
         # Write the final payload file from its template version and staged items.
         # It will be uploaded in the same s3 dir than the template file.
