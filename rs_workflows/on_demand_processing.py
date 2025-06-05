@@ -32,7 +32,7 @@ from rs_workflows.staging_flow import staging_task_auxip, staging_task_cadip
 @flow(name="On-demand processing")
 async def on_demand_processing(
     env: FlowEnvArgs,
-    processor_enum: ProcessorEnum,
+    processor: ProcessorEnum,
     cadip_collection_identifier: str,
     session_identifier: str,
     catalog_collection_identifier: str,
@@ -44,8 +44,8 @@ async def on_demand_processing(
     Prefect flow for on-demand processing.
 
     Args:
-        env: Prefect flow environment (at least the owner_id is required)
-        processor_enum: DPR processor name
+        env: Prefect flow environment
+        processor: DPR processor name
         cadip_collection_identifier: CADIP collection identifier (to know the station)
         session_identifier: Session identifier
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
@@ -71,7 +71,7 @@ async def on_demand_processing(
         )
 
         # Read Auxip CQL2 filter from the processor tasktable.
-        auxip_cql2 = read_tasktable.submit(flow_env.serialize(), processor_enum, payload_values, cadip_items)
+        auxip_cql2 = read_tasktable.submit(flow_env.serialize(), processor, payload_values, cadip_items)
 
         # Search Auxip products
         auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
@@ -111,7 +111,7 @@ async def on_demand_processing(
         # Run the DPR processor
         processed_items = run_processor.submit(
             flow_env.serialize(),
-            processor_enum,
+            processor,
             s3_payload_run,
             use_dpr_mockup,
             wait_for=written,

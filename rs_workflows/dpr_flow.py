@@ -72,7 +72,7 @@ async def read_payload_values(s3_payload: str) -> PayloadValues:
 @task(name="Read TaskTable")
 async def read_tasktable(
     env: FlowEnvArgs,
-    processor_enum: ProcessorEnum,  # pylint: disable=unused-argument
+    processor: ProcessorEnum,  # pylint: disable=unused-argument
     payload_values: PayloadValues,  # pylint: disable=unused-argument
     cadip_items: ItemCollection,  # pylint: disable=unused-argument
 ) -> dict:
@@ -82,7 +82,7 @@ async def read_tasktable(
 
     Args:
         env: Prefect flow environment
-        processor_enum: DPR processor name
+        processor: DPR processor name
         payload_values: Values read from the payload file
         cadip_items: Results of the Cadip search
     """
@@ -94,7 +94,7 @@ async def read_tasktable(
 
         # TODO 2: for now the DPR endpoint returns an empty dict which raises a validation error.
         # So just return an empty dict for now.
-        # auxip_cql2 = flow_env.rs_client.get_dpr_client().get_process(processor_enum.value)
+        # auxip_cql2 = flow_env.rs_client.get_dpr_client().get_process(processor.value)
         return {}
 
 
@@ -235,7 +235,7 @@ async def write_payload(
 @task(name="Run DPR processor")
 async def run_processor(
     env: FlowEnvArgs,
-    processor_enum: ProcessorEnum,
+    processor: ProcessorEnum,
     s3_payload_run: str,
     use_dpr_mockup: bool = False,
 ) -> list[dict]:
@@ -244,7 +244,7 @@ async def run_processor(
 
     Args:
         env: Prefect flow environment
-        processor_enum: DPR processor name
+        processor: DPR processor name
         s3_payload_run: S3 bucket location of the output final DPR payload file.
         use_dpr_mockup: Use the real or the mockup DPR processor ?
     """
@@ -267,7 +267,7 @@ async def run_processor(
 
         # Trigger the processor run from the dpr service
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
-        job_status = dpr_client.run_process(processor_enum.value, body)
+        job_status = dpr_client.run_process(processor.value, body)
 
         # Wait for the job to finish
-        return dpr_client.wait_for_job(job_status, logger, f"{processor_enum.value!r} processor")
+        return dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
