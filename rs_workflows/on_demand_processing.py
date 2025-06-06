@@ -80,7 +80,7 @@ async def on_demand_processing(
         # Auxip and Cadip item ids
         item_ids = []
         for items in [cadip_items.result(), auxip_items.result()]:
-            for item in (await items) or []:
+            for item in items or []:  # type: ignore[union-attr]
                 item_ids.append(item.id)
 
         # Stage Auxip and Cadip items.
