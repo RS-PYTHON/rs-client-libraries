@@ -15,6 +15,7 @@
 """Launch staging with rs-client-libraries"""
 
 import json
+import math
 import os
 import os.path as osp
 from collections import defaultdict
@@ -147,3 +148,32 @@ class StagingClient(OgcApiClient):
             hostname_triggers[hostname] = self.run_process(RESOURCE, staging_body)
 
         return hostname_triggers
+
+    def wait_for_jobs(
+        self,
+        all_job_status: dict[str, dict],
+        logger=None,
+        timeout: int | float = math.inf,
+        poll_interval: int = 2,
+    ):
+        """
+        Wait for job to finish.
+
+        Args:
+            job_status: Returned by `run_staging`
+            logger: To show advancement in logger
+            timeout: Job completion timeout in seconds
+            poll_interval: When to check again for job completion in seconds
+
+        Raises:
+            RuntimeError in case of error
+        """
+        # Call parent method for each hostname
+        for hostname, job_status in all_job_status.items():
+            super().wait_for_job(
+                job_status,
+                logger,
+                f"Staging from {hostname!r}",
+                timeout,
+                poll_interval,
+            )

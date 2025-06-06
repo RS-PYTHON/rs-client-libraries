@@ -56,18 +56,9 @@ async def staging(
         if isinstance(stac_input, ItemCollection):
             stac_input = stac_input.to_dict()
 
-        # Trigger the staging
-        all_job_status = staging_client.run_staging(stac_input, catalog_collection_identifier)
-
-        # Wait for jobs to finish
-        for hostname, job_status in all_job_status.items():
-            staging_client.wait_for_job(
-                job_status,
-                logger,
-                f"Staging from {hostname!r}",
-                timeout,
-                poll_interval,
-            )
+        # Trigger the staging and wait for jobs to finish
+        job_status = staging_client.run_staging(stac_input, catalog_collection_identifier)
+        staging_client.wait_for_jobs(job_status, logger, timeout, poll_interval)
 
 
 ###########################
