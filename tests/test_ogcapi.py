@@ -15,6 +15,8 @@
 """Test rs-client-libraries ogcapi functions"""
 
 import getpass
+import json
+from datetime import datetime
 
 import pytest
 import requests
@@ -24,11 +26,14 @@ from starlette import status
 from rs_client.ogcapi.dpr_client import DprClient
 from rs_client.ogcapi.ogcapi_client import OgcValidationException
 from rs_client.rs_client import RsClient
+from rs_common.logging import Logging
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 
 OWNER_ID = getpass.getuser()
 TIMEOUT = 5
+
+logger = Logging.default(__name__)
 
 # -------------------------- Staging fixtures --------------------------
 
@@ -589,3 +594,52 @@ class TestOgcApi:
         with pytest.raises(OgcValidationException) as exc_info:
             client.validate_and_unmarshal_response(response)
         assert "Unknown response http status: 500" in str(exc_info.value)
+
+    def test_wait_for_job(self, client, mocker):
+        """Test the wait_for_job function"""
+
+        timeout = 0.3
+        poll_interval = 0.1
+        mock_interval = 0.15
+        message = {"any": "value"}
+
+        time1 = None
+
+        def patch_get_job_info(*_):
+            """Path the get_job_info function. Return success after n seconds."""
+            diff = datetime.now() - time1
+            if diff.total_seconds() < mock_interval:
+                return {"status": "running"}
+            else:
+                return {"status": "successful", "message": json.dumps(message)}
+
+        mock_job_info = mocker.patch.object(
+            client,
+            "get_job_info",
+            side_effect=patch_get_job_info,
+        )
+
+        # Test nominal case
+        time1 = datetime.now()
+        if isinstance(client, DprClient):
+            assert message == client.wait_for_job({"jobID": "jobID"}, logger, "job_name", timeout, poll_interval)
+            assert mock_job_info.call_count == 3
+        else:  # StagingClient
+            client.wait_for_jobs({"job1": {"jobID": "job1"}, "job2": {"jobID": "job2"}}, logger, timeout, poll_interval)
+            assert mock_job_info.call_count == 4
+
+        # Test missing id
+        with pytest.raises(Exception) as exc_info:
+            client.wait_for_job({"missing": "jobID"})
+        assert "Job identifier is missing" in str(exc_info.getrepr())
+
+        # Test timeout
+        mocker.patch.object(client, "get_job_info", side_effect=lambda *_: {"status": "running"})
+        with pytest.raises(TimeoutError) as exc_info:
+            client.wait_for_job({"jobID": "jobID"}, timeout=timeout)
+
+        # Test failed job
+        mocker.patch.object(client, "get_job_info", side_effect=lambda *_: {"status": "failed"})
+        with pytest.raises(Exception) as exc_info:
+            client.wait_for_job({"jobID": "jobID"})
+        assert "FAILED" in str(exc_info.getrepr())
