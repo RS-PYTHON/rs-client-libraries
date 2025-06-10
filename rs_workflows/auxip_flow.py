@@ -19,6 +19,7 @@ import json
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
+from rs_client.stac.auxip_client import AuxipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
@@ -43,7 +44,8 @@ async def search(
     with flow_env.start_span(__name__, "auxip-search"):
 
         logger.info("Start Auxip search")
-        found = flow_env.rs_client.get_auxip_client().search(
+        auxip_client: AuxipClient = flow_env.rs_client.get_auxip_client()
+        found = auxip_client.search(
             method="POST",
             stac_filter=auxip_cql2.get("filter"),
             max_items=auxip_cql2.get("limit"),
@@ -63,6 +65,6 @@ async def search(
 
 
 @task(name="Auxip search")
-async def search_task(*args, **kwargs):
+async def search_task(*args, **kwargs) -> ItemCollection | None:
     """See: search"""
     return await search.fn(*args, **kwargs)

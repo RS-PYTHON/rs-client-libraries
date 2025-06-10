@@ -293,5 +293,6 @@ def test_staging_fails_endpoint_send_error(data_fixture, request, dummy_href, st
         json=json_response,
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
-    response = staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION)
-    assert "Request body validation error" in response["detail"]
+    response_values = staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION).values()
+    for response in response_values:
+        assert "Request body validation error" in response["detail"]

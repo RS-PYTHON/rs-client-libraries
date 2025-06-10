@@ -166,7 +166,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     def get_items(
         self,
         collection_id: str,
-        items_ids: str | None = None,
+        items_ids: list[str] | None = None,
         owner_id: str | None = None,
     ) -> Iterator[Item]:
         """Get all items from a specific collection."""
