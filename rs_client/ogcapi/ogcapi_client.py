@@ -253,7 +253,7 @@ class OgcApiClient(RsClient):
                 job_status = self.get_job_info(job_identifier)
                 if logger:
                     logger.info(f"job_status: {job_status}")
-                status_type = job_status.get("status")
+                status_type = job_status.get("status", "")
                 if logger:
                     logger.info(
                         f"----- {job_name} job {job_identifier!r}: {status_type.upper()} \n",

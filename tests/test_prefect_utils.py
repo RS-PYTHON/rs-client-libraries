@@ -19,7 +19,7 @@ import os
 import socket
 from datetime import datetime
 from importlib import reload
-from unittest.mock import AsyncMock, mock_open, patch
+from unittest.mock import AsyncMock, Mock, PropertyMock, mock_open, patch
 
 import pytest
 from prefect.blocks.system import Secret
@@ -34,10 +34,10 @@ OWNER_ID = "OWNER_ID"
 
 # Init a mockup prefect server, see: https://docs.prefect.io/v3/how-to-guides/workflows/test-workflows
 # NOTE: this takes long, so for local testing you can comment it and replace with "docker compose up" from rs-demo
-@pytest.fixture(autouse=True, scope="session")
-def prefect_test_fixture():
-    with prefect_test_harness():
-        yield
+# @pytest.fixture(autouse=True, scope="session")
+# def prefect_test_fixture():
+#     with prefect_test_harness():
+#         yield
 
 
 def set_local_mode(value: bool, monkeypatch):
@@ -103,7 +103,10 @@ async def test_init_prefect_blocks(monkeypatch, local_mode):
 
     # In global mode, they must be set in a prefect block
     else:
-        await Secret(value=env_global).save(prefect_utils.BLOCK_NAME_ENV_GLOBAL, overwrite=True)
+        await Secret(value=env_global).save(  # type: ignore[arg-type]
+            prefect_utils.BLOCK_NAME_ENV_GLOBAL,
+            overwrite=True,
+        )
 
     # Any other env var for the current user
     env_user = {"TEMPO_ENDPOINT": "TEMPO_ENDPOINT"}
@@ -130,7 +133,7 @@ async def test_wait_for_deployment(mocker):
     wait = 0.1
     mock_interval = 0.15
 
-    time1 = None
+    time1 = datetime.now()
 
     def patch_read_deployment(*_):
         """Path the read_deployment_by_name function. Return success after n seconds."""
@@ -182,6 +185,36 @@ async def test_bucket_functions(monkeypatch, mocker):
     assert spy_save.call_count <= 1
     assert spy_get_s3_bucket.call_count <= 1
 
+    #
     # Test bucket operations, just call the functions, don't check the underlying s3 functions
-    mocker.patch.object(S3Bucket, "upload_from_folder", AsyncMock())
+
+    mocker.patch.object(S3Bucket, "upload_from_path", my_spy := AsyncMock())
+    await prefect_utils.s3_upload_file("from_path", "s3_path")
+    my_spy.assert_called_once()
+
+    my_spy.reset_mock()
+    await prefect_utils.s3_upload_empty_file("s3_path")
+    my_spy.assert_called_once()
+
+    mocker.patch.object(S3Bucket, "upload_from_folder", my_spy := AsyncMock())
     await prefect_utils.s3_upload_dir("from_folder", "s3_path")
+    my_spy.assert_called_once()
+
+    mocker.patch.object(S3Bucket, "download_object_to_path", my_spy := AsyncMock())
+    await prefect_utils.s3_download_file("s3_path", "to_path")
+    my_spy.assert_called_once()
+
+    mocker.patch.object(S3Bucket, "get_directory", my_spy := AsyncMock())
+    await prefect_utils.s3_download_dir("s3_path", "local_path")
+    my_spy.assert_called_once()
+
+    # s3_bucket._get_bucket_resource().objects.filter(...) should return a list of mock objects
+    Mock.objects = PropertyMock()
+    Mock.objects.filter = Mock(return_value=[Mock()])
+    mocker.patch.object(S3Bucket, "_get_bucket_resource", Mock())
+    mocker.patch.object(S3Bucket, "_get_s3_client", Mock())
+    # Spy on s3_bucket._get_s3_client().delete_objects(...)
+    Mock.delete_objects = (my_spy := Mock())
+    # Call the function
+    prefect_utils.s3_delete("s3_prefix")
+    my_spy.assert_called_once()

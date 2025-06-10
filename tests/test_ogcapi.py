@@ -101,6 +101,7 @@ def get_processes_sample():
 
 @pytest.mark.parametrize("client", ["dpr", "staging"], indirect=True)
 class TestOgcApi:
+    """Parametrized pytests on DprClient and StagingClient"""
 
     @pytest.mark.unit
     @responses.activate
@@ -603,7 +604,7 @@ class TestOgcApi:
         mock_interval = 0.15
         message = {"any": "value"}
 
-        time1 = None
+        time1 = datetime.now()
 
         def patch_get_job_info(*_):
             """Patch the get_job_info function. Return success after n seconds."""

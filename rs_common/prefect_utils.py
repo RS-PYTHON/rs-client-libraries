@@ -84,9 +84,9 @@ def get_ip_address() -> str:
     return socket.gethostbyname(socket.gethostname())
 
 
-def format_env_user(owner_id: str):
+def format_env_user(any_owner_id: str):
     """Format the Prefect secret block for the current user"""
-    name = BLOCK_NAME_ENV_USER.format(owner_id).lower()
+    name = BLOCK_NAME_ENV_USER.format(any_owner_id).lower()
     return re.sub("[^a-zA-Z0-9]", "-", name)  # replace special characters by dash
 
 
@@ -134,7 +134,7 @@ async def init_prefect_blocks():
     # All fields are mandatory.
     if local_mode:
         await Secret(
-            value={  # type: ignore
+            value={  # type: ignore[arg-type]
                 "RSPY_LOCAL_MODE": "1",
                 "PREFECT_BUCKET_NAME": os.getenv("PREFECT_BUCKET_NAME") or os.environ["RSPY_TEMP_BUCKET"],
                 "PREFECT_BUCKET_FOLDER": os.getenv("PREFECT_BUCKET_FOLDER", "prefect-share"),
