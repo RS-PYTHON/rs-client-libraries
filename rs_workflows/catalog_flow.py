@@ -20,6 +20,7 @@ from datetime import datetime
 from prefect import get_run_logger, task
 from pystac import Asset, Item
 
+from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
@@ -44,7 +45,7 @@ async def publish(
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "publish-to-catalog"):
-        catalog_client = flow_env.rs_client.get_catalog_client()
+        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
         for feature_dict in items:
             try:
                 item = Item(

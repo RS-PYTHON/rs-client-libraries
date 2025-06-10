@@ -48,7 +48,7 @@ class FlowEnvArgs(BaseModel):
     """
 
     owner_id: str = Field(description="User/owner ID")
-    calling_span: tuple[int, int, bool] | None = None
+    calling_span: tuple[int, int, bool] | None = Field(description="OpenTelemetry info", default=None)
 
 
 class FlowEnv:
