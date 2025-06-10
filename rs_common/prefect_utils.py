@@ -20,6 +20,7 @@ WARNING: AFTER EACH MODIFICATION, RESTART THE JUPYTER NOTEBOOK KERNEL !
 import asyncio
 import getpass
 import os
+import re
 import socket
 import tempfile
 from collections.abc import Callable
@@ -83,6 +84,12 @@ def get_ip_address() -> str:
     return socket.gethostbyname(socket.gethostname())
 
 
+def format_env_user(owner_id: str):
+    """Format the Prefect secret block for the current user"""
+    name = BLOCK_NAME_ENV_USER.format(owner_id).lower()
+    return re.sub("[^a-zA-Z0-9]", "-", name)  # replace special characters by dash
+
+
 @sync_compatible
 async def read_apikey(optional: bool = True, save_to_env: bool = True) -> None:
     """
@@ -129,7 +136,7 @@ async def init_prefect_blocks():
         await Secret(
             value={  # type: ignore
                 "RSPY_LOCAL_MODE": "1",
-                "PREFECT_BUCKET_NAME": os.getenv("PREFECT_BUCKET_NAME", os.environ["RSPY_TEMP_BUCKET"]),
+                "PREFECT_BUCKET_NAME": os.getenv("PREFECT_BUCKET_NAME") or os.environ["RSPY_TEMP_BUCKET"],
                 "PREFECT_BUCKET_FOLDER": os.getenv("PREFECT_BUCKET_FOLDER", "prefect-share"),
                 "S3_ACCESSKEY": os.environ["S3_ACCESSKEY"],
                 "S3_SECRETKEY": os.environ["S3_SECRETKEY"],
@@ -174,7 +181,7 @@ async def init_prefect_blocks():
             env_vars[key] = value
 
     # Save env vars in a secret block for the current user
-    await Secret(value=env_vars).save(BLOCK_NAME_ENV_USER.format(owner_id).lower(), overwrite=True)  # type: ignore
+    await Secret(value=env_vars).save(format_env_user(owner_id), overwrite=True)  # type: ignore
 
     # Now read back the blocks so we are sure our env vars are up-to-date
     await read_prefect_blocks(owner_id)
@@ -194,7 +201,7 @@ async def read_prefect_blocks(any_owner_id: str | None = None):
 
     # Read the env vars for the given user
     if any_owner_id:
-        os.environ.update((await Secret.load(BLOCK_NAME_ENV_USER.format(any_owner_id).lower())).get())
+        os.environ.update((await Secret.load(format_env_user(any_owner_id))).get())
 
     # Init the env of the current module from the env vars we have just read
     init_global_env(any_owner_id)
@@ -206,7 +213,7 @@ def hack_for_jupyter(func: Callable, *args, **kwargs) -> asyncio.Task:
     return asyncio.create_task(coroutine)
 
 
-async def wait_for_deployment(name: str, wait=1, max_retry=30):
+async def wait_for_deployment(name: str, wait: int | float = 1, max_retry: int = 30):
     """Wait for prefect deployment to be finished."""
     # Taken from prefect/cli/deployment.py::inspect
     retry = 0

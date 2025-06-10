@@ -73,6 +73,7 @@ flake8 = "^7.1.1"
 flake8-pyproject = "^1.2.3"
 responses = "^0.25.7"
 starlette = "^0.45.3"
+pytest-asyncio = "^1.0.0"
 
 [tool.poetry.group.demo.dependencies] # for hybrid mode
 jupyterlab = "^4.2.1"
@@ -99,6 +100,7 @@ markers = [
     "unit", # mark a test as unittest
     "integration", # mark a test as integration test
 ]
+asyncio_default_fixture_loop_scope = "function"
 asyncio_mode = "auto"
 
 [tool.mypy]

@@ -606,12 +606,11 @@ class TestOgcApi:
         time1 = None
 
         def patch_get_job_info(*_):
-            """Path the get_job_info function. Return success after n seconds."""
+            """Patch the get_job_info function. Return success after n seconds."""
             diff = datetime.now() - time1
             if diff.total_seconds() < mock_interval:
                 return {"status": "running"}
-            else:
-                return {"status": "successful", "message": json.dumps(message)}
+            return {"status": "successful", "message": json.dumps(message)}
 
         mock_job_info = mocker.patch.object(
             client,
