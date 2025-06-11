@@ -169,8 +169,8 @@ def __mock_prefect():
     """
     Init a mockup prefect server, see: https://docs.prefect.io/v3/how-to-guides/workflows/test-workflows
     """
-    # NOTE: this takes long, so for local testing you can comment it and replace with
-    # "docker compose up" from rs-demo and set this env var to 0
+    # NOTE: this takes long, so for local testing you can comment it,
+    # and replace with "docker compose up" from rs-demo and set this env var to "1"
     if env_bool("SKIP_PREFECT_TEST_HARNESS", False):
         yield
     else:
