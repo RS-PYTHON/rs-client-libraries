@@ -19,7 +19,7 @@ import os
 import socket
 from datetime import datetime
 from importlib import reload
-from unittest.mock import AsyncMock, Mock, PropertyMock, mock_open, patch
+from unittest.mock import AsyncMock, Mock, mock_open, patch
 
 import pytest
 from prefect.blocks.system import Secret
@@ -28,16 +28,22 @@ from prefect.testing.utilities import prefect_test_harness
 from prefect_aws import S3Bucket
 
 from rs_common import prefect_utils
+from rs_common.utils import env_bool
 
 OWNER_ID = "OWNER_ID"
 
 
-# Init a mockup prefect server, see: https://docs.prefect.io/v3/how-to-guides/workflows/test-workflows
-# NOTE: this takes long, so for local testing you can comment it and replace with "docker compose up" from rs-demo
-# @pytest.fixture(autouse=True, scope="session")
-# def prefect_test_fixture():
-#     with prefect_test_harness():
-#         yield
+@pytest.fixture(autouse=True, scope="session")
+def prefect_test_fixture():
+    """
+    Init a mockup prefect server, see: https://docs.prefect.io/v3/how-to-guides/workflows/test-workflows
+    """
+    # NOTE: this takes long, so for local testing you can comment it and replace with
+    # "docker compose up" from rs-demo and set this env var to 0
+    if env_bool("SKIP_PREFECT_TEST_HARNESS", False):
+        yield
+    with prefect_test_harness():
+        yield
 
 
 def set_local_mode(value: bool, monkeypatch):
@@ -47,9 +53,10 @@ def set_local_mode(value: bool, monkeypatch):
 
 
 @pytest.fixture(name="set_env", autouse=True)
-def __set_env():
+def __set_env(monkeypatch):
     """Fixture to set environment"""
-    os.environ["JUPYTERHUB_USER"] = os.environ["RSPY_HOST_USER"] = OWNER_ID
+    monkeypatch.setenv("JUPYTERHUB_USER", OWNER_ID)
+    monkeypatch.setenv("RSPY_HOST_USER", OWNER_ID)
 
 
 async def test_get_ip_address():
@@ -57,6 +64,7 @@ async def test_get_ip_address():
     assert prefect_utils.get_ip_address() == socket.gethostbyname(socket.gethostname())
 
 
+@patch.dict(os.environ, {}, clear=False)
 async def test_read_apikey(monkeypatch, mocker):
     """Test the read_apikey function"""
 
@@ -68,15 +76,17 @@ async def test_read_apikey(monkeypatch, mocker):
     mocker.patch.object(getpass, "getpass", return_value=apikey)
 
     # Don't really save to .env file. See: https://docs.python.org/3.3/library/unittest.mock.html#mock-open
-    m = mock_open()
-    with patch("builtins.open", m, create=True):
+    opened = mock_open()
+    with patch("builtins.open", opened, create=True):
         await prefect_utils.read_apikey(optional=False, save_to_env=True)
-    m.assert_called_once_with(os.path.expanduser("~/.env"), "a", encoding="utf-8")
-    handle = m()
+        assert os.environ["RSPY_APIKEY"] == apikey
+    opened.assert_called_once_with(os.path.expanduser("~/.env"), "a", encoding="utf-8")
+    handle = opened()
     handle.write.assert_called_once_with(f"\nRSPY_APIKEY={apikey}\n")
 
 
-@pytest.mark.parametrize("local_mode", [True, False])
+@patch.dict(os.environ, {}, clear=False)
+@pytest.mark.parametrize("local_mode", [True, False], ids=["local", "cluster"])
 async def test_init_prefect_blocks(monkeypatch, local_mode):
     """Test the init_prefect_blocks function"""
 
@@ -109,7 +119,7 @@ async def test_init_prefect_blocks(monkeypatch, local_mode):
         )
 
     # Any other env var for the current user
-    env_user = {"TEMPO_ENDPOINT": "TEMPO_ENDPOINT"}
+    env_user = {"TEMPO_ENDPOINT": "TEMPO_ENDPOINT", "RSPY_APIKEY": "RSPY_APIKEY"}
     for key, value in env_user.items():
         monkeypatch.setenv(key, value)
 
@@ -209,12 +219,11 @@ async def test_bucket_functions(monkeypatch, mocker):
     my_spy.assert_called_once()
 
     # s3_bucket._get_bucket_resource().objects.filter(...) should return a list of mock objects
-    Mock.objects = PropertyMock()
-    Mock.objects.filter = Mock(return_value=[Mock()])
     mocker.patch.object(S3Bucket, "_get_bucket_resource", Mock())
-    mocker.patch.object(S3Bucket, "_get_s3_client", Mock())
+    Mock.filter = Mock(return_value=[Mock()])
     # Spy on s3_bucket._get_s3_client().delete_objects(...)
-    Mock.delete_objects = (my_spy := Mock())
+    mocker.patch.object(S3Bucket, "_get_s3_client", Mock())
+    Mock.delete_objects = (spy_delete_objects := Mock())
     # Call the function
     prefect_utils.s3_delete("s3_prefix")
-    my_spy.assert_called_once()
+    spy_delete_objects.assert_called_once()
