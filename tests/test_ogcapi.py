@@ -254,7 +254,7 @@ class TestOgcApi:
         # Test not implemented
         if isinstance(client, DprClient):
             with pytest.raises(NotImplementedError):
-                client.get_processes()
+                client.get_jobs()
             return
 
         json_response = {
@@ -381,7 +381,7 @@ class TestOgcApi:
 
         if isinstance(client, DprClient):
             with pytest.raises(NotImplementedError):
-                client.get_processes()
+                client.get_jobs()
         else:
             with pytest.raises(OgcValidationException) as exc_info:
                 client.get_jobs()
@@ -396,7 +396,7 @@ class TestOgcApi:
         # Test not implemented
         if isinstance(client, DprClient):
             with pytest.raises(NotImplementedError):
-                client.get_processes()
+                client.delete_job("")
             return
 
         job_id = "0474d453-3306-48e2-ab32-ac00bafb3115"
@@ -463,7 +463,7 @@ class TestOgcApi:
         # Test not implemented
         if isinstance(client, DprClient):
             with pytest.raises(NotImplementedError):
-                client.get_processes()
+                client.get_job_results("")
             return
 
         job_id = "0474d453-3306-48e2-ab32-ac00bafb3115"

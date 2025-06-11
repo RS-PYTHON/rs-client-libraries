@@ -24,11 +24,26 @@ from unittest.mock import AsyncMock, Mock, mock_open, patch
 import pytest
 from prefect.blocks.system import Secret
 from prefect.exceptions import ObjectNotFound
+from prefect.testing.utilities import prefect_test_harness
 from prefect_aws import S3Bucket
 
 from rs_common import prefect_utils
+from rs_common.utils import env_bool
 
 OWNER_ID = "OWNER_ID"
+
+
+@pytest.fixture(autouse=True, scope="session")
+def prefect_test_fixture():
+    """
+    Init a mockup prefect server, see: https://docs.prefect.io/v3/how-to-guides/workflows/test-workflows
+    """
+    # NOTE: this takes long, so for local testing you can comment it and replace with
+    # "docker compose up" from rs-demo and set this env var to 0
+    if env_bool("SKIP_PREFECT_TEST_HARNESS", False):
+        yield
+    with prefect_test_harness():
+        yield
 
 
 def set_local_mode(value: bool, monkeypatch):
@@ -72,7 +87,7 @@ async def test_read_apikey(monkeypatch, mocker):
 
 @patch.dict(os.environ, {}, clear=False)
 @pytest.mark.parametrize("local_mode", [True, False], ids=["local", "cluster"])
-async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # pylint: disable=unused-argument
+async def test_init_prefect_blocks(monkeypatch, local_mode):
     """Test the init_prefect_blocks function"""
 
     # Set local or cluster mode
