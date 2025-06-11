@@ -81,7 +81,7 @@ class FlowEnv:
         # Init the RsClient instance from the env vars
         self.rs_client = RsClient(
             rs_server_href=os.getenv("RSPY_WEBSITE"),
-            rs_server_api_key=os.environ.get("RSPY_APIKEY"),
+            rs_server_api_key=os.getenv("RSPY_APIKEY"),
             owner_id=self.owner_id,
             logger=get_run_logger(),  # type: ignore
         )

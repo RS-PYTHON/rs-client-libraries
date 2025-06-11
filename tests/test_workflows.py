@@ -12,218 +12,169 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Test the prefect_utils module"""
+"""Test the Prefect workflows"""
 
-import getpass
 import os
-import socket
-from datetime import datetime
-from importlib import reload
-from unittest.mock import AsyncMock, Mock, mock_open, patch
+from collections import defaultdict
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, Mock, patch
 
-import pytest
 from prefect.blocks.system import Secret
-from prefect.exceptions import ObjectNotFound
-from prefect.testing.utilities import prefect_test_harness
-from prefect_aws import S3Bucket
 
+from rs_client.rs_client import RsClient
 from rs_common import prefect_utils
-from rs_common.utils import env_bool
+from rs_workflows import (
+    auxip_flow,
+    cadip_flow,
+    catalog_flow,
+    dpr_flow,
+    on_demand_processing,
+    staging_flow,
+)
+from rs_workflows.flow_utils import FlowEnvArgs, ProcessorEnum
 
 OWNER_ID = "OWNER_ID"
+S3_PAYLOAD = "S3_PAYLOAD"
+RSPY_WEBSITE = "RSPY_WEBSITE"
+RSPY_APIKEY = "RSPY_APIKEY"
+
+# Recursive defaultdict, see: https://stackoverflow.com/a/8702435
+MOCK_DICT = lambda: defaultdict(MOCK_DICT)  # type: ignore # pylint: disable=unnecessary-lambda-assignment
+
+#########
+# Mocks #
+#########
 
 
-@pytest.fixture(autouse=True, scope="session")
-def prefect_test_fixture():
-    """
-    Init a mockup prefect server, see: https://docs.prefect.io/v3/how-to-guides/workflows/test-workflows
-    """
-    # NOTE: this takes long, so for local testing you can comment it and replace with
-    # "docker compose up" from rs-demo and set this env var to 0
-    if env_bool("SKIP_PREFECT_TEST_HARNESS", False):
-        yield
-    with prefect_test_harness():
-        yield
+class MockStr(Mock):
+    """Mock str"""
+
+    def split(self, *_, **__):
+        """Mock str split"""
+        return ["split1", "split2"]
 
 
-def set_local_mode(value: bool, monkeypatch):
-    """Configure local or cluster mode"""
-    monkeypatch.setenv("RSPY_LOCAL_MODE", str(value))
-    reload(prefect_utils)
+class MockRsClient(Mock):
+    """Mock RsClient class"""
 
-
-@pytest.fixture(name="set_env", autouse=True)
-def __set_env(monkeypatch):
-    """Fixture to set environment"""
-    monkeypatch.setenv("JUPYTERHUB_USER", OWNER_ID)
-    monkeypatch.setenv("RSPY_HOST_USER", OWNER_ID)
-
-
-async def test_get_ip_address():
-    """Test get_ip_address function"""
-    assert prefect_utils.get_ip_address() == socket.gethostbyname(socket.gethostname())
-
-
-@patch.dict(os.environ, {}, clear=False)
-async def test_read_apikey(monkeypatch, mocker):
-    """Test the read_apikey function"""
-
-    # Only in cluster mode
-    set_local_mode(False, monkeypatch)
-
-    # Mock the getpass.getpass function
-    apikey = "my_apikey"
-    mocker.patch.object(getpass, "getpass", return_value=apikey)
-
-    # Don't really save to .env file. See: https://docs.python.org/3.3/library/unittest.mock.html#mock-open
-    opened = mock_open()
-    with patch("builtins.open", opened, create=True):
-        await prefect_utils.read_apikey(optional=False, save_to_env=True)
-        assert os.environ["RSPY_APIKEY"] == apikey
-    opened.assert_called_once_with(os.path.expanduser("~/.env"), "a", encoding="utf-8")
-    handle = opened()
-    handle.write.assert_called_once_with(f"\nRSPY_APIKEY={apikey}\n")
-
-
-@patch.dict(os.environ, {}, clear=False)
-@pytest.mark.parametrize("local_mode", [True, False], ids=["local", "cluster"])
-async def test_init_prefect_blocks(monkeypatch, local_mode):
-    """Test the init_prefect_blocks function"""
-
-    # Set local or cluster mode
-    set_local_mode(local_mode, monkeypatch)
-
-    # Environment variables for all users
-    env_global = {
-        "RSPY_LOCAL_MODE": "1" if local_mode else "0",
-        "PREFECT_BUCKET_NAME": "PREFECT_BUCKET_NAME",
-        "PREFECT_BUCKET_FOLDER": "PREFECT_BUCKET_FOLDER",
-        "S3_ACCESSKEY": "S3_ACCESSKEY",
-        "S3_SECRETKEY": "S3_SECRETKEY",
-        "S3_REGION": "S3_REGION",
-        "S3_ENDPOINT": "S3_ENDPOINT",
-        "LOCAL_DASK_USERNAME": "LOCAL_DASK_USERNAME",
-        "LOCAL_DASK_PASSWORD": "LOCAL_DASK_PASSWORD",
+    # Mocked properties
+    id = "id"
+    assets = {"asset1": MockStr(), "asset2": MockStr()}
+    properties = {
+        "prop1": MockStr(),
+        "prop2": MockStr(),
     }
 
-    # In local mode, they must be set in the env
-    if local_mode:
-        for key, value in env_global.items():
-            monkeypatch.setenv(key, value)
+    def search(self, *_, **__):
+        """Mock stac search"""
+        return [MockRsClient()] * 2
 
-    # In global mode, they must be set in a prefect block
-    else:
-        await Secret(value=env_global).save(  # type: ignore[arg-type]
-            prefect_utils.BLOCK_NAME_ENV_GLOBAL,
-            overwrite=True,
-        )
+    def get_items(self, *_, **__):
+        """Mock stac get_items"""
+        return [MockRsClient()] * 2
 
-    # Any other env var for the current user
-    env_user = {"TEMPO_ENDPOINT": "TEMPO_ENDPOINT", "RSPY_APIKEY": "RSPY_APIKEY"}
-    for key, value in env_user.items():
-        monkeypatch.setenv(key, value)
+    def get_collections(self, *_, **__):
+        """Mock stac get_collections"""
+        return [MockRsClient()] * 2
 
-    # Call the function
-    await prefect_utils.init_prefect_blocks()
-
-    # Check that the blocks were written with the right values
-    env_global2 = (await Secret.load(prefect_utils.BLOCK_NAME_ENV_GLOBAL)).get()
-    env_user2 = (await Secret.load(prefect_utils.format_env_user(OWNER_ID))).get()
-    assert env_global == env_global2
-    assert env_user == env_user2
-
-    # Check that the values were save as env vars
-    for key, value in {**env_global, **env_user}.items():
-        assert os.environ[key] == value
+    def wait_for_job(self, *_, **__):
+        """Mock DprClient wait_for_job"""
+        return [MOCK_DICT()] * 2
 
 
-async def test_wait_for_deployment(mocker):
-    """Test the wait_for_deployment function"""
+############
+# DPR FLOW #
+############
 
-    wait = 0.1
-    mock_interval = 0.15
 
-    time1 = datetime.now()
+async def mock_s3_download_file(
+    s3_path: str,
+    to_path: str | Path | None,
+    **__: dict[str, Any],
+) -> Path:
+    """Mock the prefect_utils.s3_download_file function"""
+    if not to_path:
+        return Path()
 
-    def patch_read_deployment(*_):
-        """Path the read_deployment_by_name function. Return success after n seconds."""
-        diff = datetime.now() - time1
-        if diff.total_seconds() >= mock_interval:
-            return  # success
-        raise ObjectNotFound(RuntimeError())
+    # Mock the downloading of S3_PAYLOAD
+    if s3_path.startswith(S3_PAYLOAD):
+        with open(to_path, "w", encoding="utf-8") as opened:
+            opened.write(
+                """
+workflow:
+- name: workflow_name
+  module: workflow_module
+  processing_unit: workflow_processing_unit
+  outputs:
+    out1: output1
+    out2: output2
+""",
+            )
 
-    mock_read_deployment = mocker.patch(
-        "prefect.client.orchestration._deployments.client.DeploymentAsyncClient.read_deployment_by_name",
-        side_effect=patch_read_deployment,
+    return Path(to_path)
+
+
+#############
+# MAIN FLOW #
+#############
+
+
+@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
+@patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
+@patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(RsClient, "get_auxip_client", MockRsClient)
+@patch.object(RsClient, "get_cadip_client", MockRsClient)
+@patch.object(RsClient, "get_catalog_client", MockRsClient)
+@patch.object(RsClient, "get_staging_client", MockRsClient)
+@patch.object(RsClient, "get_dpr_client", MockRsClient)
+@patch.object(catalog_flow, "datetime", Mock())
+async def test_on_demand_processing(mocker, mock_prefect):  # pylint: disable=unused-argument
+    """Test the on_demand_processing flow"""
+
+    # Create prefect block
+    await Secret(
+        value={  # type: ignore[arg-type]
+            "RSPY_WEBSITE": RSPY_WEBSITE,
+            "RSPY_APIKEY": RSPY_APIKEY,
+        },
+    ).save(
+        prefect_utils.format_env_user(OWNER_ID),
+        overwrite=True,
     )
 
-    # Test nominal case
-    time1 = datetime.now()
-    await prefect_utils.wait_for_deployment("name", wait)
-    assert mock_read_deployment.call_count == 3
+    # We'll just check that the prefect tasks and flows were called.
+    # We don't check the underlying RsClient functions, this is already done in dedicated pytests.
+    spied = {
+        mocker.spy(prefect_function, "fn"): call_count  # spy on <flow>.fn or <task>.fn = the underlying python function
+        for prefect_function, call_count in {
+            auxip_flow.search: 1,
+            auxip_flow.search_task: 1,
+            cadip_flow.search: 1,
+            cadip_flow.search_task: 1,
+            dpr_flow.read_payload_values: 1,
+            dpr_flow.read_tasktable: 1,
+            dpr_flow.write_payload: 1,
+            dpr_flow.run_processor: 1,
+            staging_flow.staging_task_auxip: 1,
+            staging_flow.staging_task_cadip: 1,
+            staging_flow.staging: 2,
+            catalog_flow.publish: 1,
+        }.items()
+    }
 
-    # Test timeout
-    with pytest.raises(ObjectNotFound):
-        time1 = datetime.now()
-        await prefect_utils.wait_for_deployment("name", wait, max_retry=2)
+    # Run the prefect flow
+    await on_demand_processing.on_demand_processing(
+        env=FlowEnvArgs(owner_id=OWNER_ID),
+        processor=ProcessorEnum.S1L0,
+        cadip_collection_identifier="cadip_collection_identifier",
+        session_identifier="session_identifier",
+        catalog_collection_identifier="catalog_collection_identifier",
+        s3_payload_template=S3_PAYLOAD,
+        s3_output_data="s3_output_data",
+        use_dpr_mockup=False,
+    )
 
-
-async def test_bucket_functions(monkeypatch, mocker):
-    """Test the bucket function"""
-
-    # Set env vars for the bucket
-    for key, value in {
-        "PREFECT_BUCKET_NAME": "PREFECT_BUCKET_NAME",
-        "PREFECT_BUCKET_FOLDER": "PREFECT_BUCKET_FOLDER",
-        "S3_ACCESSKEY": "S3_ACCESSKEY",
-        "S3_SECRETKEY": "S3_SECRETKEY",
-        "S3_REGION": "S3_REGION",
-        "S3_ENDPOINT": "S3_ENDPOINT",
-    }.items():
-        monkeypatch.setenv(key, value)
-
-    # Spy on functions
-    spy_save = mocker.spy(S3Bucket, "save")
-    spy_get_s3_bucket = mocker.spy(prefect_utils, "get_s3_bucket")
-
-    # Call the function several times
-    for _ in range(5):
-        await prefect_utils.get_share_bucket()
-
-    # Check that the spied functions were called only 0 or 1 time.
-    # They are called 0 times if you reuse the same prefect env and the block was already created.
-    assert spy_save.call_count <= 1
-    assert spy_get_s3_bucket.call_count <= 1
-
-    #
-    # Test bucket operations, just call the functions, don't check the underlying s3 functions
-
-    mocker.patch.object(S3Bucket, "upload_from_path", my_spy := AsyncMock())
-    await prefect_utils.s3_upload_file("from_path", "s3_path")
-    my_spy.assert_called_once()
-
-    my_spy.reset_mock()
-    await prefect_utils.s3_upload_empty_file("s3_path")
-    my_spy.assert_called_once()
-
-    mocker.patch.object(S3Bucket, "upload_from_folder", my_spy := AsyncMock())
-    await prefect_utils.s3_upload_dir("from_folder", "s3_path")
-    my_spy.assert_called_once()
-
-    mocker.patch.object(S3Bucket, "download_object_to_path", my_spy := AsyncMock())
-    await prefect_utils.s3_download_file("s3_path", "to_path")
-    my_spy.assert_called_once()
-
-    mocker.patch.object(S3Bucket, "get_directory", my_spy := AsyncMock())
-    await prefect_utils.s3_download_dir("s3_path", "local_path")
-    my_spy.assert_called_once()
-
-    # s3_bucket._get_bucket_resource().objects.filter(...) should return a list of mock objects
-    mocker.patch.object(S3Bucket, "_get_bucket_resource", Mock())
-    Mock.filter = Mock(return_value=[Mock()])
-    # Spy on s3_bucket._get_s3_client().delete_objects(...)
-    mocker.patch.object(S3Bucket, "_get_s3_client", Mock())
-    Mock.delete_objects = (spy_delete_objects := Mock())
-    # Call the function
-    prefect_utils.s3_delete("s3_prefix")
-    spy_delete_objects.assert_called_once()
+    # Check calls
+    for fn, call_count in spied.items():
+        assert fn.await_count == call_count

@@ -173,8 +173,9 @@ def __mock_prefect():
     # "docker compose up" from rs-demo and set this env var to 0
     if env_bool("SKIP_PREFECT_TEST_HARNESS", False):
         yield
-    with prefect_test_harness():
-        yield
+    else:
+        with prefect_test_harness():
+            yield
 
 
 @pytest.fixture
