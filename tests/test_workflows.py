@@ -40,7 +40,7 @@ RSPY_WEBSITE = "RSPY_WEBSITE"
 RSPY_APIKEY = "RSPY_APIKEY"
 
 # Recursive defaultdict, see: https://stackoverflow.com/a/8702435
-MOCK_DICT = lambda: defaultdict(MOCK_DICT)  # type: ignore # pylint: disable=unnecessary-lambda-assignment
+MOCK_DICT = lambda: defaultdict(MOCK_DICT)  # type: ignore # pylint: disable=unnecessary-lambda-assignment # noqa: E731
 
 #########
 # Mocks #
