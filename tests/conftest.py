@@ -22,10 +22,12 @@ Fixtures defined in a conftest.py can be used by any test in that package withou
 
 import pytest
 import responses
+from prefect.testing.utilities import prefect_test_harness
 
 from rs_client.rs_client import RsClient
 from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
+from rs_common.utils import env_bool
 from tests import common
 
 # Use dummy values
@@ -160,6 +162,20 @@ def clear_caches():
     """Clear caches at the end of each test"""
     yield
     StacBase.get_collection.cache_clear()  # pylint:disable=no-member
+
+
+@pytest.fixture(name="mock_prefect", scope="session")
+def __mock_prefect():
+    """
+    Init a mockup prefect server, see: https://docs.prefect.io/v3/how-to-guides/workflows/test-workflows
+    """
+    # NOTE: this takes long, so for local testing you can comment it,
+    # and replace with "docker compose up" from rs-demo and set this env var to "1"
+    if env_bool("SKIP_PREFECT_TEST_HARNESS", False):
+        yield
+    else:
+        with prefect_test_harness():
+            yield
 
 
 @pytest.fixture

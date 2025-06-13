@@ -244,7 +244,8 @@ class OgcApiClient(RsClient):
             RuntimeError in case of error
         """
         try:
-            status_type, job_identifier = job_status["status"], job_status["jobID"]
+            status_type = ""
+            job_identifier = job_status.get("jobID")
             if not job_identifier:
                 raise RuntimeError("Job identifier is missing.")
 
@@ -252,7 +253,7 @@ class OgcApiClient(RsClient):
                 job_status = self.get_job_info(job_identifier)
                 if logger:
                     logger.info(f"job_status: {job_status}")
-                status_type = job_status.get("status")
+                status_type = job_status.get("status", "")
                 if logger:
                     logger.info(
                         f"----- {job_name} job {job_identifier!r}: {status_type.upper()} \n",
