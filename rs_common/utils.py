@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 @dataclass
 class AuthInfo:
-    """User authentication information in KeyCloak."""
+    """User authentication information in Keycloak."""
 
     # User login (preferred username)
     user_login: str
@@ -38,7 +38,7 @@ def read_response_error(response):
     # Try to read the response detail or error
     try:
         json = response.json()
-        detail = json.get("detail") or json["error"]
+        detail = json.get("detail") or json.get("description") or json["error"]
 
     # If this fail, get the full response content
     except Exception:  # pylint: disable=broad-exception-caught
