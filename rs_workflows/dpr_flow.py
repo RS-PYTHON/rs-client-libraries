@@ -118,6 +118,9 @@ async def write_payload(
         s3_output_data: S3 bucket location of the output processed products.
         s3_payload_run: S3 bucket location of the output final DPR payload file.
     """
+
+    # TODO: should be moved to dpr_client.py and it should call dpr_client.py::update_configuration
+
     logger = get_run_logger()
 
     # Init flow environment and opentelemetry span

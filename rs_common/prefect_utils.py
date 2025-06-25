@@ -374,12 +374,15 @@ async def s3_download_dir(
 def s3_delete(s3_prefix: str):
     """Remove all files from S3 bucket with the given prefix, using low-level client and Content-MD5 header."""
     s3_bucket, prefix = get_s3_bucket(s3_prefix)
+    objects = s3_bucket._get_bucket_resource().objects
+
+    objects_to_delete = [{"Key": obj.key} for obj in objects.filter(Prefix=prefix)]  # pylint: disable=protected-access
+
+    # Also try with a trailing /
     if not prefix.endswith("/"):
-        prefix += "/"
-    objects_to_delete = [
-        {"Key": obj.key}
-        for obj in s3_bucket._get_bucket_resource().objects.filter(Prefix=prefix)  # pylint: disable=protected-access
-    ]
+        objects_to_delete.extend(
+            [{"Key": obj.key} for obj in objects.filter(Prefix=prefix + "/")],  # pylint: disable=protected-access
+        )
 
     if not objects_to_delete:
         return None
