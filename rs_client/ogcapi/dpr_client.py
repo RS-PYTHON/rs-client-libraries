@@ -60,6 +60,28 @@ class DprClient(OgcApiClient):
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE")
 
+    def run_process(self, process: str, s3_config_dir: str, payload_subpath: str, s3_report_dir: str) -> dict:
+        """Method to start the process from rs-client - Call the endpoint /processes/{process}/execution
+
+        Args:
+            process: Process name
+            s3_config_dir: S3 bucket folder that contains the payload and configuration files to pass to the processor
+            payload_subpath: Payload file path, relative to the config folder
+            s3_report_dir: S3 bucket folder were the processor report files will be written
+
+        Return:
+            job_id (int, str): Returns the status code of the request + the identifier
+            (or None if endpoint fails) of the running job
+        """
+        return super().run_process(
+            process,
+            {
+                "s3_config_dir": s3_config_dir,
+                "payload_subpath": payload_subpath,
+                "s3_report_dir": s3_report_dir,
+            },
+        )
+
     def wait_for_job(self, *args, **kwargs) -> list[dict]:  # type: ignore
         """
         Wait for job to finish.
@@ -93,8 +115,8 @@ class DprClient(OgcApiClient):
 
     async def update_configuration(self, local_path: str, s3_path: str, is_payload: bool = False, **kwargs):
         """
-        Update local configuration file depending on the environment,
-        and upload it to the s3 bucket.
+        Update local configuration file depending on the environment, upload it to the s3 bucket,
+        and initialize output bucket folders.
 
         Args:
             local_path: Local configuration file path
