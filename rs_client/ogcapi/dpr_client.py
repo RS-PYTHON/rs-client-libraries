@@ -156,7 +156,7 @@ class DprClient(OgcApiClient):
         # Expand the env vars as $key, ${key} or %key%
         for key, value in to_expand.items():
             for key2 in f"${key}", f"${{{key}}}", f"%{key}%":
-                contents = contents.replace(key2, value)
+                contents = contents.replace(key2, str(value))
 
         # Read the payload contents
         if is_payload:
@@ -164,9 +164,10 @@ class DprClient(OgcApiClient):
 
             # We need to create the output S3 folder with a dummy file before running DPR
             for output_product in payload["I/O"]["output_products"]:
-                output_dir = output_product["path"]
-                # WARNING: in local mode, this writes to the local docker bucket, not the real one.
-                await prefect_utils.s3_upload_empty_file(f"{output_dir}/.empty")
+                s3_output_dir = output_product["path"]
+                s3_empty_file = f"{s3_output_dir}/.empty"
+                self.logger.info(f"Write empty file: {self.logger.level} {s3_empty_file!r}")
+                await prefect_utils.s3_upload_empty_file(s3_empty_file)
 
             # Change the dask authentication for local mode
             if self.local_mode:
