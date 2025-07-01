@@ -60,27 +60,53 @@ class DprClient(OgcApiClient):
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE")
 
-    def run_process(self, process: str, s3_config_dir: str, payload_subpath: str, s3_report_dir: str) -> dict:
+    def run_process(
+        self,
+        process: str,
+        s3_config_dir: str,
+        payload_subpath: str,
+        s3_report_dir: str | None,
+        use_dpr_mockup: bool = False,
+    ) -> dict:
         """Method to start the process from rs-client - Call the endpoint /processes/{process}/execution
 
         Args:
             process: Process name
             s3_config_dir: S3 bucket folder that contains the payload and configuration files to pass to the processor
             payload_subpath: Payload file path, relative to the config folder
-            s3_report_dir: S3 bucket folder were the processor report files will be written
+            s3_report_dir: S3 bucket folder were the processor report files will be written (optional). All the eopf
+            local files written in the local "./reports" directory will be pushed to this S3 bucket folder.
+            use_dpr_mockup: Use the real or the mockup DPR processor ?
 
         Return:
             job_id (int, str): Returns the status code of the request + the identifier
             (or None if endpoint fails) of the running job
         """
-        return super().run_process(
-            process,
-            {
+
+        # Data to pass to the real processor
+        data = {}
+        if not use_dpr_mockup:
+            data = {
                 "s3_config_dir": s3_config_dir,
                 "payload_subpath": payload_subpath,
                 "s3_report_dir": s3_report_dir,
-            },
-        )
+            }
+
+        # For the mockup processor, pass the payload contents.
+        # Download the payload file into a temp file.
+        else:
+            with tempfile.NamedTemporaryFile() as temp:
+                prefect_utils.s3_download_file(osp.join(s3_config_dir, payload_subpath), temp.name, _sync=True)
+
+                # Read it as a yaml file
+                with open(temp.name, encoding="utf-8") as opened:
+                    data = yaml.safe_load(opened)
+
+            # Add extra info
+            data.update({"use_mockup": use_dpr_mockup})
+
+        # Call the parent method
+        return super().run_process(process, data)
 
     def wait_for_job(self, *args, **kwargs) -> list[dict]:  # type: ignore
         """
@@ -170,8 +196,8 @@ class DprClient(OgcApiClient):
                 await prefect_utils.s3_upload_empty_file(s3_empty_file)
 
             # Change the dask authentication for local mode
+            cluster_config = payload["dask_context"]["cluster_config"]
             if self.local_mode:
-                cluster_config = payload["dask_context"]["cluster_config"]
                 cluster_config["auth"] = cluster_config["auth_local_mode"]
             del cluster_config["auth_local_mode"]
 

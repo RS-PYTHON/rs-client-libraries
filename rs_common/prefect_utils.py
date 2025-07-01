@@ -406,7 +406,7 @@ def s3_delete(s3_prefix: str, log: bool = False):
         )
 
     if log:
-        keys = [o.get("Key") for o in objects_to_delete]
+        keys = [f"s3://{s3_bucket.bucket_name}/{o.get('Key')}" for o in objects_to_delete]
         s3_bucket.logger.info(f"Delete from {endpoint_url!r}: {json.dumps(keys, indent=2)}")
 
     # Split the list of objects to delete
