@@ -375,7 +375,7 @@ async def s3_download_dir(
 def s3_delete(s3_prefix: str, log: bool = False):
     """Remove all files from S3 bucket with the given prefix, using low-level client and Content-MD5 header."""
     s3_bucket, prefix = get_s3_bucket(s3_prefix)
-    objects = s3_bucket._get_bucket_resource().objects
+    objects = s3_bucket._get_bucket_resource().objects  # pylint: disable=protected-access
 
     # objects.filter(Prefix=prefix) makes a recursive search and returns only files, not folders.
     # If we want to delete a file, call the filter and only keep the exact matches.
@@ -385,10 +385,10 @@ def s3_delete(s3_prefix: str, log: bool = False):
 
     # If we want to delete a folder, make sure the prefix ends by /, call the filter and keep everything
     else:
-        objects_to_delete = [{"Key": obj.key} for obj in objects.filter(Prefix=(prefix.rstrip("/") + "/"))]
+        objects_to_delete = [{"Key": obj.key} for obj in objects.filter(Prefix=prefix.rstrip("/") + "/")]
 
     if not objects_to_delete:
-        return None
+        return
 
     s3_client = s3_bucket._get_s3_client()  # pylint: disable=protected-access
 
@@ -407,12 +407,14 @@ def s3_delete(s3_prefix: str, log: bool = False):
 
     if log:
         keys = [f"s3://{s3_bucket.bucket_name}/{o.get('Key')}" for o in objects_to_delete]
-        s3_bucket.logger.info(f"Delete from {endpoint_url!r}: {json.dumps(keys, indent=2)}")
+        s3_bucket.logger.info(
+            f"Delete from {endpoint_url!r}: {json.dumps(keys, indent=2)}",  # nosec hardcoded_sql_expressions
+        )
 
     # Split the list of objects to delete
     chunk_size = 100
     for i in range(0, len(objects_to_delete), chunk_size):
         s3_client.delete_objects(
             Bucket=s3_bucket.bucket_name,
-            Delete={"Objects": objects_to_delete[i : i + chunk_size], "Quiet": True},
+            Delete={"Objects": objects_to_delete[i : i + chunk_size], "Quiet": True},  # noqa: E203
         )

@@ -106,7 +106,7 @@ class DprClient(OgcApiClient):
             data.update({"use_mockup": use_dpr_mockup})
 
         # Call the parent method
-        return super().run_process(process, data)
+        return super()._run_process(process, data)
 
     def wait_for_job(self, *args, **kwargs) -> list[dict]:  # type: ignore
         """
