@@ -132,3 +132,85 @@ async def on_demand_processing(
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
         published.result()  # type: ignore[unused-coroutine]
+
+
+@flow(name="On-demand Cadip staging")
+async def on_demand_cadip_staging(
+    env: FlowEnvArgs,
+    cadip_collection_identifier: str,
+    session_identifier: str,
+    catalog_collection_identifier: str
+):
+    """
+    Prefect flow for on-demand processing.
+
+    Args:
+        env: Prefect flow environment
+        processor: DPR processor name
+        cadip_collection_identifier: CADIP collection identifier (to know the station)
+        session_identifier: Session identifier
+        catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
+        s3_payload_template: S3 bucket location of the DPR payload file template.
+        s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
+        catalog bucket.
+        use_dpr_mockup: Use the real or the mockup DPR processor ?
+    """
+    # logger = get_run_logger()
+
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "on-demand-processing"):
+
+        # Search Cadip sessions
+        cadip_items = cadip_flow.search_task.submit(
+            flow_env.serialize(),
+            cadip_collection_identifier,
+            session_identifier,
+            error_if_empty=True,
+        )
+
+        # Auxip and Cadip item ids
+        item_ids = []
+        for item in cadip_items.result():
+            item_ids.append(item.id)
+
+        # Stage Auxip and Cadip items.
+        # Note: the only difference between staging_task_auxip and
+        # staging_task_cadip is the task name in the prefect dashboard.
+        staged = staging_task_cadip.submit(
+            flow_env.serialize(),
+            cadip_items,
+            catalog_collection_identifier
+        )
+
+        # Wait for last task to end.
+        # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
+        staged.result()  # type: ignore[unused-coroutine]
+
+
+@flow(name="On-demand Auxip staging")
+async def on_demand_auxip_staging(
+    env: FlowEnvArgs,
+    cadip_collection_identifier: str,
+    session_identifier: str,
+    catalog_collection_identifier: str
+):
+    """
+    Prefect flow for on-demand processing.
+
+    Args:
+        env: Prefect flow environment
+        processor: DPR processor name
+        cadip_collection_identifier: CADIP collection identifier (to know the station)
+        session_identifier: Session identifier
+        catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
+        s3_payload_template: S3 bucket location of the DPR payload file template.
+        s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
+        catalog bucket.
+        use_dpr_mockup: Use the real or the mockup DPR processor ?
+    """
+    # logger = get_run_logger()
+
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(env)
+    return
