@@ -96,7 +96,11 @@ class DprClient(OgcApiClient):
         # Download the payload file into a temp file.
         else:
             with tempfile.NamedTemporaryFile() as temp:
-                prefect_utils.s3_download_file(osp.join(s3_config_dir, payload_subpath), temp.name, _sync=True)
+                prefect_utils.s3_download_file(  # type: ignore
+                    osp.join(s3_config_dir, payload_subpath),
+                    temp.name,
+                    _sync=True,  # type: ignore
+                )
 
                 # Read it as a yaml file
                 with open(temp.name, encoding="utf-8") as opened:
