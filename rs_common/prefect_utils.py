@@ -19,6 +19,7 @@ WARNING: AFTER EACH MODIFICATION, RESTART THE JUPYTER NOTEBOOK KERNEL !
 
 import asyncio
 import getpass
+import json
 import os
 import re
 import socket
@@ -371,30 +372,49 @@ async def s3_download_dir(
     await s3_bucket.get_directory(from_path, local_path)
 
 
-def s3_delete(s3_prefix: str):
+def s3_delete(s3_prefix: str, log: bool = False):
     """Remove all files from S3 bucket with the given prefix, using low-level client and Content-MD5 header."""
     s3_bucket, prefix = get_s3_bucket(s3_prefix)
-    if not prefix.endswith("/"):
-        prefix += "/"
-    objects_to_delete = [
-        {"Key": obj.key}
-        for obj in s3_bucket._get_bucket_resource().objects.filter(Prefix=prefix)  # pylint: disable=protected-access
-    ]
+    objects = s3_bucket._get_bucket_resource().objects  # pylint: disable=protected-access
+
+    # objects.filter(Prefix=prefix) makes a recursive search and returns only files, not folders.
+    # If we want to delete a file, call the filter and only keep the exact matches.
+    try_file = [obj.key for obj in objects.filter(Prefix=prefix)]
+    if prefix in try_file:
+        objects_to_delete = [{"Key": prefix}]
+
+    # If we want to delete a folder, make sure the prefix ends by /, call the filter and keep everything
+    else:
+        objects_to_delete = [{"Key": obj.key} for obj in objects.filter(Prefix=prefix.rstrip("/") + "/")]
 
     if not objects_to_delete:
-        return None
-
-    # Hook to compute Content-MD5 from actual serialized body
-    def inject_md5_on_real_payload(request, **_):
-        request.headers["Content-MD5"] = calculate_md5(request.body)
+        return
 
     s3_client = s3_bucket._get_s3_client()  # pylint: disable=protected-access
-    s3_client.meta.events.register(
-        "before-sign.s3.DeleteObjects",
-        inject_md5_on_real_payload,
-    )
 
-    return s3_client.delete_objects(
-        Bucket=s3_bucket.bucket_name,
-        Delete={"Objects": objects_to_delete, "Quiet": True},
-    )
+    # Not for the local minio bucket
+    endpoint_url = s3_bucket.credentials.aws_client_parameters.endpoint_url
+    if not any(provider in endpoint_url for provider in ["localhost", "minio"]):
+
+        # Hook to compute Content-MD5 from actual serialized body
+        def inject_md5_on_real_payload(request, **_):
+            request.headers["Content-MD5"] = calculate_md5(request.body)
+
+        s3_client.meta.events.register(
+            "before-sign.s3.DeleteObjects",
+            inject_md5_on_real_payload,
+        )
+
+    if log:
+        keys = [f"s3://{s3_bucket.bucket_name}/{o.get('Key')}" for o in objects_to_delete]
+        s3_bucket.logger.info(
+            f"Delete from {endpoint_url!r}: {json.dumps(keys, indent=2)}",  # nosec hardcoded_sql_expressions
+        )
+
+    # Split the list of objects to delete
+    chunk_size = 100
+    for i in range(0, len(objects_to_delete), chunk_size):
+        s3_client.delete_objects(
+            Bucket=s3_bucket.bucket_name,
+            Delete={"Objects": objects_to_delete[i : i + chunk_size], "Quiet": True},  # noqa: E203
+        )
