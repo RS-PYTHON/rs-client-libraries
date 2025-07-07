@@ -142,24 +142,18 @@ async def on_demand_cadip_staging(
     catalog_collection_identifier: str
 ):
     """
-    Prefect flow for on-demand processing.
+    Prefect flow for on-demand Cadip staging.
 
     Args:
         env: Prefect flow environment
-        processor: DPR processor name
         cadip_collection_identifier: CADIP collection identifier (to know the station)
         session_identifier: Session identifier
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
-        s3_payload_template: S3 bucket location of the DPR payload file template.
-        s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
-        catalog bucket.
-        use_dpr_mockup: Use the real or the mockup DPR processor ?
     """
-    # logger = get_run_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "on-demand-processing"):
+    with flow_env.start_span(__name__, "on-demand-cadip-staging"):
 
         # Search Cadip sessions
         cadip_items = cadip_flow.search_task.submit(
@@ -169,14 +163,12 @@ async def on_demand_cadip_staging(
             error_if_empty=True,
         )
 
-        # Auxip and Cadip item ids
+        # Cadip item ids
         item_ids = []
         for item in cadip_items.result():
             item_ids.append(item.id)
 
-        # Stage Auxip and Cadip items.
-        # Note: the only difference between staging_task_auxip and
-        # staging_task_cadip is the task name in the prefect dashboard.
+        # Stage Cadip items.
         staged = staging_task_cadip.submit(
             flow_env.serialize(),
             cadip_items,
@@ -191,26 +183,66 @@ async def on_demand_cadip_staging(
 @flow(name="On-demand Auxip staging")
 async def on_demand_auxip_staging(
     env: FlowEnvArgs,
-    cadip_collection_identifier: str,
-    session_identifier: str,
-    catalog_collection_identifier: str
+    start_datetime: str,
+    end_datetime: str,
+    catalog_collection_identifier: str,
+    eopf_type: str=""
 ):
     """
-    Prefect flow for on-demand processing.
+    Prefect flow for on-demand Auxip staging.
 
     Args:
         env: Prefect flow environment
-        processor: DPR processor name
-        cadip_collection_identifier: CADIP collection identifier (to know the station)
-        session_identifier: Session identifier
+        start_datetime: Timestamp for the start datetime used to filter the items
+        end_datetime: Timestamp for the end datetime used to filter the items
+        eopf_type: Value for the eopf:type of items we want to stage
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
-        s3_payload_template: S3 bucket location of the DPR payload file template.
-        s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
-        catalog bucket.
-        use_dpr_mockup: Use the real or the mockup DPR processor ?
     """
-    # logger = get_run_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
-    return
+    with flow_env.start_span(__name__, "on-demand-auxip-staging"):
+
+        # Create Auxip CQL2 filter from the datetime input values.
+        cql2_filter = {
+            "op": "t_contains",
+            "args": [
+                {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                {"interval": [start_datetime, end_datetime]}
+            ]
+        }
+
+        # If there is an eopf:type value given, create a composite filter to handle it
+        if eopf_type:
+            cql2_filter = {
+                "op": "and",
+                "args": [
+                    {
+                        "op": "=",
+                        "args": [
+                            {"property": "eopf:type"},
+                            eopf_type
+                        ]
+                    },
+                    cql2_filter
+                ]
+            }
+
+        # Search Auxip products
+        auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), cql2_filter, error_if_empty=True)
+
+        # Auxip item ids
+        item_ids = []
+        for item in auxip_items.result():
+            item_ids.append(item.id)
+
+        # Stage Auxip items.
+        staged = staging_task_auxip.submit(
+            flow_env.serialize(),
+            auxip_items,
+            catalog_collection_identifier,
+        )
+
+        # Wait for last task to end.
+        # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
+        staged.result()  # type: ignore[unused-coroutine]
