@@ -168,7 +168,7 @@ async def on_demand_cadip_staging(
 
         # Cadip item ids
         item_ids = []
-        for item in cadip_items.result():
+        for item in cadip_items.result():  # type: ignore[attr-defined]
             item_ids.append(item.id)
 
         # Stage Cadip items.
@@ -235,7 +235,7 @@ async def on_demand_auxip_staging(
 
         # Auxip item ids
         item_ids = []
-        for item in auxip_items.result():
+        for item in auxip_items.result():  # type: ignore[attr-defined]
             item_ids.append(item.id)
 
         # Stage Auxip items.
