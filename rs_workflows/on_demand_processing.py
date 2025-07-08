@@ -231,7 +231,11 @@ async def on_demand_auxip_staging(
             }
 
         # Search Auxip products
-        auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), cql2_filter, error_if_empty=True)
+        auxip_items = auxip_flow.search_task.submit(
+            flow_env.serialize(),
+            auxip_cql2={"filter": cql2_filter},
+            error_if_empty=True,
+        )
 
         # Auxip item ids
         item_ids = []
