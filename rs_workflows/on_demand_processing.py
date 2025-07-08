@@ -141,7 +141,7 @@ async def on_demand_cadip_staging(
     env: FlowEnvArgs,
     cadip_collection_identifier: str,
     session_identifier: str,
-    catalog_collection_identifier: str
+    catalog_collection_identifier: str,
 ):
     """
     Flow to retrieve a session, stage it and add the STAC item into the catalog.
@@ -172,11 +172,7 @@ async def on_demand_cadip_staging(
             item_ids.append(item.id)
 
         # Stage Cadip items.
-        staged = staging_task_cadip.submit(
-            flow_env.serialize(),
-            cadip_items,
-            catalog_collection_identifier
-        )
+        staged = staging_task_cadip.submit(flow_env.serialize(), cadip_items, catalog_collection_identifier)
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
@@ -186,16 +182,16 @@ async def on_demand_cadip_staging(
 @flow(name="On-demand Auxip staging")
 async def on_demand_auxip_staging(
     env: FlowEnvArgs,
-    start_datetime: datetime.datetime|str,
-    end_datetime: datetime.datetime|str,
+    start_datetime: datetime.datetime | str,
+    end_datetime: datetime.datetime | str,
     catalog_collection_identifier: str,
-    eopf_type: str=""
+    eopf_type: str = "",
 ):
     """
     Flow to retrieve Auxip files using a ValCover filter with the given time interval defined by
     start_datetime and end_datetime, select only the type of files wanted if eopf_type is given, stage
     the files and add STAC items into the catalog.
-    Informations on ValCover filter: 
+    Informations on ValCover filter:
     https://pforge-exchange2.astrium.eads.net/confluence/display/COPRS/4.+External+data+selection+policies
 
     Args:
@@ -223,24 +219,15 @@ async def on_demand_auxip_staging(
             "op": "t_contains",
             "args": [
                 {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                {"interval": [start_datetime, end_datetime]}
-            ]
+                {"interval": [start_datetime, end_datetime]},
+            ],
         }
 
         # If there is an eopf:type value given, create a composite filter to handle it
         if eopf_type:
             cql2_filter = {
                 "op": "and",
-                "args": [
-                    {
-                        "op": "=",
-                        "args": [
-                            {"property": "eopf:type"},
-                            eopf_type
-                        ]
-                    },
-                    cql2_filter
-                ]
+                "args": [{"op": "=", "args": [{"property": "eopf:type"}, eopf_type]}, cql2_filter],
             }
 
         # Search Auxip products
