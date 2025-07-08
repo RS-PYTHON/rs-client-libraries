@@ -197,9 +197,9 @@ async def on_demand_auxip_staging(
     Args:
         env: Prefect flow environment
         start_datetime: Start datetime for the time interval used to filter the files
-            (select a date or directly enter a timestamp, e.g. "2025-08-07T11:51:12.509000Z)
+            (select a date or directly enter a timestamp, e.g. "2025-08-07T11:51:12.509000Z")
         end_datetime: End datetime for the time interval used to filter the files
-            (select a date or directly enter a timestamp, e.g. "2025-08-10T14:00:00.509000Z)
+            (select a date or directly enter a timestamp, e.g. "2025-08-10T14:00:00.509000Z")
         eopf_type: Auxiliary file type wanted
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
     """
