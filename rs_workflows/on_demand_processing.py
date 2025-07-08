@@ -14,6 +14,7 @@
 
 """Prefect flows and tasks for on-demand processing"""
 
+import datetime
 from pathlib import Path
 
 from prefect import flow
@@ -46,7 +47,8 @@ async def on_demand_processing(
     Args:
         env: Prefect flow environment
         processor: DPR processor name
-        cadip_collection_identifier: CADIP collection identifier (to know the station)
+        cadip_collection_identifier: CADIP collection identifier that contains the mission and station
+            (e.g. s1_ins for Sentinel-1 sessions from the Inuvik station)
         session_identifier: Session identifier
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
         s3_payload_template: S3 bucket location of the DPR payload file template.
@@ -142,11 +144,12 @@ async def on_demand_cadip_staging(
     catalog_collection_identifier: str
 ):
     """
-    Prefect flow for on-demand Cadip staging.
+    Flow to retrieve a session, stage it and add the STAC item into the catalog.
 
     Args:
         env: Prefect flow environment
-        cadip_collection_identifier: CADIP collection identifier (to know the station)
+        cadip_collection_identifier: CADIP collection identifier that contains the mission and station
+            (e.g. s1_ins for Sentinel-1 sessions from the Inuvik station)
         session_identifier: Session identifier
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
     """
@@ -183,25 +186,37 @@ async def on_demand_cadip_staging(
 @flow(name="On-demand Auxip staging")
 async def on_demand_auxip_staging(
     env: FlowEnvArgs,
-    start_datetime: str,
-    end_datetime: str,
+    start_datetime: datetime.datetime|str,
+    end_datetime: datetime.datetime|str,
     catalog_collection_identifier: str,
     eopf_type: str=""
 ):
     """
-    Prefect flow for on-demand Auxip staging.
+    Flow to retrieve Auxip files using a ValCover filter with the given time interval defined by
+    start_datetime and end_datetime, select only the type of files wanted if eopf_type is given, stage
+    the files and add STAC items into the catalog.
+    Informations on ValCover filter: 
+    https://pforge-exchange2.astrium.eads.net/confluence/display/COPRS/4.+External+data+selection+policies
 
     Args:
         env: Prefect flow environment
-        start_datetime: Timestamp for the start datetime used to filter the items
-        end_datetime: Timestamp for the end datetime used to filter the items
-        eopf_type: Value for the eopf:type of items we want to stage
+        start_datetime: Start datetime for the time interval used to filter the files
+            (select a date or directly enter a timestamp, e.g. "2025-08-07T11:51:12.509000Z)
+        end_datetime: End datetime for the time interval used to filter the files
+            (select a date or directly enter a timestamp, e.g. "2025-08-10T14:00:00.509000Z)
+        eopf_type: Auxiliary file type wanted
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
     """
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "on-demand-auxip-staging"):
+
+        # Convert datetime inputs to str
+        if isinstance(start_datetime, datetime.datetime):
+            start_datetime = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        if isinstance(end_datetime, datetime.datetime):
+            end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
         # Create Auxip CQL2 filter from the datetime input values.
         cql2_filter = {
