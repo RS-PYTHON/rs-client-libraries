@@ -149,7 +149,7 @@ class OgcApiClient(RsClient):
         )
         return self.validate_and_unmarshal_response(response)
 
-    def run_process(self, process: str, body: dict) -> dict:
+    def _run_process(self, process: str, body: dict) -> dict:
         """Method to start the process from rs-client - Call the endpoint /processes/{process}/execution
 
         Args:
@@ -231,7 +231,7 @@ class OgcApiClient(RsClient):
         Wait for job to finish.
 
         Args:
-            job_status: Returned by `run_process`
+            job_status: Returned by `_run_process`
             logger: To show advancement in logger
             job_name: Job name to show in the logger
             timeout: Job completion timeout in seconds

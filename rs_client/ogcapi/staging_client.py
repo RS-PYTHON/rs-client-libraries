@@ -87,7 +87,7 @@ class StagingClient(OgcApiClient):
             parsed = urlparse(stac_input)
             if parsed.scheme and parsed.netloc and parsed.hostname:
                 staging_body = {"inputs": {"collection": out_coll_name, "items": {"href": stac_input}}}
-                return {parsed.hostname: self.run_process(RESOURCE, staging_body)}
+                return {parsed.hostname: super()._run_process(RESOURCE, staging_body)}
 
         # ----- Case 2: we directly load a STAC ItemCollection in the staging request body
 
@@ -145,7 +145,7 @@ class StagingClient(OgcApiClient):
                     "items": {"value": stac_item_collection.model_dump(mode="json")},
                 },
             }
-            hostname_triggers[hostname] = self.run_process(RESOURCE, staging_body)
+            hostname_triggers[hostname] = super()._run_process(RESOURCE, staging_body)
 
         return hostname_triggers
 
