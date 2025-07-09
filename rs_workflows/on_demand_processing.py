@@ -17,7 +17,7 @@
 import datetime
 from pathlib import Path
 
-from prefect import flow, task
+from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow
@@ -245,9 +245,13 @@ async def on_demand_auxip_staging(
 @task(name="Filter product type")
 async def filter_product_type(auxip_items: ItemCollection | None, product_type: str) -> ItemCollection:
     """Filter Auxip items to only keep the ones with the correct product type"""
+    logger = get_run_logger()
     items_to_stage = []
+
     if auxip_items:
         for item in auxip_items:  # type: ignore[attr-defined]
             if "product:type" in item.properties.keys() and item.properties["product:type"] == product_type:
                 items_to_stage.append(item)
+
+    logger.info(f"Filtering search results: {len(items_to_stage)} item(s) found of product type {product_type}")
     return ItemCollection(items_to_stage)
