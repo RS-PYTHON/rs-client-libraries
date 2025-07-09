@@ -18,6 +18,7 @@ import datetime
 from pathlib import Path
 
 from prefect import flow
+from pystac import ItemCollection
 
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow
 from rs_workflows.dpr_flow import (
@@ -231,6 +232,7 @@ async def on_demand_auxip_staging(
         for item in auxip_items.result():  # type: ignore[attr-defined]
             if "product:type" in item.properties.keys() and item.properties["product:type"] == product_type:
                 items_to_stage.append(item)
+        items_to_stage = ItemCollection(items_to_stage)
 
         # Stage Auxip items.
         staged = staging_task_auxip.submit(
