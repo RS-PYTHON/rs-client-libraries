@@ -53,7 +53,7 @@ async def search(
         )
         if (not found) and error_if_empty:
             raise ValueError(
-                f"No Auxip session found for CQL2 filter: {json.dumps(auxip_cql2, indent=2)}",
+                f"No Auxip product found for CQL2 filter: {json.dumps(auxip_cql2, indent=2)}",
             )
         logger.info(f"Auxip search found {len(found)} results: {found}")
         return found
