@@ -17,7 +17,7 @@
 import datetime
 from pathlib import Path
 
-from prefect import flow
+from prefect import flow, task
 from pystac import ItemCollection
 
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow
@@ -228,11 +228,7 @@ async def on_demand_auxip_staging(
         )
 
         # Filtering Auxip items to only keep the ones with the correct product type
-        items_to_stage = []
-        for item in auxip_items.result():  # type: ignore[attr-defined]
-            if "product:type" in item.properties.keys() and item.properties["product:type"] == product_type:
-                items_to_stage.append(item)
-        items_to_stage = ItemCollection(items_to_stage)
+        items_to_stage = filter_product_type.submit(auxip_items, product_type)
 
         # Stage Auxip items.
         staged = staging_task_auxip.submit(
@@ -244,3 +240,14 @@ async def on_demand_auxip_staging(
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
         staged.result()  # type: ignore[unused-coroutine]
+
+
+@task(name="Filter product type")
+async def filter_product_type(auxip_items: ItemCollection | None, product_type: str) -> ItemCollection:
+    """Filter Auxip items to only keep the ones with the correct product type"""
+    items_to_stage = []
+    if auxip_items:
+        for item in auxip_items:  # type: ignore[attr-defined]
+            if "product:type" in item.properties.keys() and item.properties["product:type"] == product_type:
+                items_to_stage.append(item)
+    return ItemCollection(items_to_stage)
