@@ -23,8 +23,7 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: 3.11.7
-  SONAR_PROJECT_KEY: RS-PYTHON_rs-client-libraries_AY9yLor3vquboa54Od6W
+  PYTHON_VERSION: 3.11.7  
 
 jobs:
   changes:
@@ -288,11 +287,12 @@ jobs:
           echo tests=./tests >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Run sonarqube
-        uses: sonarsource/sonarqube-scan-action@master
+      - name: Run SonarCloud Scanner
+        uses: SonarSource/sonarcloud-github-action@v2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: RS-PYTHON_rs-client-libraries
+          SONAR_HOST_URL: https://sonarcloud.io
         with:
           # See doc:
           # https://docs.sonarsource.com/sonarqube/9.9/analyzing-source-code/languages/python/
@@ -302,9 +302,10 @@ jobs:
           projectBaseDir: .
           args: >
             -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
-            -Dsonar.branch.name=${{ github.ref_name }}
+            -Dsonar.organization=rs-python            
             -Dsonar.sources=${{ steps.dir_names.outputs.sources }}
             -Dsonar.tests=${{ steps.dir_names.outputs.tests }}
+            -Dsonar.branch.name=${{ github.ref_name }}
             -Dsonar.exclusions=
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.language=py
@@ -323,15 +324,15 @@ jobs:
         id: quality-gate-result
         with:
           sonar-project-key: ${{ env.SONAR_PROJECT_KEY }}
-          sonar-host-url: ${{ secrets.SONAR_HOST_URL }}
-          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          sonar-host-url: ${{ env.SONAR_HOST_URL }}
+          sonar-token: ${{ env.SONAR_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ github.ref_name }}
 
       - name: Output result
         run: |
-          echo "${{ steps.quality-gate-result.outputs.project-status }}"
-          echo "${{ steps.quality-gate-result.outputs.quality-gate-result }}"
+          echo "Project status: ${{ steps.quality-gate-result.outputs.project-status }}"
+          echo "Quality gate result: ${{ steps.quality-gate-result.outputs.quality-gate-result }}"
 
       - id: check-gate
         name: Check quality gate status
@@ -344,6 +345,6 @@ jobs:
       # it may be configurable. But http works as well.
       - if: always()
         run: >
-          echo "SonarQube report:
-          http://sonarqube.ops-csc.com/dashboard?branch=${{ github.ref_name }}&id=${{ env.SONAR_PROJECT_KEY }}"
+          echo "SonarCloud report:
+          https://sonarcloud.io/dashboard?id=${{ env.SONAR_PROJECT_KEY }}&branch=${{ github.ref_name }}"
           >> $GITHUB_STEP_SUMMARY
