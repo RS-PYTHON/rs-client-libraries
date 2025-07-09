@@ -214,19 +214,19 @@ async def on_demand_auxip_staging(
         if isinstance(end_datetime, datetime.datetime):
             end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
-        # Create basic Auxip CQL2 filter for the ValCover criteria.
-        cql2_filter = {
-            "op": "t_contains",
-            "args": [
-                {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                {"interval": [start_datetime, end_datetime]},
-            ],
-        }
-
-        # Create final filter with previous one and product_type
+        # Create CQL2 filter combining ValCover filter and product:type filter
         cql2_filter = {
             "op": "and",
-            "args": [{"op": "=", "args": [{"property": "product:type"}, product_type]}, cql2_filter],
+            "args": [
+                {"op": "=", "args": [{"property": "product:type"}, product_type]},
+                {
+                    "op": "t_contains",
+                    "args": [
+                        {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                        {"interval": [start_datetime, end_datetime]},
+                    ],
+                },
+            ],
         }
 
         # Search Auxip products
