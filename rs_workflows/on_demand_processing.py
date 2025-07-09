@@ -214,18 +214,13 @@ async def on_demand_auxip_staging(
         if isinstance(end_datetime, datetime.datetime):
             end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
-        # Create CQL2 filter combining ValCover filter and product:type filter
+        # CQL2 ValCover filter. The product:type filter is not added here
+        # because for some reason composite filters with "and" don't work
         cql2_filter = {
-            "op": "and",
+            "op": "t_contains",
             "args": [
-                {"op": "=", "args": [{"property": "product:type"}, product_type]},
-                {
-                    "op": "t_contains",
-                    "args": [
-                        {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                        {"interval": [start_datetime, end_datetime]},
-                    ],
-                },
+                {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                {"interval": [start_datetime, end_datetime]},
             ],
         }
 
@@ -239,7 +234,9 @@ async def on_demand_auxip_staging(
         # Auxip item ids
         item_ids = []
         for item in auxip_items.result():  # type: ignore[attr-defined]
-            item_ids.append(item.id)
+            # Keep only items with the correct product:type
+            if "product:type" in item.properties.keys() and item.properties["product:type"] == product_type:
+                item_ids.append(item.id)
 
         # Stage Auxip items.
         staged = staging_task_auxip.submit(
