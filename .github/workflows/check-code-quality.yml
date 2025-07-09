@@ -23,7 +23,7 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: 3.11.7  
+  PYTHON_VERSION: 3.11.7
 
 jobs:
   changes:
@@ -302,7 +302,7 @@ jobs:
           projectBaseDir: .
           args: >
             -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
-            -Dsonar.organization=rs-python            
+            -Dsonar.organization=rs-python
             -Dsonar.sources=${{ steps.dir_names.outputs.sources }}
             -Dsonar.tests=${{ steps.dir_names.outputs.tests }}
             -Dsonar.branch.name=${{ github.ref_name }}
