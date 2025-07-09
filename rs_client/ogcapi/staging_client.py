@@ -90,7 +90,6 @@ class StagingClient(OgcApiClient):
                 return {parsed.hostname: super()._run_process(RESOURCE, staging_body)}
 
         # ----- Case 2: we directly load a STAC ItemCollection in the staging request body
-
         # If stac_input is a file, load this file to a dictionary
         if isinstance(stac_input, str):
             # If the input is a valid path to a json_file, load this file
