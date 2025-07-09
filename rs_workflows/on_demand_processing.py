@@ -184,8 +184,8 @@ async def on_demand_auxip_staging(
     env: FlowEnvArgs,
     start_datetime: datetime.datetime | str,
     end_datetime: datetime.datetime | str,
+    product_type: str,
     catalog_collection_identifier: str,
-    eopf_type: str = "",
 ):
     """
     Flow to retrieve Auxip files using a ValCover filter with the given time interval defined by
@@ -200,7 +200,7 @@ async def on_demand_auxip_staging(
             (select a date or directly enter a timestamp, e.g. "2025-08-07T11:51:12.509000Z")
         end_datetime: End datetime for the time interval used to filter the files
             (select a date or directly enter a timestamp, e.g. "2025-08-10T14:00:00.509000Z")
-        eopf_type: Auxiliary file type wanted
+        product_type: Auxiliary file type wanted
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
     """
 
@@ -214,7 +214,7 @@ async def on_demand_auxip_staging(
         if isinstance(end_datetime, datetime.datetime):
             end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
-        # Create Auxip CQL2 filter from the datetime input values.
+        # Create basic Auxip CQL2 filter for the ValCover criteria.
         cql2_filter = {
             "op": "t_contains",
             "args": [
@@ -223,12 +223,11 @@ async def on_demand_auxip_staging(
             ],
         }
 
-        # If there is an eopf:type value given, create a composite filter to handle it
-        if eopf_type:
-            cql2_filter = {
-                "op": "and",
-                "args": [{"op": "=", "args": [{"property": "eopf:type"}, eopf_type]}, cql2_filter],
-            }
+        # Create final filter with previous one and product_type
+        cql2_filter = {
+            "op": "and",
+            "args": [{"op": "=", "args": [{"property": "product:type"}, product_type]}, cql2_filter],
+        }
 
         # Search Auxip products
         auxip_items = auxip_flow.search_task.submit(
