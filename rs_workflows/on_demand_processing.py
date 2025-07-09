@@ -166,11 +166,6 @@ async def on_demand_cadip_staging(
             error_if_empty=True,
         )
 
-        # Cadip item ids
-        item_ids = []
-        for item in cadip_items.result():  # type: ignore[attr-defined]
-            item_ids.append(item.id)
-
         # Stage Cadip items.
         staged = staging_task_cadip.submit(flow_env.serialize(), cadip_items, catalog_collection_identifier)
 
@@ -231,17 +226,16 @@ async def on_demand_auxip_staging(
             error_if_empty=False,
         )
 
-        # Auxip item ids
-        item_ids = []
+        # Filtering Auxip items to only keep the ones with the correct product type
+        items_to_stage = []
         for item in auxip_items.result():  # type: ignore[attr-defined]
-            # Keep only items with the correct product:type
             if "product:type" in item.properties.keys() and item.properties["product:type"] == product_type:
-                item_ids.append(item.id)
+                items_to_stage.append(item)
 
         # Stage Auxip items.
         staged = staging_task_auxip.submit(
             flow_env.serialize(),
-            auxip_items,
+            items_to_stage,
             catalog_collection_identifier,
         )
 
