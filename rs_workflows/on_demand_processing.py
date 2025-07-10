@@ -213,10 +213,16 @@ async def on_demand_auxip_staging(
         # CQL2 ValCover filter. The product:type filter is not added here
         # because for some reason composite filters with "and" don't work
         cql2_filter = {
-            "op": "t_contains",
+            "op": "and",
             "args": [
-                {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                {"interval": [start_datetime, end_datetime]},
+                {"op": "=", "args": [{"property": "product:type"}, product_type]},
+                {
+                    "op": "t_contains",
+                    "args": [
+                        {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                        {"interval": [start_datetime, end_datetime]},
+                    ],
+                },
             ],
         }
 
@@ -228,12 +234,12 @@ async def on_demand_auxip_staging(
         )
 
         # Filtering Auxip items to only keep the ones with the correct product type
-        items_to_stage = filter_product_type.submit(auxip_items, product_type)
+        # items_to_stage = filter_product_type.submit(auxip_items, product_type)
 
         # Stage Auxip items.
         staged = staging_task_auxip.submit(
             flow_env.serialize(),
-            items_to_stage,
+            auxip_items,
             catalog_collection_identifier,
         )
 
