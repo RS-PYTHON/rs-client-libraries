@@ -16,11 +16,13 @@
 
 import os
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 from prefect.blocks.system import Secret
+from pystac import Item, ItemCollection
 
 from rs_client.rs_client import RsClient
 from rs_common import prefect_utils
@@ -270,3 +272,27 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
     # Check calls
     for fn, call_count in spied.items():
         assert fn.await_count == call_count
+
+
+async def test_filter_product_type():
+    """Test the filter_product_type task"""
+    correct_item = Item(
+        "0001",
+        geometry={},
+        bbox=[],
+        datetime=datetime.now(),
+        properties={"product:type": "CORRECT_TYPE"},
+    )
+    incorrect_item = Item(
+        "0002",
+        geometry={},
+        bbox=[],
+        datetime=datetime.now(),
+        properties={"product:type": "WRONG_TYPE"},
+    )
+    input_collection = ItemCollection([correct_item, incorrect_item])
+
+    test_result = await on_demand_processing.filter_product_type(input_collection, "CORRECT_TYPE")
+
+    assert len(test_result) == 1
+    assert correct_item.id == test_result[0].id
