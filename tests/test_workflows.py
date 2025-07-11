@@ -117,6 +117,26 @@ workflow:
     return Path(to_path)
 
 
+async def setup_worklow_test_env():
+    """Set up secret blocks needed for correct execution of workflows in Prefect"""
+    # Environment variables for all users
+    await Secret(value={}).save(  # type: ignore[arg-type]
+        prefect_utils.BLOCK_NAME_ENV_GLOBAL,
+        overwrite=True,
+    )
+
+    # Create prefect block
+    await Secret(
+        value={  # type: ignore[arg-type]
+            "RSPY_WEBSITE": RSPY_WEBSITE,
+            "RSPY_APIKEY": RSPY_APIKEY,
+        },
+    ).save(
+        prefect_utils.format_env_user(OWNER_ID),
+        overwrite=True,
+    )
+
+
 #############
 # MAIN FLOW #
 #############
@@ -134,16 +154,7 @@ workflow:
 async def test_on_demand_processing(mocker, mock_prefect):  # pylint: disable=unused-argument
     """Test the on_demand_processing flow"""
 
-    # Create prefect block
-    await Secret(
-        value={  # type: ignore[arg-type]
-            "RSPY_WEBSITE": RSPY_WEBSITE,
-            "RSPY_APIKEY": RSPY_APIKEY,
-        },
-    ).save(
-        prefect_utils.format_env_user(OWNER_ID),
-        overwrite=True,
-    )
+    await setup_worklow_test_env()
 
     # We'll just check that the prefect tasks and flows were called.
     # We don't check the underlying RsClient functions, this is already done in dedicated pytests.
@@ -191,16 +202,7 @@ async def test_on_demand_processing(mocker, mock_prefect):  # pylint: disable=un
 async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
     """Test the on_demand_cadip_staging flow"""
 
-    # Create prefect block
-    await Secret(
-        value={  # type: ignore[arg-type]
-            "RSPY_WEBSITE": RSPY_WEBSITE,
-            "RSPY_APIKEY": RSPY_APIKEY,
-        },
-    ).save(
-        prefect_utils.format_env_user(OWNER_ID),
-        overwrite=True,
-    )
+    await setup_worklow_test_env()
 
     # We'll just check that the prefect tasks and flows were called.
     # We don't check the underlying RsClient functions, this is already done in dedicated pytests.
@@ -236,16 +238,7 @@ async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable
 async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
     """Test the on_demand_auxip_staging flow"""
 
-    # Create prefect block
-    await Secret(
-        value={  # type: ignore[arg-type]
-            "RSPY_WEBSITE": RSPY_WEBSITE,
-            "RSPY_APIKEY": RSPY_APIKEY,
-        },
-    ).save(
-        prefect_utils.format_env_user(OWNER_ID),
-        overwrite=True,
-    )
+    await setup_worklow_test_env()
 
     # We'll just check that the prefect tasks and flows were called.
     # We don't check the underlying RsClient functions, this is already done in dedicated pytests.
