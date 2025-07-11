@@ -119,13 +119,14 @@ workflow:
 
 async def setup_worklow_test_env():
     """Set up secret blocks needed for correct execution of workflows in Prefect"""
-    # Environment variables for all users
+    # Environment variables for all users. For these test we don't need specific values
+    # so it creates an empty secret. See test_prefect_utils.py for a real case example.
     await Secret(value={}).save(  # type: ignore[arg-type]
         prefect_utils.BLOCK_NAME_ENV_GLOBAL,
         overwrite=True,
     )
 
-    # Create prefect block
+    # Create prefect block for current user
     await Secret(
         value={  # type: ignore[arg-type]
             "RSPY_WEBSITE": RSPY_WEBSITE,
