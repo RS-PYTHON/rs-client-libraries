@@ -176,6 +176,13 @@ def test_staging_ok(
     )
     assert staging_resp is not None
 
+    # Nominal case - problematic collection name in earlier version of json schema
+    staging_resp = staging_client.run_staging(
+        data_to_stage["features"][0],
+        "collection10",
+    )
+    assert staging_resp is not None
+
     # Nominal case - check that the test pass if the input data is a json file with a valid format
     item_file_to_stage = osp.join(RESOURCES_FOLDER, "staging", f"{station.lower()}_data.json")
     staging_resp = staging_client.run_staging(item_file_to_stage, OUTPUT_COLLECTION)
