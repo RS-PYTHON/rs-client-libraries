@@ -282,16 +282,6 @@ jobs:
         with:
           name:
             run-all-pytests
-      - name: Move pytest report
-        run: |
-          mv /home/runner/work/rs-client-libraries/rs-client-libraries/junit-xml-report.xml . || true
-          mv /home/runner/work/rs-client-libraries/rs-client-libraries/cov-report.xml . || true
-      - name: Debug list files
-        run: |
-          echo "::group::Workspace directory structure"
-          find . -type f
-          echo "::endgroup::"
-          cat ./junit-xml-report.xml
       - name: Get directory names
         id: dir_names
         run: |
@@ -311,6 +301,9 @@ jobs:
           # https://docs.sonarsource.com/sonarqube/9.9/analyzing-source-code/importing-external-issues/importing-third-party-issues/
           # https://docs.sonarsource.com/sonarqube/9.9/analyzing-source-code/test-coverage/test-execution-parameters/
           # https://docs.sonarsource.com/sonarqube/9.9/analyzing-source-code/test-coverage/test-coverage-parameters/
+          # Before, the -Dsonar.python.xunit.reportPath flag was used, but the report generated in sonarcloud.io was having a warning:
+          # "No report was found for sonar.python.xunit.reportPath using pattern "./junit-xml-report.xml"
+          # I changed this flag with -Dsonar.junit.reportPaths, according
           projectBaseDir: .
           args: >
             -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
