@@ -284,8 +284,13 @@ jobs:
             run-all-pytests
       - name: Move pytest report
         run: |
-          mv run-all-pytests/junit-xml-report.xml . || true
-          mv run-all-pytests/cov-report.xml . || true
+          mv /home/runner/work/rs-client-libraries/rs-client-libraries/junit-xml-report.xml . || true
+          mv /home/runner/work/rs-client-libraries/rs-client-libraries/cov-report.xml . || true
+      - name: Debug list files
+        run: |
+          echo "::group::Workspace directory structure"
+          find . -type f
+          echo "::endgroup::"
       - name: Get directory names
         id: dir_names
         run: |
