@@ -16,11 +16,13 @@
 
 import os
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 from prefect.blocks.system import Secret
+from pystac import Item, ItemCollection
 
 from rs_client.rs_client import RsClient
 from rs_common import prefect_utils
@@ -115,6 +117,27 @@ workflow:
     return Path(to_path)
 
 
+async def setup_worklow_test_env():
+    """Set up secret blocks needed for correct execution of workflows in Prefect"""
+    # Environment variables for all users. For these test we don't need specific values
+    # so it creates an empty secret. See test_prefect_utils.py for a real case example.
+    await Secret(value={}).save(  # type: ignore[arg-type]
+        prefect_utils.BLOCK_NAME_ENV_GLOBAL,
+        overwrite=True,
+    )
+
+    # Create prefect block for current user
+    await Secret(
+        value={  # type: ignore[arg-type]
+            "RSPY_WEBSITE": RSPY_WEBSITE,
+            "RSPY_APIKEY": RSPY_APIKEY,
+        },
+    ).save(
+        prefect_utils.format_env_user(OWNER_ID),
+        overwrite=True,
+    )
+
+
 #############
 # MAIN FLOW #
 #############
@@ -132,16 +155,7 @@ workflow:
 async def test_on_demand_processing(mocker, mock_prefect):  # pylint: disable=unused-argument
     """Test the on_demand_processing flow"""
 
-    # Create prefect block
-    await Secret(
-        value={  # type: ignore[arg-type]
-            "RSPY_WEBSITE": RSPY_WEBSITE,
-            "RSPY_APIKEY": RSPY_APIKEY,
-        },
-    ).save(
-        prefect_utils.format_env_user(OWNER_ID),
-        overwrite=True,
-    )
+    await setup_worklow_test_env()
 
     # We'll just check that the prefect tasks and flows were called.
     # We don't check the underlying RsClient functions, this is already done in dedicated pytests.
@@ -178,3 +192,101 @@ async def test_on_demand_processing(mocker, mock_prefect):  # pylint: disable=un
     # Check calls
     for fn, call_count in spied.items():
         assert fn.await_count == call_count
+
+
+@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
+@patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
+@patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(RsClient, "get_cadip_client", MockRsClient)
+@patch.object(RsClient, "get_staging_client", MockRsClient)
+@patch.object(catalog_flow, "datetime", Mock())
+async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
+    """Test the on_demand_cadip_staging flow"""
+
+    await setup_worklow_test_env()
+
+    # We'll just check that the prefect tasks and flows were called.
+    # We don't check the underlying RsClient functions, this is already done in dedicated pytests.
+    spied = {
+        mocker.spy(prefect_function, "fn"): call_count  # spy on <flow>.fn or <task>.fn = the underlying python function
+        for prefect_function, call_count in {
+            cadip_flow.search: 1,
+            cadip_flow.search_task: 1,
+            staging_flow.staging_task_cadip: 1,
+            staging_flow.staging: 1,
+        }.items()
+    }
+
+    # Run the prefect flow
+    await on_demand_processing.on_demand_cadip_staging(
+        env=FlowEnvArgs(owner_id=OWNER_ID),
+        cadip_collection_identifier="cadip_collection_identifier",
+        session_identifier="session_identifier",
+        catalog_collection_identifier="catalog_collection_identifier",
+    )
+
+    # Check calls
+    for fn, call_count in spied.items():
+        assert fn.await_count == call_count
+
+
+@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
+@patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
+@patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(RsClient, "get_auxip_client", MockRsClient)
+@patch.object(RsClient, "get_staging_client", MockRsClient)
+@patch.object(catalog_flow, "datetime", Mock())
+async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
+    """Test the on_demand_auxip_staging flow"""
+
+    await setup_worklow_test_env()
+
+    # We'll just check that the prefect tasks and flows were called.
+    # We don't check the underlying RsClient functions, this is already done in dedicated pytests.
+    spied = {
+        mocker.spy(prefect_function, "fn"): call_count  # spy on <flow>.fn or <task>.fn = the underlying python function
+        for prefect_function, call_count in {
+            auxip_flow.search: 1,
+            auxip_flow.search_task: 1,
+            staging_flow.staging_task_auxip: 1,
+            staging_flow.staging: 1,
+            on_demand_processing.filter_product_type: 1,
+        }.items()
+    }
+
+    # Run the prefect flow
+    await on_demand_processing.on_demand_auxip_staging(
+        env=FlowEnvArgs(owner_id=OWNER_ID),
+        start_datetime="2024-05-27T09:44:09.509000Z",
+        end_datetime="2024-05-27T09:44:19.509000Z",
+        product_type="AUX_PP2",
+        catalog_collection_identifier="catalog_collection_identifier",
+    )
+
+    # Check calls
+    for fn, call_count in spied.items():
+        assert fn.await_count == call_count
+
+
+async def test_filter_product_type():
+    """Test the filter_product_type task"""
+    correct_item = Item(
+        "0001",
+        geometry={},
+        bbox=[],
+        datetime=datetime.now(),
+        properties={"product:type": "CORRECT_TYPE"},
+    )
+    incorrect_item = Item(
+        "0002",
+        geometry={},
+        bbox=[],
+        datetime=datetime.now(),
+        properties={"product:type": "WRONG_TYPE"},
+    )
+    input_collection = ItemCollection([correct_item, incorrect_item])
+
+    test_result = await on_demand_processing.filter_product_type(input_collection, "CORRECT_TYPE")
+
+    assert len(test_result) == 1
+    assert correct_item.id == test_result[0].id
