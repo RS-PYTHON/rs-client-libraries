@@ -28,7 +28,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from botocore.utils import calculate_md5
 from fastapi.concurrency import run_in_threadpool
 from prefect.blocks.system import Secret
 from prefect.client.orchestration import get_client
@@ -373,7 +372,7 @@ async def s3_download_dir(
 
 
 def s3_delete(s3_prefix: str, log: bool = False):
-    """Remove all files from S3 bucket with the given prefix, using low-level client and Content-MD5 header."""
+    """Remove all files from S3 bucket with the given prefix, using low-level client."""
     s3_bucket, prefix = get_s3_bucket(s3_prefix)
     objects = s3_bucket._get_bucket_resource().objects  # pylint: disable=protected-access
 
@@ -391,19 +390,7 @@ def s3_delete(s3_prefix: str, log: bool = False):
         return
 
     s3_client = s3_bucket._get_s3_client()  # pylint: disable=protected-access
-
-    # Not for the local minio bucket
     endpoint_url = s3_bucket.credentials.aws_client_parameters.endpoint_url
-    if not any(provider in endpoint_url for provider in ["localhost", "minio"]):
-
-        # Hook to compute Content-MD5 from actual serialized body
-        def inject_md5_on_real_payload(request, **_):
-            request.headers["Content-MD5"] = calculate_md5(request.body)
-
-        s3_client.meta.events.register(
-            "before-sign.s3.DeleteObjects",
-            inject_md5_on_real_payload,
-        )
 
     if log:
         keys = [f"s3://{s3_bucket.bucket_name}/{o.get('Key')}" for o in objects_to_delete]
