@@ -63,10 +63,11 @@ class DprClient(OgcApiClient):
     def run_process(
         self,
         process: str,
-        s3_config_dir_or_payload: str | dict,
-        payload_subpath: str | None = None,
+        s3_config_dir: str = None,
+        payload_subpath: str = None,
         s3_report_dir: str | None = None,
         use_dpr_mockup: bool = False,
+        payload: dict | None = None,
     ) -> dict:
         """Method to start the process from rs-client - Call the endpoint /processes/{process}/execution
 
@@ -77,17 +78,22 @@ class DprClient(OgcApiClient):
             s3_report_dir: S3 bucket folder were the processor report files will be written (optional). All the eopf
             local files written in the local "./reports" directory will be pushed to this S3 bucket folder.
             use_dpr_mockup: Use the real or the mockup DPR processor ?
+            payload: Dictionary to pass to the processor, used for certain custom rs-dpr-service processors 
+            (e.g., 'conv_safe_zarr') When provided, `s3_config_dir` and `payload_subpath` are ignored.
 
         Return:
             job_id (int, str): Returns the status code of the request + the identifier
             (or None if endpoint fails) of the running job
         """
-        if isinstance(s3_config_dir_or_payload, dict):
-            return super()._run_process(process, s3_config_dir_or_payload)
+        if payload is not None:
+            # Legacy path
+            return super()._run_process(process, payload)
 
-        s3_config_dir = s3_config_dir_or_payload
+        if s3_config_dir is None or payload_subpath is None:
+            raise ValueError("Must provide either `payload` or both `s3_config_dir` and `payload_subpath`.")
+
         # Data to pass to the real processor
-        data: dict = {}
+        data = {}
         if not use_dpr_mockup:
             data = {
                 "s3_config_dir": s3_config_dir,
