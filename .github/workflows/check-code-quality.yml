@@ -265,6 +265,8 @@ jobs:
       SONAR_HOST_URL: https://sonarcloud.io
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for SCM and branch analysis
       - name: Download linting reports
         uses: actions/download-artifact@v4
         with:
@@ -280,7 +282,16 @@ jobs:
         with:
           name:
             run-all-pytests
-
+      - name: Move pytest report
+        run: |
+          mv /home/runner/work/rs-client-libraries/rs-client-libraries/junit-xml-report.xml . || true
+          mv /home/runner/work/rs-client-libraries/rs-client-libraries/cov-report.xml . || true
+      - name: Debug list files
+        run: |
+          echo "::group::Workspace directory structure"
+          find . -type f
+          echo "::endgroup::"
+          cat ./junit-xml-report.xml
       - name: Get directory names
         id: dir_names
         run: |
@@ -311,11 +322,11 @@ jobs:
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.language=py
             -Dsonar.python.version=${{ env.PYTHON_VERSION }}
-            -Dsonar.python.pylint.reportPaths="./pylint-report.txt"
-            -Dsonar.python.flake8.reportPaths="./flake8-report.txt"
-            -Dsonar.python.bandit.reportPaths="./bandit-report.json"
-            -Dsonar.python.coverage.reportPaths="./cov-report.xml"
-            -Dsonar.python.xunit.reportPath="./junit-xml-report.xml"
+            -Dsonar.python.pylint.reportPaths=./pylint-report.txt
+            -Dsonar.python.flake8.reportPaths=./flake8-report.txt
+            -Dsonar.python.bandit.reportPaths=./bandit-report.json
+            -Dsonar.python.coverage.reportPaths=./cov-report.xml
+            -Dsonar.junit.reportPaths=./junit-xml-report.xml
 
       - name: Wait for quality gate result
         run: sleep 5

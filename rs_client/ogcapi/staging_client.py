@@ -167,6 +167,8 @@ class StagingClient(OgcApiClient):
         Raises:
             RuntimeError in case of error
         """
+        if logger:
+            logger.info("Waiting for job to finish.....")
         # Call parent method for each hostname
         for hostname, job_status in all_job_status.items():
             super().wait_for_job(
@@ -176,3 +178,5 @@ class StagingClient(OgcApiClient):
                 timeout,
                 poll_interval,
             )
+        if logger:
+            logger.info("Job finished")
