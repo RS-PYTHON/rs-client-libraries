@@ -145,7 +145,6 @@ async def init_prefect_blocks():
                 "S3_ENDPOINT": os.environ["S3_ENDPOINT"],
                 "LOCAL_DASK_USERNAME": os.environ["LOCAL_DASK_USERNAME"],
                 "LOCAL_DASK_PASSWORD": os.environ["LOCAL_DASK_PASSWORD"],
-                "RSPY_USE_MOCKUP_STATIONS": os.getenv("RSPY_USE_MOCKUP_STATIONS", "False"),
             },
         ).save(BLOCK_NAME_ENV_GLOBAL, overwrite=True)
 

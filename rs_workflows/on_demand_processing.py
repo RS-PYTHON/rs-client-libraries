@@ -17,10 +17,8 @@
 import datetime
 from pathlib import Path
 
-from prefect import flow, get_run_logger, task
-from pystac import ItemCollection
+from prefect import flow
 
-from rs_common.config import USE_MOCKUP_STATIONS
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow
 from rs_workflows.dpr_flow import (
     read_payload_values,
@@ -211,52 +209,27 @@ async def on_demand_auxip_staging(
         if isinstance(end_datetime, datetime.datetime):
             end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
-        if USE_MOCKUP_STATIONS:
-            # When using mockup: do the filtering in two parts, because the mockup doesn't handle
-            # composite filters
+        # CQL2 filter: we use a filter combining a ValCover filter and a product type filter
+        cql2_filter = {
+            "op": "and",
+            "args": [
+                {"op": "=", "args": [{"property": "product:type"}, product_type]},
+                {
+                    "op": "t_contains",
+                    "args": [
+                        {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                        {"interval": [start_datetime, end_datetime]},
+                    ],
+                },
+            ],
+        }
 
-            # CQL2 ValCover filter
-            cql2_filter = {
-                "op": "t_contains",
-                "args": [
-                    {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                    {"interval": [start_datetime, end_datetime]},
-                ],
-            }
-
-            # Search Auxip products
-            auxip_items = auxip_flow.search_task.submit(
-                flow_env.serialize(),
-                auxip_cql2={"filter": cql2_filter},
-                error_if_empty=False,
-            )
-
-            # Filtering Auxip items to only keep the ones with the correct product type
-            auxip_items = filter_product_type.submit(auxip_items, product_type)
-
-        else:
-            # "Real life" use case: we use a filter combining ValCover and product type filters in one
-            # This is for when the flow is run on a real station
-            cql2_filter = {
-                "op": "and",
-                "args": [
-                    {"op": "=", "args": [{"property": "product:type"}, product_type]},
-                    {
-                        "op": "t_contains",
-                        "args": [
-                            {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                            {"interval": [start_datetime, end_datetime]},
-                        ],
-                    },
-                ],
-            }
-
-            # Search Auxip products
-            auxip_items = auxip_flow.search_task.submit(
-                flow_env.serialize(),
-                auxip_cql2={"filter": cql2_filter},
-                error_if_empty=False,
-            )
+        # Search Auxip products
+        auxip_items = auxip_flow.search_task.submit(
+            flow_env.serialize(),
+            auxip_cql2={"filter": cql2_filter},
+            error_if_empty=False,
+        )
 
         # Stage Auxip items.
         staged = staging_task_auxip.submit(
@@ -268,18 +241,3 @@ async def on_demand_auxip_staging(
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
         staged.result()  # type: ignore[unused-coroutine]
-
-
-@task(name="Filter product type")
-async def filter_product_type(auxip_items: ItemCollection | None, product_type: str) -> ItemCollection:
-    """Filter Auxip items to only keep the ones with the correct product type"""
-    logger = get_run_logger()
-    items_to_stage = []
-
-    if auxip_items:
-        for item in auxip_items:  # type: ignore[attr-defined]
-            if "product:type" in item.properties.keys() and item.properties["product:type"] == product_type:
-                items_to_stage.append(item)
-
-    logger.info(f"Filtering search results: {len(items_to_stage)} item(s) found of product type {product_type}")
-    return ItemCollection(items_to_stage)

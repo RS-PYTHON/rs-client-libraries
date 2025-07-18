@@ -16,8 +16,6 @@
 
 from enum import Enum
 
-from rs_common.utils import env_bool
-
 #############
 # Constants #
 #############
@@ -28,7 +26,6 @@ DATETIME_FORMAT_MS = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 # name of the Auxip station, used in the same logic as the ECadipStation enum (see below)
 AUXIP_STATION = "AUXIP"
-USE_MOCKUP_STATIONS = env_bool("RSPY_USE_MOCKUP_STATIONS", False)
 
 #########
 # Enums #
