@@ -67,23 +67,23 @@ class OgcApiClient(RsClient):
             request (Request): endpoint request
 
         Returns:
-            ResponseUnmarshalResult.data: data validated by the openapi_core
+            RequestUnmarshalResult.data: data validated by the openapi_core
             unmarshal_response method
         """
         openapi_request = RequestsOpenAPIRequest(request)
 
-        # validate_request(request, spec=Spec.from_file_path(PATH_TO_YAML_OPENAPI))
+        # validate request
         result = self.get_openapi().unmarshal_request(openapi_request)
 
         if result.errors:
             raise OgcValidationException(
-                f"Error validating the request of the enpoint "
-                f"{openapi_request.path}: {str(result.errors[0])}",  # type: ignore
+                f"Error validating the request of the endpoint "
+                f"{openapi_request.path}: {', '.join(str(x) for x in result.errors)}",
             )
         if not result.body:
             raise OgcValidationException(
-                f"Error validating the request of the enpoint "
-                f"{openapi_request.path}: 'data' field of ResponseUnmarshalResult"
+                f"Error validating the request of the endpoint "
+                f"{openapi_request.path}: 'data' field of RequestUnmarshalResult"
                 f"object is empty",
             )
         return result.body
@@ -102,18 +102,17 @@ class OgcApiClient(RsClient):
         openapi_request = RequestsOpenAPIRequest(response.request)
         openapi_response = RequestsOpenAPIResponse(response)
 
-        # Alternative method to validate the response
-        # validate_response(response=response, spec= Spec.from_file_path(PATH_TO_YAML_OPENAPI), request=request)
+        # validate response
         result = self.get_openapi().unmarshal_response(openapi_request, openapi_response)  # type: ignore
         if result.errors:
             raise OgcValidationException(  # type: ignore
-                f"Error validating the response of the enpoint {openapi_request.path} - "
+                f"Error validating the response of the endpoint {openapi_request.path} - "
                 f"Server response content: {response.json()} - "
-                f"Validation error of the server response: {str(result.errors[0])}",  # type: ignore
+                f"Validation error of the server response: {', '.join(str(x) for x in result.errors)}",
             )
         if not result.data:
             raise OgcValidationException(
-                f"Error validating the response of the enpoint "
+                f"Error validating the response of the endpoint "
                 f"{openapi_request.path}: 'data' field of ResponseUnmarshalResult"
                 f"object is empty",
             )
