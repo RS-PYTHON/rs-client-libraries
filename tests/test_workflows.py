@@ -16,13 +16,11 @@
 
 import os
 from collections import defaultdict
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 from prefect.blocks.system import Secret
-from pystac import Item, ItemCollection
 
 from rs_client.rs_client import RsClient
 from rs_common import prefect_utils
