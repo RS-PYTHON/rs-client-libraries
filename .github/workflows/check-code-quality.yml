@@ -289,8 +289,9 @@ jobs:
       - name: Debug list files
         run: |
           echo "::group::Workspace directory structure"
-          find . -type f
+          find . -type f          
           echo "::endgroup::"
+          cat ./junit-xml-report.xml
       - name: Get directory names
         id: dir_names
         run: |
