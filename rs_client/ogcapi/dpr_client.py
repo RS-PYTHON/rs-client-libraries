@@ -63,8 +63,8 @@ class DprClient(OgcApiClient):
     def run_process(
         self,
         process: str,
-        s3_config_dir: str = None,
-        payload_subpath: str = None,
+        s3_config_dir: str | None = None,
+        payload_subpath: str | None = None,
         s3_report_dir: str | None = None,
         use_dpr_mockup: bool = False,
         payload: dict | None = None,
@@ -78,7 +78,7 @@ class DprClient(OgcApiClient):
             s3_report_dir: S3 bucket folder were the processor report files will be written (optional). All the eopf
             local files written in the local "./reports" directory will be pushed to this S3 bucket folder.
             use_dpr_mockup: Use the real or the mockup DPR processor ?
-            payload: Dictionary to pass to the processor, used for certain custom rs-dpr-service processors 
+            payload: Dictionary to pass to the processor, used for certain custom rs-dpr-service processors
             (e.g., 'conv_safe_zarr') When provided, `s3_config_dir` and `payload_subpath` are ignored.
 
         Return:
