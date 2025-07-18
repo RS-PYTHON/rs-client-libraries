@@ -63,9 +63,9 @@ class DprClient(OgcApiClient):
     def run_process(
         self,
         process: str,
-        s3_config_dir: str,
-        payload_subpath: str,
-        s3_report_dir: str | None,
+        s3_config_dir_or_payload: str | dict,
+        payload_subpath: str | None = None,
+        s3_report_dir: str | None = None,
         use_dpr_mockup: bool = False,
     ) -> dict:
         """Method to start the process from rs-client - Call the endpoint /processes/{process}/execution
@@ -82,9 +82,12 @@ class DprClient(OgcApiClient):
             job_id (int, str): Returns the status code of the request + the identifier
             (or None if endpoint fails) of the running job
         """
+        if isinstance(s3_config_dir_or_payload, dict):
+            return super()._run_process(process, s3_config_dir_or_payload)
 
+        s3_config_dir = s3_config_dir_or_payload
         # Data to pass to the real processor
-        data = {}
+        data: dict = {}
         if not use_dpr_mockup:
             data = {
                 "s3_config_dir": s3_config_dir,
