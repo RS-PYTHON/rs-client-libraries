@@ -265,6 +265,8 @@ jobs:
       SONAR_HOST_URL: https://sonarcloud.io
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for SCM and branch analysis
       - name: Download linting reports
         uses: actions/download-artifact@v4
         with:
@@ -280,7 +282,10 @@ jobs:
         with:
           name:
             run-all-pytests
-
+      - name: Move pytest report
+        run: |
+          mv run-all-pytests/junit-xml-report.xml . || true
+          mv run-all-pytests/cov-report.xml . || true
       - name: Get directory names
         id: dir_names
         run: |
