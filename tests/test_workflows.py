@@ -250,7 +250,6 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
             auxip_flow.search_task: 1,
             staging_flow.staging_task_auxip: 1,
             staging_flow.staging: 1,
-            on_demand_processing.filter_product_type: 1,
         }.items()
     }
 
@@ -266,27 +265,3 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
     # Check calls
     for fn, call_count in spied.items():
         assert fn.await_count == call_count
-
-
-async def test_filter_product_type():
-    """Test the filter_product_type task"""
-    correct_item = Item(
-        "0001",
-        geometry={},
-        bbox=[],
-        datetime=datetime.now(),
-        properties={"product:type": "CORRECT_TYPE"},
-    )
-    incorrect_item = Item(
-        "0002",
-        geometry={},
-        bbox=[],
-        datetime=datetime.now(),
-        properties={"product:type": "WRONG_TYPE"},
-    )
-    input_collection = ItemCollection([correct_item, incorrect_item])
-
-    test_result = await on_demand_processing.filter_product_type(input_collection, "CORRECT_TYPE")
-
-    assert len(test_result) == 1
-    assert correct_item.id == test_result[0].id
