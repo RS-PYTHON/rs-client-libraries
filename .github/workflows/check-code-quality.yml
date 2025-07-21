@@ -265,6 +265,8 @@ jobs:
       SONAR_HOST_URL: https://sonarcloud.io
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for SCM and branch analysis
       - name: Download linting reports
         uses: actions/download-artifact@v4
         with:
@@ -280,7 +282,6 @@ jobs:
         with:
           name:
             run-all-pytests
-
       - name: Get directory names
         id: dir_names
         run: |
@@ -300,6 +301,9 @@ jobs:
           # https://docs.sonarsource.com/sonarqube/9.9/analyzing-source-code/importing-external-issues/importing-third-party-issues/
           # https://docs.sonarsource.com/sonarqube/9.9/analyzing-source-code/test-coverage/test-execution-parameters/
           # https://docs.sonarsource.com/sonarqube/9.9/analyzing-source-code/test-coverage/test-coverage-parameters/
+          # Before, the -Dsonar.python.xunit.reportPath flag was used, but the report generated in sonarcloud.io was having a warning:
+          # "No report was found for sonar.python.xunit.reportPath using pattern "./junit-xml-report.xml"
+          # I changed this flag with -Dsonar.junit.reportPaths, according
           projectBaseDir: .
           args: >
             -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
@@ -311,11 +315,11 @@ jobs:
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.language=py
             -Dsonar.python.version=${{ env.PYTHON_VERSION }}
-            -Dsonar.python.pylint.reportPaths="./pylint-report.txt"
-            -Dsonar.python.flake8.reportPaths="./flake8-report.txt"
-            -Dsonar.python.bandit.reportPaths="./bandit-report.json"
-            -Dsonar.python.coverage.reportPaths="./cov-report.xml"
-            -Dsonar.python.xunit.reportPath="./junit-xml-report.xml"
+            -Dsonar.python.pylint.reportPaths=./pylint-report.txt
+            -Dsonar.python.flake8.reportPaths=./flake8-report.txt
+            -Dsonar.python.bandit.reportPaths=./bandit-report.json
+            -Dsonar.python.coverage.reportPaths=./cov-report.xml
+            -Dsonar.junit.reportPaths=./junit-xml-report.xml
 
       - name: Wait for quality gate result
         run: sleep 5
