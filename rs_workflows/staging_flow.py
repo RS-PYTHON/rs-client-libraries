@@ -26,7 +26,7 @@ async def staging(
     env: FlowEnvArgs,
     stac_input: str | ItemCollection | dict,  # warning: dict as last choice for prefect ui
     catalog_collection_identifier: str,
-    timeout: int = 120,
+    timeout: int = 1200,
     poll_interval: int = 2,
 ):
     """
