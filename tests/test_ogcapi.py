@@ -648,7 +648,7 @@ class TestOgcApi:
         """Test the run_conv_safe_zarr function"""
 
         if not isinstance(client, DprClient):
-            pytest.skip("run_conv_safe_zarr is only implemented for DprClient")
+            return  # Not applicable to StagingClient
 
         payload = {"input_safe_path": "s3://bucket/legacy-product", "output_zarr_dir_path": "s3://bucket/output-zarr"}
         expected_result = "mock-job-id"
