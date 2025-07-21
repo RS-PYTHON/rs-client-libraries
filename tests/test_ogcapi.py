@@ -655,7 +655,7 @@ class TestOgcApi:
 
         # Patch the superclass _run_process method
         mock_run_process = mocker.patch.object(
-            super(type(client), client),
+            client.__class__.__bases__[0],
             "_run_process",
             return_value=expected_result,  # get superclass
         )
