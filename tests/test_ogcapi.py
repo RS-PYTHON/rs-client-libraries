@@ -643,3 +643,27 @@ class TestOgcApi:
         with pytest.raises(Exception) as exc_info:
             client.wait_for_job({"jobID": "jobID"})
         assert "FAILED" in str(exc_info.getrepr())
+
+    def test_run_conv_safe_zarr(self, client, mocker):
+        """Test the run_conv_safe_zarr function"""
+
+        if not isinstance(client, DprClient):
+            pytest.skip("run_conv_safe_zarr is only implemented for DprClient")
+
+        payload = {"input_safe_path": "s3://bucket/legacy-product", "output_zarr_dir_path": "s3://bucket/output-zarr"}
+        expected_result = "mock-job-id"
+
+        # Patch the superclass _run_process method
+        mock_run_process = mocker.patch.object(
+            super(type(client), client),
+            "_run_process",
+            return_value=expected_result,  # get superclass
+        )
+
+        result = client.run_conv_safe_zarr(payload)
+
+        # Assert _run_process was called correctly
+        mock_run_process.assert_called_once_with("conv_safe_zarr", payload)
+
+        # Assert return value is passed through
+        assert result == expected_result
