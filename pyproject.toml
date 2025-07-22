@@ -74,7 +74,7 @@ sphinx-rtd-theme = "^3.0.2"
 flake8 = "^7.1.1"
 flake8-pyproject = "^1.2.3"
 responses = "^0.25.7"
-starlette = "^0.45.3"
+starlette = "^0.47.2"
 pytest-asyncio = "^1.0.0"
 
 [tool.poetry.group.demo.dependencies] # for hybrid mode
