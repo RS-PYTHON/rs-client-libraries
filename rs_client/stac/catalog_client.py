@@ -21,8 +21,8 @@ import logging
 import re
 from collections.abc import Iterator
 
-import pystac
 from pystac import Collection, Item, Link, RelType
+from pystac_client import Client
 from pystac_client.collection_client import CollectionClient
 from pystac_client.item_search import ItemSearch
 from requests import Response
@@ -182,9 +182,10 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     ) -> ItemSearch | None:
         """Search items inside a specific collection."""
 
-        kwargs["collections"] = [
-            self.full_collection_id(kwargs["owner_id"], collection, "_") for collection in kwargs["collections"]
-        ]  # type: ignore
+        if "collections" in kwargs:
+            kwargs["collections"] = [
+                self.full_collection_id(kwargs.get("owner_id"), collection, "_") for collection in kwargs["collections"]
+            ]  # type: ignore
         return super().search(**kwargs)  # type: ignore
 
     # end of STAC read opperations
@@ -192,8 +193,10 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     # STAC write opperations. These can't be done with pystac_client
     # - add_collection
     # - remove_collection
+    # - update_collection
     # - add_item
     # - remove_item
+    # - update_item
 
     def add_collection(
         self,
@@ -240,9 +243,6 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
                 ),
             )
 
-        # Update the links
-        self.ps_client.add_child(collection)
-
         # Restore the short collection_id at the root of the collection
         collection.id = short_collection_id
 
@@ -276,24 +276,49 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         # owner_id:collection_id
         full_collection_id = self.full_collection_id(owner_id, collection_id)
 
-        # Remove the collection from the "child" links of the local catalog instance
-        collection_link = f"{self.ps_client.self_href.rstrip('/')}/collections/{full_collection_id}"
-        self.ps_client.links = [
-            link
-            for link in self.ps_client.links
-            if not ((link.rel == pystac.RelType.CHILD) and (link.href == collection_link))
-        ]
-
-        # We need to clear the cache for this and parent "get_collection" methods
-        # because their returned value must be updated.
-        self.ps_client.get_collection.cache_clear()
-
         # Remove the collection from the server catalog
-        return self.http_session.delete(
+        response = self.http_session.delete(
             f"{self.href_service}/catalog/collections/{full_collection_id}",
             **self.apikey_headers,
             timeout=timeout,
         )
+
+        # Clear the lru_caches because they still contains the old collection.
+        StacBase.get_collection.cache_clear()
+        Client.get_collection.cache_clear()
+
+        return response
+
+    def update_collection(
+        self,
+        collection: Collection | dict,
+        timeout: int = TIMEOUT,
+    ) -> Response:
+        """Put/update a collection int the catalog.
+
+        Args:
+            collection: The collection contents.
+            timeout (int): The timeout duration for the HTTP request.
+
+        Returns:
+            JSONResponse: The response of the request.
+        """
+        TODO
+        # owner_id:collection_id
+        full_collection_id = self.full_collection_id(owner_id, collection_id)
+
+        # Remove the collection from the server catalog
+        response = self.http_session.delete(
+            f"{self.href_service}/catalog/collections/{full_collection_id}",
+            **self.apikey_headers,
+            timeout=timeout,
+        )
+
+        # Clear the lru_caches because they still contains the old collection.
+        StacBase.get_collection.cache_clear()
+        Client.get_collection.cache_clear()
+
+        return response
 
     def add_item(  # type: ignore # pylint: disable=arguments-renamed
         self,
@@ -318,12 +343,6 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
 
         # Check that the item is compliant to STAC
         item.validate()
-
-        # Get the collection from the catalog
-        collection = self.get_collection(collection_id, owner_id)
-
-        # Update the item  contents
-        collection.add_item(item)  # type: ignore
 
         # Post the item to the catalog
         return self.http_session.post(
