@@ -219,6 +219,12 @@ def mocked_stac_catalog_add_item():
             json=json_status,
             status=HTTP_OK,
         )
+        resp.add(
+            "PUT",
+            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items/item_0",
+            json=json_status,
+            status=HTTP_OK,
+        )
 
         yield MOCKED_URL
 
@@ -252,6 +258,7 @@ def mocked_stac_catalog_add_collection():
         json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
         resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
         resp.add("POST", url=f"{MOCKED_URL}/catalog/collections", json={"status": HTTP_OK}, status=HTTP_OK)
+        resp.add("PUT", url=f"{MOCKED_URL}/catalog/collections/OWNERID:S2_L2", json={"status": HTTP_OK}, status=HTTP_OK)
 
         yield MOCKED_URL
 

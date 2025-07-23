@@ -108,7 +108,7 @@ def test_create_new_collection_catalog_client():  # pylint: disable=missing-func
     assert new_collection_jgaucher.id == "S3_L3"
 
 
-def test_add_collection_catalog_client(
+def test_add_update_collection_catalog_client(
     mocked_stac_catalog_add_collection,
 ):  # pylint: disable=missing-function-docstring
     print(f"RSPY_HOST_CATALOG = {os.getenv('RSPY_HOST_CATALOG', None)}")
@@ -129,15 +129,13 @@ def test_add_collection_catalog_client(
 
     new_collection_jgaucher = Collection(id="S3_L3", description="S3_L3 collection.", extent=extent)
 
-    ###########################################
-    # Publish a new collection in the catalog #
-    ###########################################
+    # Publish a new collections in the catalog
+    catalog.add_collection(new_collection)
+    catalog.add_collection(new_collection_jgaucher)
 
-    response = catalog.add_collection(new_collection)
-    assert response.status_code == 200
-
-    response = catalog.add_collection(new_collection_jgaucher)
-    assert response.status_code == 200
+    # Update a collection
+    new_collection.description = "new description"
+    catalog.update_collection(new_collection)
 
 
 def test_delete_collection_catalog_client(
@@ -153,11 +151,10 @@ def test_delete_collection_catalog_client(
     # Delete a collection #
     #######################
 
-    response = catalog.remove_collection(collection_id="S1_L1", owner_id="toto")  # default owner_id is 'pyteam'
-    assert response.status_code == 200
+    catalog.remove_collection(collection_id="S1_L1", owner_id="toto")  # default owner_id is 'pyteam'
 
 
-def test_add_item_catalog_client(mocked_stac_catalog_add_item):  # pylint: disable=missing-function-docstring
+def test_add_update_item_catalog_client(mocked_stac_catalog_add_item):  # pylint: disable=missing-function-docstring
     catalog: CatalogClient = RsClient(mocked_stac_catalog_add_item, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
 
     # Add a new item from toto:S1_L1 collection
@@ -190,9 +187,13 @@ def test_add_item_catalog_client(mocked_stac_catalog_add_item):  # pylint: disab
         datetime=datetime.now(),
         properties=properties,
     )
-    response = catalog.add_item(collection_id="S1_L1", item=item, owner_id="toto")
+    catalog.add_item(collection_id="S1_L1", item=item, owner_id="toto")
 
-    assert response.status_code == 200
+    # The collection is needed to update an item. In real use-case, it is set by rs-server.
+    # Also add a random property.
+    item.collection_id = "S1_L1"
+    item.properties["new_property"] = "any_value"
+    catalog.update_item(item)
 
 
 def test_remove_item_catalog_client(mocked_stac_catalog_delete_item):  # pylint: disable=missing-function-docstring
@@ -202,8 +203,7 @@ def test_remove_item_catalog_client(mocked_stac_catalog_delete_item):  # pylint:
     # Delete an item #
     ##################
 
-    response = catalog.remove_item("S1_L1", "item_0", "toto")
-    assert response.status_code == 200
+    catalog.remove_item("S1_L1", "item_0", "toto")
 
 
 def test_search_item_inside_collection_catalog_client_mock(

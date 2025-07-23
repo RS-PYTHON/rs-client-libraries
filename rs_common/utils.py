@@ -32,19 +32,19 @@ class AuthInfo:
     apikey_config: dict
 
 
-def read_response_error(response):
+def read_response_error(response) -> str:
     """Read and return an HTTP response error detail."""
 
     # Try to read the response detail or error
     try:
         json = response.json()
-        detail = json.get("detail") or json.get("description") or json["error"]
+        if isinstance(json, str):
+            return json
+        return json.get("detail") or json.get("description") or json["error"]
 
     # If this fail, get the full response content
     except Exception:  # pylint: disable=broad-exception-caught
-        detail = response.content.decode("utf-8", errors="ignore")
-
-    return detail
+        return response.content.decode("utf-8", errors="ignore")
 
 
 def get_href_service(rs_server_href, env_var) -> str:
