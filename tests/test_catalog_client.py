@@ -109,11 +109,11 @@ def test_create_new_collection_catalog_client():  # pylint: disable=missing-func
 
 
 def test_add_update_collection_catalog_client(
-    mocked_stac_catalog_add_collection,
+    mocked_stac_catalog_add_update_collection,
 ):  # pylint: disable=missing-function-docstring
     print(f"RSPY_HOST_CATALOG = {os.getenv('RSPY_HOST_CATALOG', None)}")
     catalog: CatalogClient = RsClient(
-        mocked_stac_catalog_add_collection,
+        mocked_stac_catalog_add_update_collection,
         RS_SERVER_API_KEY,
         OWNER_ID,
     ).get_catalog_client()

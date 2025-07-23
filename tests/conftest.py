@@ -250,7 +250,7 @@ def mocked_stac_catalog_delete_collection():
 
 
 @pytest.fixture
-def mocked_stac_catalog_add_collection():
+def mocked_stac_catalog_add_update_collection():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
     with responses.RequestsMock() as resp:
         # This is the returned content when calling a real STAC catalog service with:
