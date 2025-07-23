@@ -112,6 +112,20 @@ class DprClient(OgcApiClient):
         # Call the parent method
         return super()._run_process(process, data)
 
+    def run_conv_safe_zarr(self, payload: dict):
+        """Method to start the safe to zarr conversion process from rs-client -
+           Call the endpoint /processes/conv_safe_zarr/execution
+
+        Args:
+            payload: Dictionary to pass to the processor,
+            containing input_safe_path - the s3 path of legacy product and
+            output_zarr_dir_path - the s3 path for the new zarr
+        Return:
+            job_id (int, str): Returns the status code of the request + the identifier
+            (or None if endpoint fails) of the running job
+        """
+        return super()._run_process("conv_safe_zarr", payload)
+
     def wait_for_job(self, *args, **kwargs) -> list[dict]:  # type: ignore
         """
         Wait for job to finish.
