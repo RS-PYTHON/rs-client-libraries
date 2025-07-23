@@ -173,7 +173,7 @@ def test_add_update_item_catalog_client(mocked_stac_catalog_add_item):  # pylint
     }
     properties = {
         "gsd": 0.5971642834779395,
-        "owner": "jgaucher",
+        "owner": "toto",
         "width": 2500,
         "height": 2500,
         "datetime": "2000-02-02T00:00:00Z",
