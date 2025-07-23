@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import getpass
-import json
 import logging
 import re
 from collections.abc import Iterator
@@ -156,7 +155,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     # Utility functions #
     #####################
 
-    def raise_for_status(self, response: Response, ignore: list[int] = []):
+    def raise_for_status(self, response: Response, ignore: list[int] | None = None):
         """
         Raises :class:`HTTPError`, if one occurred.
 
@@ -164,18 +163,18 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             response: HTTP response
             ignore: ignore error its status code is in this list
         """
-        if response.status_code in ignore:
+        if ignore and (response.status_code in ignore):
             return
         try:
             response.raise_for_status()
         except HTTPError as error:
             message = f"{error.args[0]}\nDetail: {utils.read_response_error(response)}"
-            raise HTTPError(message, response=response)
+            raise HTTPError(message, response=response)  # pylint: disable=raise-missing-from
 
     def clear_collection_cache(self):
         """Clear the lru_caches because they still contains the old collection."""
-        StacBase.get_collection.cache_clear()
-        Client.get_collection.cache_clear()
+        StacBase.get_collection.cache_clear()  # pylint: disable=no-member
+        Client.get_collection.cache_clear()  # pylint: disable=no-member
 
     ################################
     # Specific STAC implementation #

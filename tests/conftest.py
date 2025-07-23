@@ -37,6 +37,7 @@ PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 
 HTTP_OK = 200
+HTTP_ERROR = 500
 OWNER = "toto"
 COLLECTION_ID = "S1_L1"
 
@@ -199,18 +200,13 @@ def mocked_stac_catalog_delete_item():
 
 
 @pytest.fixture
-def mocked_stac_catalog_add_item():
+def mocked_stac_catalog_add_update_item():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
     with responses.RequestsMock() as resp:
         # This is the returned content when calling a real STAC catalog service with:
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
         json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}", conforms_to=False)
         resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
-        resp.get(
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}",
-            json=COLLECTION_RESPONSE,
-            status=HTTP_OK,
-        )
 
         json_status = {"status": HTTP_OK}
         resp.add(
@@ -259,6 +255,17 @@ def mocked_stac_catalog_add_update_collection():
         resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
         resp.add("POST", url=f"{MOCKED_URL}/catalog/collections", json={"status": HTTP_OK}, status=HTTP_OK)
         resp.add("PUT", url=f"{MOCKED_URL}/catalog/collections/OWNERID:S2_L2", json={"status": HTTP_OK}, status=HTTP_OK)
+
+        yield MOCKED_URL
+
+
+@pytest.fixture
+def mocked_stac_catalog_add_collection_error():
+    """Mock error response from a STAC catalog server made with the "requests" library. Return the mocked server URL."""
+    with responses.RequestsMock() as resp:
+        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
+        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
+        resp.add("POST", url=f"{MOCKED_URL}/catalog/collections", json={"status": HTTP_ERROR}, status=HTTP_ERROR)
 
         yield MOCKED_URL
 

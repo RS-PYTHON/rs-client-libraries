@@ -22,6 +22,7 @@ from datetime import datetime
 import pytest
 import responses
 from pystac import Collection, Extent, Item, SpatialExtent, TemporalExtent
+from requests import HTTPError
 
 from rs_client.rs_client import RsClient
 from rs_client.stac.catalog_client import CatalogClient
@@ -138,6 +139,22 @@ def test_add_update_collection_catalog_client(
     catalog.update_collection(new_collection)
 
 
+def test_add_collection_catalog_client_error(
+    mocked_stac_catalog_add_collection_error,
+):  # pylint: disable=missing-function-docstring
+    print(f"RSPY_HOST_CATALOG = {os.getenv('RSPY_HOST_CATALOG', None)}")
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_add_collection_error,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
+
+    # Trigger a mocked error response
+    response = catalog.http_session.post(f"{catalog.href_service}/catalog/collections")
+    with pytest.raises(HTTPError):
+        catalog.raise_for_status(response)
+
+
 def test_delete_collection_catalog_client(
     mocked_stac_catalog_delete_collection,
 ):  # pylint: disable=missing-function-docstring
@@ -154,8 +171,14 @@ def test_delete_collection_catalog_client(
     catalog.remove_collection(collection_id="S1_L1", owner_id="toto")  # default owner_id is 'pyteam'
 
 
-def test_add_update_item_catalog_client(mocked_stac_catalog_add_item):  # pylint: disable=missing-function-docstring
-    catalog: CatalogClient = RsClient(mocked_stac_catalog_add_item, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
+def test_add_update_item_catalog_client(
+    mocked_stac_catalog_add_update_item,
+):  # pylint: disable=missing-function-docstring
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_add_update_item,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
 
     # Add a new item from toto:S1_L1 collection
 
