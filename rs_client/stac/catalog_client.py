@@ -21,14 +21,15 @@ import logging
 import re
 from collections.abc import Iterator
 
-import pystac
 from pystac import Collection, Item, Link, RelType
+from pystac_client import Client
 from pystac_client.collection_client import CollectionClient
 from pystac_client.item_search import ItemSearch
-from requests import Response
+from requests import HTTPError, Response
 
 from rs_client.rs_client import TIMEOUT
 from rs_client.stac.stac_base import StacBase
+from rs_common import utils
 from rs_common.utils import get_href_service
 
 
@@ -108,6 +109,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     ##############
     # Properties #
     ##############
+
     @property
     def href_service(self) -> str:
         """
@@ -149,6 +151,31 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             concat_char = ":"
         return f"{owner_id or self.owner_id}{concat_char}{collection_id}"
 
+    #####################
+    # Utility functions #
+    #####################
+
+    def raise_for_status(self, response: Response, ignore: list[int] | None = None):
+        """
+        Raises :class:`HTTPError`, if one occurred.
+
+        Args:
+            response: HTTP response
+            ignore: ignore error its status code is in this list
+        """
+        if ignore and (response.status_code in ignore):
+            return
+        try:
+            response.raise_for_status()
+        except HTTPError as error:
+            message = f"{error.args[0]}\nDetail: {utils.read_response_error(response)}"
+            raise HTTPError(message, response=response)  # pylint: disable=raise-missing-from
+
+    def clear_collection_cache(self):
+        """Clear the lru_caches because they still contains the old collection."""
+        StacBase.get_collection.cache_clear()  # pylint: disable=no-member
+        Client.get_collection.cache_clear()  # pylint: disable=no-member
+
     ################################
     # Specific STAC implementation #
     ################################
@@ -182,9 +209,10 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     ) -> ItemSearch | None:
         """Search items inside a specific collection."""
 
-        kwargs["collections"] = [
-            self.full_collection_id(kwargs["owner_id"], collection, "_") for collection in kwargs["collections"]
-        ]  # type: ignore
+        if "collections" in kwargs:
+            kwargs["collections"] = [
+                self.full_collection_id(kwargs.get("owner_id"), collection, "_") for collection in kwargs["collections"]
+            ]  # type: ignore
         return super().search(**kwargs)  # type: ignore
 
     # end of STAC read opperations
@@ -192,8 +220,10 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     # STAC write opperations. These can't be done with pystac_client
     # - add_collection
     # - remove_collection
+    # - update_collection
     # - add_item
     # - remove_item
+    # - update_item
 
     def add_collection(
         self,
@@ -212,6 +242,9 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
 
         Returns:
             JSONResponse (json): The response of the request.
+
+        Raises:
+            HTTPError in case of server error.
         """
 
         full_owner_id = owner_id or self.owner_id
@@ -240,9 +273,6 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
                 ),
             )
 
-        # Update the links
-        self.ps_client.add_child(collection)
-
         # Restore the short collection_id at the root of the collection
         collection.id = short_collection_id
 
@@ -250,12 +280,15 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         collection.validate_all()
 
         # Post the collection to the catalog
-        return self.http_session.post(
+        response = self.http_session.post(
             f"{self.href_service}/catalog/collections",
             json=collection.to_dict(),
             **self.apikey_headers,
             timeout=timeout,
         )
+        self.raise_for_status(response)
+        self.clear_collection_cache()
+        return response
 
     def remove_collection(
         self,
@@ -271,29 +304,64 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             timeout (int): The timeout duration for the HTTP request.
 
         Returns:
-            JSONResponse: The response of the request.
+            JSONResponse (json): The response of the request.
+
+        Raises:
+            HTTPError in case of server error.
         """
         # owner_id:collection_id
         full_collection_id = self.full_collection_id(owner_id, collection_id)
 
-        # Remove the collection from the "child" links of the local catalog instance
-        collection_link = f"{self.ps_client.self_href.rstrip('/')}/collections/{full_collection_id}"
-        self.ps_client.links = [
-            link
-            for link in self.ps_client.links
-            if not ((link.rel == pystac.RelType.CHILD) and (link.href == collection_link))
-        ]
-
-        # We need to clear the cache for this and parent "get_collection" methods
-        # because their returned value must be updated.
-        self.ps_client.get_collection.cache_clear()
-
         # Remove the collection from the server catalog
-        return self.http_session.delete(
+        response = self.http_session.delete(
             f"{self.href_service}/catalog/collections/{full_collection_id}",
             **self.apikey_headers,
             timeout=timeout,
         )
+        self.raise_for_status(response, ignore=[404])
+        self.clear_collection_cache()
+        return response
+
+    def update_collection(
+        self,
+        collection: Collection | CollectionClient | dict,
+        timeout: int = TIMEOUT,
+    ) -> Response:
+        """Put/update a collection in the catalog.
+
+        Args:
+            collection: The collection contents.
+            timeout (int): The timeout duration for the HTTP request.
+
+        Returns:
+            JSONResponse (json): The response of the request.
+
+        Raises:
+            HTTPError in case of server error.
+        """
+
+        # Convert to dict
+        col_dict: dict = collection if isinstance(collection, dict) else collection.to_dict()
+
+        # Get the collection owner_id and remove it from the collection id
+        # which is like <owner_id>_<short_collection_id>
+        owner_id = col_dict["owner"]
+        collection_id = col_dict["id"].removeprefix(f"{owner_id}_")
+        col_dict["id"] = collection_id
+
+        # owner_id:collection_id
+        full_collection_id = self.full_collection_id(owner_id, collection_id)
+
+        # Update the collection in the server catalog
+        response = self.http_session.put(
+            f"{self.href_service}/catalog/collections/{full_collection_id}",
+            json=col_dict,
+            **self.apikey_headers,
+            timeout=timeout,
+        )
+        self.raise_for_status(response)
+        self.clear_collection_cache()
+        return response
 
     def add_item(  # type: ignore # pylint: disable=arguments-renamed
         self,
@@ -311,7 +379,10 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             timeout (int): The timeout duration for the HTTP request.
 
         Returns:
-            JSONResponse: The response of the request.
+            JSONResponse (json): The response of the request.
+
+        Raises:
+            HTTPError in case of server error.
         """
         # owner_id:collection_id
         full_collection_id = self.full_collection_id(owner_id, collection_id)
@@ -319,19 +390,16 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         # Check that the item is compliant to STAC
         item.validate()
 
-        # Get the collection from the catalog
-        collection = self.get_collection(collection_id, owner_id)
-
-        # Update the item  contents
-        collection.add_item(item)  # type: ignore
-
         # Post the item to the catalog
-        return self.http_session.post(
+        response = self.http_session.post(
             f"{self.href_service}/catalog/collections/{full_collection_id}/items",
             json=item.to_dict(),
             **self.apikey_headers,
             timeout=timeout,
         )
+        self.raise_for_status(response)
+        self.clear_collection_cache()
+        return response
 
     def remove_item(  # type: ignore # pylint: disable=arguments-differ
         self,
@@ -349,16 +417,63 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             timeout (int): The timeout duration for the HTTP request.
 
         Returns:
-            JSONResponse: The response of the request.
+            JSONResponse (json): The response of the request.
+
+        Raises:
+            HTTPError in case of server error.
         """
         # owner_id:collection_id
         full_collection_id = self.full_collection_id(owner_id, collection_id)
 
         # Remove the collection from the server catalog
-        return self.http_session.delete(
+        response = self.http_session.delete(
             f"{self.href_service}/catalog/collections/{full_collection_id}/items/{item_id}",
             **self.apikey_headers,
             timeout=timeout,
         )
+        self.raise_for_status(response)
+        self.clear_collection_cache()
+        return response
+
+    def update_item(
+        self,
+        item: Item | dict,
+        timeout: int = TIMEOUT,
+    ) -> Response:
+        """Put/update an item in the catalog.
+
+        Args:
+            item: The item contents.
+            timeout (int): The timeout duration for the HTTP request.
+
+        Returns:
+            JSONResponse (json): The response of the request.
+
+        Raises:
+            HTTPError in case of server error.
+        """
+
+        # Convert to dict
+        item_dict: dict = item if isinstance(item, dict) else item.to_dict()
+
+        # Get the collection owner_id and remove it from the collection id
+        # which is like <owner_id>_<short_collection_id>
+        owner_id = item_dict["properties"]["owner"]
+        collection_id = item_dict["collection"].removeprefix(f"{owner_id}_")
+        item_dict["collection"] = collection_id
+
+        # owner_id:collection_id
+        full_collection_id = self.full_collection_id(owner_id, collection_id)
+
+        # Update the item in the server catalog
+        response = self.http_session.put(
+            f"{self.href_service}/catalog/collections/{full_collection_id}/items/{item_dict['id']}",
+            json=item_dict,
+            **self.apikey_headers,
+            timeout=timeout,
+        )
+        self.raise_for_status(response)
+        self.clear_collection_cache()
+        return response
 
     # end of STAC write opperations

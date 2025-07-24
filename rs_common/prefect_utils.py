@@ -399,7 +399,7 @@ def s3_delete(s3_prefix: str, log: bool = False):
         )
 
     # Split the list of objects to delete
-    chunk_size = 100
+    chunk_size = 1000
     for i in range(0, len(objects_to_delete), chunk_size):
         s3_client.delete_objects(
             Bucket=s3_bucket.bucket_name,

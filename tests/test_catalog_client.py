@@ -22,6 +22,7 @@ from datetime import datetime
 import pytest
 import responses
 from pystac import Collection, Extent, Item, SpatialExtent, TemporalExtent
+from requests import HTTPError
 
 from rs_client.rs_client import RsClient
 from rs_client.stac.catalog_client import CatalogClient
@@ -108,12 +109,12 @@ def test_create_new_collection_catalog_client():  # pylint: disable=missing-func
     assert new_collection_jgaucher.id == "S3_L3"
 
 
-def test_add_collection_catalog_client(
-    mocked_stac_catalog_add_collection,
+def test_add_update_collection_catalog_client(
+    mocked_stac_catalog_add_update_collection,
 ):  # pylint: disable=missing-function-docstring
     print(f"RSPY_HOST_CATALOG = {os.getenv('RSPY_HOST_CATALOG', None)}")
     catalog: CatalogClient = RsClient(
-        mocked_stac_catalog_add_collection,
+        mocked_stac_catalog_add_update_collection,
         RS_SERVER_API_KEY,
         OWNER_ID,
     ).get_catalog_client()
@@ -129,15 +130,29 @@ def test_add_collection_catalog_client(
 
     new_collection_jgaucher = Collection(id="S3_L3", description="S3_L3 collection.", extent=extent)
 
-    ###########################################
-    # Publish a new collection in the catalog #
-    ###########################################
+    # Publish a new collections in the catalog
+    catalog.add_collection(new_collection)
+    catalog.add_collection(new_collection_jgaucher)
 
-    response = catalog.add_collection(new_collection)
-    assert response.status_code == 200
+    # Update a collection
+    new_collection.description = "new description"
+    catalog.update_collection(new_collection)
 
-    response = catalog.add_collection(new_collection_jgaucher)
-    assert response.status_code == 200
+
+def test_add_collection_catalog_client_error(
+    mocked_stac_catalog_add_collection_error,
+):  # pylint: disable=missing-function-docstring
+    print(f"RSPY_HOST_CATALOG = {os.getenv('RSPY_HOST_CATALOG', None)}")
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_add_collection_error,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
+
+    # Trigger a mocked error response
+    response = catalog.http_session.post(f"{catalog.href_service}/catalog/collections")
+    with pytest.raises(HTTPError):
+        catalog.raise_for_status(response)
 
 
 def test_delete_collection_catalog_client(
@@ -153,12 +168,17 @@ def test_delete_collection_catalog_client(
     # Delete a collection #
     #######################
 
-    response = catalog.remove_collection(collection_id="S1_L1", owner_id="toto")  # default owner_id is 'pyteam'
-    assert response.status_code == 200
+    catalog.remove_collection(collection_id="S1_L1", owner_id="toto")  # default owner_id is 'pyteam'
 
 
-def test_add_item_catalog_client(mocked_stac_catalog_add_item):  # pylint: disable=missing-function-docstring
-    catalog: CatalogClient = RsClient(mocked_stac_catalog_add_item, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
+def test_add_update_item_catalog_client(
+    mocked_stac_catalog_add_update_item,
+):  # pylint: disable=missing-function-docstring
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_add_update_item,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
 
     # Add a new item from toto:S1_L1 collection
 
@@ -176,7 +196,7 @@ def test_add_item_catalog_client(mocked_stac_catalog_add_item):  # pylint: disab
     }
     properties = {
         "gsd": 0.5971642834779395,
-        "owner": "jgaucher",
+        "owner": "toto",
         "width": 2500,
         "height": 2500,
         "datetime": "2000-02-02T00:00:00Z",
@@ -190,9 +210,13 @@ def test_add_item_catalog_client(mocked_stac_catalog_add_item):  # pylint: disab
         datetime=datetime.now(),
         properties=properties,
     )
-    response = catalog.add_item(collection_id="S1_L1", item=item, owner_id="toto")
+    catalog.add_item(collection_id="S1_L1", item=item, owner_id="toto")
 
-    assert response.status_code == 200
+    # The collection is needed to update an item. In real use-case, it is set by rs-server.
+    # Also add a random property.
+    item.collection_id = "S1_L1"
+    item.properties["new_property"] = "any_value"
+    catalog.update_item(item)
 
 
 def test_remove_item_catalog_client(mocked_stac_catalog_delete_item):  # pylint: disable=missing-function-docstring
@@ -202,8 +226,7 @@ def test_remove_item_catalog_client(mocked_stac_catalog_delete_item):  # pylint:
     # Delete an item #
     ##################
 
-    response = catalog.remove_item("S1_L1", "item_0", "toto")
-    assert response.status_code == 200
+    catalog.remove_item("S1_L1", "item_0", "toto")
 
 
 def test_search_item_inside_collection_catalog_client_mock(
