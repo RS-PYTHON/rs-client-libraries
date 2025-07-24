@@ -178,7 +178,7 @@ async def write_payload(
 
             first_asset = list(item.assets.items())[0][1]
             logger.info(f"first_asset = {first_asset}")
-            full_s3_href = first_asset.extra_fields.get("alternate", {}).get("s3", {}).get("href")
+            full_s3_href = first_asset.extra_fields.get("href")
             if not full_s3_href:
                 raise ValueError(f"S3 HREF not found in extra fields for item {item.id}")
 

@@ -31,7 +31,7 @@
                 "ADGS1.EOF": {
                     "href": "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS1.EOF/download/file",
                     "alternate": {
-                        "s3": {
+                        "https": {
                             "href": "s3://rs-dev-cluster-catalog/stations/ADGS/ADGS1.EOF"
                         }
                     },
@@ -56,7 +56,8 @@
             "stac_version": "1.0.0",
             "stac_extensions": [
                 "https://stac-extensions.github.io/file/v2.1.0/schema.json",
-                "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"
+                "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+                "https://stac-extensions.github.io/file/v2.1.0/schema.json"
             ]
         },
         {
@@ -88,7 +89,7 @@
                 "ADGS2.EOF": {
                     "href": "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS2.EOF/download/file",
                     "alternate": {
-                        "s3": {
+                        "https": {
                             "href": "s3://rs-dev-cluster-catalog/stations/ADGS/ADGS2.EOF"
                         }
                     },
@@ -113,7 +114,8 @@
             "stac_version": "1.0.0",
             "stac_extensions": [
                 "https://stac-extensions.github.io/file/v2.1.0/schema.json",
-                "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"
+                "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+                "https://stac-extensions.github.io/file/v2.1.0/schema.json"
             ]
         }
     ]
