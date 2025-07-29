@@ -4399,14 +4399,14 @@ validation = ["jsonschema (>=4.18,<5.0)"]
 
 [[package]]
 name = "pystac-client"
-version = "0.8.6"
+version = "0.9.0"
 description = "Python library for searching SpatioTemporal Asset Catalog (STAC) APIs."
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "pystac_client-0.8.6-py3-none-any.whl", hash = "sha256:d68df4ef6f1cd5e396b52f5b5d71360fe8288e00438857258e48fe8139f920ed"},
-    {file = "pystac_client-0.8.6.tar.gz", hash = "sha256:83d4f4420c14b8dbb3e39ab0da00e72639903912942075d42e06737d61ab3e7d"},
+    {file = "pystac_client-0.9.0-py3-none-any.whl", hash = "sha256:eed146b5980f93646aaa3a59080f11f1dcab6000b0bfbc28b1d0c6fd0a61eda1"},
+    {file = "pystac_client-0.9.0.tar.gz", hash = "sha256:3908951583bcc6a3aaaf2828024a8e03764e6ca9d9f9f1d8149df587e14dd744"},
 ]
 
 [package.dependencies]
@@ -6651,4 +6651,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "eb5b139825ccbcb9683b98ea33bbca343745dd9a4cd062092c88b1ab903d0e13"
+content-hash = "3f18cc56444098b822fbf0692d8d860a25d1a99362f1428d5e669a93a9b70bdf"
