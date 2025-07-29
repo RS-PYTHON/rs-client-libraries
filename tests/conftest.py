@@ -133,6 +133,7 @@ ITEM_RESPONSE = {
     "stac_extensions": [
         "https://stac-extensions.github.io/file/v2.1.0/schema.json",
         "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/file/v2.1.0/schema.json",
     ],
 }
 
