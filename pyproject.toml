@@ -37,10 +37,10 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
-opentelemetry-distro = "^0.56b0" # then run 'poetry run opentelemetry-bootstrap -a install'
-opentelemetry-instrumentation-aws-lambda = "^0.56b0"
-opentelemetry-test-utils = "^0.56b0"
-opentelemetry-exporter-otlp = "^1.35.0"
+opentelemetry-distro = "^0.57b0" # then run 'poetry run opentelemetry-bootstrap -a install'
+opentelemetry-instrumentation-aws-lambda = "^0.57b0"
+opentelemetry-test-utils = "^0.57b0"
+opentelemetry-exporter-otlp = "^1.36.0"
 protobuf = ">=5.29.5"
 python-logging-loki = "^0.3.1" # to avoid otl error: No module named 'logging_loki'
 cachetools = "^5.5.2"
@@ -75,7 +75,7 @@ flake8 = "^7.1.1"
 flake8-pyproject = "^1.2.3"
 responses = "^0.25.7"
 starlette = "^0.47.2"
-pytest-asyncio = "^1.0.0"
+pytest-asyncio = "^1.1.0"
 
 [tool.poetry.group.demo.dependencies] # for hybrid mode
 jupyterlab = "^4.2.1"
