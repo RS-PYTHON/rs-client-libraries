@@ -177,11 +177,8 @@ async def write_payload(
                 raise ValueError(f"No assets in item {item.id}")
 
             first_asset = list(item.assets.items())[0][1]
-            logger.info(f"rs-client-libs: first_asset = {first_asset}")
-            logger.info(f"rs-client-libs: type(first_asset) = {type(first_asset)}")
+            logger.debug(f"rs-client-libs: first_asset = {first_asset}")
             full_s3_href = first_asset.href
-            logger.info(f"rs-client-libs: first_asset.extra_fields = {first_asset.extra_fields}")
-            logger.info(f"rs-client-libs: type(first_asset.extra_fields) = {type(first_asset.extra_fields)}")
             if not full_s3_href:
                 raise ValueError(f"S3 HREF not found in extra fields for item {item.id}")
 
