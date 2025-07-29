@@ -29,10 +29,10 @@
             ],
             "assets": {
                 "ADGS1.EOF": {
-                    "href": "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS1.EOF/download/file",
+                    "href": "s3://rs-dev-cluster-catalog/stations/ADGS/ADGS1.EOF",
                     "alternate": {
                         "https": {
-                            "href": "s3://rs-dev-cluster-catalog/stations/ADGS/ADGS1.EOF"
+                            "href": "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS1.EOF/download/file"
                         }
                     },
                     "file:size": 2029769
@@ -87,10 +87,10 @@
             ],
             "assets": {
                 "ADGS2.EOF": {
-                    "href": "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS2.EOF/download/file",
+                    "href": "s3://rs-dev-cluster-catalog/stations/ADGS/ADGS2.EOF",
                     "alternate": {
                         "https": {
-                            "href": "s3://rs-dev-cluster-catalog/stations/ADGS/ADGS2.EOF"
+                            "href": "https://rs-server/catalog/TestUser/collections/s1_aux/items/ADGS2.EOF/download/file"
                         }
                     },
                     "file:size": 1922340
