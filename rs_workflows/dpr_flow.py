@@ -179,7 +179,7 @@ async def write_payload(
             first_asset = list(item.assets.items())[0][1]
             logger.info(f"rs-client-libs: first_asset = {first_asset}")
             logger.info(f"rs-client-libs: type(first_asset) = {type(first_asset)}")
-            full_s3_href = first_asset.get("href")
+            full_s3_href = first_asset.href
             logger.info(f"rs-client-libs: first_asset.extra_fields = {first_asset.extra_fields}")
             logger.info(f"rs-client-libs: type(first_asset.extra_fields) = {type(first_asset.extra_fields)}")
             if not full_s3_href:
