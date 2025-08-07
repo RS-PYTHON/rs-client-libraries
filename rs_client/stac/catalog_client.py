@@ -176,6 +176,23 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         StacBase.get_collection.cache_clear()  # pylint: disable=no-member
         Client.get_collection.cache_clear()  # pylint: disable=no-member
 
+    def process_response(self, response: Response, raise_for_status: bool, ignore: list[int] | None = None) -> Response:
+        """
+        Process the HTTP response.
+
+        Args:
+            response: The HTTP response to process.
+            raise_for_status: If True, raise an error for HTTP errors.
+            ignore: A list of status codes to ignore.
+
+        Returns:
+            The processed HTTP response.
+        """
+        if raise_for_status:
+            self.raise_for_status(response, ignore)
+        self.clear_collection_cache()
+        return response
+
     ################################
     # Specific STAC implementation #
     ################################
@@ -231,6 +248,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         add_public_license: bool = True,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
+        raise_for_status: bool = True,
     ) -> Response:
         """Update the collection links, then post the collection into the catalog.
 
@@ -239,6 +257,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             add_public_license (bool): If True, add a public domain license field and link.
             owner_id (str, optional): Collection owner ID. If missing, we use self.owner_id.
             timeout (int): The timeout duration for the HTTP request.
+            raise_for_status (bool): If True, raise HTTPError in case of server error.
 
         Returns:
             JSONResponse (json): The response of the request.
@@ -286,15 +305,14 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             **self.apikey_headers,
             timeout=timeout,
         )
-        self.raise_for_status(response)
-        self.clear_collection_cache()
-        return response
+        return self.process_response(response, raise_for_status)
 
     def remove_collection(
         self,
         collection_id: str,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
+        raise_for_status: bool = True,
     ) -> Response:
         """Remove/delete a collection from the catalog.
 
@@ -302,6 +320,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             collection_id (str): The collection id.
             owner_id (str, optional): Collection owner ID. If missing, we use self.owner_id.
             timeout (int): The timeout duration for the HTTP request.
+            raise_for_status (bool): If True, raise HTTPError in case of server error.
 
         Returns:
             JSONResponse (json): The response of the request.
@@ -318,20 +337,20 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             **self.apikey_headers,
             timeout=timeout,
         )
-        self.raise_for_status(response, ignore=[404])
-        self.clear_collection_cache()
-        return response
+        return self.process_response(response, raise_for_status, ignore=[404])
 
     def update_collection(
         self,
         collection: Collection | CollectionClient | dict,
         timeout: int = TIMEOUT,
+        raise_for_status: bool = True,
     ) -> Response:
         """Put/update a collection in the catalog.
 
         Args:
             collection: The collection contents.
             timeout (int): The timeout duration for the HTTP request.
+            raise_for_status (bool): If True, raise HTTPError in case of server error.
 
         Returns:
             JSONResponse (json): The response of the request.
@@ -359,9 +378,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             **self.apikey_headers,
             timeout=timeout,
         )
-        self.raise_for_status(response)
-        self.clear_collection_cache()
-        return response
+        return self.process_response(response, raise_for_status)
 
     def add_item(  # type: ignore # pylint: disable=arguments-renamed
         self,
@@ -369,6 +386,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         item: Item,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
+        raise_for_status: bool = True,
     ) -> Response:
         """Update the item links, then post the item into the catalog.
 
@@ -377,6 +395,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             item (Item): STAC item to update and post
             owner_id (str, optional): Collection owner ID. If missing, we use self.owner_id.
             timeout (int): The timeout duration for the HTTP request.
+            raise_for_status (bool): If True, raise HTTPError in case of server error.
 
         Returns:
             JSONResponse (json): The response of the request.
@@ -397,9 +416,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             **self.apikey_headers,
             timeout=timeout,
         )
-        self.raise_for_status(response)
-        self.clear_collection_cache()
-        return response
+        return self.process_response(response, raise_for_status)
 
     def remove_item(  # type: ignore # pylint: disable=arguments-differ
         self,
@@ -407,6 +424,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         item_id: str,
         owner_id: str | None = None,
         timeout: int = TIMEOUT,
+        raise_for_status: bool = True,
     ) -> Response:
         """Remove/delete an item from a collection.
 
@@ -415,6 +433,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             item_id (str): The item id.
             owner_id (str, optional): Collection owner ID. If missing, we use self.owner_id.
             timeout (int): The timeout duration for the HTTP request.
+            raise_for_status (bool): If True, raise HTTPError in case of server error.
 
         Returns:
             JSONResponse (json): The response of the request.
@@ -431,20 +450,20 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             **self.apikey_headers,
             timeout=timeout,
         )
-        self.raise_for_status(response)
-        self.clear_collection_cache()
-        return response
+        return self.process_response(response, raise_for_status)
 
     def update_item(
         self,
         item: Item | dict,
         timeout: int = TIMEOUT,
+        raise_for_status: bool = True,
     ) -> Response:
         """Put/update an item in the catalog.
 
         Args:
             item: The item contents.
             timeout (int): The timeout duration for the HTTP request.
+            raise_for_status (bool): If True, raise HTTPError in case of server error.
 
         Returns:
             JSONResponse (json): The response of the request.
@@ -472,8 +491,6 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
             **self.apikey_headers,
             timeout=timeout,
         )
-        self.raise_for_status(response)
-        self.clear_collection_cache()
-        return response
+        return self.process_response(response, raise_for_status)
 
     # end of STAC write opperations
