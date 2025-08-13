@@ -13,10 +13,16 @@
 # limitations under the License.
 
 from sqlalchemy import (
-    Column, BigInteger, Integer, Boolean,
-    Text, TIMESTAMP, ForeignKey, CheckConstraint
+    TIMESTAMP,
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Integer,
+    Text,
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
 
 
@@ -24,7 +30,9 @@ class Base(DeclarativeBase):
     """
     Set Base as a type, thus mypy understands it. Otherwise, error from mypy
     """
+
     pass
+
 
 class FlowRun(Base):
     __tablename__ = "flow_run"
@@ -116,9 +124,7 @@ class ProductMissing(Base):
     sensing_start_datetime = Column(TIMESTAMP)
     count = Column(Integer)
 
-    __table_args__ = (
-        CheckConstraint("count >= 0"),
-    )
+    __table_args__ = (CheckConstraint("count >= 0"),)
 
     flow_run = relationship("FlowRun", back_populates="products_missing")
     pi_category = relationship("PiCategory", back_populates="products_missing")

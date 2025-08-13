@@ -66,7 +66,7 @@ def insert_pi_categories(engine):
 
 @flow(name="PI db model")
 def init_pi_database(env: FlowEnvArgs):
-#def init_pi_database():
+    # def init_pi_database():
     logger = get_run_logger()
 
     # Init flow environment and opentelemetry span
