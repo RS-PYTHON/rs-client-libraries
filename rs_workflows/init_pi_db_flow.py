@@ -16,12 +16,13 @@
 
 import os
 
-from pi_db_models import Base, PiCategory
 from prefect import flow, get_run_logger, task
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+
+from .pi_db_models import Base, PiCategory
 
 PI_CATEGORY_DATA = [
     ("S1", "L0-SEG-NRT", "Segments EW, IW, SM with timeliness NRT & PT", 1800),
@@ -48,13 +49,35 @@ PI_CATEGORY_DATA = [
 
 @task
 def create_schema(engine):
+    """
+    Creates all database tables defined in the pi_db_models.
+
+    This task initializes the database schema for the Performance Indicator (PI) database
+    using the provided SQLAlchemy engine.
+
+    Args:
+        engine (sqlalchemy.engine.Engine): SQLAlchemy database engine connected to the target database.
+    """
     Base.metadata.create_all(engine)
 
 
 @task
 def insert_pi_categories(engine):
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    """
+    Inserts default Performance Indicator (PI) categories into the database if none exist.
+
+    This task checks whether the `pi_category` table is empty and, if so, inserts predefined
+    categories from `PI_CATEGORY_DATA`.
+
+    Args:
+        engine (sqlalchemy.engine.Engine): SQLAlchemy database engine connected to the target database.
+
+    Notes:
+        - If categories already exist, no action is taken.
+        - Commits the transaction only if new data is inserted.
+    """
+    session_maker = sessionmaker(bind=engine)
+    session = session_maker()
     try:
         if session.query(PiCategory).count() == 0:
             for mission, name, desc, max_delay in PI_CATEGORY_DATA:
@@ -65,8 +88,31 @@ def insert_pi_categories(engine):
 
 
 @flow(name="PI db init")
+# def init_pi_database():
 def init_pi_database(env: FlowEnvArgs):
-    # def init_pi_database():
+    """
+    Initializes the Performance Indicator (PI) database (named `performance`) schema and populates default categories.
+
+    This Prefect flow:
+      - Creates all required tables for the PI database.
+      - Inserts default PI categories if none exist.
+
+    Args:
+        env (FlowEnvArgs): Prefect flow environment configuration, including runtime context variables.
+
+    Environment Variables Required:
+        POSTGRES_USER (str): PostgreSQL username.
+        POSTGRES_PASSWORD (str): PostgreSQL password.
+        POSTGRES_HOST (str): PostgreSQL host address.
+        POSTGRES_PORT (str): PostgreSQL port.
+        POSTGRES_PI_DB (str): Name of the Performance Indicator database.
+
+    Flow Steps:
+        1. Initialize flow environment and tracing span.
+        2. Build database connection URL.
+        3. Create database schema via `create_schema` task.
+        4. Insert default PI categories via `insert_pi_categories` task.
+    """
     logger = get_run_logger()
 
     # Init flow environment and opentelemetry span
