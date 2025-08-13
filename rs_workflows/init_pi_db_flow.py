@@ -64,7 +64,7 @@ def insert_pi_categories(engine):
         session.close()
 
 
-@flow(name="PI db model")
+@flow(name="PI db init")
 def init_pi_database(env: FlowEnvArgs):
     # def init_pi_database():
     logger = get_run_logger()
@@ -74,7 +74,11 @@ def init_pi_database(env: FlowEnvArgs):
     with flow_env.start_span(__name__, "init-pi-database"):
 
         logger.info("Start the initialisation of the tables for performance indicator database")
-        db_url = f"postgresql+psycopg2://{os.environ['POSTGRES_USER']}:{os.environ['POSTGRES_PASSWORD']}@{os.environ['POSTGRES_HOST']}:{os.environ['POSTGRES_PORT']}/{os.environ['POSTGRES_PI_DB']}"
+        db_url = (
+            f"postgresql+psycopg2://{os.environ['POSTGRES_USER']}:"
+            f"{os.environ['POSTGRES_PASSWORD']}@{os.environ['POSTGRES_HOST']}:"
+            f"{os.environ['POSTGRES_PORT']}/{os.environ['POSTGRES_PI_DB']}"
+        )
         engine = create_engine(db_url)
 
         create_schema(engine)
