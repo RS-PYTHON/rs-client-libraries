@@ -40,7 +40,9 @@ RUN pip install -U pip && \
         prefect-aws=="${PREFECT_AWS_TAG}" \
         s3fs \
         boto3 \
-        numpy=="1.26.4"
+        numpy=="1.26.4" \
+        SQLAlchemy=="^2.0.37" \
+        psycopg2=="^2.9.10"
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
