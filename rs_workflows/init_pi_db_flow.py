@@ -89,7 +89,7 @@ def insert_pi_categories(engine):
 
 @flow(name="PI db init")
 # def init_pi_database():
-def init_pi_database(env: FlowEnvArgs):
+async def init_pi_database(env: FlowEnvArgs):
     """
     Initializes the Performance Indicator (PI) database (named `performance`) schema and populates default categories.
 
@@ -131,17 +131,6 @@ def init_pi_database(env: FlowEnvArgs):
         insert_pi_categories(engine)
 
         logger.info("End")
-
-
-###########################
-# Call the flow as task #
-###########################
-
-
-@task(name="Create pi db")
-async def init_pi_db_model_task(*args, **kwargs):
-    """See: search"""
-    return await init_pi_database.fn(*args, **kwargs)
 
 
 # if __name__ == "__main__":
