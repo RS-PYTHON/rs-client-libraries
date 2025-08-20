@@ -131,11 +131,11 @@ async def init_pi_database(env: FlowEnvArgs):
             f"{os.environ['POSTGRES_PASSWORD']}@{os.environ['POSTGRES_HOST']}:"
             f"{os.environ['POSTGRES_PORT']}/{os.environ['POSTGRES_PI_DB']}"
         )
-        # Prefect tasks try to serialize inputs (for caching, retries, mapping, etc.) and
-        # also compute a cache key by hashing the inputs. SQLAlchemy Engine contains locks
+        # Prefect tasks attempt to serialize inputs (for caching, retries, mapping, etc.) and
+        # also generate a cache key by hashing them. SQLAlchemy Engine contains locks
         # and connection pools (thread.RLock, weakref.ReferenceType, etc.), which are not serializable.
-        # THat's why Instead of passing the engine object, pass only the DB URL (a string, which is serializable).
-        # Then, inside each task, the engine is created locally:
+        # That's why instead of passing the engine object, pass only the db_url, a string, which is serializable.
+        # Each task can then create its own engine locally.
         create_schema(db_url)
         insert_pi_categories(db_url)
 
