@@ -48,7 +48,7 @@ PI_CATEGORY_DATA = [
 
 
 @task
-def create_schema(engine):
+def create_schema(db_url: str):
     """
     Creates all database tables defined in the pi_db_models.
 
@@ -58,11 +58,15 @@ def create_schema(engine):
     Args:
         engine (sqlalchemy.engine.Engine): SQLAlchemy database engine connected to the target database.
     """
+    logger = get_run_logger()
+    logger.info(f"Received: {db_url}")
+    engine = create_engine(db_url)
+    logger.info("Call the create_all")
     Base.metadata.create_all(engine)
 
 
 @task
-def insert_pi_categories(engine):
+def insert_pi_categories(db_url: str):
     """
     Inserts default Performance Indicator (PI) categories into the database if none exist.
 
@@ -76,8 +80,9 @@ def insert_pi_categories(engine):
         - If categories already exist, no action is taken.
         - Commits the transaction only if new data is inserted.
     """
-    session_maker = sessionmaker(bind=engine)
-    session = session_maker()
+    engine = create_engine(db_url)
+    own_session_maker = sessionmaker(bind=engine)
+    session = own_session_maker()
     try:
         if session.query(PiCategory).count() == 0:
             for mission, name, desc, max_delay in PI_CATEGORY_DATA:
@@ -119,16 +124,20 @@ async def init_pi_database(env: FlowEnvArgs):
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "init-pi-database"):
 
-        logger.info("Start the initialisation of the tables for performance indicator database")
+        logger.info("Start the initialisation of the tables for performance indicator database...")
+
         db_url = (
             f"postgresql+psycopg2://{os.environ['POSTGRES_USER']}:"
             f"{os.environ['POSTGRES_PASSWORD']}@{os.environ['POSTGRES_HOST']}:"
             f"{os.environ['POSTGRES_PORT']}/{os.environ['POSTGRES_PI_DB']}"
         )
-        engine = create_engine(db_url)
-
-        create_schema(engine)
-        insert_pi_categories(engine)
+        # Prefect tasks try to serialize inputs (for caching, retries, mapping, etc.) and
+        # also compute a cache key by hashing the inputs. SQLAlchemy Engine contains locks
+        # and connection pools (thread.RLock, weakref.ReferenceType, etc.), which are not serializable.
+        # THat's why Instead of passing the engine object, pass only the DB URL (a string, which is serializable).
+        # Then, inside each task, the engine is created locally:
+        create_schema(db_url)
+        insert_pi_categories(db_url)
 
         logger.info("End")
 
