@@ -93,7 +93,6 @@ def insert_pi_categories(db_url: str):
 
 
 @flow(name="PI db init")
-# def init_pi_database():
 async def init_pi_database(env: FlowEnvArgs):
     """
     Initializes the Performance Indicator (PI) database (named `performance`) schema and populates default categories.
@@ -141,6 +140,3 @@ async def init_pi_database(env: FlowEnvArgs):
 
         logger.info("End")
 
-
-# if __name__ == "__main__":
-#     init_pi_database()
