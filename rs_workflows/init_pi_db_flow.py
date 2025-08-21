@@ -123,7 +123,7 @@ async def init_pi_database(env: FlowEnvArgs):
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "init-pi-database"):
 
-        logger.info("Start the initialisation of the tables for performance indicator database...")
+        logger.info("Starting the initialization of the tables for the performance indicator database...")
 
         db_url = (
             f"postgresql+psycopg2://{os.environ['POSTGRES_USER']}:"
@@ -138,5 +138,4 @@ async def init_pi_database(env: FlowEnvArgs):
         create_schema(db_url)
         insert_pi_categories(db_url)
 
-        logger.info("End")
-
+        logger.info("The initialization of the tables for the performance indicator database finished")
