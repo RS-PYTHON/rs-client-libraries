@@ -1,5 +1,5 @@
 from prefect import task, get_run_logger
-from sqlalchemy import create_engine, MetaData, Table
+from sqlalchemy import create_engine, MetaData, Table, select, update
 from sqlalchemy.orm import sessionmaker
 import os
 
@@ -27,25 +27,34 @@ def record_flow_run(start_date = None, stop_date = None, status = None, runtime=
         metadata = MetaData()
         flow_run = Table("flow_run", metadata, autoload_with=engine)
 
-        # Insert
-        db.execute(
-            flow_run.insert().values(
-                flow_type=runtime.parameters.get("flow_run_type", "systematic"),
-                mission=runtime.parameters.get("mission", "null"),
-                prefect_flow_id=runtime.flow_run.id,
-                prefect_flow_parent_id=runtime.flow_run.parent_flow_run_id,
-                dask_version="2025.0.0",
-                python_version="3.11.9",
-                dpr_processor_name=runtime.parameters.get("dpr_processor_name", "dpr_processor"),
-                dpr_processor_version=runtime.parameters.get("dpr_processor_version", "dpr_processor_version"),
-                dpr_processor_unit=runtime.parameters.get("dpr_processor_unit", "dpr_processor_unit"),
-                dpr_processing_input_stac_items=runtime.parameters.get("dpr_processing_input_stac_items", "dpr_processing_input_stac_items"),
-                dpr_processing_start_datetime=start_date,
-                dpr_processing_stop_datetime=stop_date,
-                dpr_processing_status=status,
-                excluded_from_pi=False
-            )
-        )
+        prefect_flow_id = runtime.flow_run.id
+
+        # check if current flow_id is registered
+        existing = db.execute(
+            select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)
+        ).fetchone()
+
+        values = {
+            "flow_type": runtime.parameters.get("flow_run_type", "systematic"),
+            "mission": runtime.parameters.get("mission", "null"),
+            "prefect_flow_id": prefect_flow_id,
+            "prefect_flow_parent_id": runtime.flow_run.parent_flow_run_id,
+            "dask_version": "2025.0.0", # wip
+            "python_version": "3.11.9", # wip
+            "dpr_processor_name": runtime.parameters.get("dpr_processor_name", "dpr_processor"),
+            "dpr_processor_version": runtime.parameters.get("dpr_processor_version", "dpr_processor_version"),
+            "dpr_processor_unit": runtime.parameters.get("dpr_processor_unit", "dpr_processor_unit"),
+            "dpr_processing_input_stac_items": runtime.parameters.get("dpr_processing_input_stac_items", "dpr_processing_input_stac_items"),
+            "dpr_processing_start_datetime": start_date,
+            "dpr_processing_stop_datetime": stop_date,
+            "dpr_processing_status": status,
+            "excluded_from_pi": False,
+        }
+        # upsert, if flow_id exists, update the content, else insert everything
+        if existing:
+            db.execute(update(flow_run).where(flow_run.c.prefect_flow_id == prefect_flow_id).values(**values))
+        else:
+            db.execute(flow_run.insert().values(**values))
 
         db.commit()
         logger.info("Dummy flow_run inserted from task!")
