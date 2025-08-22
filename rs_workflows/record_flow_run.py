@@ -1,11 +1,10 @@
-from prefect import task, get_run_logger, runtime
+from prefect import task, get_run_logger
 from sqlalchemy import create_engine, MetaData, Table
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
 import os
 
 @task
-def record_flow_run(start_date = None, stop_date = None, status = None):
+def record_flow_run(start_date = None, stop_date = None, status = None, runtime=None):
     """Parameters will be added, const values to be extracted from flowenv?"""
     logger = get_run_logger()
     logger.info(f"Inserting a record into flow_run table")
