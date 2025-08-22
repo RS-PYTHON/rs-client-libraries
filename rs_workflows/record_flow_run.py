@@ -5,7 +5,12 @@ import os
 
 @task
 def record_flow_run(start_date = None, stop_date = None, status = None, runtime=None):
-    """Parameters will be added, const values to be extracted from flowenv?"""
+    """
+        start_date: UTC date and time of the DPR processing starts.
+        stop_date: UTC date and time of the DPR processing ends.
+        status: Can be : NULL, OK, NOK. Set to ‘NULL’ by default.
+        runtime: prefect context runtime variable
+    """
     logger = get_run_logger()
     logger.info(f"Inserting a record into flow_run table")
 
