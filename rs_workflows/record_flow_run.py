@@ -1,11 +1,11 @@
-from prefect import task, flow, get_run_logger
+from prefect import task, get_run_logger, runtime
 from sqlalchemy import create_engine, MetaData, Table
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
-import uuid, os
+import os
 
 @task
-def record_flow_run():
+def record_flow_run(start_date = None, stop_date = None, status = None):
     """Parameters will be added, const values to be extracted from flowenv?"""
     logger = get_run_logger()
     logger.info(f"Inserting a record into flow_run table")
@@ -26,19 +26,19 @@ def record_flow_run():
         # Insert
         db.execute(
             flow_run.insert().values(
-                flow_type="dummy_type",
-                mission="dummy_mission",
-                prefect_flow_id=str(uuid.uuid4()),
-                prefect_flow_parent_id=None,
+                flow_type=runtime.parameters.get("flow_run_type", "systematic"),
+                mission=runtime.parameters.get("mission", "null"),
+                prefect_flow_id=runtime.flow_run.id,
+                prefect_flow_parent_id=runtime.flow_run.parent_flow_run_id,
                 dask_version="2025.0.0",
                 python_version="3.11.9",
-                dpr_processor_name="dummy_processor",
-                dpr_processor_version="1.0",
-                dpr_processor_unit="unit_test",
-                dpr_processing_input_stac_items={"input": "dummy"},
-                dpr_processing_start_datetime=datetime.utcnow(),
-                dpr_processing_stop_datetime=datetime.utcnow(),
-                dpr_processing_status="SUCCESS",
+                dpr_processor_name=runtime.parameters.get("dpr_processor_name", "dpr_processor"),
+                dpr_processor_version=runtime.parameters.get("dpr_processor_version", "dpr_processor_version"),
+                dpr_processor_unit=runtime.parameters.get("dpr_processor_unit", "dpr_processor_unit"),
+                dpr_processing_input_stac_items=runtime.parameters.get("dpr_processing_input_stac_items", "dpr_processing_input_stac_items"),
+                dpr_processing_start_datetime=start_date,
+                dpr_processing_stop_datetime=stop_date,
+                dpr_processing_status=status,
                 excluded_from_pi=False
             )
         )
