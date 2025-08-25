@@ -14,6 +14,7 @@
 
 """Test the Prefect workflows"""
 
+import json
 import os
 from collections import defaultdict
 from pathlib import Path
@@ -22,6 +23,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from prefect.blocks.system import Secret
+from pydantic import SecretStr
 
 from rs_client.rs_client import RsClient
 from rs_common import prefect_utils
@@ -119,11 +121,22 @@ workflow:
     return Path(to_path)
 
 
-async def setup_worklow_test_env():
+async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
     """Set up secret blocks needed for correct execution of workflows in Prefect"""
     # Environment variables for all users. For these test we don't need specific values
     # so it creates an empty secret. See test_prefect_utils.py for a real case example.
-    await Secret(value={}).save(  # type: ignore[arg-type]
+    # Use an empty dictionary if input_dict is None
+    # Default arguments are evaluated once when the function is defined, not each
+    # time the function is called. If env_vars = {} would have been used and modify env_vars in one call,
+    # this modified dictionary would persists for subsequent calls, which can lead to bugs.
+    # Using env_vars = None and creating a new empty dictionary inside this function avoids this issue.
+    env_vars = env_vars if env_vars is not None else {}
+    # Serialize dictionary to a JSON string and wrap it in SecretStr
+    secret_value = SecretStr(json.dumps(env_vars))
+
+    await Secret(
+        value=secret_value,
+    ).save(  # type: ignore[arg-type]
         prefect_utils.BLOCK_NAME_ENV_GLOBAL,
         overwrite=True,
     )
@@ -384,7 +397,7 @@ async def test_init_pi_database(monkeypatch, mock_prefect):  # pylint: disable=u
         "POSTGRES_PORT": "5432",
         "POSTGRES_PI_DB": "test_db",
     }
-    await setup_worklow_test_env()
+    await setup_worklow_test_env(mock_environ)
     monkeypatch.setattr(os, "environ", mock_environ)
 
     mock_create_schema = MagicMock()
