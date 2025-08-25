@@ -1,10 +1,10 @@
-from prefect import task, get_run_logger
+from prefect import task, get_run_logger, runtime
 from sqlalchemy import create_engine, MetaData, Table, select, update
 from sqlalchemy.orm import sessionmaker
 import os
 
 @task
-def record_flow_run(start_date = None, stop_date = None, status = None, runtime=None):
+def record_flow_run(start_date = None, stop_date = None, status = None):
     """
         start_date: UTC date and time of the DPR processing starts.
         stop_date: UTC date and time of the DPR processing ends.
@@ -12,6 +12,7 @@ def record_flow_run(start_date = None, stop_date = None, status = None, runtime=
         runtime: prefect context runtime variable
     """
     logger = get_run_logger()
+    logger.info(runtime.flow_run.parameters)
     logger.info(f"Inserting a record into flow_run table")
 
     db_url = (
