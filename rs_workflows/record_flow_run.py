@@ -2,6 +2,8 @@ from prefect import task, get_run_logger, runtime
 from sqlalchemy import create_engine, MetaData, Table, select, update
 from sqlalchemy.orm import sessionmaker
 import os
+import sys
+from importlib.metadata import version
 
 @task
 def record_flow_run(start_date = None, stop_date = None, status = None):
@@ -39,8 +41,8 @@ def record_flow_run(start_date = None, stop_date = None, status = None):
             "mission": runtime.flow_run.parameters.get("mission", "null"),
             "prefect_flow_id": prefect_flow_id,
             "prefect_flow_parent_id": runtime.flow_run.parent_flow_run_id,
-            "dask_version": "2025.0.0", # wip
-            "python_version": "3.11.9", # wip
+            "dask_version": version("dask"),
+            "python_version": sys.version.split()[0],
             "dpr_processor_name": runtime.flow_run.parameters.get("dpr_processor_name", "dpr_processor"),
             "dpr_processor_version": runtime.flow_run.parameters.get("dpr_processor_version", "dpr_processor_version"),
             "dpr_processor_unit": runtime.flow_run.parameters.get("dpr_processor_unit", "dpr_processor_unit"),
@@ -57,7 +59,7 @@ def record_flow_run(start_date = None, stop_date = None, status = None):
             db.execute(flow_run.insert().values(**values))
 
         db.commit()
-        logger.info("Dummy flow_run inserted from task!")
+        logger.info("Sucessfully inserted into flow_run!")
 
     except Exception as e:
         db.rollback()
