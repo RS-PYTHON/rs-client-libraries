@@ -14,6 +14,7 @@
 """Module for testing <<record flow run>>"""
 
 from unittest.mock import MagicMock
+
 import rs_workflows.record_flow_run as record_flow_module
 
 
