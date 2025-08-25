@@ -54,7 +54,7 @@ def test_record_flow_run_inserts_new_entry(monkeypatch, mocker):
     mock_session.close = MagicMock()
 
     # Fake sessionmaker that always returns mock_session
-    def fake_sessionmaker(**kwargs): # pylint: disable
+    def fake_sessionmaker(**kwargs):  # pylint: disable = unused-argument
         return lambda: mock_session
 
     mocker.patch("rs_workflows.record_flow_run.sessionmaker", side_effect=fake_sessionmaker)
