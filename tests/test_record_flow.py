@@ -1,8 +1,25 @@
-import pytest
+# Copyright 2025 CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Module for testing <<record flow run>>"""
+
 from unittest.mock import MagicMock
+
 import rs_workflows.record_flow_run as record_flow_module
 
+
 def test_record_flow_run_inserts_new_entry(monkeypatch, mocker):
+    """Test record flow run"""
     # Environment variables for all users
     env_global = {
         "POSTGRES_USER": "test_user",
@@ -38,7 +55,7 @@ def test_record_flow_run_inserts_new_entry(monkeypatch, mocker):
     mock_session.close = MagicMock()
 
     # Fake sessionmaker that always returns mock_session
-    def fake_sessionmaker(**kwargs):
+    def fake_sessionmaker():
         return lambda: mock_session
 
     mocker.patch("rs_workflows.record_flow_run.sessionmaker", side_effect=fake_sessionmaker)
