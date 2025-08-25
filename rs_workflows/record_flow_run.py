@@ -1,20 +1,37 @@
-from prefect import task, get_run_logger, runtime
-from sqlalchemy import create_engine, MetaData, Table, select, update
-from sqlalchemy.orm import sessionmaker
+# Copyright 2025 CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Module with task used to insert into flow run table."""
+
 import os
 import sys
 from importlib.metadata import version
 
+from prefect import get_run_logger, runtime, task
+from sqlalchemy import MetaData, Table, create_engine, select, update
+from sqlalchemy.orm import sessionmaker
+
+
 @task
-def record_flow_run(start_date = None, stop_date = None, status = None):
+def record_flow_run(start_date=None, stop_date=None, status=None):
     """
-        start_date: UTC date and time of the DPR processing starts.
-        stop_date: UTC date and time of the DPR processing ends.
-        status: Can be : NULL, OK, NOK. Set to ‘NULL’ by default.
-        runtime: prefect context runtime variable
+    start_date: UTC date and time of the DPR processing starts.
+    stop_date: UTC date and time of the DPR processing ends.
+    status: Can be : NULL, OK, NOK. Set to ‘NULL’ by default.
     """
     logger = get_run_logger()
-    logger.info(f"Inserting a record into flow_run table")
+    logger.info("Inserting a record into flow_run table")
 
     db_url = (
         f"postgresql+psycopg2://{os.environ['POSTGRES_USER']}:"
@@ -22,8 +39,7 @@ def record_flow_run(start_date = None, stop_date = None, status = None):
         f"{os.environ['POSTGRES_PORT']}/{os.environ['POSTGRES_PI_DB']}"
     )
     engine = create_engine(db_url, pool_pre_ping=True)
-    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    db = SessionLocal()
+    db = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
 
     try:
         metadata = MetaData()
@@ -32,9 +48,7 @@ def record_flow_run(start_date = None, stop_date = None, status = None):
         prefect_flow_id = runtime.flow_run.id
 
         # check if current flow_id is registered
-        existing = db.execute(
-            select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)
-        ).fetchone()
+        existing = db.execute(select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)).fetchone()
 
         values = {
             "flow_type": runtime.flow_run.parameters.get("flow_run_type", "systematic"),
@@ -46,7 +60,10 @@ def record_flow_run(start_date = None, stop_date = None, status = None):
             "dpr_processor_name": runtime.flow_run.parameters.get("dpr_processor_name", "dpr_processor"),
             "dpr_processor_version": runtime.flow_run.parameters.get("dpr_processor_version", "dpr_processor_version"),
             "dpr_processor_unit": runtime.flow_run.parameters.get("dpr_processor_unit", "dpr_processor_unit"),
-            "dpr_processing_input_stac_items": runtime.flow_run.parameters.get("dpr_processing_input_stac_items", "dpr_processing_input_stac_items"),
+            "dpr_processing_input_stac_items": runtime.flow_run.parameters.get(
+                "dpr_processing_input_stac_items",
+                "dpr_processing_input_stac_items",
+            ),
             "dpr_processing_start_datetime": start_date,
             "dpr_processing_stop_datetime": stop_date,
             "dpr_processing_status": status,
