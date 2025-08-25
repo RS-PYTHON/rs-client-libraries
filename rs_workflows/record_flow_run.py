@@ -12,7 +12,6 @@ def record_flow_run(start_date = None, stop_date = None, status = None):
         runtime: prefect context runtime variable
     """
     logger = get_run_logger()
-    logger.info(runtime.flow_run.parameters)
     logger.info(f"Inserting a record into flow_run table")
 
     db_url = (
@@ -36,16 +35,16 @@ def record_flow_run(start_date = None, stop_date = None, status = None):
         ).fetchone()
 
         values = {
-            "flow_type": runtime.parameters.get("flow_run_type", "systematic"),
-            "mission": runtime.parameters.get("mission", "null"),
+            "flow_type": runtime.flow_run.parameters.get("flow_run_type", "systematic"),
+            "mission": runtime.flow_run.parameters.get("mission", "null"),
             "prefect_flow_id": prefect_flow_id,
             "prefect_flow_parent_id": runtime.flow_run.parent_flow_run_id,
             "dask_version": "2025.0.0", # wip
             "python_version": "3.11.9", # wip
-            "dpr_processor_name": runtime.parameters.get("dpr_processor_name", "dpr_processor"),
-            "dpr_processor_version": runtime.parameters.get("dpr_processor_version", "dpr_processor_version"),
-            "dpr_processor_unit": runtime.parameters.get("dpr_processor_unit", "dpr_processor_unit"),
-            "dpr_processing_input_stac_items": runtime.parameters.get("dpr_processing_input_stac_items", "dpr_processing_input_stac_items"),
+            "dpr_processor_name": runtime.flow_run.parameters.get("dpr_processor_name", "dpr_processor"),
+            "dpr_processor_version": runtime.flow_run.parameters.get("dpr_processor_version", "dpr_processor_version"),
+            "dpr_processor_unit": runtime.flow_run.parameters.get("dpr_processor_unit", "dpr_processor_unit"),
+            "dpr_processing_input_stac_items": runtime.flow_run.parameters.get("dpr_processing_input_stac_items", "dpr_processing_input_stac_items"),
             "dpr_processing_start_datetime": start_date,
             "dpr_processing_stop_datetime": stop_date,
             "dpr_processing_status": status,
