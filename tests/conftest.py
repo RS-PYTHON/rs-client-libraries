@@ -19,6 +19,7 @@ The conftest.py file serves as a means of providing fixtures for an entire direc
 Fixtures defined in a conftest.py can be used by any test in that package without needing to import them
 (pytest will automatically discover them).
 """
+import logging
 
 import pytest
 import responses
@@ -28,6 +29,7 @@ from rs_client.rs_client import RsClient
 from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from rs_common.utils import env_bool
+from rs_workflows import init_pi_db_flow
 from tests import common
 
 # Use dummy values
@@ -542,3 +544,12 @@ def mocked_stac_catalog_get_item():
         )
 
         yield MOCKED_URL
+
+
+@pytest.fixture(autouse=True, scope="function")
+def patch_prefect_logger(monkeypatch):
+    """
+    Patch Prefect get_run_logger to avoid MissingContextError in tests.
+    Replaces Prefect’s logger with a standard Python logger.
+    """
+    monkeypatch.setattr(init_pi_db_flow, "get_run_logger", lambda: logging.getLogger("test"))
