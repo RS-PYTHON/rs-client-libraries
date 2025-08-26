@@ -21,8 +21,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-
-from .pi_db_models import Base, PiCategory
+from rs_workflows.pi_db_models import Base, PiCategory
 
 PI_CATEGORY_DATA = [
     ("S1", "L0-SEG-NRT", "Segments EW, IW, SM with timeliness NRT & PT", 1800),
