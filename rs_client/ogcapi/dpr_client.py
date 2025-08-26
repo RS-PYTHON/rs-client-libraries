@@ -142,12 +142,16 @@ class DprClient(OgcApiClient):
     ######################################################
 
     def get_processes(self) -> dict:
-        """Get all defined processes."""
-        return super().get_processes()
+        """Get all defined processes with logging."""
+        processes = super().get_processes()
+        self.logger.debug("Fetched %d processes", len(processes))
+        return processes
 
     def get_jobs(self) -> dict:
-        """Get all registered jobs."""
-        return super().get_jobs()
+        """Get all registered jobs with logging."""
+        jobs = super().get_jobs()
+        self.logger.debug("Fetched %d jobs", len(jobs))
+        return jobs
 
     def delete_job(self, _: str) -> dict:
         raise NotImplementedError
