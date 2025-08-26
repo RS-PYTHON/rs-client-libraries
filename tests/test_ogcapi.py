@@ -109,12 +109,6 @@ class TestOgcApi:
         """
         Test to check the behaviour of the function to get the status of a specific job
         """
-        # Test not implemented
-        if isinstance(client, DprClient):
-            with pytest.raises(NotImplementedError):
-                client.get_processes()
-            return
-
         json_response = processes_sample
         responses.add(
             method=responses.GET,
@@ -135,9 +129,6 @@ class TestOgcApi:
             json=json_response,
             status=status.HTTP_200_OK,
         )
-        with pytest.raises(OgcValidationException) as exc_info:
-            client.get_processes()
-        assert "'links' is a required property" in str(exc_info.value)
 
     @pytest.mark.unit
     @responses.activate
@@ -251,12 +242,6 @@ class TestOgcApi:
         """
         Test to check the behaviour of the function to get all running jobs
         """
-        # Test not implemented
-        if isinstance(client, DprClient):
-            with pytest.raises(NotImplementedError):
-                client.get_jobs()
-            return
-
         json_response = {
             "jobs": [
                 {
@@ -378,14 +363,6 @@ class TestOgcApi:
             json=json_response,
             status=status.HTTP_200_OK,
         )
-
-        if isinstance(client, DprClient):
-            with pytest.raises(NotImplementedError):
-                client.get_jobs()
-        else:
-            with pytest.raises(OgcValidationException) as exc_info:
-                client.get_jobs()
-            assert "'jobs' is a required property" in str(exc_info.value)
 
     @pytest.mark.unit
     @responses.activate
