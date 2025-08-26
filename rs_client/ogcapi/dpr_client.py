@@ -67,6 +67,7 @@ class DprClient(OgcApiClient):
         payload_subpath: str,
         s3_report_dir: str | None,
         use_dpr_mockup: bool = False,
+        extra_data: dict = {},
     ) -> dict:
         """Method to start the process from rs-client - Call the endpoint /processes/{process}/execution
 
@@ -77,6 +78,7 @@ class DprClient(OgcApiClient):
             s3_report_dir: S3 bucket folder were the processor report files will be written (optional). All the eopf
             local files written in the local "./reports" directory will be pushed to this S3 bucket folder.
             use_dpr_mockup: Use the real or the mockup DPR processor ?
+            extra_data: Extra data to pass to the processor.
 
         Return:
             job_id (int, str): Returns the status code of the request + the identifier
@@ -90,7 +92,7 @@ class DprClient(OgcApiClient):
                 "s3_config_dir": s3_config_dir,
                 "payload_subpath": payload_subpath,
                 "s3_report_dir": s3_report_dir,
-            }
+            } | extra_data
 
         # For the mockup processor, pass the payload contents.
         # Download the payload file into a temp file.
