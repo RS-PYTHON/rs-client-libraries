@@ -48,9 +48,7 @@ def record_flow_run(start_date=None, stop_date=None, status=None):
         prefect_flow_id = runtime.flow_run.id
 
         # Check if record exists
-        existing = db.execute(
-            select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)
-        ).fetchone()
+        existing = db.execute(select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)).fetchone()
 
         if not existing:
             # Insert new record
@@ -62,7 +60,10 @@ def record_flow_run(start_date=None, stop_date=None, status=None):
                 "dask_version": version("dask"),
                 "python_version": sys.version.split()[0],
                 "dpr_processor_name": runtime.flow_run.parameters.get("dpr_processor_name", "dpr_processor"),
-                "dpr_processor_version": runtime.flow_run.parameters.get("dpr_processor_version", "dpr_processor_version"),
+                "dpr_processor_version": runtime.flow_run.parameters.get(
+                    "dpr_processor_version",
+                    "dpr_processor_version",
+                ),
                 "dpr_processor_unit": runtime.flow_run.parameters.get("dpr_processor_unit", "dpr_processor_unit"),
                 "dpr_processing_input_stac_items": runtime.flow_run.parameters.get(
                     "dpr_processing_input_stac_items",
@@ -86,11 +87,7 @@ def record_flow_run(start_date=None, stop_date=None, status=None):
                 update_values["dpr_processing_status"] = status
 
             if update_values:
-                stmt = (
-                    update(flow_run)
-                    .where(flow_run.c.prefect_flow_id == prefect_flow_id)
-                    .values(**update_values)
-                )
+                stmt = update(flow_run).where(flow_run.c.prefect_flow_id == prefect_flow_id).values(**update_values)
                 db.execute(stmt)
                 logger.info(f"Updated flow_run {prefect_flow_id} with {update_values}")
 
