@@ -67,7 +67,7 @@ class DprClient(OgcApiClient):
         payload_subpath: str,
         s3_report_dir: str | None,
         use_dpr_mockup: bool = False,
-        extra_data: dict = {},
+        extra_data: dict | None = None,
     ) -> dict:
         """Method to start the process from rs-client - Call the endpoint /processes/{process}/execution
 
@@ -92,7 +92,7 @@ class DprClient(OgcApiClient):
                 "s3_config_dir": s3_config_dir,
                 "payload_subpath": payload_subpath,
                 "s3_report_dir": s3_report_dir,
-            } | extra_data
+            } | (extra_data or {})
 
         # For the mockup processor, pass the payload contents.
         # Download the payload file into a temp file.
