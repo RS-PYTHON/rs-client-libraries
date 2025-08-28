@@ -89,6 +89,11 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
         "S3_ENDPOINT": "S3_ENDPOINT",
         "LOCAL_DASK_USERNAME": "LOCAL_DASK_USERNAME",
         "LOCAL_DASK_PASSWORD": "LOCAL_DASK_PASSWORD",
+        "POSTGRES_USER": "test_user",
+        "POSTGRES_PASSWORD": "test_pass",
+        "POSTGRES_HOST": "test_host",
+        "POSTGRES_PORT": "5432",
+        "POSTGRES_PI_DB": "test_db",
     }
 
     # In local mode, they must be set in the env
