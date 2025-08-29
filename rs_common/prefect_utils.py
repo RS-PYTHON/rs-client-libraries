@@ -136,7 +136,7 @@ async def init_prefect_blocks():
         await Secret(
             value={  # type: ignore[arg-type]
                 "RSPY_LOCAL_MODE": "1",
-                "PREFECT_BUCKET_NAME": os.getenv("PREFECT_BUCKET_NAME") or os.environ["RSPY_TEMP_BUCKET"],
+                "PREFECT_BUCKET_NAME": os.environ["PREFECT_BUCKET_NAME"],
                 "PREFECT_BUCKET_FOLDER": os.getenv("PREFECT_BUCKET_FOLDER", "prefect-share"),
                 "S3_ACCESSKEY": os.environ["S3_ACCESSKEY"],
                 "S3_SECRETKEY": os.environ["S3_SECRETKEY"],
