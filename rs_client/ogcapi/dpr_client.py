@@ -124,7 +124,7 @@ class DprClient(OgcApiClient):
             data.update({"use_mockup": use_mockup})
 
         # Call the parent method
-        return super()._run_process(str(process), data)
+        return super()._run_process(process.value, data)
 
     def run_conv_safe_zarr(self, payload: dict):
         """Method to start the safe to zarr conversion process from rs-client -
