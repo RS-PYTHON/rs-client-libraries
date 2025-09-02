@@ -17,6 +17,7 @@
 import ast
 import os.path as osp
 import tempfile
+from enum import Enum
 
 import yaml
 from openapi_core import OpenAPI  # Spec, validate_request, validate_response
@@ -34,6 +35,17 @@ PATH_TO_YAML_OPENAPI = osp.realpath(
         "dpr_openapi_schema.yaml",
     ),
 )
+
+
+class DprProcess(str, Enum):
+    """DPR processor name"""
+
+    # String value = resource name in the rs-dpr-service
+    CONV_SAFE_ZARR = "conv_safe_zarr"
+    MOCKUP = "mockup"
+    S1L0 = "s1_l0"
+    S3L0 = "s3_l0"
+    S1ARD = "s1_ard"
 
 
 class DprClient(OgcApiClient):
@@ -62,22 +74,20 @@ class DprClient(OgcApiClient):
 
     def run_process(
         self,
-        process: str,
+        process: DprProcess,
         s3_config_dir: str,
         payload_subpath: str,
         s3_report_dir: str | None,
-        use_dpr_mockup: bool = False,
         extra_data: dict | None = None,
     ) -> dict:
         """Method to start the process from rs-client - Call the endpoint /processes/{process}/execution
 
         Args:
-            process: Process name
+            process: DPR process
             s3_config_dir: S3 bucket folder that contains the payload and configuration files to pass to the processor
             payload_subpath: Payload file path, relative to the config folder
             s3_report_dir: S3 bucket folder were the processor report files will be written (optional). All the eopf
             local files written in the local "./reports" directory will be pushed to this S3 bucket folder.
-            use_dpr_mockup: Use the real or the mockup DPR processor ?
             extra_data: Extra data to pass to the processor.
 
         Return:
@@ -85,9 +95,11 @@ class DprClient(OgcApiClient):
             (or None if endpoint fails) of the running job
         """
 
+        use_mockup = process == DprProcess.MOCKUP
+
         # Data to pass to the real processor
         data = {}
-        if not use_dpr_mockup:
+        if not use_mockup:
             data = {
                 "s3_config_dir": s3_config_dir,
                 "payload_subpath": payload_subpath,
@@ -109,10 +121,10 @@ class DprClient(OgcApiClient):
                     data = yaml.safe_load(opened)
 
             # Add extra info
-            data.update({"use_mockup": use_dpr_mockup})
+            data.update({"use_mockup": use_mockup})
 
         # Call the parent method
-        return super()._run_process(process, data)
+        return super()._run_process(str(process), data)
 
     def run_conv_safe_zarr(self, payload: dict):
         """Method to start the safe to zarr conversion process from rs-client -
