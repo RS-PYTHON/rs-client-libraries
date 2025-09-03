@@ -24,12 +24,24 @@ from sqlalchemy.orm import sessionmaker
 
 
 @task
-def record_flow_run(start_date=None, stop_date=None, status=None):
+def record_flow_run(
+    start_date: str = None,
+    stop_date: str = None,
+    status: str = None,
+    flow_run_type: str = None,
+    mission: str = None,
+    dpr_processor_name: str = None,
+    dpr_processor_version: str = None,
+    dpr_processor_unit: str = None,
+    dpr_processing_input_stac_items: str = None,
+):
     """
-    start_date: UTC date and time of the DPR processing starts.
-    stop_date: UTC date and time of the DPR processing ends.
-    status: Can be : NULL, OK, NOK. Set to 'NULL' by default.
+    Records or updates flow_run in database with priority:
+    1. Explicit task parameter
+    2. runtime.flow_run.parameters
+    3. Hardcoded default
     """
+
     logger = get_run_logger()
     logger.info("Inserting or updating a record in flow_run table")
 
@@ -41,6 +53,13 @@ def record_flow_run(start_date=None, stop_date=None, status=None):
     engine = create_engine(db_url, pool_pre_ping=True)
     db = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
 
+    def resolve_param(param_value, runtime_key, default):
+        """Return param_value if set, else runtime parameter, else default."""
+        if param_value is not None:
+            return param_value
+        runtime_val = runtime.flow_run.parameters.get(runtime_key)
+        return runtime_val if runtime_val is not None else default
+
     try:
         metadata = MetaData()
         flow_run = Table("flow_run", metadata, autoload_with=engine)
@@ -48,26 +67,26 @@ def record_flow_run(start_date=None, stop_date=None, status=None):
         prefect_flow_id = runtime.flow_run.id
 
         # Check if record exists
-        existing = db.execute(select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)).fetchone()
+        existing = db.execute(
+            select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)
+        ).fetchone()
 
         if not existing:
             # Insert new record
             values = {
-                "flow_type": runtime.flow_run.parameters.get("flow_run_type", "systematic"),
-                "mission": runtime.flow_run.parameters.get("mission", "null"),
+                "flow_type": resolve_param(flow_run_type, "flow_run_type", "systematic"),
+                "mission": resolve_param(mission, "mission", "sentinel-1"),
                 "prefect_flow_id": prefect_flow_id,
                 "prefect_flow_parent_id": runtime.flow_run.parent_flow_run_id,
                 "dask_version": version("dask"),
                 "python_version": sys.version.split()[0],
-                "dpr_processor_name": runtime.flow_run.parameters.get("dpr_processor_name", "dpr_processor"),
-                "dpr_processor_version": runtime.flow_run.parameters.get(
-                    "dpr_processor_version",
-                    "dpr_processor_version",
-                ),
-                "dpr_processor_unit": runtime.flow_run.parameters.get("dpr_processor_unit", "dpr_processor_unit"),
-                "dpr_processing_input_stac_items": runtime.flow_run.parameters.get(
+                "dpr_processor_name": resolve_param(dpr_processor_name, "dpr_processor_name", "dpr_processor"),
+                "dpr_processor_version": resolve_param(dpr_processor_version, "dpr_processor_version", "dpr_processor_version"),
+                "dpr_processor_unit": resolve_param(dpr_processor_unit, "dpr_processor_unit", "dpr_processor_unit"),
+                "dpr_processing_input_stac_items": resolve_param(
+                    dpr_processing_input_stac_items,
                     "dpr_processing_input_stac_items",
-                    "dpr_processing_input_stac_items",
+                    "{'dpr_processing_input_stac_items': 'value'}",
                 ),
                 "dpr_processing_start_datetime": start_date,
                 "dpr_processing_stop_datetime": stop_date,

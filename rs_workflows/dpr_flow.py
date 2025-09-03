@@ -242,13 +242,7 @@ async def run_processor(
     env: FlowEnvArgs,
     processor: ProcessorEnum,
     s3_payload_run: str,
-    use_dpr_mockup: bool = False,
-    flow_run_type: str = "systematic",
-    mission: str = "sentinel-1",
-    dpr_processor_name: str = "dpr_processor", # processor.S1L0
-    dpr_processor_version: str = "dpr_processor_version",
-    dpr_processor_unit: str = "dpr_processor_unit",
-    dpr_processing_input_stac_items: str = "{'dpr_processing_input_stac_items': 'value'}", # same as s3_payload_run
+    use_dpr_mockup: bool = False
 ) -> list[dict]:
     """
     Run the DPR processor.
@@ -264,7 +258,7 @@ async def run_processor(
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "run-processor"):
-        record_flow_run.fn(start_date=datetime.datetime.now(), status="OK")
+        record_flow_run.fn(start_date=datetime.datetime.now(), status="OK", dpr_processing_input_stac_items=s3_payload_run, dpr_processor_name=processor.value)
         # Trigger the processor run from the dpr service
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
         job_status = dpr_client.run_process(
@@ -276,5 +270,5 @@ async def run_processor(
         )
         wait_for = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
         # Wait for the job to finish
-        record_flow_run.fn(start_date=datetime.datetime.now(), status="OK")
+        record_flow_run.fn(stop_date=datetime.datetime.now(), status="OK", dpr_processing_input_stac_items=s3_payload_run, dpr_processor_name=processor.value)
         return wait_for
