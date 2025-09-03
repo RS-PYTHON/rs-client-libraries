@@ -576,7 +576,7 @@ class TestOgcApi:
     def test_wait_for_job(self, client, mocker):
         """Test the wait_for_job function"""
 
-        timeout = 0.3
+        # timeout = 0.3
         poll_interval = 0.1
         mock_interval = 0.15
         message = {"any": "value"}
@@ -599,10 +599,21 @@ class TestOgcApi:
         # Test nominal case
         time1 = datetime.now()
         if isinstance(client, DprClient):
-            assert message == client.wait_for_job({"jobID": "jobID"}, logger, "job_name", timeout, poll_interval)
+            assert message == client.wait_for_job(
+                {"jobID": "jobID"},
+                logger,
+                "job_name",
+                # timeout,
+                poll_interval,
+            )
             assert mock_job_info.call_count == 3
         else:  # StagingClient
-            client.wait_for_jobs({"job1": {"jobID": "job1"}, "job2": {"jobID": "job2"}}, logger, timeout, poll_interval)
+            client.wait_for_jobs(
+                {"job1": {"jobID": "job1"}, "job2": {"jobID": "job2"}},
+                logger,
+                # timeout,
+                poll_interval,
+            )
             assert mock_job_info.call_count == 4
 
         # Test missing id
@@ -612,8 +623,15 @@ class TestOgcApi:
 
         # Test timeout
         mocker.patch.object(client, "get_job_info", side_effect=lambda *_: {"status": "running"})
+        # Patch math.inf in the ogcapi_client module
+        # this is because of the missing endpoint staging.cancel_job(job_id)
+        # Check the comment from OgcApiClient.wait_for_job() function
+        mocker.patch("rs_client.ogcapi.ogcapi_client.math.inf", 0.3)
         with pytest.raises(TimeoutError) as exc_info:
-            client.wait_for_job({"jobID": "jobID"}, timeout=timeout)
+            client.wait_for_job(
+                {"jobID": "jobID"},
+                # timeout=timeout
+            )
 
         # Test failed job
         mocker.patch.object(client, "get_job_info", side_effect=lambda *_: {"status": "failed"})

@@ -15,7 +15,8 @@
 """Launch staging with rs-client-libraries"""
 
 import json
-import math
+
+# import math
 import os
 import os.path as osp
 from collections import defaultdict
@@ -152,7 +153,7 @@ class StagingClient(OgcApiClient):
         self,
         all_job_status: dict[str, dict],
         logger=None,
-        timeout: int | float = math.inf,
+        # timeout: int | float = math.inf,
         poll_interval: int = 2,
     ):
         """
@@ -162,6 +163,7 @@ class StagingClient(OgcApiClient):
             job_status: Returned by `run_staging`
             logger: To show advancement in logger
             timeout: Job completion timeout in seconds
+                    NOTE: This argument has been disabled, see the comment in super().wait_for_job() function
             poll_interval: When to check again for job completion in seconds
 
         Raises:
@@ -173,6 +175,6 @@ class StagingClient(OgcApiClient):
                 job_status,
                 logger,
                 f"Staging from {hostname!r}",
-                timeout,
+                # timeout,
                 poll_interval,
             )

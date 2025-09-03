@@ -26,7 +26,7 @@ async def staging(
     env: FlowEnvArgs,
     stac_input: str | ItemCollection | dict,  # warning: dict as last choice for prefect ui
     catalog_collection_identifier: str,
-    timeout: int = 1200,
+    # timeout: int = 1200,
     poll_interval: int = 2,
 ):
     """
@@ -42,6 +42,7 @@ async def staging(
             - A single link that returns a STAC ItemCollection: this link should be an url to search an ItemCollection
         catalog_collection_identifier: Catalog collection identifier where items are staged
         timeout: Job completion timeout in seconds
+            NOTE: This argument has been disabled, see the comment in staging_client.wait_for_jobs function
         poll_interval: When to check again for job completion in seconds
     """
     logger = get_run_logger()
@@ -58,7 +59,12 @@ async def staging(
 
         # Trigger the staging and wait for jobs to finish
         job_status = staging_client.run_staging(stac_input, catalog_collection_identifier)
-        staging_client.wait_for_jobs(job_status, logger, timeout, poll_interval)
+        staging_client.wait_for_jobs(
+            job_status,
+            logger,
+            # timeout,
+            poll_interval,
+        )
 
 
 ###########################
