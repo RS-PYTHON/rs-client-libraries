@@ -21,19 +21,19 @@ from importlib.metadata import version
 from prefect import get_run_logger, runtime, task
 from sqlalchemy import MetaData, Table, create_engine, select, update
 from sqlalchemy.orm import sessionmaker
-
+from datetime import datetime
 
 @task
 def record_flow_run(
-    start_date: str = None,
-    stop_date: str = None,
-    status: str = None,
-    flow_run_type: str = None,
-    mission: str = None,
-    dpr_processor_name: str = None,
-    dpr_processor_version: str = None,
-    dpr_processor_unit: str = None,
-    dpr_processing_input_stac_items: str = None,
+    start_date: datetime | str | None = None,
+    stop_date: datetime | str | None = None,
+    status: str | None = None,
+    flow_run_type: str | None = None,
+    mission: str | None = None,
+    dpr_processor_name: str | None = None,
+    dpr_processor_version: str | None = None,
+    dpr_processor_unit: str | None = None,
+    dpr_processing_input_stac_items: str | None = None,
 ):
     """
     Records or updates flow_run in database with priority:
@@ -45,14 +45,6 @@ def record_flow_run(
     logger = get_run_logger()
     logger.info("Inserting or updating a record in flow_run table")
 
-    db_url = (
-        f"postgresql+psycopg2://{os.environ['POSTGRES_USER']}:"
-        f"{os.environ['POSTGRES_PASSWORD']}@{os.environ['POSTGRES_HOST']}:"
-        f"{os.environ['POSTGRES_PORT']}/{os.environ['POSTGRES_PI_DB']}"
-    )
-    engine = create_engine(db_url, pool_pre_ping=True)
-    db = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
-
     def resolve_param(param_value, runtime_key, default):
         """Return param_value if set, else runtime parameter, else default."""
         if param_value is not None:
@@ -61,15 +53,21 @@ def record_flow_run(
         return runtime_val if runtime_val is not None else default
 
     try:
+        db_url = (
+            f"postgresql+psycopg2://{os.environ['POSTGRES_USER']}:"
+            f"{os.environ['POSTGRES_PASSWORD']}@{os.environ['POSTGRES_HOST']}:"
+            f"{os.environ['POSTGRES_PORT']}/{os.environ['POSTGRES_PI_DB']}"
+        )
+        engine = create_engine(db_url, pool_pre_ping=True)
+        db = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
+
         metadata = MetaData()
         flow_run = Table("flow_run", metadata, autoload_with=engine)
 
         prefect_flow_id = runtime.flow_run.id
 
         # Check if record exists
-        existing = db.execute(
-            select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)
-        ).fetchone()
+        existing = db.execute(select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)).fetchone()
 
         if not existing:
             # Insert new record
@@ -81,7 +79,11 @@ def record_flow_run(
                 "dask_version": version("dask"),
                 "python_version": sys.version.split()[0],
                 "dpr_processor_name": resolve_param(dpr_processor_name, "dpr_processor_name", "dpr_processor"),
-                "dpr_processor_version": resolve_param(dpr_processor_version, "dpr_processor_version", "dpr_processor_version"),
+                "dpr_processor_version": resolve_param(
+                    dpr_processor_version,
+                    "dpr_processor_version",
+                    "dpr_processor_version",
+                ),
                 "dpr_processor_unit": resolve_param(dpr_processor_unit, "dpr_processor_unit", "dpr_processor_unit"),
                 "dpr_processing_input_stac_items": resolve_param(
                     dpr_processing_input_stac_items,
@@ -113,6 +115,9 @@ def record_flow_run(
         db.commit()
         logger.info("Successfully committed transaction to flow_run!")
 
+    except KeyError as e:
+        logger.error(f"KeyError: {e}")
+        raise e
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to insert/update flow_run in task: {e}")

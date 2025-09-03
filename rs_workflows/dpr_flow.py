@@ -15,6 +15,7 @@
 """DPR flow implementation"""
 
 import copy
+import datetime
 import tempfile
 from os import path as osp
 
@@ -27,8 +28,8 @@ from rs_client.ogcapi.dpr_client import DprClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
-from record_flow_run import record_flow_run
-import datetime
+from rs_workflows.record_flow_run import record_flow_run
+
 
 class PayloadValues(BaseModel):
     """Values read from the payload file."""
@@ -242,7 +243,7 @@ async def run_processor(
     env: FlowEnvArgs,
     processor: ProcessorEnum,
     s3_payload_run: str,
-    use_dpr_mockup: bool = False
+    use_dpr_mockup: bool = False,
 ) -> list[dict]:
     """
     Run the DPR processor.
@@ -258,7 +259,12 @@ async def run_processor(
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "run-processor"):
-        record_flow_run.fn(start_date=datetime.datetime.now(), status="OK", dpr_processing_input_stac_items=s3_payload_run, dpr_processor_name=processor.value)
+        record_flow_run.fn(
+            start_date=datetime.datetime.now(),
+            status="OK",
+            dpr_processing_input_stac_items=s3_payload_run,
+            dpr_processor_name=processor.value,
+        )
         # Trigger the processor run from the dpr service
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
         job_status = dpr_client.run_process(
@@ -270,5 +276,10 @@ async def run_processor(
         )
         wait_for = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
         # Wait for the job to finish
-        record_flow_run.fn(stop_date=datetime.datetime.now(), status="OK", dpr_processing_input_stac_items=s3_payload_run, dpr_processor_name=processor.value)
+        record_flow_run.fn(
+            stop_date=datetime.datetime.now(),
+            status="OK",
+            dpr_processing_input_stac_items=s3_payload_run,
+            dpr_processor_name=processor.value,
+        )
         return wait_for
