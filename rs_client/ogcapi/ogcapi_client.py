@@ -223,7 +223,7 @@ class OgcApiClient(RsClient):
         job_status: dict,
         logger=None,
         job_name: str = "",
-        timeout: int | float = math.inf,
+        # timeout: int | float = math.inf,
         poll_interval: int = 2,
     ) -> dict:
         """
@@ -233,7 +233,8 @@ class OgcApiClient(RsClient):
             job_status: Returned by `_run_process`
             logger: To show advancement in logger
             job_name: Job name to show in the logger
-            timeout: Job completion timeout in seconds
+            timeout: Job completion timeout in seconds.
+                        NOTE: This argument has been disabled, see the comment bellow !
             poll_interval: When to check again for job completion in seconds
 
         Returns:
@@ -242,6 +243,24 @@ class OgcApiClient(RsClient):
         Raises:
             RuntimeError in case of error
         """
+        # This parameter has been disabled as input, requiring the client to use the default timeout (INFINITE)
+        # for the entire staging process.
+        # The reason behind is that the rs-server staging module does not currently provide a 'cancel_job(job_id)'
+        # endpoint. The staging process only stops if at least one file fails to stage. In that case, it sends
+        # 'dask_client.cancel_all()' to terminate all the running tasks in the dask cluster, waits for them to
+        # finish, cleans up (deletes) already staged files, and marks the job status as failed. The rs-client then
+        # retrieves this failed status through 'self.get_job_info(job_identifier)' (see below in this function).
+        # Allowing 'timeout' as an input argument would be error-prone. If a client sets a timeout shorter than
+        # the actual staging duration, the rs-client would raise a timeout error even if the staging
+        # could eventually succeed.
+        # In such cases, the rs-client should ideally be able to notify the staging process to stop by
+        # calling 'cancel_job(job_id)', but this endpoint has not yet been implemented in the rs-server staging module.
+        # For now, the only option available to the rs-client is to wait until the staging process finishes, whether
+        # it ends in success or failure.
+        # If the 'cancel_job(job_id)' endpoint shall be implemented in the staging module, simply uncomment the
+        # input parameter timeout and delete / comment the following line. All the other functions that are using
+        # this function shall be matter to a change as well (uncomment the timeout parameter)
+        timeout: int | float = math.inf
         try:
             status_type = ""
             job_identifier = job_status.get("jobID")
@@ -264,6 +283,8 @@ class OgcApiClient(RsClient):
 
                 # Or sleep n seconds and try again
                 timeout -= poll_interval
+                # This will make sense only when the 'timeout' shall be activated as input argument
+                # (see the comment) from the beginning of this function
                 if timeout <= 0:
                     raise TimeoutError(f"Timed out while waiting for {job_name} job {job_identifier!r}")
                 time.sleep(poll_interval)
