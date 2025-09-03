@@ -16,12 +16,13 @@
 
 import os
 import sys
+from datetime import datetime
 from importlib.metadata import version
 
 from prefect import get_run_logger, runtime, task
 from sqlalchemy import MetaData, Table, create_engine, select, update
 from sqlalchemy.orm import sessionmaker
-from datetime import datetime
+
 
 @task
 def record_flow_run(
