@@ -23,7 +23,7 @@ from prefect import get_run_logger, task
 from pydantic import BaseModel
 from pystac import ItemCollection
 
-from rs_client.ogcapi.dpr_client import DprClient
+from rs_client.ogcapi.dpr_client import DprClient, DprProcess
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
@@ -261,11 +261,10 @@ async def run_processor(
         # Trigger the processor run from the dpr service
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
         job_status = dpr_client.run_process(
-            process=processor.value,
+            process=DprProcess.MOCKUP if use_dpr_mockup else DprProcess(processor.value),
             s3_config_dir=osp.dirname(s3_payload_run),
             payload_subpath=osp.basename(s3_payload_run),
             s3_report_dir=None,
-            use_dpr_mockup=use_dpr_mockup,
         )
 
         # Wait for the job to finish
