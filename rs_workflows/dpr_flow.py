@@ -28,7 +28,7 @@ from rs_client.ogcapi.dpr_client import DprClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
-from rs_workflows.record_flow_run import record_flow_run
+from rs_workflows.record_performance import record_performance_indicators
 
 
 class PayloadValues(BaseModel):
@@ -259,7 +259,7 @@ async def run_processor(
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "run-processor"):
-        record_flow_run.fn(
+        record_performance_indicators.fn(
             start_date=datetime.datetime.now(),
             status="OK",
             dpr_processing_input_stac_items=s3_payload_run,
@@ -276,7 +276,7 @@ async def run_processor(
         )
         wait_for = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
         # Wait for the job to finish
-        record_flow_run.fn(
+        record_performance_indicators.fn(
             stop_date=datetime.datetime.now(),
             status="OK",
             dpr_processing_input_stac_items=s3_payload_run,
