@@ -51,18 +51,34 @@ def resolve_param(param_value, runtime_key, default):
 
 def get_flow_run_id(prefect_flow_id: str) -> int | None:
     """Return id from flow_run table for given prefect_flow_id."""
+
+    logger = get_run_logger()
     db, engine = get_db_session()
     try:
+        logger.info(f"Connecting to DB with engine: {engine}")
+
         metadata = MetaData()
         flow_run = Table("flow_run", metadata, autoload_with=engine)
+        logger.info("Loaded flow_run table metadata")
 
+        logger.info(f"Looking up flow_run.id for prefect_flow_id={prefect_flow_id}")
         row = db.execute(
             select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)
         ).fetchone()
 
-        return row[0] if row else None
+        if row:
+            logger.info(f"Found flow_run.id={row[0]} for prefect_flow_id={prefect_flow_id}")
+            return row[0]
+        else:
+            logger.warning(f"No record found in flow_run for prefect_flow_id={prefect_flow_id}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Error while fetching flow_run.id for prefect_flow_id={prefect_flow_id}: {e}")
+        raise
     finally:
         db.close()
+        logger.info("DB session closed")
 
 def record_flow_run(
     start_date: datetime | str | None = None,
@@ -151,7 +167,7 @@ def record_product_realised():
         "on_time_3_day": False,
         "on_time_7_day": False,
     }
-
+    logger.info(f"Values to be inserted into product_realised: {values}")
     stmt = insert(product_realised).values(**values)
     upsert_stmt = stmt.on_conflict_do_update(
         index_elements=["flow_run_id"],  # conflict key
