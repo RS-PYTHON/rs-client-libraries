@@ -155,21 +155,21 @@ def record_flow_run(
 
 
 def record_product_realised(flow_run_id):
-    """Upsert into product_realised table (insert or update)."""
+    """Insert or update a record in product_realised table by flow_run_id."""
 
     logger = get_run_logger()
     metadata = MetaData()
     db, engine = get_db_session()
     product_realised = Table("product_realised", metadata, autoload_with=engine)
-    # flow_run_id = get_flow_run_id(runtime.flow_run.id)
+
     values = {
         "flow_run_id": flow_run_id or 123456,
         "pi_category_id": 1,
         "eopf_type": "EOPF_TYPE",
         "stac_item": {"example": "stac_item"},
-        "sensing_start_datetime": datetime.now(),
-        "origin_date": datetime.now(),
-        "catalog_stored_datetime": datetime.now(),
+        "sensing_start_datetime": datetime.datetime.utcnow(),
+        "origin_date": datetime.datetime.utcnow(),
+        "catalog_stored_datetime": datetime.datetime.utcnow(),
         "unexpected": False,
         "on_time_0_day": True,
         "on_time_1_day": False,
@@ -177,16 +177,34 @@ def record_product_realised(flow_run_id):
         "on_time_3_day": False,
         "on_time_7_day": False,
     }
-    logger.info(f"Values to be inserted into product_realised: {values}")
-    stmt = insert(product_realised).values(**values)
-    upsert_stmt = stmt.on_conflict_do_update(
-        index_elements=["flow_run_id"],  # conflict key
-        set_={k: v for k, v in values.items() if k != "flow_run_id"},  # update only these
-    )
+    logger.info(f"Values prepared for product_realised: {values}")
 
-    db.execute(upsert_stmt)
-    db.commit()
-    logger.info(f"Upserted product_realised for flow_run_id={flow_run_id}")
+    try:
+        existing = db.execute(
+            select(product_realised.c.id).where(product_realised.c.flow_run_id == flow_run_id),
+        ).fetchone()
+
+        if existing:
+            stmt = (
+                update(product_realised)
+                .where(product_realised.c.flow_run_id == flow_run_id)
+                .values(**{k: v for k, v in values.items() if k != "flow_run_id"})
+            )
+            db.execute(stmt)
+            logger.info(f"Updated product_realised for flow_run_id={flow_run_id}")
+        else:
+            stmt = insert(product_realised).values(**values)
+            db.execute(stmt)
+            logger.info(f"Inserted product_realised for flow_run_id={flow_run_id}")
+
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error in record_product_realised: {e}")
+        raise
+    finally:
+        db.close()
 
 
 @task
