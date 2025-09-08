@@ -145,8 +145,8 @@ def record_flow_run(
             stmt = update(flow_run).where(flow_run.c.prefect_flow_id == prefect_flow_id).values(**update_values)
             db.execute(stmt)
             logger.info(f"Updated flow_run {prefect_flow_id} with {update_values}")
-
     db.commit()
+    logger.info(f"Succesufly inserted / updated record no.{flow_run_id}")
     return flow_run_id
 
 
@@ -159,7 +159,7 @@ def record_product_realised(flow_run_id):
     product_realised = Table("product_realised", metadata, autoload_with=engine)
     # flow_run_id = get_flow_run_id(runtime.flow_run.id)
     values = {
-        "flow_run_id": flow_run_id,
+        "flow_run_id": flow_run_id or 123456,
         "pi_category_id": 1,
         "eopf_type": "EOPF_TYPE",
         "stac_item": {"example": "stac_item"},
