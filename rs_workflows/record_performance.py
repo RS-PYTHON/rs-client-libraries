@@ -49,6 +49,20 @@ def resolve_param(param_value, runtime_key, default):
     runtime_val = runtime.flow_run.parameters.get(runtime_key)
     return runtime_val if runtime_val is not None else default
 
+def get_flow_run_id(prefect_flow_id: str) -> int | None:
+    """Return id from flow_run table for given prefect_flow_id."""
+    db, engine = get_db_session()
+    try:
+        metadata = MetaData()
+        flow_run = Table("flow_run", metadata, autoload_with=engine)
+
+        row = db.execute(
+            select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)
+        ).fetchone()
+
+        return row[0] if row else None
+    finally:
+        db.close()
 
 def record_flow_run(
     start_date: datetime | str | None = None,
@@ -121,9 +135,9 @@ def record_product_realised():
     metadata = MetaData()
     db, engine = get_db_session()
     product_realised = Table("product_realised", metadata, autoload_with=engine)
-    prefect_flow_id = runtime.flow_run.id
+    flow_run_id = get_flow_run_id(runtime.flow_run.id)
     values = {
-        "flow_run_id": prefect_flow_id,
+        "flow_run_id": flow_run_id,
         "pi_category_id": 1,
         "eopf_type": "EOPF_TYPE",
         "stac_item": {"example": "stac_item"},
