@@ -81,8 +81,8 @@ def get_flow_run_id(prefect_flow_id: str) -> int | None:
 
 
 def record_flow_run(
-    start_date: datetime | str | None = None,
-    stop_date: datetime | str | None = None,
+    start_date: datetime.datetime | str | None = None,
+    stop_date: datetime.datetime | str | None = None,
     status: str | None = None,
     flow_run_type: str | None = None,
     mission: str | None = None,
@@ -91,7 +91,8 @@ def record_flow_run(
     dpr_processor_unit: str | None = None,
     dpr_processing_input_stac_items: str | None = None,
 ):
-    """Insert or update a record in flow_run table."""
+    """Insert or update a record in flow_run table and return the DB id."""
+
     logger = get_run_logger()
     metadata = MetaData()
     db, engine = get_db_session()
@@ -103,7 +104,7 @@ def record_flow_run(
     existing = db.execute(select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)).fetchone()
 
     if not existing:
-        # Insert new record
+        # Insert new record with RETURNING id
         values = {
             "flow_type": resolve_param(flow_run_type, "flow_run_type", "systematic"),
             "mission": resolve_param(mission, "mission", "sentinel-1"),
@@ -115,9 +116,9 @@ def record_flow_run(
             "dpr_processor_version": resolve_param(
                 dpr_processor_version,
                 "dpr_processor_version",
-                "dpr_processor_version",
+                "v1.0",
             ),
-            "dpr_processor_unit": resolve_param(dpr_processor_unit, "dpr_processor_unit", "dpr_processor_unit"),
+            "dpr_processor_unit": resolve_param(dpr_processor_unit, "dpr_processor_unit", "DPR_PU"),
             "dpr_processing_input_stac_items": resolve_param(
                 dpr_processing_input_stac_items,
                 "dpr_processing_input_stac_items",
@@ -128,8 +129,10 @@ def record_flow_run(
             "dpr_processing_status": status,
             "excluded_from_pi": False,
         }
-        flow_run_id = db.execute(flow_run.insert().values(**values)).scalar()
-        logger.info("Inserted new flow_run record")
+        stmt = insert(flow_run).values(**values).returning(flow_run.c.id)
+        flow_run_id = db.execute(stmt).scalar()
+        logger.info(f"Inserted new flow_run record with id={flow_run_id}")
+
     else:
         flow_run_id = existing[0]
         # Update only selected fields if provided
@@ -145,8 +148,9 @@ def record_flow_run(
             stmt = update(flow_run).where(flow_run.c.prefect_flow_id == prefect_flow_id).values(**update_values)
             db.execute(stmt)
             logger.info(f"Updated flow_run {prefect_flow_id} with {update_values}")
+
     db.commit()
-    logger.info(f"Succesufly inserted / updated record no.{flow_run_id}")
+    logger.info(f"Successfully inserted / updated flow_run with id={flow_run_id}")
     return flow_run_id
 
 
