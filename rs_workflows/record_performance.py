@@ -159,7 +159,7 @@ def record_product_realised():
     )
 
     db.execute(upsert_stmt)
-    logger.info(f"Upserted product_realised for flow_run_id={prefect_flow_id}")
+    logger.info(f"Upserted product_realised for flow_run_id={flow_run_id}")
 
 
 @task
