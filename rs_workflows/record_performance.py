@@ -21,6 +21,7 @@ from importlib.metadata import version
 
 from prefect import get_run_logger, runtime, task
 from sqlalchemy import MetaData, Table, create_engine, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 
 
@@ -40,6 +41,7 @@ def get_db_session():
     session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     return session(), engine
 
+
 def resolve_param(param_value, runtime_key, default):
     """Return param_value if set, else runtime parameter, else default."""
     if param_value is not None:
@@ -49,7 +51,6 @@ def resolve_param(param_value, runtime_key, default):
 
 
 def record_flow_run(
-    db, engine,
     start_date: datetime | str | None = None,
     stop_date: datetime | str | None = None,
     status: str | None = None,
@@ -63,14 +64,13 @@ def record_flow_run(
     """Insert or update a record in flow_run table."""
     logger = get_run_logger()
     metadata = MetaData()
+    db, engine = get_db_session()
     flow_run = Table("flow_run", metadata, autoload_with=engine)
 
     prefect_flow_id = runtime.flow_run.id
 
     # Check if record exists
-    existing = db.execute(
-        select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)
-    ).fetchone()
+    existing = db.execute(select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)).fetchone()
 
     if not existing:
         # Insert new record
@@ -83,7 +83,7 @@ def record_flow_run(
             "python_version": sys.version.split()[0],
             "dpr_processor_name": resolve_param(dpr_processor_name, "dpr_processor_name", "dpr_processor"),
             "dpr_processor_version": resolve_param(
-                dpr_processor_version, "dpr_processor_version", "dpr_processor_version"
+                dpr_processor_version, "dpr_processor_version", "dpr_processor_version",
             ),
             "dpr_processor_unit": resolve_param(dpr_processor_unit, "dpr_processor_unit", "dpr_processor_unit"),
             "dpr_processing_input_stac_items": resolve_param(
@@ -109,49 +109,43 @@ def record_flow_run(
             update_values["dpr_processing_status"] = status
 
         if update_values:
-            stmt = (
-                update(flow_run)
-                .where(flow_run.c.prefect_flow_id == prefect_flow_id)
-                .values(**update_values)
-            )
+            stmt = update(flow_run).where(flow_run.c.prefect_flow_id == prefect_flow_id).values(**update_values)
             db.execute(stmt)
             logger.info(f"Updated flow_run {prefect_flow_id} with {update_values}")
 
 
-def record_product_realised(
-    db, engine,
-    product_id: str | None = None,
-    product_type: str | None = None,
-    product_status: str | None = None,
-):
-    """Insert or update a record in product_realised table."""
+def record_product_realised():
+    """Upsert into product_realised table (insert or update)."""
+
     logger = get_run_logger()
     metadata = MetaData()
+    db, engine = get_db_session()
     product_realised = Table("product_realised", metadata, autoload_with=engine)
+    prefect_flow_id = runtime.flow_run.id
+    values = {
+        "flow_run_id": prefect_flow_id,
+        "pi_category_id": 1,
+        "eopf_type": "EOPF_TYPE",
+        "stac_item": {"example": "stac_item"},
+        "sensing_start_datetime": datetime.datetime.now(),
+        "origin_date": datetime.datetime.now(),
+        "catalog_stored_datetime": datetime.datetime.now(),
+        "unexpected": False,
+        "on_time_0_day": True,
+        "on_time_1_day": False,
+        "on_time_2_day": False,
+        "on_time_3_day": False,
+        "on_time_7_day": False,
+    }
 
-    # to be implemented
+    stmt = insert(product_realised).values(**values)
+    upsert_stmt = stmt.on_conflict_do_update(
+        index_elements=["flow_run_id"],  # conflict key
+        set_={k: v for k, v in values.items() if k != "flow_run_id"},  # update only these
+    )
 
-
-    # existing = db.execute(
-    #     select(product_realised.c.id).where(product_realised.c.product_id == product_id)
-    # ).fetchone()
-
-    # if not existing:
-    #     values = {
-    #         "product_id": product_id,
-    #         "product_type": product_type or "default_type",
-    #         "product_status": product_status or "created",
-    #     }
-    #     db.execute(product_realised.insert().values(**values))
-    #     logger.info(f"Inserted product_realised: {values}")
-    # else:
-    #     stmt = (
-    #         update(product_realised)
-    #         .where(product_realised.c.product_id == product_id)
-    #         .values(product_status=product_status)
-    #     )
-    #     db.execute(stmt)
-    #     logger.info(f"Updated product_realised {product_id} with status={product_status}")
+    db.execute(upsert_stmt)
+    logger.info(f"Upserted product_realised for flow_run_id={prefect_flow_id}")
 
 
 @task
@@ -176,21 +170,22 @@ def record_performance_indicators(
     logger = get_run_logger()
     logger.info("Starting record_performance_indicators")
 
-    db, engine = get_db_session()
+    db, _ = get_db_session()
 
     try:
         record_flow_run(
-            db, engine,
-            start_date, stop_date, status,
-            flow_run_type, mission,
-            dpr_processor_name, dpr_processor_version,
-            dpr_processor_unit, dpr_processing_input_stac_items
+            start_date,
+            stop_date,
+            status,
+            flow_run_type,
+            mission,
+            dpr_processor_name,
+            dpr_processor_version,
+            dpr_processor_unit,
+            dpr_processing_input_stac_items,
         )
 
-        record_product_realised(
-            db, engine,
-            product_id, product_type, product_status
-        )
+        record_product_realised(product_id, product_type, product_status)
 
         db.commit()
         logger.info("Transaction committed successfully!")
