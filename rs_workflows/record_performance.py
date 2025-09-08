@@ -49,6 +49,7 @@ def resolve_param(param_value, runtime_key, default):
     runtime_val = runtime.flow_run.parameters.get(runtime_key)
     return runtime_val if runtime_val is not None else default
 
+
 def get_flow_run_id(prefect_flow_id: str) -> int | None:
     """Return id from flow_run table for given prefect_flow_id."""
 
@@ -62,9 +63,7 @@ def get_flow_run_id(prefect_flow_id: str) -> int | None:
         logger.info("Loaded flow_run table metadata")
 
         logger.info(f"Looking up flow_run.id for prefect_flow_id={prefect_flow_id}")
-        row = db.execute(
-            select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)
-        ).fetchone()
+        row = db.execute(select(flow_run.c.id).where(flow_run.c.prefect_flow_id == prefect_flow_id)).fetchone()
 
         if row:
             logger.info(f"Found flow_run.id={row[0]} for prefect_flow_id={prefect_flow_id}")
@@ -79,6 +78,7 @@ def get_flow_run_id(prefect_flow_id: str) -> int | None:
     finally:
         db.close()
         logger.info("DB session closed")
+
 
 def record_flow_run(
     start_date: datetime | str | None = None,
@@ -113,7 +113,9 @@ def record_flow_run(
             "python_version": sys.version.split()[0],
             "dpr_processor_name": resolve_param(dpr_processor_name, "dpr_processor_name", "dpr_processor"),
             "dpr_processor_version": resolve_param(
-                dpr_processor_version, "dpr_processor_version", "dpr_processor_version",
+                dpr_processor_version,
+                "dpr_processor_version",
+                "dpr_processor_version",
             ),
             "dpr_processor_unit": resolve_param(dpr_processor_unit, "dpr_processor_unit", "dpr_processor_unit"),
             "dpr_processing_input_stac_items": resolve_param(
@@ -126,9 +128,10 @@ def record_flow_run(
             "dpr_processing_status": status,
             "excluded_from_pi": False,
         }
-        db.execute(flow_run.insert().values(**values))
+        flow_run_id = db.execute(flow_run.insert().values(**values)).scalar()
         logger.info("Inserted new flow_run record")
     else:
+        flow_run_id = existing[0]
         # Update only selected fields if provided
         update_values = {}
         if start_date is not None:
@@ -143,15 +146,18 @@ def record_flow_run(
             db.execute(stmt)
             logger.info(f"Updated flow_run {prefect_flow_id} with {update_values}")
 
+    db.commit()
+    return flow_run_id
 
-def record_product_realised():
+
+def record_product_realised(flow_run_id):
     """Upsert into product_realised table (insert or update)."""
 
     logger = get_run_logger()
     metadata = MetaData()
     db, engine = get_db_session()
     product_realised = Table("product_realised", metadata, autoload_with=engine)
-    flow_run_id = get_flow_run_id(runtime.flow_run.id)
+    # flow_run_id = get_flow_run_id(runtime.flow_run.id)
     values = {
         "flow_run_id": flow_run_id,
         "pi_category_id": 1,
@@ -175,6 +181,7 @@ def record_product_realised():
     )
 
     db.execute(upsert_stmt)
+    db.commit()
     logger.info(f"Upserted product_realised for flow_run_id={flow_run_id}")
 
 
@@ -203,7 +210,7 @@ def record_performance_indicators(
     db, _ = get_db_session()
 
     try:
-        record_flow_run(
+        flow_run_id = record_flow_run(
             start_date,
             stop_date,
             status,
@@ -214,10 +221,8 @@ def record_performance_indicators(
             dpr_processor_unit,
             dpr_processing_input_stac_items,
         )
-        db.commit() # temp
 
-        record_product_realised()
-        db.commit()
+        record_product_realised(flow_run_id)
         logger.info("Transaction committed successfully!")
 
     except Exception as e:
