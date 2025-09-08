@@ -81,8 +81,8 @@ def get_flow_run_id(prefect_flow_id: str) -> int | None:
 
 
 def record_flow_run(
-    start_date: datetime.datetime | str | None = None,
-    stop_date: datetime.datetime | str | None = None,
+    start_date: datetime | str | None = None,
+    stop_date: datetime | str | None = None,
     status: str | None = None,
     flow_run_type: str | None = None,
     mission: str | None = None,
