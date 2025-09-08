@@ -198,9 +198,9 @@ def record_performance_indicators(
             dpr_processor_unit,
             dpr_processing_input_stac_items,
         )
+        db.commit() # temp
 
         record_product_realised()
-
         db.commit()
         logger.info("Transaction committed successfully!")
 
