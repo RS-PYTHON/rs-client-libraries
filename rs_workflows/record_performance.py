@@ -153,7 +153,7 @@ def record_flow_run(
     return flow_run_id
 
 
-def record_product_realised(flow_run_id, stac_item):
+def record_product_realised(flow_run_id, stac_items):
     """Insert or update a record in product_realised table by flow_run_id."""
 
     logger = get_run_logger()
@@ -161,42 +161,42 @@ def record_product_realised(flow_run_id, stac_item):
     db, engine = get_db_session()
     product_realised = Table("product_realised", metadata, autoload_with=engine)
 
-    values = {
-        "flow_run_id": flow_run_id or 123456,
-        "pi_category_id": 1,
-        "eopf_type": "EOPF_TYPE",
-        "stac_item": stac_item or {},
-        "sensing_start_datetime": datetime.now(),
-        "origin_date": datetime.now(),
-        "catalog_stored_datetime": datetime.now(),
-        "unexpected": False,
-        "on_time_0_day": True,
-        "on_time_1_day": False,
-        "on_time_2_day": False,
-        "on_time_3_day": False,
-        "on_time_7_day": False,
-    }
-    logger.info(f"Values prepared for product_realised: {values}")
-
     try:
-        existing = db.execute(
-            select(product_realised.c.id).where(product_realised.c.flow_run_id == flow_run_id),
-        ).fetchone()
+        for dpr_product in stac_items:
+            values = {
+                "flow_run_id": flow_run_id or 123456,
+                "pi_category_id": 1,
+                "eopf_type": dpr_product["stac_discovery"]["properties"]["eopf:type"],
+                "stac_item": dpr_product["stac_discovery"] or {},
+                "sensing_start_datetime": datetime.now(),
+                "origin_date": datetime.now(),
+                "catalog_stored_datetime": datetime.now(),
+                "unexpected": False,
+                "on_time_0_day": True,
+                "on_time_1_day": False,
+                "on_time_2_day": False,
+                "on_time_3_day": False,
+                "on_time_7_day": False,
+            }
+            logger.info(f"Values prepared for product_realised: {values}")
+            existing = db.execute(
+                select(product_realised.c.id).where(product_realised.c.flow_run_id == flow_run_id),
+            ).fetchone()
 
-        if existing:
-            stmt = (
-                update(product_realised)
-                .where(product_realised.c.flow_run_id == flow_run_id)
-                .values(**{k: v for k, v in values.items() if k != "flow_run_id"})
-            )
-            db.execute(stmt)
-            logger.info(f"Updated product_realised for flow_run_id={flow_run_id}")
-        else:
-            stmt = insert(product_realised).values(**values)
-            db.execute(stmt)
-            logger.info(f"Inserted product_realised for flow_run_id={flow_run_id}")
+            if existing:
+                stmt = (
+                    update(product_realised)
+                    .where(product_realised.c.flow_run_id == flow_run_id)
+                    .values(**{k: v for k, v in values.items() if k != "flow_run_id"})
+                )
+                db.execute(stmt)
+                logger.info(f"Updated product_realised for flow_run_id={flow_run_id}")
+            else:
+                stmt = insert(product_realised).values(**values)
+                db.execute(stmt)
+                logger.info(f"Inserted product_realised for flow_run_id={flow_run_id}")
 
-        db.commit()
+            db.commit()
 
     except Exception as e:
         db.rollback()
