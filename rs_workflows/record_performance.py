@@ -165,6 +165,7 @@ def record_product_realised(flow_run_id, stac_items):
         return
     try:
         for dpr_product in stac_items:
+            logger.info(f"Preparing to compute: {dpr_product}")
             values = {
                 "flow_run_id": flow_run_id or 123456,
                 "pi_category_id": 1,
