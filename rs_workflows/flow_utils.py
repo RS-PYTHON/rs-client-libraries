@@ -34,6 +34,7 @@ class ProcessorEnum(str, Enum):
     # String value = resource name in the rs-dpr-service
     S1L0 = "s1_l0"
     S3L0 = "s3_l0"
+    S1ARD = "s1_ard"
 
 
 class FlowEnvArgs(BaseModel):

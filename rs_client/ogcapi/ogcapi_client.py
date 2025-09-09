@@ -159,7 +159,6 @@ class OgcApiClient(RsClient):
             job_id (int, str): Returns the status code of the request + the identifier
             (or None if endpoint fails) of the running job
         """
-
         # Check that the request containing the body is valid
         request = requests.Request(
             method="POST",
