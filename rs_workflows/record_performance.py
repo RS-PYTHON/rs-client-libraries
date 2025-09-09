@@ -160,7 +160,9 @@ def record_product_realised(flow_run_id, stac_items):
     metadata = MetaData()
     db, engine = get_db_session()
     product_realised = Table("product_realised", metadata, autoload_with=engine)
-
+    if not stac_items:
+        # don't update product_realised if stac_items is empty
+        return
     try:
         for dpr_product in stac_items:
             values = {
