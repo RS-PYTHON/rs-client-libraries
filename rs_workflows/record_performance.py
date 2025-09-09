@@ -221,7 +221,7 @@ def record_performance_indicators(
     dpr_processor_unit: str | None = None,
     dpr_processing_input_stac_items: str | None = None,
     # product_realised params
-    stac_item=None,
+    stac_items=None,
 ):
     """Main task that orchestrates DB recording for flow_run and product_realised."""
 
@@ -243,7 +243,7 @@ def record_performance_indicators(
             dpr_processing_input_stac_items,
         )
 
-        record_product_realised(flow_run_id, stac_item)
+        record_product_realised(flow_run_id, stac_items)
         logger.info("Transaction committed successfully!")
 
     except Exception as e:
