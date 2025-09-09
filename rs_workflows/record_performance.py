@@ -68,9 +68,8 @@ def get_flow_run_id(prefect_flow_id: str) -> int | None:
         if row:
             logger.info(f"Found flow_run.id={row[0]} for prefect_flow_id={prefect_flow_id}")
             return row[0]
-        else:
-            logger.warning(f"No record found in flow_run for prefect_flow_id={prefect_flow_id}")
-            return None
+        logger.warning(f"No record found in flow_run for prefect_flow_id={prefect_flow_id}")
+        return None
 
     except Exception as e:
         logger.error(f"Error while fetching flow_run.id for prefect_flow_id={prefect_flow_id}: {e}")
@@ -154,7 +153,7 @@ def record_flow_run(
     return flow_run_id
 
 
-def record_product_realised(flow_run_id):
+def record_product_realised(flow_run_id, stac_item):
     """Insert or update a record in product_realised table by flow_run_id."""
 
     logger = get_run_logger()
@@ -166,7 +165,7 @@ def record_product_realised(flow_run_id):
         "flow_run_id": flow_run_id or 123456,
         "pi_category_id": 1,
         "eopf_type": "EOPF_TYPE",
-        "stac_item": {"example": "stac_item"},
+        "stac_item": stac_item or {},
         "sensing_start_datetime": datetime.now(),
         "origin_date": datetime.now(),
         "catalog_stored_datetime": datetime.now(),
@@ -220,9 +219,7 @@ def record_performance_indicators(
     dpr_processor_unit: str | None = None,
     dpr_processing_input_stac_items: str | None = None,
     # product_realised params
-    product_id: str | None = None,
-    product_type: str | None = None,
-    product_status: str | None = None,
+    stac_item=None,
 ):
     """Main task that orchestrates DB recording for flow_run and product_realised."""
 
@@ -244,7 +241,7 @@ def record_performance_indicators(
             dpr_processing_input_stac_items,
         )
 
-        record_product_realised(flow_run_id)
+        record_product_realised(flow_run_id, stac_item)
         logger.info("Transaction committed successfully!")
 
     except Exception as e:

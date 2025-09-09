@@ -273,12 +273,8 @@ async def run_processor(
             payload_subpath=osp.basename(s3_payload_run),
             s3_report_dir=None,
         )
-        wait_for = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
+        dpr_job = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
+        logger.info(f"DPR processor output {dpr_job}")
         # Wait for the job to finish
-        record_performance_indicators.fn(
-            stop_date=datetime.datetime.now(),
-            status="OK",
-            dpr_processing_input_stac_items=s3_payload_run,
-            dpr_processor_name=processor.value,
-        )
-        return wait_for
+        record_performance_indicators.fn(stop_date=datetime.datetime.now(), status="OK", stac_item=dpr_job)
+        return dpr_job
