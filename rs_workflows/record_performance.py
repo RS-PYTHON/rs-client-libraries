@@ -206,7 +206,11 @@ def record_flow_run(
             update_values["dpr_processing_status"] = status
 
         if update_values:
-            stmt = update(flow_run).where(flow_run.c.prefect_flow_id == prefect_flow_id).values(**update_values)
+            stmt = (
+                update(flow_run)
+                .where(flow_run.c.prefect_flow_id == prefect_flow_id)
+                .values(**update_values)  # type: ignore
+            )
             db.execute(stmt)
             logger.info(f"Updated flow_run {prefect_flow_id} with {update_values}")
 
@@ -233,8 +237,9 @@ def record_product_realised(flow_run_id, stac_items):
                 "pi_category_id": get_pi_category_id(eopf_type),
                 "eopf_type": eopf_type,
                 "stac_item": dpr_product["stac_discovery"],
+                # to be later implemented.
                 "sensing_start_datetime": datetime.now(),
-                "origin_date": datetime.now(),
+                "origin_date": dpr_product["stac_discovery"]["properties"].get("datetime", datetime.now()),
                 "catalog_stored_datetime": datetime.now(),
                 "unexpected": False,
                 "on_time_0_day": False,
@@ -257,7 +262,7 @@ def record_product_realised(flow_run_id, stac_items):
                 db.execute(stmt)
                 logger.info(f"Updated product_realised for flow_run_id={flow_run_id}")
             else:
-                stmt = insert(product_realised).values(**values)
+                stmt = insert(product_realised).values(**values)  # type: ignore
                 db.execute(stmt)
                 logger.info(f"Inserted product_realised for flow_run_id={flow_run_id}")
 
