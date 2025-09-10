@@ -79,6 +79,68 @@ def get_flow_run_id(prefect_flow_id: str) -> int | None:
         logger.info("DB session closed")
 
 
+def get_pi_category_id(eopf_type: str) -> int | None:
+    """
+    Return id from pi_category table based on eopf_type.
+
+    Mapping rules (example):
+        - S01* -> mission='S1', name='L12-NRT'
+        - S02* -> mission='S2', name='L1C'
+        - S03* -> mission='S3', name='NRT'
+
+        "S01SIWOCN": 5,  # Level-1/2 IW/GRD Sentinel-1
+        "S01SIWV": 6,    # Level-2 Wave Sentinel-1
+        "S02L1C": 9,     # Level-1C Sentinel-2
+        "S02L2A": 10,    # Level-2A Sentinel-2
+        "S03NRT": 12     # All NRT Sentinel-3
+    """
+    logger = get_run_logger()
+    db, engine = get_db_session()
+
+    try:
+        logger.info(f"Connecting to DB with engine: {engine}")
+
+        metadata = MetaData()
+        pi_category = Table("pi_category", metadata, autoload_with=engine)
+        logger.info("Loaded pi_category table metadata")
+
+        # Determine mission and name based on eopf_type
+        mission = None
+        name = None
+        if eopf_type.startswith("S01"):
+            mission = "S1"
+            name = "L12-NRT"  # Level-1/2 EW/IW/SM
+        elif eopf_type.startswith("S02"):
+            mission = "S2"
+            name = "L1C"
+        elif eopf_type.startswith("S03"):
+            mission = "S3"
+            name = "NRT"
+
+        if mission is None or name is None:
+            logger.warning(f"No mapping found for eopf_type={eopf_type}")
+            return None
+
+        logger.info(f"Looking up pi_category.id for mission={mission}, name={name}")
+        row = db.execute(
+            select(pi_category.c.id).where((pi_category.c.mission == mission) & (pi_category.c.name == name)),
+        ).fetchone()
+
+        if row:
+            logger.info(f"Found pi_category.id={row[0]} for eopf_type={eopf_type}")
+            return row[0]
+
+        logger.warning(f"No record found in pi_category for eopf_type={eopf_type}")
+        return None
+
+    except Exception as e:
+        logger.error(f"Error while fetching pi_category.id for eopf_type={eopf_type}: {e}")
+        raise
+    finally:
+        db.close()
+        logger.info("DB session closed")
+
+
 def record_flow_run(
     start_date: datetime | str | None = None,
     stop_date: datetime | str | None = None,
@@ -165,17 +227,17 @@ def record_product_realised(flow_run_id, stac_items):
         return
     try:
         for dpr_product in stac_items:
-            logger.info(f"Preparing to compute: {dpr_product}")
+            eopf_type = dpr_product["stac_discovery"]["properties"]["eopf:type"]
             values = {
-                "flow_run_id": flow_run_id or 123456,
-                "pi_category_id": 1,
-                "eopf_type": dpr_product["stac_discovery"]["properties"]["eopf:type"],
-                "stac_item": dpr_product["stac_discovery"] or {},
+                "flow_run_id": flow_run_id,
+                "pi_category_id": get_pi_category_id(eopf_type),
+                "eopf_type": eopf_type,
+                "stac_item": dpr_product["stac_discovery"],
                 "sensing_start_datetime": datetime.now(),
                 "origin_date": datetime.now(),
                 "catalog_stored_datetime": datetime.now(),
                 "unexpected": False,
-                "on_time_0_day": True,
+                "on_time_0_day": False,
                 "on_time_1_day": False,
                 "on_time_2_day": False,
                 "on_time_3_day": False,
@@ -200,6 +262,11 @@ def record_product_realised(flow_run_id, stac_items):
                 logger.info(f"Inserted product_realised for flow_run_id={flow_run_id}")
 
             db.commit()
+
+    except KeyError as ker:
+        db.rollback()
+        logger.error(f"Key error while unpacking dpr output: {ker}")
+        raise
 
     except Exception as e:
         db.rollback()
