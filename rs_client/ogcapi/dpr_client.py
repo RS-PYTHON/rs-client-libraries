@@ -20,6 +20,7 @@ import tempfile
 from enum import Enum
 from pathlib import Path
 
+import anyio
 import yaml
 from openapi_core import OpenAPI  # Spec, validate_request, validate_response
 
@@ -221,8 +222,8 @@ class DprClient(OgcApiClient):
         to_expand.update(kwargs)
 
         # Open the input local file
-        with open(str(local_path), encoding="utf-8") as opened:
-            contents = opened.read()
+        async with await anyio.open_file(str(local_path), encoding="utf-8") as opened:
+            contents = await opened.read()
 
         # Expand the env vars as $key, ${key} or %key%
         for key, value in to_expand.items():

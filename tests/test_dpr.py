@@ -19,6 +19,7 @@ import getpass
 import tempfile
 from unittest.mock import AsyncMock
 
+import anyio
 import pytest
 import responses
 from starlette import status
@@ -190,8 +191,8 @@ I/O:
         Mock uploading of the payload file.
         Return the uploaded file contents.
         """
-        with open(from_path, encoding="utf-8") as opened:
-            return opened.read()
+        async with await anyio.open_file(from_path, encoding="utf-8") as opened:
+            return await opened.read()
 
     mocker.patch("rs_client.ogcapi.dpr_client.prefect_utils.s3_upload_file", new=mock_upload)
 
