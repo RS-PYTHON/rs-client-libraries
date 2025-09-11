@@ -13,12 +13,11 @@
 # limitations under the License.
 """Module for testing <<record flow run>>"""
 
-
 import sys
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import Column, MetaData, String, Table
+from sqlalchemy import Column, Integer, MetaData, Select, String, Table
 from sqlalchemy.sql.dml import Insert, Update
 
 import rs_workflows.record_performance as record_flow_module
@@ -29,20 +28,11 @@ import rs_workflows.record_performance as record_flow_module
 @pytest.fixture
 def mock_db_env(monkeypatch, mocker):
     """
-    Pytest fixture to mock environment variables required for database connections.
-
-    Sets the following environment variables:
-        - POSTGRES_USER
-        - POSTGRES_PASSWORD
-        - POSTGRES_HOST
-        - POSTGRES_PORT
-        - POSTGRES_PI_DB
-
-    Args:
-        monkeypatch (pytest.MonkeyPatch): pytest fixture used to temporarily set environment variables.
-
-    This fixture ensures that tests depending on database connection settings
-    can run without relying on real environment variables.
+    Pytest fixture to mock environment variables, DB session, engine, and tables.
+    Works for:
+        - product_realised
+        - pi_category
+        - flow_run
     """
     # Patch env vars
     env_global = {
@@ -55,31 +45,47 @@ def mock_db_env(monkeypatch, mocker):
     for key, value in env_global.items():
         monkeypatch.setenv(key, value)
 
-    # Patch logger
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=MagicMock())
-
-    # Patch DB + engine
+    mock_logger = MagicMock()
+    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
     mock_engine = MagicMock()
     mocker.patch("rs_workflows.record_performance.create_engine", return_value=mock_engine)
     mock_session = MagicMock()
     mock_session.close = MagicMock()
     mocker.patch("rs_workflows.record_performance.sessionmaker", return_value=lambda **_: mock_session)
 
-    # Patch table
     metadata = MetaData()
-    mock_table = Table(
+
+    mock_product_table = Table(
         "product_realised",
         metadata,
         Column("id", String, primary_key=True),
         Column("flow_run_id", String),
         Column("eopf_type", String),
     )
-    mocker.patch("rs_workflows.record_performance.Table", return_value=mock_table)
 
-    # Patch helper
-    mocker.patch("rs_workflows.record_performance.get_pi_category_id", return_value="mock-cat")
+    def table_side_effect(name, metadata, **kwargs):
+        if name == "product_realised":
+            return mock_product_table
+        if name == "pi_category":
+            return Table(
+                "pi_category",
+                metadata,
+                Column("id", Integer, primary_key=True),
+                Column("mission", String),
+                Column("name", String),
+            )
+        if name == "flow_run":
+            return Table(
+                "flow_run",
+                metadata,
+                Column("id", Integer, primary_key=True),
+                Column("prefect_flow_id", String),
+            )
+        raise ValueError(f"Unmocked table: {name}")
 
-    return mock_session, mock_table
+    mocker.patch("rs_workflows.record_performance.Table", side_effect=table_side_effect)
+
+    return mock_session, mock_product_table
 
 
 def make_mock_session(mocker):
@@ -116,17 +122,14 @@ def test_record_flow_run_inserts_new_entry(mock_db_env, mocker):
     mocker.patch("rs_workflows.record_performance.version", return_value="2025.0.0")
     mocker.patch("rs_workflows.record_performance.sys", new=sys)
 
-    # Mock db + engine
     mock_engine = MagicMock()
     mocker.patch("rs_workflows.record_performance.create_engine", return_value=mock_engine)
     mock_session = make_mock_session(mocker)
 
-    # Table
     metadata = MetaData()
     mock_table = Table("flow_run", metadata, Column("id", String), Column("prefect_flow_id", String))
     mocker.patch("rs_workflows.record_performance.Table", return_value=mock_table)
 
-    # No existing record
     mock_session.execute.return_value.fetchone.return_value = None
     mock_session.execute.return_value.scalar.return_value = 999
 
@@ -166,17 +169,14 @@ def test_record_flow_run_updates_existing_entry(mock_db_env, mocker):
     mocker.patch("rs_workflows.record_performance.version", return_value="2025.0.0")
     mocker.patch("rs_workflows.record_performance.sys", new=sys)
 
-    # Mock db + engine
     mock_engine = MagicMock()
     mocker.patch("rs_workflows.record_performance.create_engine", return_value=mock_engine)
     mock_session = make_mock_session(mocker)
 
-    # Table
     metadata = MetaData()
     mock_table = Table("flow_run", metadata, Column("id", String), Column("prefect_flow_id", String))
     mocker.patch("rs_workflows.record_performance.Table", return_value=mock_table)
 
-    # Existing record found
     mock_session.execute.return_value.fetchone.return_value = ["existing-id"]
 
     result = record_flow_module.record_flow_run(stop_date="2025-01-03", status="NOK")
@@ -223,6 +223,7 @@ def test_record_product_realised_insert(mock_db_env):
     """
     mock_session, _ = mock_db_env
     # No existing record
+    # ?
     mock_session.execute.return_value.fetchone.return_value = None
 
     stac_items = [
@@ -254,7 +255,7 @@ def test_record_product_realised_update(mock_db_env):
         mock_db_env: A fixture providing a mocked database session and engine.
     """
     mock_session, _ = mock_db_env
-    # Simulate existing record
+    # zSimulate existing record
     mock_session.execute.return_value.fetchone.return_value = ["existing-id"]
 
     stac_items = [
@@ -287,11 +288,105 @@ def test_record_product_realised_keyerror_triggers_rollback(mock_db_env):
         mock_db_env: A fixture providing a mocked database session and engine.
     """
     mock_session, _ = mock_db_env
-    # stac_discovery missing "properties"
+    # stac_discovery not in "properties"
     stac_items = [{"stac_discovery": {}}]  # type: ignore
 
     with pytest.raises(KeyError):
         record_flow_module.record_product_realised("flow-1", stac_items)
 
     mock_session.rollback.assert_called_once()
+    mock_session.close.assert_called_once()
+
+
+def test_get_pi_category_id_found(mock_db_env):
+    """
+    Test that get_pi_category_id returns the correct ID when a matching record exists in the DB.
+    """
+    mock_session, _ = mock_db_env
+    mock_session.execute.return_value.fetchone.return_value = [5]
+
+    result = record_flow_module.get_pi_category_id("S01SIWOCN")
+
+    stmt = mock_session.execute.call_args[0][0]
+    assert isinstance(stmt, Select)
+    assert result == 5
+    mock_session.close.assert_called_once()
+
+
+def test_get_pi_category_id_not_found(mock_db_env):
+    """
+    Test that get_pi_category_id returns None when no record is found for the given eopf_type.
+    """
+    mock_session, _ = mock_db_env
+    mock_session.execute.return_value.fetchone.return_value = None
+
+    result = record_flow_module.get_pi_category_id("S01SIWOCN")
+
+    assert result is None
+    mock_session.close.assert_called_once()
+
+
+def test_get_pi_category_id_invalid_type(mock_db_env):
+    """
+    Test that get_pi_category_id returns None when the eopf_type does not match any mapping.
+    """
+    mock_session, _ = mock_db_env
+
+    result = record_flow_module.get_pi_category_id("UNKNOWN_TYPE")
+
+    assert result is None
+    mock_session.close.assert_called_once()
+
+
+def test_get_pi_category_id_db_exception(mock_db_env):
+    """
+    Test that get_pi_category_id propagates exceptions from the database and closes the session.
+    """
+    mock_session, _ = mock_db_env
+    mock_session.execute.side_effect = Exception("DB error")
+
+    with pytest.raises(Exception, match="DB error"):
+        record_flow_module.get_pi_category_id("S01SIWOCN")
+
+    mock_session.close.assert_called_once()
+
+
+def test_get_flow_run_id_found(mock_db_env):
+    """
+    Test that get_flow_run_id returns the correct ID when a matching record exists in the DB.
+    """
+    mock_session, _ = mock_db_env
+    mock_session.execute.return_value.fetchone.return_value = [42]
+
+    result = record_flow_module.get_flow_run_id("fake-prefect-id")
+
+    stmt = mock_session.execute.call_args[0][0]
+    assert isinstance(stmt, Select)
+    assert result == 42
+    mock_session.close.assert_called_once()
+
+
+def test_get_flow_run_id_not_found(mock_db_env):
+    """
+    Test that get_flow_run_id returns None when no record is found for the given prefect_flow_id.
+    """
+    mock_session, _ = mock_db_env
+    mock_session.execute.return_value.fetchone.return_value = None
+
+    result = record_flow_module.get_flow_run_id("fake-prefect-id")
+
+    assert result is None
+    mock_session.close.assert_called_once()
+
+
+def test_get_flow_run_id_db_exception(mock_db_env):
+    """
+    Test that get_flow_run_id propagates exceptions from the database and closes the session.
+    """
+    mock_session, _ = mock_db_env
+    mock_session.execute.side_effect = Exception("DB error")
+
+    with pytest.raises(Exception, match="DB error"):
+        record_flow_module.get_flow_run_id("fake-prefect-id")
+
     mock_session.close.assert_called_once()
