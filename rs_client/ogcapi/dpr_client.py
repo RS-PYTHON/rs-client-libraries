@@ -18,7 +18,9 @@ import ast
 import os.path as osp
 import tempfile
 from enum import Enum
+from pathlib import Path
 
+import anyio
 import yaml
 from openapi_core import OpenAPI  # Spec, validate_request, validate_response
 
@@ -177,7 +179,13 @@ class DprClient(OgcApiClient):
     # Specific methods #
     ####################
 
-    async def update_configuration(self, local_path: str, s3_path: str, is_payload: bool = False, **kwargs):
+    async def update_configuration(
+        self,
+        local_path: str | Path,
+        s3_path: str | Path,
+        is_payload: bool = False,
+        **kwargs,
+    ):
         """
         Update local configuration file depending on the environment, upload it to the s3 bucket,
         and initialize output bucket folders.
@@ -214,8 +222,8 @@ class DprClient(OgcApiClient):
         to_expand.update(kwargs)
 
         # Open the input local file
-        with open(local_path, encoding="utf-8") as opened:
-            contents = opened.read()
+        async with await anyio.open_file(str(local_path), encoding="utf-8") as opened:
+            contents = await opened.read()
 
         # Expand the env vars as $key, ${key} or %key%
         for key, value in to_expand.items():
@@ -248,4 +256,4 @@ class DprClient(OgcApiClient):
             tmp.flush()
 
             # Upload the temp file to the s3 bucket
-            return await prefect_utils.s3_upload_file(tmp.name, s3_path)
+            return await prefect_utils.s3_upload_file(tmp.name, str(s3_path))
