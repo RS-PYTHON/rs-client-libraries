@@ -231,7 +231,7 @@ def record_product_realised(flow_run_id, stac_items):
         return
     try:
         for dpr_product in stac_items:
-            eopf_type = dpr_product["stac_discovery"]["properties"]["eopf:type"]
+            eopf_type = dpr_product["stac_discovery"]["properties"]["product:type"]
             values = {
                 "flow_run_id": flow_run_id,
                 "pi_category_id": get_pi_category_id(eopf_type),
