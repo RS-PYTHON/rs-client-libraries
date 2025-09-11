@@ -16,6 +16,8 @@
 
 
 import getpass
+import tempfile
+from unittest.mock import AsyncMock
 
 import pytest
 import responses
@@ -99,3 +101,112 @@ def test_dpr_client(mocker, dpr_client: DprClient, process: DprProcess, dummy_hr
 
     # Run the DPR processing
     assert dpr_client.run_process(process, "", "", "", {}) == dpr_response_sample
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("local_mode", [True, False])
+async def test_update_configuration(mocker, dpr_client: DprClient, local_mode):
+    """Test DprClient.update_configuration"""
+
+    payload_contents = """
+store_params:
+    storage_options:
+    key: ${S3_ACCESSKEY_CLUSTER}
+    secret: ${S3_SECRETKEY_CLUSTER}
+    client_kwargs:
+        endpoint_url: ${S3_ENDPOINT_CLUSTER}
+        region_name: ${S3_REGION_CLUSTER}
+
+dask_context:
+  cluster_type: gateway
+  cluster_config:
+    address: ${DASK_GATEWAY_ADDRESS}
+    reuse_cluster: ${DASK_CLUSTER_INSTANCE}
+    auth:
+      type: jupyterhub
+      api_token: ${JUPYTERHUB_API_TOKEN}
+    auth_local_mode: # auth for local mode
+      type: basic
+      username: ${LOCAL_DASK_USERNAME}
+      password: ${LOCAL_DASK_PASSWORD}
+
+I/O:
+  output_products:
+  - path: s3://bucket/output
+"""
+
+    expected_results_local = """
+store_params:
+  storage_options: null
+  key: ${access_key}
+  secret: ${secret_key}
+  client_kwargs:
+    endpoint_url: ${host_bucket}
+    region_name: ${bucket_location}
+dask_context:
+  cluster_type: gateway
+  cluster_config:
+    address: address-value
+    reuse_cluster: instance-value
+    auth:
+      type: basic
+      username: ${LOCAL_DASK_USERNAME}
+      password: ${LOCAL_DASK_PASSWORD}
+I/O:
+  output_products:
+  - path: s3://bucket/output
+"""
+
+    expected_results_cluster = """
+store_params:
+  storage_options: null
+  key: ${S3_ACCESSKEY}
+  secret: ${S3_SECRETKEY}
+  client_kwargs:
+    endpoint_url: ${S3_ENDPOINT}
+    region_name: ${S3_REGION}
+dask_context:
+  cluster_type: gateway
+  cluster_config:
+    address: address-value
+    reuse_cluster: instance-value
+    auth:
+      type: jupyterhub
+      api_token: ${JUPYTERHUB_API_TOKEN}
+I/O:
+  output_products:
+  - path: s3://bucket/output
+"""
+
+    dpr_client.local_mode = local_mode
+
+    mock_s3_upload_empty = mocker.patch(
+        "rs_client.ogcapi.dpr_client.prefect_utils.s3_upload_empty_file",
+        new_callable=AsyncMock,
+    )
+
+    async def mock_upload(from_path, _, **__):
+        """
+        Mock uploading of the payload file.
+        Return the uploaded file contents.
+        """
+        with open(from_path, encoding="utf-8") as opened:
+            return opened.read()
+
+    mocker.patch("rs_client.ogcapi.dpr_client.prefect_utils.s3_upload_file", new=mock_upload)
+
+    # Write dummy payload file
+    with tempfile.NamedTemporaryFile() as tmp:
+        tmp.write(payload_contents.encode("utf-8"))
+        tmp.flush()
+
+        uploaded_contents = await dpr_client.update_configuration(
+            local_path=tmp.name,
+            s3_path="",
+            is_payload=True,
+            DASK_GATEWAY_ADDRESS="address-value",
+            DASK_CLUSTER_INSTANCE="instance-value",
+        )
+
+    mock_s3_upload_empty.assert_awaited_with("s3://bucket/output/.empty")
+    assert uploaded_contents.strip() == (expected_results_local if local_mode else expected_results_cluster).strip()
