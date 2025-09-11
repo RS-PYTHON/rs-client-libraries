@@ -228,7 +228,7 @@ def test_record_product_realised_insert(mock_db_env):
     stac_items = [
         {
             "stac_discovery": {
-                "properties": {"eopf:type": "S1_GRD", "datetime": "2025-01-01T00:00:00Z"},
+                "properties": {"product:type": "S1_GRD", "datetime": "2025-01-01T00:00:00Z"},
             },
         },
     ]
@@ -260,7 +260,7 @@ def test_record_product_realised_update(mock_db_env):
     stac_items = [
         {
             "stac_discovery": {
-                "properties": {"eopf:type": "S1_GRD", "datetime": "2025-01-01T00:00:00Z"},
+                "properties": {"product:type": "S1_GRD", "datetime": "2025-01-01T00:00:00Z"},
             },
         },
     ]
