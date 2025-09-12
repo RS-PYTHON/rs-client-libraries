@@ -17,20 +17,20 @@
 # This jupyter base image already contains prefect and dask.
 FROM ghcr.io/rs-python/jupyter/minimal-notebook:latest
 
+COPY ./layer-cleanup.sh /usr/local/bin/
+RUN chmod 755 /usr/local/bin/layer-cleanup.sh
+
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
 RUN mkdir -p /tmp/whl
 ADD ./*.whl /tmp/whl
 
 # Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
-RUN pip install /tmp/whl/rs_client_libraries-*.whl && opentelemetry-bootstrap -a install
+RUN pip install /tmp/whl/rs_client_libraries-*.whl && opentelemetry-bootstrap -a install && layer-cleanup.sh
 
 # Install other useful dependencies for rs-demo in local mode.
-RUN pip install papermill
+RUN pip install papermill && layer-cleanup.sh
 
-# Clean everything
-USER root
-RUN rm -rf /tmp/whl /root/.cache/pip /home/*/.cache/pip /var/cache/apt/archives /var/lib/apt/lists/*
 USER jovyan
 
 # Set labels based on the Open Containers Initiative (OCI):
