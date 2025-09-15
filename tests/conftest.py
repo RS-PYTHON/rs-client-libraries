@@ -447,6 +447,7 @@ def mocked_stac_catalog_url_():
         json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
         resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
         resp.get(url=f"{MOCKED_URL}/auxip/", json=json_landing_page, status=HTTP_OK)
+        resp.get(url=f"{MOCKED_URL}/prip/", json=json_landing_page, status=HTTP_OK)
         resp.get(url=f"{MOCKED_URL}/cadip/", json=json_landing_page, status=HTTP_OK)
 
         yield MOCKED_URL
@@ -489,6 +490,12 @@ def auxip_client_(generic_rs_client):
 def cadip_client_(generic_rs_client):
     """Return a generic CadipClient instance for testing."""
     yield generic_rs_client.get_cadip_client()
+
+
+@pytest.fixture(name="prip_client")
+def prip_client_(generic_rs_client):
+    """Return a generic PripClient instance for testing."""
+    yield generic_rs_client.get_prip_client()
 
 
 @pytest.fixture(name="stac_client")
