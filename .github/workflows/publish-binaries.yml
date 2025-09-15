@@ -152,6 +152,10 @@ jobs:
           name: ${{ needs.build-whl.outputs.package_name }}
           path: ./whl
 
+      - name: Copy layer-cleanup.sh script
+        run: cp -t ./whl ./.github/scripts/layer-cleanup.sh
+        shell: bash
+
       - id: publish-docker
         uses: ./.github/actions/publish-docker
         with:
@@ -181,6 +185,10 @@ jobs:
         with:
           name: ${{ needs.build-whl.outputs.package_name }}
           path: ./whl
+
+      - name: Copy layer-cleanup.sh script
+        run: cp -t ./whl ./.github/scripts/layer-cleanup.sh
+        shell: bash
 
       - id: publish-docker
         uses: ./.github/actions/publish-docker
@@ -213,6 +221,10 @@ jobs:
         with:
           name: ${{ needs.build-whl.outputs.package_name }}
           path: ./whl
+
+      - name: Copy layer-cleanup.sh script
+        run: cp -t ./whl ./.github/scripts/layer-cleanup.sh
+        shell: bash
 
       - id: publish-docker
         uses: ./.github/actions/publish-docker
