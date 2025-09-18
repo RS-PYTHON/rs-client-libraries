@@ -49,7 +49,7 @@ async def search(
             stac_filter=prip_cql2.get("filter"),
             max_items=prip_cql2.get("limit", 10),
             sortby=prip_cql2.get("sortby", "-created"),
-            collections = [prip_collection],
+            collections=[prip_collection],
         )
         if (not found) and error_if_empty:
             raise ValueError("No PRIP products found")
