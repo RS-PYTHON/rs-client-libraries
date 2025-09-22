@@ -19,7 +19,7 @@ from pathlib import Path
 
 from prefect import flow
 
-from rs_workflows import auxip_flow, cadip_flow, catalog_flow
+from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
 from rs_workflows.dpr_flow import (
     read_payload_values,
     read_tasktable,
@@ -27,7 +27,11 @@ from rs_workflows.dpr_flow import (
     write_payload,
 )
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
-from rs_workflows.staging_flow import staging_task_auxip, staging_task_cadip
+from rs_workflows.staging_flow import (
+    staging_task_auxip,
+    staging_task_cadip,
+    staging_task_prip,
+)
 
 
 @flow(name="On-demand processing")
@@ -171,6 +175,75 @@ async def on_demand_cadip_staging(
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
+        staged.result()  # type: ignore[unused-coroutine]
+
+
+@flow(name="On-demand Prip staging")
+async def on_demand_prip_staging(
+    env: FlowEnvArgs,
+    start_datetime: datetime.datetime | str,
+    end_datetime: datetime.datetime | str,
+    product_type: str,
+    prip_collection: str,
+    catalog_collection_identifier: str,
+):
+    """
+    Flow to retrieve Prip files with the given time interval defined by
+    start_datetime and end_datetime, select only the type of files wanted,
+    stage the files and add STAC items into the catalog.
+
+    Args:
+        env: Prefect flow environment
+        start_datetime: Start datetime for the time interval used to filter the files
+            (date or timestamp, e.g. "2025-08-07T11:51:12.509000Z")
+        end_datetime: End datetime for the time interval used to filter the files
+            (date or timestamp, e.g. "2025-08-10T14:00:00.509000Z")
+        product_type: Prip product type wanted
+        prip_collection: PRIP collection identifier (station)
+        catalog_collection_identifier: Catalog collection identifier where PRIP data are staged
+    """
+
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "on-demand-prip-staging"):
+
+        # Convert datetime inputs to str
+        if isinstance(start_datetime, datetime.datetime):
+            start_datetime = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+        if isinstance(end_datetime, datetime.datetime):
+            end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+        # CQL2 filter: filter on product type and time interval
+        cql2_filter = {
+            "op": "and",
+            "args": [
+                {"op": "=", "args": [{"property": "product:type"}, product_type]},
+                {
+                    "op": "t_contains",
+                    "args": [
+                        {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                        {"interval": [start_datetime, end_datetime]},
+                    ],
+                },
+            ],
+        }
+
+        # Search Prip products
+        prip_items = prip_flow.search_task.submit(
+            flow_env.serialize(),
+            prip_cql2={"filter": cql2_filter},
+            prip_collection=prip_collection,
+            error_if_empty=False,
+        )
+
+        # Stage Prip items
+        staged = staging_task_prip.submit(
+            flow_env.serialize(),
+            prip_items,
+            catalog_collection_identifier,
+        )
+
+        # Wait for last task to end (unwrap exceptions if any)
         staged.result()  # type: ignore[unused-coroutine]
 
 
