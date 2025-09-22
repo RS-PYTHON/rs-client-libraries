@@ -108,28 +108,6 @@ def get_auxip_data_link():
     )
 
 
-@pytest.fixture(name="prip_data")
-def get_prip_data():
-    """
-    Return PRIP FeatureCollection as a dictionary
-    """
-    auxip_data_json = osp.join(RESOURCES_FOLDER, "staging", "prip_data.json")
-    with open(auxip_data_json, encoding="utf-8") as file:
-        return json.loads(file.read())
-
-
-@pytest.fixture(name="prip_data_link")
-def get_prip_data_link():
-    """
-    Return PRIP link pointing to a FeatureCollection
-    """
-    return (
-        "http://localhost:8001/prip/search?"
-        "ids=S1A_OPER_AUX_PREORB_OPOD_20240527T062732_"
-        "V20240527T062732_20240527T062732.EOF&collections=adgs"
-    )
-
-
 @pytest.fixture(name="staging_response_sample")
 def get_staging_response_sample():
     """
@@ -248,11 +226,7 @@ def test_staging_fails_stage_empty_dict(dummy_href, staging_client):
 @responses.activate
 @pytest.mark.parametrize(
     "station, data_fixture, data_link_fixture",
-    [
-        (CADIP, "cadip_data", "cadip_data_link"),
-        (AUXIP, "auxip_data", "auxip_data_link"),
-        (PRIP, "prip_data", "prip_data_link"),
-    ],
+    [(CADIP, "cadip_data", "cadip_data_link"), (AUXIP, "auxip_data", "auxip_data_link")],
 )
 def test_staging_fails_wrong_data_format(  # pylint: disable=R0913, R0917
     station,
@@ -303,7 +277,7 @@ def test_staging_fails_wrong_data_format(  # pylint: disable=R0913, R0917
 @responses.activate
 @pytest.mark.parametrize(
     "data_fixture",
-    ["cadip_data", "auxip_data", "prip_data"],
+    ["cadip_data", "auxip_data"],
 )
 def test_staging_fails_endpoint_send_error(data_fixture, request, dummy_href, staging_client):
     """
