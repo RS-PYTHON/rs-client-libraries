@@ -78,6 +78,12 @@ async def staging_task_auxip(*args, **kwargs):
     return await staging.fn(*args, **kwargs)
 
 
+@task(name="Prip staging")
+async def staging_task_prip(*args, **kwargs):
+    """See: staging"""
+    return await staging.fn(*args, **kwargs)
+
+
 @task(name="Cadip staging")
 async def staging_task_cadip(*args, **kwargs):
     """See: staging"""

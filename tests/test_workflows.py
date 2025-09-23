@@ -35,6 +35,7 @@ from rs_workflows import (
     init_pi_db_flow,
     on_demand_processing,
     pi_db_models,
+    prip_flow,
     staging_flow,
 )
 from rs_workflows.flow_utils import FlowEnvArgs, ProcessorEnum
@@ -291,6 +292,40 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
         start_datetime="2024-05-27T09:44:09.509000Z",
         end_datetime="2024-05-27T09:44:19.509000Z",
         product_type="AUX_PP2",
+        catalog_collection_identifier="catalog_collection_identifier",
+    )
+
+    # Check calls
+    for fn, call_count in spied.items():
+        assert fn.await_count == call_count
+
+
+@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
+@patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
+@patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(RsClient, "get_prip_client", MockRsClient)
+@patch.object(RsClient, "get_staging_client", MockRsClient)
+async def test_on_demand_prip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
+    """Test the on_demand_prip_staging flow"""
+
+    await setup_worklow_test_env()
+
+    spied = {
+        mocker.spy(prefect_function, "fn"): call_count
+        for prefect_function, call_count in {
+            prip_flow.search: 1,
+            prip_flow.search_task: 1,
+            staging_flow.staging: 1,
+        }.items()
+    }
+
+    # Run the prefect flow
+    await on_demand_processing.on_demand_prip_staging(
+        env=FlowEnvArgs(owner_id=OWNER_ID),
+        start_datetime="2024-05-27T09:44:09.509000Z",
+        end_datetime="2024-05-27T09:44:19.509000Z",
+        product_type="S2MSI1C",
+        prip_collection="prip-collection",
         catalog_collection_identifier="catalog_collection_identifier",
     )
 

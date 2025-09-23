@@ -41,6 +41,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     - rs-server-staging
     - rs-server-cadip
     - rs-server-auxip
+    - rs-server-prip
     - rs-server-catalog
 
     This class provides methods to authenticate and interact with RS-Server,
@@ -229,6 +230,16 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         )
 
         return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.logger, **kwargs)
+
+    def get_prip_client(self, **kwargs) -> "PripClient":  # type: ignore # noqa: F821
+        """
+        Return an instance of the child class PripClient, with the same attributes as this "self" instance.
+        """
+        from rs_client.stac.prip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            PripClient,
+        )
+
+        return PripClient(self.rs_server_href, self.rs_server_api_key, self.logger, **kwargs)
 
     def get_cadip_client(self, **kwargs) -> "CadipClient":  # type: ignore # noqa: F821
         """

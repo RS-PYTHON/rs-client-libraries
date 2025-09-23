@@ -30,6 +30,7 @@ from rs_client.rs_client import RsClient
 RESOURCES_FOLDER = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 AUXIP = "AUXIP"
 CADIP = "CADIP"
+PRIP = "PRIP"
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 
 OWNER_ID = getpass.getuser()
@@ -98,7 +99,7 @@ def get_auxip_data():
 @pytest.fixture(name="auxip_data_link")
 def get_auxip_data_link():
     """
-    Return cadip link pointing to a FeatureCollection
+    Return auxip link pointing to a FeatureCollection
     """
     return (
         "http://localhost:8001/auxip/search?"
@@ -225,10 +226,7 @@ def test_staging_fails_stage_empty_dict(dummy_href, staging_client):
 @responses.activate
 @pytest.mark.parametrize(
     "station, data_fixture, data_link_fixture",
-    [
-        (CADIP, "cadip_data", "cadip_data_link"),
-        (AUXIP, "auxip_data", "auxip_data_link"),
-    ],
+    [(CADIP, "cadip_data", "cadip_data_link"), (AUXIP, "auxip_data", "auxip_data_link")],
 )
 def test_staging_fails_wrong_data_format(  # pylint: disable=R0913, R0917
     station,
