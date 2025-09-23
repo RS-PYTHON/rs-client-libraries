@@ -90,6 +90,19 @@ class MockRsClient(Mock):
         return [MOCK_DICT()] * 2
 
 
+@pytest.fixture(autouse=True)
+def mock_record_performance_indicators(mocker):
+    """
+    Auto-applied fixture that mocks the Prefect task `record_performance_indicators`
+    so that no real DB or side effects are triggered during tests.
+    """
+    fake_task = MagicMock()
+    fake_task.fn = MagicMock()
+    mocker.patch("rs_workflows.dpr_flow.record_performance_indicators", fake_task)
+
+    return fake_task
+
+
 ############
 # DPR FLOW #
 ############
@@ -168,7 +181,11 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_dpr_client", MockRsClient)
 @patch.object(catalog_flow, "datetime", Mock())
-async def test_on_demand_processing(mocker, mock_prefect):  # pylint: disable=unused-argument
+async def test_on_demand_processing(
+    mocker,
+    mock_prefect,
+    mock_record_performance_indicators,
+):  # pylint: disable=unused-argument, redefined-outer-name
     """Test the on_demand_processing flow"""
 
     await setup_worklow_test_env()
