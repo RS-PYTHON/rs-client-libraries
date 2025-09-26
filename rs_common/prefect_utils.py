@@ -302,7 +302,7 @@ async def get_share_bucket(sub_folder: str = "") -> S3Bucket:
 
     # Use a specific block for the current user. Always overwrite it, because the subfolder may have changed.
     else:
-        block_name = format_env_user(BLOCK_NAME_SHARE_BUCKET_USER, owner_id)
+        block_name = format_env_user(BLOCK_NAME_SHARE_BUCKET_USER, owner_id)  # type: ignore
 
     # Read the prefect blocks that contain the S3 authentication
     bucket_name = os.environ["PREFECT_BUCKET_NAME"]
