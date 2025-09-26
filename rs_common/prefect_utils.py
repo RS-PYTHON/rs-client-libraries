@@ -278,7 +278,7 @@ def get_s3_bucket(s3_path: str) -> tuple[S3Bucket, str]:
 
 
 @sync_compatible
-async def get_share_bucket(sub_folder: str = "") -> S3Bucket:
+async def get_share_bucket(sub_folder: str = "") -> tuple[S3Bucket, str]:
     """
     Get the prefect share bucket folder.
 
@@ -286,6 +286,9 @@ async def get_share_bucket(sub_folder: str = "") -> S3Bucket:
         sub_folder: subfolder to use in the bucket. If empty, use the default folder and secret block.
         Else use a specific secret block. WARNING: this only works in a single-threaded environment
         else these specific secret blocks may overwrite each other.
+
+    Returns:
+        The prefect block for the share bucket and the block name.
     """
 
     # Use the default secret block for the default folder
@@ -294,7 +297,7 @@ async def get_share_bucket(sub_folder: str = "") -> S3Bucket:
 
         # Try to read and return the prefect block, if it already exists.
         try:
-            return await S3Bucket.load(block_name)
+            return await S3Bucket.load(block_name), block_name
 
         # If it doesn't exist yet, create and return it
         except ValueError:
@@ -323,7 +326,7 @@ async def get_share_bucket(sub_folder: str = "") -> S3Bucket:
 
     # Save it as a prefect block and return it
     await share_bucket.save(block_name, overwrite=True)
-    return share_bucket
+    return share_bucket, block_name
 
 
 @sync_compatible
