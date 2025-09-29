@@ -281,6 +281,52 @@ def record_product_realised(flow_run_id, stac_items):
         db.close()
 
 
+def record_product_expected(flow_run_id: str):
+    """Insert a hardcoded record in product_expected table by flow_run_id."""
+
+    logger = get_run_logger()
+    metadata = MetaData()
+    db, engine = get_db_session()
+    product_expected = Table("product_expected", metadata, autoload_with=engine)
+
+    try:
+        values = {
+            "flow_run_id": flow_run_id,
+            "pi_category_id": 1,
+            "eopf_type": "HARDCODED_TYPE",  # hardcoded
+            "sensing_start_datetime": datetime.now(),
+            "min_count": 1,
+            "max_count": 5,
+        }
+
+        # check if record already exists for this flow_run_id
+        existing = db.execute(
+            select(product_expected.c.id).where(product_expected.c.flow_run_id == flow_run_id),
+        ).fetchone()
+
+        if existing:
+            stmt = (
+                update(product_expected)
+                .where(product_expected.c.flow_run_id == flow_run_id)
+                .values(**{k: v for k, v in values.items() if k != "flow_run_id"})
+            )
+            db.execute(stmt)
+            logger.info(f"Updated product_expected for flow_run_id={flow_run_id}")
+        else:
+            stmt = insert(product_expected).values(**values)  # type: ignore
+            db.execute(stmt)
+            logger.info(f"Inserted product_expected for flow_run_id={flow_run_id}")
+
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error in record_product_expected: {e}")
+        raise
+    finally:
+        db.close()
+
+
 @task
 def record_performance_indicators(
     # flow_run params
@@ -315,6 +361,7 @@ def record_performance_indicators(
             dpr_processor_unit,
             dpr_processing_input_stac_items,
         )
+        record_product_expected(flow_run_id)
 
         record_product_realised(flow_run_id, stac_items)
         logger.info("Transaction committed successfully!")
