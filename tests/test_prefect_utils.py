@@ -118,7 +118,7 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
 
     # Check that the blocks were written with the right values
     env_global2 = (await Secret.load(prefect_utils.BLOCK_NAME_ENV_GLOBAL)).get()
-    env_user2 = (await Secret.load(prefect_utils.format_env_user(OWNER_ID))).get()
+    env_user2 = (await Secret.load(prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID))).get()
     assert env_global == env_global2
     assert env_user == env_user2
 

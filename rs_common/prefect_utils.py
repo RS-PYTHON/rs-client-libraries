@@ -49,7 +49,8 @@ owner_id: str | None = ""
 # Prefect block names
 BLOCK_NAME_ENV_GLOBAL: str = "env-vars"
 BLOCK_NAME_ENV_USER: str = "env-vars-{0}"  # env variables for the user/owner_id
-BLOCK_NAME_SHARE_BUCKET: str = "share-bucket"
+BLOCK_NAME_SHARE_BUCKET_GLOBAL: str = "share-bucket"
+BLOCK_NAME_SHARE_BUCKET_USER: str = "share-bucket-{0}"  # share bucket for the user/owner_id
 
 # S3 bucket object for each bucket name.
 S3_BUCKETS: dict[str, S3Bucket] = {}
@@ -84,9 +85,9 @@ def get_ip_address() -> str:
     return socket.gethostbyname(socket.gethostname())
 
 
-def format_env_user(any_owner_id: str):
+def format_env_user(block_name: str, any_owner_id: str):
     """Format the Prefect secret block for the current user"""
-    name = BLOCK_NAME_ENV_USER.format(any_owner_id).lower()
+    name = block_name.format(any_owner_id).lower()
     return re.sub("[^a-zA-Z0-9]", "-", name)  # replace special characters by dash
 
 
@@ -182,7 +183,7 @@ async def init_prefect_blocks():
             env_vars[key] = value
 
     # Save env vars in a secret block for the current user
-    await Secret(value=env_vars).save(format_env_user(owner_id), overwrite=True)  # type: ignore
+    await Secret(value=env_vars).save(format_env_user(BLOCK_NAME_ENV_USER, owner_id), overwrite=True)  # type: ignore
 
     # Now read back the blocks so we are sure our env vars are up-to-date
     await read_prefect_blocks(owner_id)
@@ -202,7 +203,7 @@ async def read_prefect_blocks(any_owner_id: str | None = None):
 
     # Read the env vars for the given user
     if any_owner_id:
-        os.environ.update((await Secret.load(format_env_user(any_owner_id))).get())
+        os.environ.update((await Secret.load(format_env_user(BLOCK_NAME_ENV_USER, any_owner_id))).get())
 
     # Init the env of the current module from the env vars we have just read
     init_global_env(any_owner_id)
@@ -277,20 +278,41 @@ def get_s3_bucket(s3_path: str) -> tuple[S3Bucket, str]:
 
 
 @sync_compatible
-async def get_share_bucket() -> S3Bucket:
-    """Get the prefect share bucket folder"""
+async def get_share_bucket(sub_folder: str = "") -> tuple[S3Bucket, str]:
+    """
+    Get the prefect share bucket folder.
 
-    # Try to read it from the prefect block
-    try:
-        return await S3Bucket.load(BLOCK_NAME_SHARE_BUCKET)
+    Args:
+        sub_folder: subfolder to use in the bucket. If empty, use the default folder and secret block.
+        Else use a specific secret block. WARNING: this only works in a single-threaded environment
+        else these specific secret blocks may overwrite each other.
 
-    # If it doesn't exist yet, create and return it
-    except ValueError:
-        pass
+    Returns:
+        The prefect block for the share bucket and the block name.
+    """
+
+    # Use the default secret block for the default folder
+    if not sub_folder:
+        block_name = BLOCK_NAME_SHARE_BUCKET_GLOBAL
+
+        # Try to read and return the prefect block, if it already exists.
+        try:
+            return await S3Bucket.load(block_name), block_name
+
+        # If it doesn't exist yet, create and return it
+        except ValueError:
+            pass
+
+    # Use a specific block for the current user. Always overwrite it, because the subfolder may have changed.
+    else:
+        block_name = format_env_user(BLOCK_NAME_SHARE_BUCKET_USER, owner_id)  # type: ignore
 
     # Read the prefect blocks that contain the S3 authentication
     bucket_name = os.environ["PREFECT_BUCKET_NAME"]
     bucket_folder = os.environ["PREFECT_BUCKET_FOLDER"]
+
+    if sub_folder:
+        bucket_folder = os.path.join(bucket_folder, sub_folder)
 
     # Get a s3 bucket object from its name
     generic_bucket, _ = get_s3_bucket(bucket_name)
@@ -303,8 +325,8 @@ async def get_share_bucket() -> S3Bucket:
     )
 
     # Save it as a prefect block and return it
-    await share_bucket.save(BLOCK_NAME_SHARE_BUCKET, overwrite=True)
-    return share_bucket
+    await share_bucket.save(block_name, overwrite=True)
+    return share_bucket, block_name
 
 
 @sync_compatible

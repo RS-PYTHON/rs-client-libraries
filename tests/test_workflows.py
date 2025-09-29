@@ -162,7 +162,7 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
             "RSPY_APIKEY": RSPY_APIKEY,
         },
     ).save(
-        prefect_utils.format_env_user(OWNER_ID),
+        prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID),
         overwrite=True,
     )
 
