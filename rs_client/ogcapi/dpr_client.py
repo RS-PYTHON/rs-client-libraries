@@ -17,6 +17,7 @@
 import ast
 import os.path as osp
 import tempfile
+from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
 
@@ -48,6 +49,23 @@ class DprProcess(str, Enum):
     S1L0 = "s1_l0"
     S3L0 = "s3_l0"
     S1ARD = "s1_ard"
+
+
+@dataclass
+class ClusterInfo:
+    """
+    Information to connect to a DPR Dask cluster.
+    In cluster mode, either the label or instance must be set. In local mode, they are both optional.
+
+    Attributes:
+        jupyter_token: JupyterHub API token. Only used in cluster mode, not local mode.
+        cluster_label: Dask cluster label e.g. "dask-l0"
+        cluster_instance: Dask cluster instance ID (something like "dask-gateway.17e196069443463495547eb97f532834")
+    """
+
+    jupyter_token: str
+    cluster_label: str
+    cluster_instance: str
 
 
 class DprClient(OgcApiClient):
