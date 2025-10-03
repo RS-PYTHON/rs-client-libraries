@@ -152,8 +152,8 @@ jobs:
           name: ${{ needs.build-whl.outputs.package_name }}
           path: ./whl
 
-      - name: Copy layer-cleanup.sh script
-        run: cp -t ./whl ./.github/scripts/layer-cleanup.sh
+      - name: Copy Dockerfile requirements
+        run: cp -t ./whl ./.github/scripts/layer-cleanup.sh ./.github/scripts/restore-apt.sh
         shell: bash
 
       - id: publish-docker
@@ -222,8 +222,8 @@ jobs:
           name: ${{ needs.build-whl.outputs.package_name }}
           path: ./whl
 
-      - name: Copy layer-cleanup.sh script
-        run: cp -t ./whl ./.github/scripts/layer-cleanup.sh
+      - name: Copy Dockerfile requirements
+        run: cp -t ./whl ./.github/scripts/layer-cleanup.sh ./.github/scripts/restore-apt.sh
         shell: bash
 
       - id: publish-docker
