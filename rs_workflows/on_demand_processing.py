@@ -17,7 +17,7 @@
 import datetime
 from pathlib import Path
 
-from prefect import flow
+from prefect import flow, get_run_logger
 
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
 from rs_workflows.dpr_flow import (
@@ -26,7 +26,7 @@ from rs_workflows.dpr_flow import (
     run_processor,
     write_payload,
 )
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
+from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs, ProcessorEnum
 from rs_workflows.staging_flow import (
     staging_task_auxip,
     staging_task_cadip,
@@ -44,6 +44,7 @@ async def on_demand_processing(
     s3_payload_template: str,
     s3_output_data: str,
     use_dpr_mockup: bool = False,
+    # dpr_input: DprProcessIn | None = None,
 ):
     """
     Prefect flow for on-demand processing.
@@ -60,7 +61,8 @@ async def on_demand_processing(
         catalog bucket.
         use_dpr_mockup: Use the real or the mockup DPR processor ?
     """
-    # logger = get_run_logger()
+    logger = get_run_logger()
+    logger.info(f"########################################################################################")
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
