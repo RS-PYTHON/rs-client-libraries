@@ -220,26 +220,28 @@ def record_flow_run(
 
 
 def record_product_realised(flow_run_id, stac_items):
-    """Insert or update a record in product_realised table by flow_run_id."""
-
+    """Insert records in product_realised table"""
     logger = get_run_logger()
     metadata = MetaData()
     db, engine = get_db_session()
     product_realised = Table("product_realised", metadata, autoload_with=engine)
+
     if not stac_items:
-        # don't update product_realised if stac_items is empty
+        logger.info("No STAC items provided — skipping insert into product_realised.")
         return
+
     try:
         for dpr_product in stac_items:
-            eopf_type = dpr_product["stac_discovery"]["properties"]["product:type"]
+            stac_discovery = dpr_product["stac_discovery"]
+            eopf_type = stac_discovery["properties"]["product:type"]
+
             values = {
                 "flow_run_id": flow_run_id,
                 "pi_category_id": get_pi_category_id(eopf_type),
                 "eopf_type": eopf_type,
-                "stac_item": dpr_product["stac_discovery"],
-                # to be later implemented.
+                "stac_item": stac_discovery,
                 "sensing_start_datetime": datetime.now(),
-                "origin_date": dpr_product["stac_discovery"]["properties"].get("datetime", datetime.now()),
+                "origin_date": stac_discovery["properties"].get("datetime", datetime.now()),
                 "catalog_stored_datetime": datetime.now(),
                 "unexpected": False,
                 "on_time_0_day": False,
@@ -248,35 +250,23 @@ def record_product_realised(flow_run_id, stac_items):
                 "on_time_3_day": False,
                 "on_time_7_day": False,
             }
-            logger.info(f"Values prepared for product_realised: {values}")
-            existing = db.execute(
-                select(product_realised.c.id).where(product_realised.c.flow_run_id == flow_run_id),
-            ).fetchone()
+            # no upsert, only insert each element from dpr output
+            stmt = insert(product_realised).values(**values)
+            db.execute(stmt)
+            logger.info(f"Inserted product_realised for flow_run_id={flow_run_id}")
 
-            if existing:
-                stmt = (
-                    update(product_realised)
-                    .where(product_realised.c.flow_run_id == flow_run_id)
-                    .values(**{k: v for k, v in values.items() if k != "flow_run_id"})
-                )
-                db.execute(stmt)
-                logger.info(f"Updated product_realised for flow_run_id={flow_run_id}")
-            else:
-                stmt = insert(product_realised).values(**values)  # type: ignore
-                db.execute(stmt)
-                logger.info(f"Inserted product_realised for flow_run_id={flow_run_id}")
-
-            db.commit()
+        db.commit()
 
     except KeyError as ker:
         db.rollback()
-        logger.error(f"Key error while unpacking dpr output: {ker}")
+        logger.error(f"Key error while unpacking DPR product: {ker}")
         raise
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Error in record_product_realised: {e}")
+        logger.error(f"Unexpected error in record_product_realised: {e}")
         raise
+
     finally:
         db.close()
 
