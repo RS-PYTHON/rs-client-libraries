@@ -23,15 +23,15 @@ import requests
 import responses
 from starlette import status
 
-from rs_client.ogcapi.dpr_client import DprClient
+from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient
 from rs_client.ogcapi.ogcapi_client import OgcValidationException
 from rs_client.rs_client import RsClient
 from rs_common.logging import Logging
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
-
 OWNER_ID = getpass.getuser()
 TIMEOUT = 5
+CLUSTER_INFO = ClusterInfo("", "", "")
 
 logger = Logging.default(__name__)
 
@@ -655,7 +655,7 @@ class TestOgcApi:
             return_value=expected_result,  # get superclass
         )
 
-        result = client.run_conv_safe_zarr(payload)
+        result = client.run_conv_safe_zarr(payload, CLUSTER_INFO)
 
         # Assert _run_process was called correctly
         mock_run_process.assert_called_once_with("conv_safe_zarr", payload)

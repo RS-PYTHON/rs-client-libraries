@@ -15,10 +15,13 @@
 """Prefect flows and tasks for on-demand processing"""
 
 import datetime
+import os
 from pathlib import Path
 
 from prefect import flow
 
+from rs_client.ogcapi.dpr_client import ClusterInfo
+from rs_common import prefect_utils
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
 from rs_workflows.dpr_flow import (
     read_payload_values,
@@ -38,6 +41,7 @@ from rs_workflows.staging_flow import (
 async def on_demand_processing(
     env: FlowEnvArgs,
     processor: ProcessorEnum,
+    cluster_label: str,
     cadip_collection_identifier: str,
     session_identifier: str,
     catalog_collection_identifier: str,
@@ -51,6 +55,7 @@ async def on_demand_processing(
     Args:
         env: Prefect flow environment
         processor: DPR processor name
+        cluster_label (str): Dask cluster label e.g. "dask-l0"
         cadip_collection_identifier: CADIP collection identifier that contains the mission and station
             (e.g. s1_ins for Sentinel-1 sessions from the Inuvik station)
         session_identifier: Session identifier
@@ -66,6 +71,12 @@ async def on_demand_processing(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "on-demand-processing"):
 
+        # Create cluster info from JUPYTERHUB_API_TOKEN env var (only in cluster mode) and Dask cluster label.
+        cluster_info = ClusterInfo(
+            jupyter_token=os.environ["JUPYTERHUB_API_TOKEN"] if prefect_utils.cluster_mode else "",
+            cluster_label=cluster_label,
+        )
+
         # Read values from the payload file
         payload_values = read_payload_values.submit(s3_payload_template)
 
@@ -78,7 +89,7 @@ async def on_demand_processing(
         )
 
         # Read Auxip CQL2 filter from the processor tasktable.
-        auxip_cql2 = read_tasktable.submit(flow_env.serialize(), processor, payload_values, cadip_items)
+        auxip_cql2 = read_tasktable.submit(flow_env.serialize(), processor, cluster_info, payload_values, cadip_items)
 
         # Search Auxip products
         auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
@@ -122,6 +133,7 @@ async def on_demand_processing(
         processed_items = run_processor.submit(
             flow_env.serialize(),
             processor,
+            cluster_info,
             s3_payload_run,
             use_dpr_mockup,
             wait_for=written,
