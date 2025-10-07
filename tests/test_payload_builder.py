@@ -18,6 +18,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from rs_workflows.payload_builder import build_units_list
 
 SCENARIOS: dict[str, dict] = {
@@ -31,8 +32,9 @@ SCENARIOS: dict[str, dict] = {
     },
 }
 
+
 @pytest.mark.parametrize("case_id,cfg", SCENARIOS.items())
-def test_build_units_list_returns_dict(case_id, cfg):# pylint: disable=unused-argument
+def test_build_units_list_returns_dict(case_id, cfg):  # pylint: disable=unused-argument
     """Test build_units_list function"""
     tt_path = Path(__file__).parent / "resources" / cfg["json_path"]
     with tt_path.open("r", encoding="utf-8") as f:
@@ -45,6 +47,7 @@ def test_build_units_list_returns_dict(case_id, cfg):# pylint: disable=unused-ar
         processing_mode=cfg["kwargs"].get("processing_mode"),
     )
     assert isinstance(out, dict)
+
 
 def test_case_8_exact_output():
     """Test build_units_list function"""
@@ -69,7 +72,7 @@ def test_case_8_exact_output():
                         "mandatory": False,
                         "type": "folder",
                         "store_type": "safe",
-                    }
+                    },
                 ],
                 "input_adfs": [
                     {"name": "CONFIG", "mandatory": False, "type": "filename"},
@@ -83,7 +86,7 @@ def test_case_8_exact_output():
                         "type": "folder",
                         "store_type": "safe",
                         "opening_mode": "CREATE_OVERWRITE",
-                    }
+                    },
                 ],
             },
             {
@@ -97,14 +100,14 @@ def test_case_8_exact_output():
                         "type": "folder",
                         "store_type": "safe",
                         "opening_mode": "CREATE_OVERWRITE",
-                    }
+                    },
                 ],
                 "input_adfs": [
                     {"name": "CONFIG", "mandatory": False, "type": "filename"},
                     {"name": "DEM", "mandatory": False, "type": "folder"},
                 ],
                 "output_products": [
-                    {"name": "reference_dem", "origin": "pipeline_internal", "mandatory": True, "type": "folder"}
+                    {"name": "reference_dem", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
                 ],
             },
             {
@@ -128,7 +131,7 @@ def test_case_8_exact_output():
                 ],
                 "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
                 "output_products": [
-                    {"name": "simulation_ref", "origin": "pipeline_internal", "mandatory": True, "type": "folder"}
+                    {"name": "simulation_ref", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
                 ],
             },
             {
@@ -165,7 +168,7 @@ def test_case_8_exact_output():
                         "type": "filename",
                         "store_type": "zarr",
                         "store_params": {"consolidate": True},
-                    }
+                    },
                 ],
             },
             {
@@ -196,7 +199,7 @@ def test_case_8_exact_output():
                         "type": "filename",
                         "store_type": "zarr",
                         "store_params": {"consolidate": True},
-                    }
+                    },
                 ],
             },
             {
@@ -210,7 +213,7 @@ def test_case_8_exact_output():
                         "type": "filename",
                         "store_type": "zarr",
                         "store_params": {"consolidate": True},
-                    }
+                    },
                 ],
                 "input_adfs": [{"name": "S2_TILES", "mandatory": False, "type": "filename"}],
                 "output_products": [
@@ -221,10 +224,10 @@ def test_case_8_exact_output():
                         "type": "filename",
                         "store_type": "zarr",
                         "store_params": {"consolidate": True},
-                    }
+                    },
                 ],
             },
-        ]
+        ],
     }
 
     assert out == expected
