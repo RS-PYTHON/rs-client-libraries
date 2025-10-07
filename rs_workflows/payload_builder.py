@@ -37,7 +37,7 @@ def _select_unit_names(tasktable: dict[str, Any], *, pipeline: str | None) -> li
         raise TaskTableError(f'Pipeline "{pipeline}" has no steps.')
 
     ordered = sorted(steps, key=lambda s: s.get("order", 0))
-    names = [s.get("unit_name") for s in ordered if isinstance(s, dict) and s.get("unit_name")]
+    names: list[str] = [s["unit_name"] for s in ordered if isinstance(s, dict) and isinstance(s.get("unit_name"), str)]
     if not names:
         raise TaskTableError(f'Pipeline "{pipeline}" steps do not contain valid "unit_name" entries.')
     return names
@@ -66,7 +66,9 @@ def _build_entries(
         if not name:
             continue
 
-        # Mode filter: keep items with mode="always" or without mode; if processing_mode is None, drop items that specify a mode; otherwise keep only if mode ∈ processing_mode.
+        # Mode filter: keep items with mode="always" or without mode;
+        # if processing_mode is None, drop items that specify a mode;
+        # otherwise keep only if mode ∈ processing_mode.
         mode = e.get("mode")
         if mode == "always":
             pass
@@ -79,7 +81,7 @@ def _build_entries(
 
         out: dict[str, Any] = {"name": name}
 
-        # origin (only for inputs/outputs) — now taken from pipeline step maps (or single-step map) instead of unit entry
+        # origin (only for inputs/outputs)
         if with_origin:
             origin_raw = origin_map_by_unit.get(unit_name, {}).get(origin_kind, {}).get(name)
             if isinstance(origin_raw, str):
