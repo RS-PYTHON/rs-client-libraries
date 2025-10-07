@@ -71,7 +71,8 @@ async def on_demand_processing(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "on-demand-processing"):
 
-        # Create cluster info from JUPYTERHUB_API_TOKEN env var (only in cluster mode) and Dask cluster label.
+        # Create cluster info from JUPYTERHUB_API_TOKEN env var (only in cluster mode, read from the
+        # prefect blocks) and Dask cluster label.
         cluster_info = ClusterInfo(
             jupyter_token=os.environ["JUPYTERHUB_API_TOKEN"] if prefect_utils.cluster_mode else "",
             cluster_label=cluster_label,

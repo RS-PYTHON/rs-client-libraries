@@ -20,7 +20,6 @@ import tempfile
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 import anyio
 import yaml
@@ -277,11 +276,14 @@ class DprClient(OgcApiClient):
                 self.logger.info(f"Write empty file: {self.logger.level} {s3_empty_file!r}")
                 await prefect_utils.s3_upload_empty_file(s3_empty_file)
 
-            # Change the dask authentication for local mode
-            cluster_config = payload["dask_context"]["cluster_config"]
-            if self.local_mode:
-                cluster_config["auth"] = cluster_config["auth_local_mode"]
-            del cluster_config["auth_local_mode"]
+            # Change the dask authentication for local mode (used in old demos, could be removed)
+            try:
+                cluster_config = payload["dask_context"]["cluster_config"]
+                if self.local_mode:
+                    cluster_config["auth"] = cluster_config["auth_local_mode"]
+                del cluster_config["auth_local_mode"]
+            except KeyError:
+                pass
 
             # yaml to str conversion
             contents = yaml.dump(payload, default_flow_style=False, sort_keys=False)
