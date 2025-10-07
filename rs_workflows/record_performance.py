@@ -404,10 +404,9 @@ def validate_products(flow_run_id: str):
             select(product_realised.c.eopf_type).distinct().where(product_realised.c.flow_run_id == flow_run_id),
         ).fetchall()
 
-        # ??
         realised_types = [r[0] for r in realised_types]
-
         expected_types = [r[0] for r in expected_rows]
+
         # For each ‘eopf_type’ from ‘product_realised’, check that there is a corresponding
         # record for "product_expected".
         #
