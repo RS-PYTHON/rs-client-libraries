@@ -12,33 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" . """
+"""."""
 
 
-from typing import Any, Dict, Iterable, Optional, List
+from collections.abc import Iterable
+from typing import Any
+
 
 class TaskTableError(ValueError):
     """Errors related to Task Table parsing/validation."""
 
-def _select_unit_names(tasktable: Dict[str, Any], *, pipeline: Optional[str], unit: Optional[str]) -> List[str]:
+
+def _select_unit_names(tasktable: dict[str, Any], *, pipeline: str | None) -> list[str]:
     """
     Return the ordered list of unit names
     """
-    if pipeline and unit:
-        raise TaskTableError('Provide either "pipeline" or "unit", not both.')
-    if not pipeline and not unit:
-        raise TaskTableError('One of "pipeline" or "unit" must be provided.')
-
-    if unit:
-        # Caller asked for a single unit; existence will be validated later against units index.
-        return [unit]
-
-    # Validate pipelines shape
-    if not isinstance(tasktable, dict):
-        raise TaskTableError("Task table root must be a JSON object (dict).")
-    if "pipelines" not in tasktable or not isinstance(tasktable["pipelines"], list):
-        raise TaskTableError('Missing or invalid "pipelines" list in task table.')
-
     # Find pipeline by name
     pl = next((p for p in tasktable["pipelines"] if p.get("name") == pipeline), None)
     if not pl:
@@ -54,14 +42,21 @@ def _select_unit_names(tasktable: Dict[str, Any], *, pipeline: Optional[str], un
         raise TaskTableError(f'Pipeline "{pipeline}" steps do not contain valid "unit_name" entries.')
     return names
 
-def _build_entries(entries: List[Dict[str, Any]],
-                   io_index: Dict[str, Dict[str, Any]],
-                   processing_mode: Optional[Iterable[str]],
-                   with_origin: bool) -> List[Dict[str, Any]]:
+
+def _build_entries(
+    entries: list[dict[str, Any]],
+    io_index: dict[str, dict[str, Any]],
+    processing_mode: Iterable[str] | None,
+    with_origin: bool,
+    *,
+    unit_name: str,
+    origin_kind: str,
+    origin_map_by_unit: dict[str, dict[str, dict[str, Any]]],
+) -> list[dict[str, Any]]:
     """
     Build STEP 1 entries for input_products / input_adfs / output_products.
     """
-    kept: List[Dict[str, Any]] = []
+    kept: list[dict[str, Any]] = []
     mode_set = set(processing_mode) if processing_mode else None
 
     for e in entries or []:
@@ -71,6 +66,7 @@ def _build_entries(entries: List[Dict[str, Any]],
         if not name:
             continue
 
+        # Mode filter: keep items with mode="always" or without mode; if processing_mode is None, drop items that specify a mode; otherwise keep only if mode ∈ processing_mode.
         mode = e.get("mode")
         if mode == "always":
             pass
@@ -81,73 +77,120 @@ def _build_entries(entries: List[Dict[str, Any]],
             if mode_set is None or mode not in mode_set:
                 continue
 
-        out: Dict[str, Any] = {"name": name}
+        out: dict[str, Any] = {"name": name}
 
-        # origin (only for inputs/outputs)
+        # origin (only for inputs/outputs) — now taken from pipeline step maps (or single-step map) instead of unit entry
         if with_origin:
-            origin = e.get("origin")
-            if isinstance(origin, str):
+            origin_raw = origin_map_by_unit.get(unit_name, {}).get(origin_kind, {}).get(name)
+            if isinstance(origin_raw, str):
                 # Normalize dotted to underscored pipeline refs
                 norm = {
                     "pipeline.input": "pipeline_input",
                     "pipeline.output": "pipeline_output",
                     "pipeline.internal": "pipeline_internal",
-                }.get(origin, origin)
+                }.get(origin_raw, origin_raw)
                 out["origin"] = norm
 
-        # Mandatory precedence: entry > io > unset
-        if "mandatory" in e:
-            out["mandatory"] = bool(e["mandatory"])
+        if "mandatory" not in e:
+            raise TaskTableError(f'Missing "mandatory" for item "{name}" in unit "{unit_name}".')
+        out["mandatory"] = bool(e["mandatory"])
 
         # Merge IO config
-        io_cfg = io_index.get(name, {})
-        for k in ("type", "store_type", "store_params", "alternatives",
-                  "opening_mode", "regex", "multiplicity"):
-            if k in io_cfg:
-                out[k] = io_cfg[k]
-
-        if "mandatory" not in out and "mandatory" in io_cfg:
-            out["mandatory"] = bool(io_cfg["mandatory"])
+        io_cfg = io_index.get(name, {}) or {}
+        for k, v in io_cfg.items():
+            if k in ("name", "mandatory"):
+                continue
+            out[k] = v
 
         kept.append(out)
 
     return kept
 
+
 def build_units_list(
-    tasktable: Dict[str, Any],
+    tasktable: dict[str, Any],
     pipeline: str | None = None,
     unit: str | None = None,
-    processing_mode: Optional[Iterable[str]] = None,
-) -> Dict[str, Any]:
+    processing_mode: Iterable[str] | None = None,
+) -> dict[str, Any]:
     """
     STEP 1: Build the list of processing units from the Task Table.
     """
-
+    # Validate pipelines shape
     if not isinstance(tasktable, dict):
         raise TaskTableError("Task table root must be a JSON object (dict).")
+    if "pipelines" not in tasktable or not isinstance(tasktable["pipelines"], list):
+        raise TaskTableError('Missing or invalid "pipelines" list in task table.')
     if "units" not in tasktable or not isinstance(tasktable["units"], list):
         raise TaskTableError('Missing or invalid "units" list in task table.')
     if "io" not in tasktable or not isinstance(tasktable["io"], list):
         raise TaskTableError('Missing or invalid "io" list in task table.')
 
     # Build indices for quick lookup
-    units_index: Dict[str, Dict[str, Any]] = {}
+    units_index: dict[str, dict[str, Any]] = {}
     for u in tasktable["units"]:
         if isinstance(u, dict) and isinstance(u.get("name"), str):
             units_index[u["name"]] = u
     if not units_index:
         raise TaskTableError('No valid unit entries found in "units".')
 
-    io_index: Dict[str, Dict[str, Any]] = {}
+    io_index: dict[str, dict[str, Any]] = {}
     for io in tasktable["io"]:
         if isinstance(io, dict) and isinstance(io.get("name"), str):
             io_index[io["name"]] = io
 
+    if pipeline and unit:
+        raise TaskTableError('Provide either "pipeline" or "unit", not both.')
+    if not pipeline and not unit:
+        raise TaskTableError('One of "pipeline" or "unit" must be provided.')
+
     # Select unit names from pipeline or explicit unit
-    unit_names = _select_unit_names(tasktable, pipeline=pipeline, unit=unit)
+    if unit:
+        unit_names = [unit]
+        if unit not in units_index:
+            raise TaskTableError(f'Unit {unit} not found in "units".')
+    else:
+        unit_names = _select_unit_names(tasktable, pipeline=pipeline)
+
+    # pipeline provided: per-step origin maps for each unit in the selected pipeline.
+    origin_map_by_unit: dict[str, dict[str, dict[str, Any]]] = {}
+    if pipeline:
+        pl = next((p for p in tasktable.get("pipelines", []) if p.get("name") == pipeline), None)
+        steps = pl.get("steps", []) if pl else []
+        for s in steps:
+            if not isinstance(s, dict):
+                continue
+            uname = s.get("unit_name")
+            if not uname:
+                continue
+            origin_map_by_unit[uname] = {
+                "in": s.get("input_products", {}) or {},
+                "out": s.get("output_products", {}) or {},
+            }
+    else:
+        # unit provided: take the first pipeline step that defines this unit
+        s = None
+        for p in tasktable.get("pipelines", []):
+            if not isinstance(p, dict):
+                continue
+            for st in p.get("steps") or []:
+                if isinstance(st, dict) and st.get("unit_name") in unit_names:
+                    s = st
+                    break
+            if s:
+                break
+
+        if not s:
+            raise TaskTableError(f'No pipeline step found for unit "{unit_names[0]}" to derive origins.')
+
+        uname = s.get("unit_name")
+        origin_map_by_unit[uname] = {
+            "in": s.get("input_products", {}) or {},
+            "out": s.get("output_products", {}) or {},
+        }
 
     # Build output units
-    out_units: List[Dict[str, Any]] = []
+    out_units: list[dict[str, Any]] = []
     for uname in unit_names:
         udef = units_index.get(uname)
         if not udef:
@@ -162,26 +205,37 @@ def build_units_list(
             io_index,
             processing_mode,
             with_origin=True,
+            unit_name=uname,
+            origin_kind="in",
+            origin_map_by_unit=origin_map_by_unit,
         )
         input_adfs = _build_entries(
             udef.get("input_adfs", []),
             io_index,
             processing_mode,
             with_origin=False,
+            unit_name=uname,
+            origin_kind="in",
+            origin_map_by_unit=origin_map_by_unit,
         )
         output_products = _build_entries(
             udef.get("output_products", []),
             io_index,
             processing_mode,
             with_origin=True,
+            unit_name=uname,
+            origin_kind="out",
+            origin_map_by_unit=origin_map_by_unit,
         )
 
-        out_units.append({
-            "name": uname,
-            "module": module,
-            "input_products": input_products,
-            "input_adfs": input_adfs,
-            "output_products": output_products,
-        })
+        out_units.append(
+            {
+                "name": uname,
+                "module": module,
+                "input_products": input_products,
+                "input_adfs": input_adfs,
+                "output_products": output_products,
+            },
+        )
 
     return {"units": out_units}
