@@ -22,6 +22,37 @@ import pytest
 from rs_workflows.payload_builder import build_units_list
 
 SCENARIOS: dict[str, dict] = {
+    # S3 L0
+    "1": {
+        "json_path": "TaskTable_S3_L0_generated_by_rs_python_v1.json",
+        "kwargs": {"pipeline": "s3_l0_full", "processing_mode": None},
+    },
+    "2": {
+        "json_path": "TaskTable_S3_L0_generated_by_rs_python_v1.json",
+        "kwargs": {"pipeline": "s3_l0_full", "processing_mode": ["nrt"]},
+    },
+    "3": {
+        "json_path": "TaskTable_S3_L0_generated_by_rs_python_v1.json",
+        "kwargs": {"unit": "single_unit", "processing_mode": ["nrt"]},
+    },
+    "4": {
+        "json_path": "TaskTable_S3_L0_generated_by_rs_python_v1.json",
+        "kwargs": {"unit": "single_unit", "processing_mode": ["reprocessing"]},
+    },
+    # S1 L0
+    "5": {
+        "json_path": "TaskTable_S1_L0_generated_by_rs_python_v1.json",
+        "kwargs": {"pipeline": "s1_l0_full", "processing_mode": None},
+    },
+    "6": {
+        "json_path": "TaskTable_S1_L0_generated_by_rs_python_v1.json",
+        "kwargs": {"pipeline": "s1_l0_full", "processing_mode": ["reprocessing"]},
+    },
+    "7": {
+        "json_path": "TaskTable_S1_L0_generated_by_rs_python_v1.json",
+        "kwargs": {"unit": "single_unit", "processing_mode": ["nrt"]},
+    },
+    # S1 ARD
     "8": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
         "kwargs": {"pipeline": "s1_ard_full", "processing_mode": ["nrt", "reprocessing"]},
@@ -29,6 +60,26 @@ SCENARIOS: dict[str, dict] = {
     "9": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
         "kwargs": {"unit": "calibration", "processing_mode": ["nrt"]},
+    },
+    "10": {
+        "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
+        "kwargs": {"unit": "reference_dem", "processing_mode": ["nrt"]},
+    },
+    "11": {
+        "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
+        "kwargs": {"unit": "reference_geometry", "processing_mode": ["nrt"]},
+    },
+    "12": {
+        "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
+        "kwargs": {"unit": "coregistration", "processing_mode": ["nrt"]},
+    },
+    "13": {
+        "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
+        "kwargs": {"unit": "geocoding", "processing_mode": ["nrt"]},
+    },
+    "14": {
+        "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
+        "kwargs": {"unit": "mosaicking", "processing_mode": ["nrt"]},
     },
 }
 
