@@ -185,6 +185,9 @@ class TestOgcApi:
             },
         }
 
+        # The cluster info is given only for the DPR client
+        get_process_kwargs = {"cluster_info": CLUSTER_INFO} if isinstance(client, DprClient) else {}
+
         # ----- Check that the process information are returned if we specify a valid job identifier in input
         responses.add(
             method=responses.GET,
@@ -192,7 +195,7 @@ class TestOgcApi:
             json=json_response,
             status=status.HTTP_200_OK,
         )
-        process_resp = client.get_process(process_id)
+        process_resp = client.get_process(process_id, **get_process_kwargs)
         assert process_resp is not None
 
         # ----- Check that the right error status code is returned if trying to get an unexisting resource
@@ -208,7 +211,7 @@ class TestOgcApi:
             json=not_found_response,
             status=status.HTTP_404_NOT_FOUND,
         )
-        process_resp = client.get_process(process_id)
+        process_resp = client.get_process(process_id, **get_process_kwargs)
         assert '"Resource process_that_doesnt_exist not found' in process_resp["detail"]
 
         # ----- Check that we get a validation error if the server sends a response with an unvalid format
@@ -233,7 +236,7 @@ class TestOgcApi:
             status=status.HTTP_200_OK,
         )
         with pytest.raises(OgcValidationException) as exc_info:
-            client.get_process(process_id)
+            client.get_process(process_id, **get_process_kwargs)
         assert "{'wrong_key': False} is not valid under any of the given schemas" in str(exc_info.value)
 
     @pytest.mark.unit

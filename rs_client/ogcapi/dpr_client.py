@@ -92,7 +92,12 @@ class DprClient(OgcApiClient):
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE")
 
-    def get_process(self, process_id: str, cluster_info: ClusterInfo, **kwargs) -> dict:
+    def get_process(  # type: ignore # pylint: disable=arguments-differ
+        self,
+        process_id: str,
+        cluster_info: ClusterInfo,
+        **kwargs,
+    ) -> dict:
         """
         Call parent method with additional HTTP Get parameters.
 
