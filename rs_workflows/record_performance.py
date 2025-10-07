@@ -240,9 +240,11 @@ def record_product_realised(flow_run_id, stac_items):
                 "pi_category_id": get_pi_category_id(eopf_type),
                 "eopf_type": eopf_type,
                 "stac_item": stac_discovery,
-                "sensing_start_datetime": datetime.now(),
+                # get it from properties instead of product name, now() if missing
+                "sensing_start_datetime": stac_discovery["properties"].get("start_datetime", datetime.now()),
                 "origin_date": stac_discovery["properties"].get("datetime", datetime.now()),
                 "catalog_stored_datetime": datetime.now(),
+                # default to false, will be updated by validate
                 "unexpected": False,
                 "on_time_0_day": False,
                 "on_time_1_day": False,
