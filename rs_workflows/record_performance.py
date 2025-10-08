@@ -313,10 +313,10 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
     db, engine = get_db_session()
     product_expected = Table("product_expected", metadata, autoload_with=engine)
 
-    EOPF_TYPE = []
+    eopf_type_dict = []
     # products expected for S3 Level 0
     if dpr_processor_name == "s3_l0":
-        EOPF_TYPE = [
+        eopf_type_dict = [
             ("S03DORDOP", 1, 1),
             ("S03DORNAV", 1, 1),
             ("S03GNSL0_", 1, 1),
@@ -333,7 +333,7 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
     else:
         return
 
-    EOPF_TYPE_LOOKUP = {k: (min_c, max_c) for k, min_c, max_c in EOPF_TYPE}
+    eopf_type_lookup = {k: (min_c, max_c) for k, min_c, max_c in eopf_type_dict}
 
     list_eopf_types = list(payload["workflow"][0]["outputs"].values())
     list_items = list((payload["workflow"][0]["inputs"]).values())
@@ -343,12 +343,12 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
         for eopf_type in list_eopf_types:
 
             try:
-                min_c, max_c = EOPF_TYPE_LOOKUP[eopf_type]
+                min_c, max_c = eopf_type_lookup[eopf_type]
             except KeyError:
-                logger.error(f"EOPF type '{eopf_type}' not found in EOPF_TYPE_LOOKUP.")
+                logger.error(f"EOPF type '{eopf_type}' not found in eopf_type_lookup.")
                 raise
             except Exception as e:
-                logger.exception(f"Unexpected error accessing EOPF_TYPE_LOOKUP with key '{eopf_type}': {e}")
+                logger.exception(f"Unexpected error accessing eopf_type_lookup with key '{eopf_type}': {e}")
                 raise
 
             values = {
