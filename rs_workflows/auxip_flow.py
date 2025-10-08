@@ -17,10 +17,16 @@
 import json
 
 from prefect import flow, get_run_logger, task
-from pystac import ItemCollection
+from pystac import Item, ItemCollection
 
 from rs_client.stac.auxip_client import AuxipClient
+from rs_workflows.catalog_flow import catalog_search_task
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.staging_flow import staging_task_auxip
+
+###############
+# Auxip flows #
+###############
 
 
 @flow(name="Auxip search")
@@ -57,6 +63,76 @@ async def search(
             )
         logger.info(f"Auxip search found {len(found)} results: {found}")
         return found
+
+
+@flow(name="Auxip staging")
+async def auxip_staging(
+    env: FlowEnvArgs,
+    stac_query: json,
+    catalog_collection_identifier: str,
+    timeout_seconds: int = -1,
+):
+    """
+    Generic flow to retrieve a list of items matching the STAC CQL2 filter given, and to stage the ones
+    that are not already in the catalog.
+
+    Args:
+        env (FlowEnvArgs): Prefect flow environment
+        stac_query (json): CQL2 filter to select which files to stage
+        catalog_collection_identifier (str): Catalog collection identifier where CADIP sessions and AUX data are staged
+        timeout_seconds (int): Timeout value for the Auxip search task.
+            Optional, if no value is given the process will run until it is completed
+    """
+    logger = get_run_logger()
+
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "auxip-staging"):
+
+        # TODO Add timeout
+        # Search Auxip products
+        auxip_items: ItemCollection = search_task.submit(
+            flow_env.serialize(),
+            auxip_cql2={"filter": stac_query},
+            error_if_empty=False,
+        )
+
+        # Stop process if search task didn't return any item
+        if len(auxip_items) == 0:
+            logger.info("Nothing to stage: Auxip search with given filter returned empty result.")
+            return
+
+        # Search catalog items
+        catalog_items: ItemCollection = catalog_search_task.submit(
+            flow_env.serialize(),
+            catalog_cql2={"filter": stac_query},
+            error_if_empty=False,
+        )
+
+        # Compare results of Auxip search with results of Catalog search
+        # to see what is missing in Catalog
+        missing_items_list: list[Item] = []
+        for item in auxip_items:
+            if item not in catalog_items:
+                missing_items_list.append(item)
+        missing_auxip_items = ItemCollection(missing_items_list)
+        logger.info(f"Number of items missing in the catalog to stage: {len(missing_auxip_items)}")
+
+        # Stop process if all the Auxip items found are already in the catalog
+        if len(missing_auxip_items) == 0:
+            logger.info("Nothing to stage: all Auxip items found are already in the catalog.")
+            return
+
+        # Stage missing Auxip items
+        staged = staging_task_auxip.submit(
+            flow_env.serialize(),
+            missing_auxip_items,
+            catalog_collection_identifier,
+        )
+
+        # Wait for last task to end.
+        # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
+        staged.result()  # type: ignore[unused-coroutine]
 
 
 ###########################
