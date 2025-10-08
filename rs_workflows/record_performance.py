@@ -20,7 +20,7 @@ from datetime import datetime
 from importlib.metadata import version
 
 from prefect import get_run_logger, runtime, task
-from sqlalchemy import MetaData, Table, create_engine, select, update
+from sqlalchemy import MetaData, Table, create_engine, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 
@@ -220,27 +220,31 @@ def record_flow_run(
 
 
 def record_product_realised(flow_run_id, stac_items):
-    """Insert or update a record in product_realised table by flow_run_id."""
-
+    """Insert records in product_realised table"""
     logger = get_run_logger()
     metadata = MetaData()
     db, engine = get_db_session()
     product_realised = Table("product_realised", metadata, autoload_with=engine)
+
     if not stac_items:
-        # don't update product_realised if stac_items is empty
+        logger.info("No STAC items provided — skipping insert into product_realised.")
         return
+
     try:
         for dpr_product in stac_items:
-            eopf_type = dpr_product["stac_discovery"]["properties"]["product:type"]
+            stac_discovery = dpr_product["stac_discovery"]
+            eopf_type = stac_discovery["properties"]["product:type"]
+
             values = {
                 "flow_run_id": flow_run_id,
                 "pi_category_id": get_pi_category_id(eopf_type),
                 "eopf_type": eopf_type,
-                "stac_item": dpr_product["stac_discovery"],
-                # to be later implemented.
-                "sensing_start_datetime": datetime.now(),
-                "origin_date": dpr_product["stac_discovery"]["properties"].get("datetime", datetime.now()),
+                "stac_item": stac_discovery,
+                # get it from properties instead of product name, now() if missing
+                "sensing_start_datetime": stac_discovery["properties"].get("start_datetime", datetime.now()),
+                "origin_date": stac_discovery["properties"].get("datetime", datetime.now()),
                 "catalog_stored_datetime": datetime.now(),
+                # default to false, will be updated by validate
                 "unexpected": False,
                 "on_time_0_day": False,
                 "on_time_1_day": False,
@@ -248,34 +252,188 @@ def record_product_realised(flow_run_id, stac_items):
                 "on_time_3_day": False,
                 "on_time_7_day": False,
             }
-            logger.info(f"Values prepared for product_realised: {values}")
-            existing = db.execute(
-                select(product_realised.c.id).where(product_realised.c.flow_run_id == flow_run_id),
-            ).fetchone()
+            # no upsert, only insert each element from dpr output
+            stmt = insert(product_realised).values(**values)
+            db.execute(stmt)
+            logger.info(f"Inserted product_realised for flow_run_id={flow_run_id}")
 
-            if existing:
-                stmt = (
-                    update(product_realised)
-                    .where(product_realised.c.flow_run_id == flow_run_id)
-                    .values(**{k: v for k, v in values.items() if k != "flow_run_id"})
-                )
-                db.execute(stmt)
-                logger.info(f"Updated product_realised for flow_run_id={flow_run_id}")
-            else:
-                stmt = insert(product_realised).values(**values)  # type: ignore
-                db.execute(stmt)
-                logger.info(f"Inserted product_realised for flow_run_id={flow_run_id}")
-
-            db.commit()
+        db.commit()
 
     except KeyError as ker:
         db.rollback()
-        logger.error(f"Key error while unpacking dpr output: {ker}")
+        logger.error(f"Key error while unpacking DPR product: {ker}")
         raise
 
     except Exception as e:
         db.rollback()
-        logger.error(f"Error in record_product_realised: {e}")
+        logger.error(f"Unexpected error in record_product_realised: {e}")
+        raise
+
+    finally:
+        db.close()
+
+
+def record_product_expected(flow_run_id: str):
+    """Insert a hardcoded record in product_expected table by flow_run_id."""
+
+    logger = get_run_logger()
+    metadata = MetaData()
+    db, engine = get_db_session()
+    product_expected = Table("product_expected", metadata, autoload_with=engine)
+
+    try:
+        values = {
+            "flow_run_id": flow_run_id,
+            "pi_category_id": 1,
+            "eopf_type": "HARDCODED_TYPE",  # hardcoded
+            "sensing_start_datetime": datetime.now(),
+            "min_count": 1,
+            "max_count": 5,
+        }
+
+        # check if record already exists for this flow_run_id
+        existing = db.execute(
+            select(product_expected.c.id).where(product_expected.c.flow_run_id == flow_run_id),
+        ).fetchone()
+
+        if existing:
+            stmt = (
+                update(product_expected)
+                .where(product_expected.c.flow_run_id == flow_run_id)
+                .values(**{k: v for k, v in values.items() if k != "flow_run_id"})
+            )
+            db.execute(stmt)
+            logger.info(f"Updated product_expected for flow_run_id={flow_run_id}")
+        else:
+            stmt = insert(product_expected).values(**values)  # type: ignore
+            db.execute(stmt)
+            logger.info(f"Inserted product_expected for flow_run_id={flow_run_id}")
+
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error in record_product_expected: {e}")
+        raise
+    finally:
+        db.close()
+
+
+def validate_products(flow_run_id: str):
+    """Validate realised vs expected products for a given flow_run_id.
+    : running multiple times won't duplicate inserts/updates.
+    """
+
+    logger = get_run_logger()
+    metadata = MetaData()
+    db, engine = get_db_session()
+
+    # get all involved tables in rspy 743
+    product_expected = Table("product_expected", metadata, autoload_with=engine)
+    product_realised = Table("product_realised", metadata, autoload_with=engine)
+    product_missing = Table("product_missing", metadata, autoload_with=engine)
+
+    try:
+        # get expected products:  type min / max count
+        expected_rows = db.execute(
+            select(
+                product_expected.c.eopf_type,
+                product_expected.c.min_count,
+                product_expected.c.max_count,
+            ).where(product_expected.c.flow_run_id == flow_run_id),
+        ).fetchall()
+
+        # step 1: validate each expected type
+        for row in expected_rows:
+            eopf_type, min_count, max_count = row
+
+            realised_count = db.execute(
+                select(func.count())  # pylint: disable=not-callable
+                .select_from(product_realised)
+                .where(
+                    product_realised.c.flow_run_id == flow_run_id,
+                    product_realised.c.eopf_type == eopf_type,
+                ),
+            ).scalar()
+
+            logger.debug(f"eopf_type={eopf_type}, expected {min_count}-{max_count}, realised={realised_count}")
+
+            if realised_count < min_count:
+                # case 1 fill product_missing table
+                missing_count = min_count - realised_count
+
+                # check if already inserted
+                exists_missing = db.execute(
+                    select(product_missing.c.id).where(
+                        product_missing.c.flow_run_id == flow_run_id,
+                        product_missing.c.eopf_type == eopf_type,
+                    ),
+                ).fetchone()
+
+                if not exists_missing:
+                    stmt = insert(product_missing).values(
+                        flow_run_id=flow_run_id,
+                        eopf_type=eopf_type,
+                        count=missing_count,
+                    )
+                    db.execute(stmt)
+                    logger.warning(f"Missing products for {eopf_type}: inserted {missing_count} into product_missing")
+                else:
+                    logger.info(f"Missing products for {eopf_type} already recorded, skipping insert")
+
+            elif realised_count > max_count:
+                # case 2: update 'product_realised.unexpected'
+                # only update if not already marked
+                stmt = (
+                    update(product_realised)  # type: ignore
+                    .where(
+                        product_realised.c.flow_run_id == flow_run_id,
+                        product_realised.c.eopf_type == eopf_type,
+                        product_realised.c.unexpected.is_(False),
+                    )
+                    .values(unexpected=True)
+                )
+                result = db.execute(stmt)
+                if result.rowcount > 0:
+                    logger.error(f"Too many products for {eopf_type}: marked all as unexpected")
+                else:
+                    logger.info(f"Too many products for {eopf_type} already marked, skipping update")
+
+        # step 2: check realised types without expected
+        realised_types = db.execute(
+            select(product_realised.c.eopf_type).distinct().where(product_realised.c.flow_run_id == flow_run_id),
+        ).fetchall()
+
+        realised_types = [r[0] for r in realised_types]
+        expected_types = [r[0] for r in expected_rows]
+
+        # For each ‘eopf_type’ from ‘product_realised’, check that there is a corresponding
+        # record for "product_expected".
+        #
+        # In case there is no correspondance, set ‘product_realised.unexpected’ to true for
+        # all records for this ‘eopf_type’.
+        extra_types = set(realised_types) - set(expected_types)
+        for eopf_type in extra_types:
+            stmt = (
+                update(product_realised)  # type: ignore
+                .where(
+                    product_realised.c.flow_run_id == flow_run_id,
+                    product_realised.c.eopf_type == eopf_type,
+                    product_realised.c.unexpected.is_(False),
+                )
+                .values(unexpected=True)
+            )
+            result = db.execute(stmt)
+            if result.rowcount > 0:
+                logger.error(f"Unexpected product type {eopf_type}: marked all as unexpected")
+            else:
+                logger.info(f"Unexpected product type {eopf_type} already marked, skipping update")
+
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error in validate_products: {e}")
         raise
     finally:
         db.close()
@@ -315,8 +473,11 @@ def record_performance_indicators(
             dpr_processor_unit,
             dpr_processing_input_stac_items,
         )
+        record_product_expected(flow_run_id)
 
         record_product_realised(flow_run_id, stac_items)
+
+        validate_products(flow_run_id)
         logger.info("Transaction committed successfully!")
 
     except Exception as e:

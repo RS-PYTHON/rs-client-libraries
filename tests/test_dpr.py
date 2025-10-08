@@ -24,11 +24,12 @@ import pytest
 import responses
 from starlette import status
 
-from rs_client.ogcapi.dpr_client import DprClient, DprProcess
+from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcess
 from rs_client.rs_client import RsClient
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = getpass.getuser()
+CLUSTER_INFO = ClusterInfo("", "", "")
 
 
 @pytest.fixture(name="dummy_href")
@@ -101,7 +102,7 @@ def test_dpr_client(mocker, dpr_client: DprClient, process: DprProcess, dummy_hr
     mocker.patch("rs_client.ogcapi.dpr_client.prefect_utils.s3_download_file", new=mock_download)
 
     # Run the DPR processing
-    assert dpr_client.run_process(process, "", "", "", {}) == dpr_response_sample
+    assert dpr_client.run_process(process, CLUSTER_INFO, "", "", "", {}) == dpr_response_sample
 
 
 @pytest.mark.asyncio
