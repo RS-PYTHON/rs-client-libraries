@@ -37,6 +37,37 @@ from rs_workflows.staging_flow import (
     staging_task_cadip,
     staging_task_prip,
 )
+import re
+from copy import deepcopy
+
+# To be later moved ?
+def build_cql2_json(task_table, query_name, values):
+    """
+    Recursively replaces placeholders of the form {var} in a dictionary or list
+    using the mapping from 'values'.
+    """
+    for cql_filter in task_table['queries']:
+        if cql_filter['name'] == query_name:
+            # Work on a deep copy so we don't mutate the original
+            template = deepcopy(cql_filter)
+    pattern = re.compile(r'^{(.*)}$')  # matches exactly "{var}" (whole string)
+
+    def _replace(item):
+        if isinstance(item, str):
+            match = pattern.match(item)
+            if match:
+                key = match.group(1)
+                return values.get(key, item)  # replace if found, else keep
+            return item
+        elif isinstance(item, list):
+            return [_replace(x) for x in item]
+        elif isinstance(item, dict):
+            return {k: _replace(v) for k, v in item.items()}
+        else:
+            return item
+
+    return _replace(template)
+
 
 @flow(name="dpr-process")
 async def on_demand_processing(
@@ -116,27 +147,34 @@ async def on_demand_processing(
         md = "# Units list\n\n```json\n" + json.dumps(units, indent=2) + "\n```"
         await acreate_markdown_artifact(key="units-list", markdown=md, description="Units list structure")
         
-        auxip_items = []
-        alternative_index = 0
-        while not auxip_items:
-            # 1 Get the "query" with the "parameters" and "timeout_seconds" information (from output of build_units_list)
-            # get from alternative_index
-            # 2 Get the corresponding "query.name" on the section "query" of the task table (from output of build_units_list)
-            # 3 Build the CQL2 JSON by replacing the parameters
-            # Based on query.name, read cql2 filter from tt
-            auxip_cql2 =  [filter for filter in tt['queries'] if filter['name'] == "query.name"] # tbd
-            auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
-            # 4 Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux ???
-            catalog_collection_identifier = "something from somewhere"
-            # 5 Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout, 
-            # it's done below after auxip_items is set, or runtime is raised.
-            # 6 If the flow return at least one value, stop. Otherwise go to the next "alternative"
-            alternative_index += 1
-            if alternative_index == len(units['io']['alternatives']):
-                # there are no alternatives defined left, so raise an error
-                raise RuntimeError("No items")
+        # disabled temporarly
+        out = None
+        auxip_staged_items = []
+        try:
+            for unit in out:
+                # For each input_adfs element computed on STEP 1
+                for input_adfs in unit['input_adfs']:
+                    # and for each "alternative" ( get it following the "order" )
+                    for alternative in input_adfs['alternatives']:
+                        # 1. Get the "query" with the "parameters" and "timeout_seconds" information 
+                        # 2. Get the corresponding "query.name" on the section "query" of the task table
+                        timeout = alternative['timeout_seconds']
+                        name, parameters = alternative['query']['name'], alternative['query']['parameters']
+                        # 3. Build the CQL2 JSON by replacing the parameters
+                        auxip_cql2 = build_cql2_json(name, parameters)
+                        auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
+                        # 4. Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
+                        catalog_collection_identifier = "s1-aux" # to be updated
+                        if not auxip_items:
+                            # 6 If the flow return at least one value, stop. Otherwise go to the next "alternative"
+                            continue
+                # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
+                # timeout currently disabled
+                # note: auxip-staged-items should be a tuple (aux-name, s3_path)
+                auxip_staged_items = staging_task_auxip.submit(flow_env.serialize(), auxip_items, catalog_collection_identifier)
 
-            
+        except KeyError as kerr:
+            raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
 
         # Auxip and Cadip item ids
         item_ids = []
@@ -148,11 +186,7 @@ async def on_demand_processing(
         # Note: the only difference between staging_task_auxip and
         # staging_task_cadip is the task name in the prefect dashboard.
         staged = [
-            staging_task_auxip.submit(
-                flow_env.serialize(),
-                auxip_items,
-                catalog_collection_identifier,
-            ),
+            auxip_staged_items,
             staging_task_cadip.submit(
                 flow_env.serialize(),
                 cadip_items,
