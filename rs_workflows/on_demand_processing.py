@@ -15,10 +15,12 @@
 """Prefect flows and tasks for on-demand processing"""
 
 import datetime
+import json
 import os
 from pathlib import Path
 
 from prefect import flow
+from prefect.artifacts import acreate_markdown_artifact
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
@@ -37,7 +39,7 @@ from rs_workflows.staging_flow import (
 )
 
 
-@flow(name="On-demand processing")
+@flow(name="dpr-process")
 async def on_demand_processing(
     env: FlowEnvArgs,
     processor: ProcessorEnum,
@@ -51,7 +53,7 @@ async def on_demand_processing(
     # dpr_input: DprProcessIn | None = None,
 ):
     """
-    Prefect flow for on-demand processing.
+    Prefect flow for dpr-process.
 
     Args:
         env: Prefect flow environment
@@ -90,6 +92,26 @@ async def on_demand_processing(
 
         # Read Auxip CQL2 filter from the processor tasktable.
         auxip_cql2 = read_tasktable.submit(flow_env.serialize(), processor, cluster_info, payload_values, cadip_items)
+
+        units = [
+            {
+                "name": "calibration",
+                "module": "processing.ard.calibration",
+                "input_products": [],
+                "input_adfs": [],
+                "output_products": [],
+            },
+            {
+                "name": "geocoding",
+                "module": "processing.ard.geocoding",
+                "input_products": [],
+                "input_adfs": [],
+                "output_products": [],
+            },
+        ]
+
+        md = "# Units list\n\n```json\n" + json.dumps(units, indent=2) + "\n```"
+        await acreate_markdown_artifact(key="units-list", markdown=md, description="Units list structure")
 
         # Search Auxip products
         auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)

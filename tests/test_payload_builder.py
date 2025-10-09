@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from rs_workflows.payload_builder import build_units_list
+from rs_workflows.payload_builder import TaskTableError, build_units_list
 
 SCENARIOS: dict[str, dict] = {
     # S3 L0
@@ -86,7 +86,8 @@ SCENARIOS: dict[str, dict] = {
 
 @pytest.mark.parametrize("case_id,cfg", SCENARIOS.items())
 def test_build_units_list_returns_dict(case_id, cfg):  # pylint: disable=unused-argument
-    """Test build_units_list function"""
+    """Verify the result is a dict and that 'units' is a list whose items include the keys
+    'name', 'module', 'input_products', 'input_adfs', and 'output_products'."""
     tt_path = Path(__file__).parent / "resources" / cfg["json_path"]
     with tt_path.open("r", encoding="utf-8") as f:
         tt = json.load(f)
@@ -98,6 +99,76 @@ def test_build_units_list_returns_dict(case_id, cfg):  # pylint: disable=unused-
         processing_mode=cfg["kwargs"].get("processing_mode"),
     )
     assert isinstance(out, dict)
+
+    assert "units" in out, "Missing key 'units'."
+    assert isinstance(out["units"], list)
+
+    for i, unit in enumerate(out["units"]):
+        assert isinstance(unit, dict), f"units[{i}] must be a dict."
+        for key in ("name", "module", "input_products", "input_adfs", "output_products"):
+            assert key in unit, f"Missing key '{key}' in units[{i}]."
+
+
+def _valid_tasktable():
+    return {
+        "pipelines": [{"name": "p1", "steps": [{"order": 1, "unit_name": "u1"}]}],
+        "units": [
+            {
+                "name": "u1",
+                "module": "mod.u1",
+                "input_products": [],
+                "input_adfs": [],
+                "output_products": [],
+            },
+        ],
+        "io": [],
+    }
+
+
+def test_build_units_list_rejects_both_pipeline_and_unit():
+    """Test that build_units_list raises TaskTableError when both 'pipeline' and 'unit' are provided."""
+    tt = _valid_tasktable()
+    with pytest.raises(TaskTableError, match='Provide either "pipeline" or "unit", not both\\.'):
+        build_units_list(tt, pipeline="p1", unit="u1")
+
+
+def test_build_units_list_requires_one_of_pipeline_or_unit():
+    """Test that build_units_list raises TaskTableError when neither 'pipeline' nor 'unit' is provided."""
+    tt = _valid_tasktable()
+    with pytest.raises(TaskTableError, match='One of "pipeline" or "unit" must be provided\\.'):
+        build_units_list(tt, pipeline=None, unit=None)
+
+
+def test_build_units_list_invalid_tasktable_root_type():
+    """Test that providing a non-dict task table raises TaskTableError with the expected message."""
+    with pytest.raises(TaskTableError, match=r"Task table root must be a JSON object \(dict\)\."):
+        build_units_list("not a dict", pipeline="p1")
+
+
+def test_build_units_list_missing_or_invalid_pipelines_list():
+    """Test that a missing or non-list 'pipelines' field in the task table raises
+    TaskTableError with the expected message."""
+    tt = {"units": [], "io": []}
+    with pytest.raises(TaskTableError, match='Missing or invalid "pipelines" list in task table\\.'):
+        build_units_list(tt, pipeline="p1")
+
+
+def test_build_units_list_missing_or_invalid_units_list():
+    """Test that a missing or non-list 'units' field in the task table raises
+    TaskTableError with the expected message."""
+    tt = {"pipelines": [], "io": []}
+    with pytest.raises(TaskTableError, match='Missing or invalid "units" list in task table\\.'):
+        build_units_list(tt, pipeline="p1")
+
+
+def test_build_units_list_missing_or_invalid_io_list():
+    """Test that a missing or non-list 'io' field in the task table raises TaskTableError with the expected message."""
+    tt = {
+        "pipelines": [{"name": "p1", "steps": [{"order": 1, "unit_name": "u1"}]}],
+        "units": [{"name": "u1", "module": "m", "input_products": [], "input_adfs": [], "output_products": []}],
+    }
+    with pytest.raises(TaskTableError, match='Missing or invalid "io" list in task table\\.'):
+        build_units_list(tt, pipeline="p1")
 
 
 def test_case_8_exact_output():

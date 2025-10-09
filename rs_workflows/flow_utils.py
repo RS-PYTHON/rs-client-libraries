@@ -24,7 +24,6 @@ from opentelemetry import trace
 from opentelemetry.trace import Span, SpanContext
 from opentelemetry.util._decorator import _agnosticcontextmanager
 from prefect import get_run_logger
-from pydantic import BaseModel, Field
 from pystac import Item
 
 from rs_client.rs_client import RsClient
@@ -40,9 +39,10 @@ class ProcessorEnum(str, Enum):
     S1ARD = "s1_ard"
 
 
-class FlowEnvArgs(BaseModel):
+@dataclass
+class FlowEnvArgs:
     """
-    Prefect flow environment, as a Pydantic serializable object.
+    Prefect flow environment arguments.
 
     Attributes:
         owner_id: User/owner ID (necessary to retrieve the user info: API key and OAuth2 cookie)
@@ -51,8 +51,8 @@ class FlowEnvArgs(BaseModel):
         calling_span (tuple): Serialized OpenTelemetry span of the calling flow, if any.
     """
 
-    owner_id: str = Field(description="User/owner ID")
-    calling_span: tuple[int, int, bool] | None = Field(description="OpenTelemetry info", default=None)
+    owner_id: str
+    calling_span: tuple[int, int, bool] | None = None
 
 
 class FlowEnv:
