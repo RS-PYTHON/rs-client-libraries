@@ -38,7 +38,6 @@ from rs_workflows.staging_flow import (
     staging_task_prip,
 )
 
-
 @flow(name="dpr-process")
 async def on_demand_processing(
     env: FlowEnvArgs,
@@ -116,9 +115,28 @@ async def on_demand_processing(
 
         md = "# Units list\n\n```json\n" + json.dumps(units, indent=2) + "\n```"
         await acreate_markdown_artifact(key="units-list", markdown=md, description="Units list structure")
+        
+        auxip_items = []
+        alternative_index = 0
+        while not auxip_items:
+            # 1 Get the "query" with the "parameters" and "timeout_seconds" information (from output of build_units_list)
+            # get from alternative_index
+            # 2 Get the corresponding "query.name" on the section "query" of the task table (from output of build_units_list)
+            # 3 Build the CQL2 JSON by replacing the parameters
+            # Based on query.name, read cql2 filter from tt
+            auxip_cql2 =  [filter for filter in tt['queries'] if filter['name'] == "query.name"] # tbd
+            auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
+            # 4 Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux ???
+            catalog_collection_identifier = "something from somewhere"
+            # 5 Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout, 
+            # it's done below after auxip_items is set, or runtime is raised.
+            # 6 If the flow return at least one value, stop. Otherwise go to the next "alternative"
+            alternative_index += 1
+            if alternative_index == len(units['io']['alternatives']):
+                # there are no alternatives defined left, so raise an error
+                raise RuntimeError("No items")
 
-        # Search Auxip products
-        auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
+            
 
         # Auxip and Cadip item ids
         item_ids = []
