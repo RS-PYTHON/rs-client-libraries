@@ -17,6 +17,8 @@
 import datetime
 import json
 import os
+import re
+from copy import deepcopy
 from pathlib import Path
 
 from prefect import flow
@@ -37,8 +39,7 @@ from rs_workflows.staging_flow import (
     staging_task_cadip,
     staging_task_prip,
 )
-import re
-from copy import deepcopy
+
 
 # To be later moved ?
 def build_cql2_json(task_table, query_name, values):
@@ -46,11 +47,12 @@ def build_cql2_json(task_table, query_name, values):
     Recursively replaces placeholders of the form {var} in a dictionary or list
     using the mapping from 'values'.
     """
-    for cql_filter in task_table['queries']:
-        if cql_filter['name'] == query_name:
+    template = {}
+    for cql_filter in task_table["queries"]:
+        if cql_filter["name"] == query_name:
             # Work on a deep copy so we don't mutate the original
             template = deepcopy(cql_filter)
-    pattern = re.compile(r'^{(.*)}$')  # matches exactly "{var}" (whole string)
+    pattern = re.compile(r"^{(.*)}$")  # matches exactly "{var}" (whole string)
 
     def _replace(item):
         if isinstance(item, str):
@@ -59,12 +61,11 @@ def build_cql2_json(task_table, query_name, values):
                 key = match.group(1)
                 return values.get(key, item)  # replace if found, else keep
             return item
-        elif isinstance(item, list):
+        if isinstance(item, list):
             return [_replace(x) for x in item]
-        elif isinstance(item, dict):
+        if isinstance(item, dict):
             return {k: _replace(v) for k, v in item.items()}
-        else:
-            return item
+        return item
 
     return _replace(template)
 
@@ -122,11 +123,12 @@ async def on_demand_processing(
 
         # Read Auxip CQL2 filter from the processor tasktable.
         auxip_cql2 = read_tasktable.submit(flow_env.serialize(), processor, cluster_info, payload_values, cadip_items)
- 
+
         # task_table = flow_env.rs_client.get_dpr_client().get_process(processor.value, cluster_info)
-        # units_list = build_units_list(tasktable=tt, pipeline=dpr_input.pipeline, unit=dpr_input.unit, processing_mode=dpr_input.processing_mode)
+        # units_list = build_units_list(tasktable=tt, pipeline=dpr_input.pipeline,
+        #  unit=dpr_input.unit, processing_mode=dpr_input.processing_mode)
         # units_list = out["units"]
-        
+
         units = [
             {
                 "name": "calibration",
@@ -146,36 +148,47 @@ async def on_demand_processing(
 
         md = "# Units list\n\n```json\n" + json.dumps(units, indent=2) + "\n```"
         await acreate_markdown_artifact(key="units-list", markdown=md, description="Units list structure")
-        
+
         # disabled temporarly, wait for rspy 797
         units_list = []
         auxip_staged_items = []
         task_table = {}
-        try:
-            for unit in units_list:
+        for unit in units_list:
+            try:
                 # For each input_adfs element computed on STEP 1
-                for input_adfs in unit['input_adfs']:
+                for input_adfs in unit["input_adfs"]:
                     # and for each "alternative" ( get it following the "order" )
-                    for alternative in input_adfs['alternatives']:
-                        # 1. Get the "query" with the "parameters" and "timeout_seconds" information 
+                    for idx, alternative in enumerate(input_adfs["alternatives"]):
+                        # 1. Get the "query" with the "parameters" and "timeout_seconds" information
                         # 2. Get the corresponding "query.name" on the section "query" of the task table
-                        timeout = alternative['timeout_seconds']
-                        name, parameters = alternative['query']['name'], alternative['query']['parameters']
+                        timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
+                        name, parameters = alternative["query"]["name"], alternative["query"]["parameters"]
                         # 3. Build the CQL2 JSON by replacing the parameters
                         auxip_cql2 = build_cql2_json(task_table, name, parameters)
-                        auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
-                        # 4. Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
-                        catalog_collection_identifier = "s1-aux" # to be updated
-                        if not auxip_items:
-                            # 6 If the flow return at least one value, stop. Otherwise go to the next "alternative"
-                            continue
+                        auxip_items = auxip_flow.search_task.submit(
+                            flow_env.serialize(),
+                            auxip_cql2,
+                            error_if_empty=True,
+                        )
+                        # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
+                        catalog_collection_identifier = "s1-aux"  # to be updated
+                        # catalog_collection_identifier = f"{dpr_input.satellite}-aux"
+                        if auxip_items:
+                            # Found items → stop searching alternatives, start staging
+                            break
+                        if idx == len(input_adfs["alternatives"]) - 1:
+                            #  Last one and still nothing → raise runtime
+                            raise RuntimeError("All ADFS searched, no items found.")
                 # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
                 # timeout currently disabled
                 # note: auxip-staged-items should be a tuple (aux-name, s3_path)
-                auxip_staged_items = staging_task_auxip.submit(flow_env.serialize(), auxip_items, catalog_collection_identifier)
-
-        except KeyError as kerr:
-            raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
+                auxip_staged_items = staging_task_auxip.submit(
+                    flow_env.serialize(),
+                    auxip_items,
+                    catalog_collection_identifier,
+                )
+            except KeyError as kerr:
+                raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
 
         # Auxip and Cadip item ids
         item_ids = []
