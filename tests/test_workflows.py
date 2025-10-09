@@ -188,7 +188,8 @@ async def test_on_demand_processing(
 ):  # pylint: disable=unused-argument, redefined-outer-name
     """Test the on_demand_processing flow"""
 
-    await setup_worklow_test_env()
+    # Save env vars in prefect secret blocks
+    await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": "JUPYTERHUB_API_TOKEN"})
 
     # We'll just check that the prefect tasks and flows were called.
     # We don't check the underlying RsClient functions, this is already done in dedicated pytests.
@@ -214,6 +215,7 @@ async def test_on_demand_processing(
     await on_demand_processing.on_demand_processing(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         processor=ProcessorEnum.S1L0,
+        cluster_label="cluster_label",
         cadip_collection_identifier="cadip_collection_identifier",
         session_identifier="session_identifier",
         catalog_collection_identifier="catalog_collection_identifier",

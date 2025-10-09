@@ -17,6 +17,7 @@
 import ast
 import os.path as osp
 import tempfile
+from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
 
@@ -50,6 +51,23 @@ class DprProcess(str, Enum):
     S1ARD = "s1_ard"
 
 
+@dataclass
+class ClusterInfo:
+    """
+    Information to connect to a DPR Dask cluster.
+
+    Attributes:
+        jupyter_token: JupyterHub API token. Only used in cluster mode, not local mode.
+        cluster_label: Dask cluster label e.g. "dask-l0"
+        cluster_instance: Dask cluster instance ID (something like "dask-gateway.17e196069443463495547eb97f532834").
+        If instance is empty, the DPR processor will use the first cluster with the given label.
+    """
+
+    jupyter_token: str
+    cluster_label: str
+    cluster_instance: str | None = ""
+
+
 class DprClient(OgcApiClient):
     """Implement the OGC API client for 'DPR as a service'."""
 
@@ -74,9 +92,25 @@ class DprClient(OgcApiClient):
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE")
 
+    def get_process(  # type: ignore # pylint: disable=arguments-differ
+        self,
+        process_id: str,
+        cluster_info: ClusterInfo,
+        **kwargs,
+    ) -> dict:
+        """
+        Call parent method with additional HTTP Get parameters.
+
+        Args:
+            process_id (str): name of the resource
+            cluster_info: Information to connect to a DPR Dask cluster
+        """
+        return super().get_process(process_id, params=asdict(cluster_info), **kwargs)
+
     def run_process(
         self,
         process: DprProcess,
+        cluster_info: ClusterInfo,
         s3_config_dir: str,
         payload_subpath: str,
         s3_report_dir: str | None,
@@ -86,6 +120,7 @@ class DprClient(OgcApiClient):
 
         Args:
             process: DPR process
+            cluster_info: Information to connect to a DPR Dask cluster
             s3_config_dir: S3 bucket folder that contains the payload and configuration files to pass to the processor
             payload_subpath: Payload file path, relative to the config folder
             s3_report_dir: S3 bucket folder were the processor report files will be written (optional). All the eopf
@@ -125,21 +160,26 @@ class DprClient(OgcApiClient):
             # Add extra info
             data.update({"use_mockup": use_mockup})
 
+        # Add the cluster info
+        data.update(asdict(cluster_info))
+
         # Call the parent method
         return super()._run_process(process.value, data)
 
-    def run_conv_safe_zarr(self, payload: dict):
+    def run_conv_safe_zarr(self, payload: dict, cluster_info: ClusterInfo):
         """Method to start the safe to zarr conversion process from rs-client -
            Call the endpoint /processes/conv_safe_zarr/execution
 
         Args:
             payload: Dictionary to pass to the processor,
+            cluster_info: Information to connect to a DPR Dask cluster
             containing input_safe_path - the s3 path of legacy product and
             output_zarr_dir_path - the s3 path for the new zarr
         Return:
             job_id (int, str): Returns the status code of the request + the identifier
             (or None if endpoint fails) of the running job
         """
+        payload.update(asdict(cluster_info))  # Add the cluster info to the payload
         return super()._run_process("conv_safe_zarr", payload)
 
     def wait_for_job(self, *args, **kwargs) -> list[dict]:  # type: ignore
@@ -241,11 +281,14 @@ class DprClient(OgcApiClient):
                 self.logger.info(f"Write empty file: {self.logger.level} {s3_empty_file!r}")
                 await prefect_utils.s3_upload_empty_file(s3_empty_file)
 
-            # Change the dask authentication for local mode
-            cluster_config = payload["dask_context"]["cluster_config"]
-            if self.local_mode:
-                cluster_config["auth"] = cluster_config["auth_local_mode"]
-            del cluster_config["auth_local_mode"]
+            # Change the dask authentication for local mode (used in old demos, could be removed)
+            try:
+                cluster_config = payload["dask_context"]["cluster_config"]
+                if self.local_mode:
+                    cluster_config["auth"] = cluster_config["auth_local_mode"]
+                del cluster_config["auth_local_mode"]
+            except KeyError:
+                pass
 
             # yaml to str conversion
             contents = yaml.dump(payload, default_flow_style=False, sort_keys=False)

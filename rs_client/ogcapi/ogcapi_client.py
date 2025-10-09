@@ -135,7 +135,7 @@ class OgcApiClient(RsClient):
         )
         return self.validate_and_unmarshal_response(response)
 
-    def get_process(self, process_id: str) -> dict:
+    def get_process(self, process_id: str, **kwargs) -> dict:
         """
         Wrapper to get a specific process
         Args:
@@ -145,6 +145,7 @@ class OgcApiClient(RsClient):
             url=f"{self.href_service}/{self.endpoint_prefix}processes/{process_id}",
             timeout=TIMEOUT,
             **self.apikey_headers,
+            **kwargs,
         )
         return self.validate_and_unmarshal_response(response)
 

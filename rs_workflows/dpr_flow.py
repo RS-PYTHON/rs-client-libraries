@@ -24,7 +24,7 @@ from prefect import get_run_logger, task
 from pydantic import BaseModel
 from pystac import ItemCollection
 
-from rs_client.ogcapi.dpr_client import DprClient, DprProcess
+from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcess
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
@@ -76,6 +76,7 @@ async def read_payload_values(s3_payload: str) -> PayloadValues:
 async def read_tasktable(
     env: FlowEnvArgs,
     processor: ProcessorEnum,  # pylint: disable=unused-argument
+    cluster_info: ClusterInfo,  # pylint: disable=unused-argument
     payload_values: PayloadValues,  # pylint: disable=unused-argument
     cadip_items: ItemCollection,  # pylint: disable=unused-argument
 ) -> dict:
@@ -97,7 +98,7 @@ async def read_tasktable(
 
         # TODO 2: for now the DPR endpoint returns an empty dict which raises a validation error.
         # So just return an empty dict for now.
-        # auxip_cql2 = flow_env.rs_client.get_dpr_client().get_process(processor.value)
+        # auxip_cql2 = flow_env.rs_client.get_dpr_client().get_process(processor.value, cluster_info)
         return {}
 
 
@@ -246,6 +247,7 @@ async def run_processor(
     env: FlowEnvArgs,
     processor: ProcessorEnum,
     payload: dict,
+    cluster_info: ClusterInfo,
     s3_payload_run: str,
     use_dpr_mockup: bool = False,
 ) -> list[dict]:
@@ -274,6 +276,7 @@ async def run_processor(
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
         job_status = dpr_client.run_process(
             process=DprProcess.MOCKUP if use_dpr_mockup else DprProcess(processor.value),
+            cluster_info=cluster_info,
             s3_config_dir=osp.dirname(s3_payload_run),
             payload_subpath=osp.basename(s3_payload_run),
             s3_report_dir=None,
