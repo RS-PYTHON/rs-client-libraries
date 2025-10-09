@@ -18,6 +18,7 @@ import datetime
 import json
 
 from prefect import flow, get_run_logger, task
+from prefect.artifacts import create_markdown_artifact, create_table_artifact
 from pystac import ItemCollection
 
 from rs_client.stac.auxip_client import AuxipClient
@@ -115,9 +116,16 @@ async def auxip_staging(
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        staged.result()  # type: ignore[unused-coroutine]
+        staging_results = staged.result()  # type: ignore[unused-coroutine]
 
         # TODO Create prefect artifact with results
+        create_table_artifact(
+            table={"auxip_staging_results": staging_results},
+            key="auxip_staging_results",
+            description="Results of Auxip staging execution",
+        )
+
+        # TODO Return values
 
 
 @flow(name="On-demand Auxip staging")
