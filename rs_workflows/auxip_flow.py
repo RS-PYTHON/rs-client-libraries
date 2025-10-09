@@ -14,6 +14,7 @@
 
 """Auxip flow implementation"""
 
+import datetime
 import json
 
 from prefect import flow, get_run_logger, task
@@ -67,7 +68,7 @@ async def search(
 @flow(name="Auxip staging")
 async def auxip_staging(
     env: FlowEnvArgs,
-    stac_query: json,
+    cql2_filter: dict,
     catalog_collection_identifier: str,
     timeout_seconds: int = -1,
 ):
@@ -77,7 +78,7 @@ async def auxip_staging(
 
     Args:
         env (FlowEnvArgs): Prefect flow environment
-        stac_query (json): CQL2 filter to select which files to stage
+        stac_query (dict): CQL2 filter to select which files to stage
         catalog_collection_identifier (str): Catalog collection identifier where CADIP sessions and AUX data are staged
         timeout_seconds (int): Timeout value for the Auxip search task.
             Optional, if no value is given the process will run until it is completed
@@ -91,7 +92,7 @@ async def auxip_staging(
         # Search Auxip products
         auxip_search_task = search_task.submit(
             flow_env.serialize(),
-            auxip_cql2={"filter": stac_query},
+            auxip_cql2=cql2_filter,
             error_if_empty=False,
         )
 
@@ -115,6 +116,61 @@ async def auxip_staging(
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
         staged.result()  # type: ignore[unused-coroutine]
+
+        # TODO Create prefect artifact with results
+
+
+@flow(name="On-demand Auxip staging")
+async def on_demand_auxip_staging(
+    env: FlowEnvArgs,
+    start_datetime: datetime.datetime | str,
+    end_datetime: datetime.datetime | str,
+    product_type: str,
+    catalog_collection_identifier: str,
+):
+    """
+    Flow to retrieve Auxip files using a ValCover filter with the given time interval defined by
+    start_datetime and end_datetime, select only the type of files wanted if eopf_type is given, stage
+    the files and add STAC items into the catalog.
+    Informations on ValCover filter:
+    https://pforge-exchange2.astrium.eads.net/confluence/display/COPRS/4.+External+data+selection+policies
+
+    Args:
+        env: Prefect flow environment
+        start_datetime: Start datetime for the time interval used to filter the files
+            (select a date or directly enter a timestamp, e.g. "2025-08-07T11:51:12.509000Z")
+        end_datetime: End datetime for the time interval used to filter the files
+            (select a date or directly enter a timestamp, e.g. "2025-08-10T14:00:00.509000Z")
+        product_type: Auxiliary file type wanted
+        catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
+    """
+
+    # Convert datetime inputs to str
+    if isinstance(start_datetime, datetime.datetime):
+        start_datetime = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    if isinstance(end_datetime, datetime.datetime):
+        end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+    # CQL2 filter: we use a filter combining a ValCover filter and a product type filter
+    cql2_filter = {
+        "op": "and",
+        "args": [
+            {"op": "=", "args": [{"property": "product:type"}, product_type]},
+            {
+                "op": "t_contains",
+                "args": [
+                    {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                    {"interval": [start_datetime, end_datetime]},
+                ],
+            },
+        ],
+    }
+
+    return await auxip_staging.fn(
+        env=env,
+        cql2_filter={"filter": cql2_filter},
+        catalog_collection_identifier=catalog_collection_identifier,
+    )
 
 
 ###########################

@@ -281,6 +281,7 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
     spied = {
         mocker.spy(prefect_function, "fn"): call_count  # spy on <flow>.fn or <task>.fn = the underlying python function
         for prefect_function, call_count in {
+            auxip_flow.auxip_staging: 1,
             auxip_flow.search: 1,
             auxip_flow.search_task: 1,
             staging_flow.staging_task_auxip: 1,
@@ -289,7 +290,7 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
     }
 
     # Run the prefect flow
-    await on_demand_processing.on_demand_auxip_staging(
+    await auxip_flow.on_demand_auxip_staging(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         start_datetime="2024-05-27T09:44:09.509000Z",
         end_datetime="2024-05-27T09:44:19.509000Z",
