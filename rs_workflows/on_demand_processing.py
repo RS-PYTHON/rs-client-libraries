@@ -92,7 +92,11 @@ async def on_demand_processing(
 
         # Read Auxip CQL2 filter from the processor tasktable.
         auxip_cql2 = read_tasktable.submit(flow_env.serialize(), processor, cluster_info, payload_values, cadip_items)
-
+ 
+        # tt = flow_env.rs_client.get_dpr_client().get_process(processor.value, cluster_info)
+        # out = build_units_list(tasktable=tt, pipeline=dpr_input.pipeline, unit=dpr_input.unit, processing_mode=dpr_input.processing_mode)
+        # units = out["units"]
+        
         units = [
             {
                 "name": "calibration",
