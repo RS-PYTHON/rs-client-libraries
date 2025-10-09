@@ -16,6 +16,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -142,13 +143,13 @@ def test_build_units_list_requires_one_of_pipeline_or_unit():
 def test_build_units_list_invalid_tasktable_root_type():
     """Test that providing a non-dict task table raises TaskTableError with the expected message."""
     with pytest.raises(TaskTableError, match=r"Task table root must be a JSON object \(dict\)\."):
-        build_units_list("not a dict", pipeline="p1")
+        build_units_list("not a dict", pipeline="p1")  # type: ignore[arg-type]
 
 
 def test_build_units_list_missing_or_invalid_pipelines_list():
     """Test that a missing or non-list 'pipelines' field in the task table raises
     TaskTableError with the expected message."""
-    tt = {"units": [], "io": []}
+    tt: dict[str, Any] = {"units": [], "io": []}
     with pytest.raises(TaskTableError, match='Missing or invalid "pipelines" list in task table\\.'):
         build_units_list(tt, pipeline="p1")
 
@@ -156,7 +157,7 @@ def test_build_units_list_missing_or_invalid_pipelines_list():
 def test_build_units_list_missing_or_invalid_units_list():
     """Test that a missing or non-list 'units' field in the task table raises
     TaskTableError with the expected message."""
-    tt = {"pipelines": [], "io": []}
+    tt: dict[str, Any] = {"pipelines": [], "io": []}
     with pytest.raises(TaskTableError, match='Missing or invalid "units" list in task table\\.'):
         build_units_list(tt, pipeline="p1")
 
