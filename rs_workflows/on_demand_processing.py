@@ -123,9 +123,9 @@ async def on_demand_processing(
         # Read Auxip CQL2 filter from the processor tasktable.
         auxip_cql2 = read_tasktable.submit(flow_env.serialize(), processor, cluster_info, payload_values, cadip_items)
  
-        # tt = flow_env.rs_client.get_dpr_client().get_process(processor.value, cluster_info)
-        # out = build_units_list(tasktable=tt, pipeline=dpr_input.pipeline, unit=dpr_input.unit, processing_mode=dpr_input.processing_mode)
-        # units = out["units"]
+        # task_table = flow_env.rs_client.get_dpr_client().get_process(processor.value, cluster_info)
+        # units_list = build_units_list(tasktable=tt, pipeline=dpr_input.pipeline, unit=dpr_input.unit, processing_mode=dpr_input.processing_mode)
+        # units_list = out["units"]
         
         units = [
             {
@@ -147,11 +147,12 @@ async def on_demand_processing(
         md = "# Units list\n\n```json\n" + json.dumps(units, indent=2) + "\n```"
         await acreate_markdown_artifact(key="units-list", markdown=md, description="Units list structure")
         
-        # disabled temporarly
-        out = None
+        # disabled temporarly, wait for rspy 797
+        units_list = []
         auxip_staged_items = []
+        task_table = {}
         try:
-            for unit in out:
+            for unit in units_list:
                 # For each input_adfs element computed on STEP 1
                 for input_adfs in unit['input_adfs']:
                     # and for each "alternative" ( get it following the "order" )
@@ -161,7 +162,7 @@ async def on_demand_processing(
                         timeout = alternative['timeout_seconds']
                         name, parameters = alternative['query']['name'], alternative['query']['parameters']
                         # 3. Build the CQL2 JSON by replacing the parameters
-                        auxip_cql2 = build_cql2_json(name, parameters)
+                        auxip_cql2 = build_cql2_json(task_table, name, parameters)
                         auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
                         # 4. Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
                         catalog_collection_identifier = "s1-aux" # to be updated
