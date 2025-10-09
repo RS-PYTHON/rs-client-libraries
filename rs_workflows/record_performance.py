@@ -284,7 +284,6 @@ def record_product_realised(flow_run_id, stac_items):
 
 def extract_min_datetime(list_items):
     """Finds the earliest datetime to insert in column sensing_start_datetime of product_expected."""
-    logger = get_run_logger()
 
     datetime_patterns = [(re.compile(r"\d{8}T\d{6}"), "%Y%m%dT%H%M%S"), (re.compile(r"\d{20}"), "%Y%m%d%H%M%S%f")]
     earliest = None
@@ -301,7 +300,6 @@ def extract_min_datetime(list_items):
                 except ValueError:
                     continue
 
-    logger.info(f"Value of sensing_start_datetime: {earliest}")
     return earliest
 
 
