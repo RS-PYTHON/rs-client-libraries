@@ -34,6 +34,7 @@ class ProcessorEnum(str, Enum):
     """DPR processor name"""
 
     # String value = resource name in the rs-dpr-service
+    MOCKUP = "mockup"
     S1L0 = "s1_l0"
     S3L0 = "s3_l0"
     S1ARD = "s1_ard"
@@ -131,7 +132,7 @@ class FlowEnv:
             yield span
 
 
-class Priority(Enum):
+class Priority(str, Enum):
     """
     Priority for the cluster dask to be able to prioritise task execution.
     """
@@ -141,7 +142,7 @@ class Priority(Enum):
     HIGH = "high"
 
 
-class WorkflowType(Enum):
+class WorkflowType(str, Enum):
     """
     Workflow type.
     """
@@ -170,7 +171,7 @@ class DprProcessIn:  # pylint: disable=too-many-instance-attributes
     """
 
     env: FlowEnvArgs
-    processor_name: str
+    processor_name: ProcessorEnum
     processor_version: str
     dask_cluster_label: str
     # 'pipeline' or 'unit' must be provided
@@ -197,8 +198,8 @@ class DprProcessIn:  # pylint: disable=too-many-instance-attributes
         if has_pipeline == has_unit:
             raise ValueError("Exactly one of 'pipeline' or 'unit' must be provided.")
 
-        if not self.input_products:
-            raise ValueError("'input_products' must contain at least one pystac.Item.")
+        # if not self.input_products:
+        #    raise ValueError("'input_products' must contain at least one pystac.Item.")
 
         if not self.generated_product_to_collection_identifier:
             raise ValueError("'generated_product_to_collection_identifier' must not be empty.")
