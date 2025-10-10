@@ -19,7 +19,7 @@ import json
 import os
 from pathlib import Path
 
-from prefect import flow
+from prefect import flow, get_run_logger
 from prefect.artifacts import acreate_markdown_artifact
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
@@ -31,7 +31,8 @@ from rs_workflows.dpr_flow import (
     run_processor,
     write_payload,
 )
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
+from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs, ProcessorEnum
+from rs_workflows.payload_builder import build_units_list
 from rs_workflows.staging_flow import (
     staging_task_auxip,
     staging_task_cadip,
@@ -41,16 +42,7 @@ from rs_workflows.staging_flow import (
 
 @flow(name="dpr-process")
 async def on_demand_processing(
-    env: FlowEnvArgs,
-    processor: ProcessorEnum,
-    cluster_label: str,
-    cadip_collection_identifier: str,
-    session_identifier: str,
-    catalog_collection_identifier: str,
-    s3_payload_template: str,
-    s3_output_data: str,
-    use_dpr_mockup: bool = False,
-    # dpr_input: DprProcessIn | None = None,
+    dpr_input: DprProcessIn | None = None,
 ):
     """
     Prefect flow for dpr-process.
@@ -68,16 +60,41 @@ async def on_demand_processing(
         catalog bucket.
         use_dpr_mockup: Use the real or the mockup DPR processor ?
     """
+    s3_payload_template = (
+        "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
+    )
+    auxip_cql2 = {}
+    catalog_collection_identifier = "SPRINT24_TEST_COLLECTION"
+    cadip_collection_identifier = "sgs_sentinel1"
+    session_identifier = "S1A_20200105072204051312"
+    processor = ProcessorEnum.S3L0
+    s3_output_data = "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/output/s3"
+
+    logger = get_run_logger()
+
     # Init flow environment and opentelemetry span
-    flow_env = FlowEnv(env)
+    flow_env = FlowEnv(dpr_input.env)
     with flow_env.start_span(__name__, "on-demand-processing"):
 
         # Create cluster info from JUPYTERHUB_API_TOKEN env var (only in cluster mode, read from the
         # prefect blocks) and Dask cluster label.
         cluster_info = ClusterInfo(
             jupyter_token=os.environ["JUPYTERHUB_API_TOKEN"] if prefect_utils.cluster_mode else "",
-            cluster_label=cluster_label,
+            cluster_label=dpr_input.dask_cluster_label,
         )
+
+        # read tasktable and construct list of processing units
+        tt = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name.value, cluster_info)
+        out = build_units_list(
+            tasktable=tt,
+            pipeline=dpr_input.pipeline,
+            unit=dpr_input.unit,
+            processing_mode=dpr_input.processing_mode,
+        )
+        units_list = out["units"]
+        md = "# Units list\n\n```json\n" + json.dumps(units_list, indent=2) + "\n```"
+        # Artifact key must only contain lowercase letters, numbers, and dashes.
+        await acreate_markdown_artifact(key="units-list", markdown=md, description="List of processing units")
 
         # Read values from the payload file
         payload_values = read_payload_values.submit(s3_payload_template)
@@ -87,37 +104,8 @@ async def on_demand_processing(
             flow_env.serialize(),
             cadip_collection_identifier,
             session_identifier,
-            error_if_empty=True,
+            error_if_empty=False,
         )
-
-        # Read Auxip CQL2 filter from the processor tasktable.
-        auxip_cql2 = read_tasktable.submit(flow_env.serialize(), processor, cluster_info, payload_values, cadip_items)
-
-        # tt = flow_env.rs_client.get_dpr_client().get_process(processor.value, cluster_info)
-        # out = build_units_list(tasktable=tt, pipeline=dpr_input.pipeline, unit=dpr_input.unit,
-        # processing_mode=dpr_input.processing_mode)
-        # units = out["units"]
-
-        units = [
-            {
-                "name": "calibration",
-                "module": "processing.ard.calibration",
-                "input_products": [],
-                "input_adfs": [],
-                "output_products": [],
-            },
-            {
-                "name": "geocoding",
-                "module": "processing.ard.geocoding",
-                "input_products": [],
-                "input_adfs": [],
-                "output_products": [],
-            },
-        ]
-
-        md = "# Units list\n\n```json\n" + json.dumps(units, indent=2) + "\n```"
-        await acreate_markdown_artifact(key="units-list", markdown=md, description="Units list structure")
-
         # Search Auxip products
         auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
 
@@ -162,7 +150,7 @@ async def on_demand_processing(
             processor,
             cluster_info,
             s3_payload_run,
-            use_dpr_mockup,
+            dpr_input.use_dpr_mockup,
             wait_for=written,
         )
 
