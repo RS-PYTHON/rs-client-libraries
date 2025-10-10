@@ -42,7 +42,7 @@ from rs_workflows.staging_flow import (
 
 @flow(name="dpr-process")
 async def on_demand_processing(
-    dpr_input: DprProcessIn | None = None,
+    dpr_input: DprProcessIn,
 ):
     """
     Prefect flow for dpr-process.
