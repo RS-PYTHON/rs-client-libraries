@@ -174,8 +174,6 @@ async def on_demand_processing(
                 )
             except KeyError as kerr:
                 raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
-        # Search Auxip products
-        auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
 
         # Auxip and Cadip item ids
         item_ids = []
