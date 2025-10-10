@@ -465,7 +465,8 @@ def set_db_env_var_fixture(monkeypatch):
     envvars = {
         "RSPY_HOST_CATALOG": "https://dummy-catalog/catalog/",
         "RSPY_HOST_CADIP": "https://dummy-cadip/cadip/",
-        "RSPY_HOST_AUXIP": "https://dummy-audxip/auxip/",
+        "RSPY_HOST_AUXIP": "https://dummy-auxip/auxip/",
+        "RSPY_HOST_PRIP": "https://dummy-prip/prip/",
         "RSPY_HOST_STAGING": "https://dummy-staging/staging/",
     }
     for key, val in envvars.items():
