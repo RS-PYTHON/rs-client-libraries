@@ -19,15 +19,13 @@ import json
 import os
 from pathlib import Path
 
-from prefect import flow, get_run_logger
+from prefect import flow
 from prefect.artifacts import acreate_markdown_artifact
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
 from rs_workflows.dpr_flow import (
-    read_payload_values,
-    read_tasktable,
     run_processor,
     write_payload,
 )
@@ -41,7 +39,7 @@ from rs_workflows.staging_flow import (
 
 
 @flow(name="dpr-process")
-async def on_demand_processing(
+async def dpr_processing(
     dpr_input: DprProcessIn,
 ):
     """
@@ -70,8 +68,6 @@ async def on_demand_processing(
     processor = ProcessorEnum.S3L0
     s3_output_data = "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/output/s3"
 
-    logger = get_run_logger()
-
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(dpr_input.env)
     with flow_env.start_span(__name__, "on-demand-processing"):
@@ -84,7 +80,14 @@ async def on_demand_processing(
         )
 
         # read tasktable and construct list of processing units
-        tt = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name.value, cluster_info)
+        if not dpr_input.use_dpr_mockup:
+            tt = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name.value, cluster_info)
+        else:
+            tt = flow_env.rs_client.get_dpr_client().get_process("mockup", cluster_info)
+            s3_payload_template = (
+                f"s3://rs-dev-cluster-temp/prefect-share/users/{flow_env.owner_id}/"
+                f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
+            )
         out = build_units_list(
             tasktable=tt,
             pipeline=dpr_input.pipeline,
@@ -95,9 +98,6 @@ async def on_demand_processing(
         md = "# Units list\n\n```json\n" + json.dumps(units_list, indent=2) + "\n```"
         # Artifact key must only contain lowercase letters, numbers, and dashes.
         await acreate_markdown_artifact(key="units-list", markdown=md, description="List of processing units")
-
-        # Read values from the payload file
-        payload_values = read_payload_values.submit(s3_payload_template)
 
         # Search Cadip sessions
         cadip_items = cadip_flow.search_task.submit(
@@ -122,11 +122,6 @@ async def on_demand_processing(
             staging_task_auxip.submit(
                 flow_env.serialize(),
                 auxip_items,
-                catalog_collection_identifier,
-            ),
-            staging_task_cadip.submit(
-                flow_env.serialize(),
-                cadip_items,
                 catalog_collection_identifier,
             ),
         ]
