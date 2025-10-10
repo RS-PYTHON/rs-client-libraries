@@ -169,12 +169,14 @@ class StagingClient(OgcApiClient):
         Raises:
             RuntimeError in case of error
         """
+        job_results: dict[str, dict] = {}
         # Call parent method for each hostname
         for hostname, job_status in all_job_status.items():
-            super().wait_for_job(
+            job_results[hostname] = super().wait_for_job(
                 job_status,
                 logger,
                 f"Staging from {hostname!r}",
                 # timeout,
                 poll_interval,
             )
+        return job_results
