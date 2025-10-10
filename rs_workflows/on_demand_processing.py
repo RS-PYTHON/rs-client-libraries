@@ -38,7 +38,7 @@ from rs_workflows.staging_flow import (
 )
 
 
-@flow(name="dpr-process")
+@flow(name="dpr-processing")
 async def dpr_processing(
     dpr_input: DprProcessIn,
 ):
