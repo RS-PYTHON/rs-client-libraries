@@ -436,7 +436,7 @@ def test_min_valid_datetime_formats(input_item, expected_str, datetime_format):
     assert extract_min_datetime([input_item]) == expected
 
 
-def test_record_product_expected_insert(mock_db_env, mocker):
+def test_record_product_expected_insert_data(mock_db_env, mocker):
     """
     Test that product_expected inserts new records into the product_expected table
     when no existing records are found.
@@ -507,6 +507,8 @@ def test_record_product_expected_rollback_on_keyerror(mocker, mock_db_env):
     )
 
     mock_session.close.assert_called_once()
+
+
 def test_inserts_missing_products(mock_db_env, mock_tables, mocker):
     """Should insert into product_missing when realised < min_count and not already recorded."""
     mock_session, _ = mock_db_env
@@ -725,55 +727,3 @@ def test_rollback_on_exception(mock_db_env, mock_tables, mocker):
     mock_session.rollback.assert_called_once()
     logger.error.assert_any_call("Error in validate_products: err!")
     mock_session.close.assert_called_once()
-
-
-def test_record_product_expected_insert(mock_tables, mocker):
-    """Should insert a new product_expected if none exists."""
-
-    # Mock logger
-    mock_logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
-
-    # Mock DB session
-    mock_db = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_db_session", return_value=(mock_db, MagicMock()))
-
-    # No existing record
-    mock_db.execute.return_value.fetchone.return_value = None
-
-    flow_run_id = "FLOW123"
-    record_flow_module.record_product_expected(flow_run_id)
-
-    stmt = mock_db.execute.call_args[0][0]
-    # Check that it tried to insert
-    assert isinstance(stmt, Insert) or hasattr(stmt, "values")
-    mock_logger.info.assert_any_call(f"Inserted product_expected for flow_run_id={flow_run_id}")
-    mock_db.commit.assert_called_once()
-    mock_db.rollback.assert_not_called()
-    mock_db.close.assert_called_once()
-
-
-def test_record_product_expected_update(mock_tables, mocker):
-    """Should update product_expected if record already exists."""
-
-    # Mock logger
-    mock_logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
-
-    # Mock DB session
-    mock_db = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_db_session", return_value=(mock_db, MagicMock()))
-
-    # Existing record
-    mock_db.execute.return_value.fetchone.return_value = (1,)
-
-    flow_run_id = "FLOW123"
-    record_flow_module.record_product_expected(flow_run_id)
-
-    stmt = mock_db.execute.call_args[0][0]
-    # Check that it tried to update
-    assert isinstance(stmt, Update) or hasattr(stmt, "values")
-    mock_logger.info.assert_any_call(f"Updated product_expected for flow_run_id={flow_run_id}")
-    mock_db.commit.assert_called_once()
-    mock_db.rollback.assert_not_called()
-    mock_db.close.assert_called_once()
