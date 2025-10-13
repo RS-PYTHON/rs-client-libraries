@@ -61,7 +61,7 @@ async def dpr_processing(
     s3_payload_template = (
         "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
     )
-    auxip_cql2 = {}
+    auxip_cql2 = {}  # type: ignore[var-annotated]
     catalog_collection_identifier = "SPRINT24_TEST_COLLECTION"
     cadip_collection_identifier = "sgs_sentinel1"
     session_identifier = "S1A_20200105072204051312"
@@ -70,7 +70,7 @@ async def dpr_processing(
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(dpr_input.env)
-    with flow_env.start_span(__name__, "on-demand-processing"):
+    with flow_env.start_span(__name__, "dpr-processing"):
 
         # Create cluster info from JUPYTERHUB_API_TOKEN env var (only in cluster mode, read from the
         # prefect blocks) and Dask cluster label.
@@ -82,17 +82,19 @@ async def dpr_processing(
         # read tasktable and construct list of processing units
         if not dpr_input.use_dpr_mockup:
             tt = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name.value, cluster_info)
-        else:
+        else:  # use old mockup payload file
             tt = flow_env.rs_client.get_dpr_client().get_process("mockup", cluster_info)
             s3_payload_template = (
                 f"s3://rs-dev-cluster-temp/prefect-share/users/{flow_env.owner_id}/"
                 f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
             )
+
+        processing_mode = [m.value for m in dpr_input.processing_mode] if dpr_input.processing_mode else None
         out = build_units_list(
             tasktable=tt,
             pipeline=dpr_input.pipeline,
             unit=dpr_input.unit,
-            processing_mode=dpr_input.processing_mode,
+            processing_mode=processing_mode,
         )
         units_list = out["units"]
         md = "# Units list\n\n```json\n" + json.dumps(units_list, indent=2) + "\n```"
