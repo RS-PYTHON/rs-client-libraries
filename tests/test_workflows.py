@@ -26,7 +26,6 @@ import pytest
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
 from pystac import Item
-from pystac_client import ItemSearch
 
 from rs_client.rs_client import RsClient
 from rs_common import prefect_utils

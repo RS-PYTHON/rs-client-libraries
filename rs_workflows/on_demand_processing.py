@@ -192,7 +192,7 @@ async def on_demand_cadip_staging(
 
 
 @flow(name="On-demand Prip staging")
-async def on_demand_prip_staging(  # pylint: disable=duplicated-code
+async def on_demand_prip_staging(  # pylint: disable=duplicate-code
     env: FlowEnvArgs,
     start_datetime: datetime.datetime | str,
     end_datetime: datetime.datetime | str,
