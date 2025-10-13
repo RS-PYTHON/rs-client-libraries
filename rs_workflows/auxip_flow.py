@@ -147,7 +147,8 @@ async def auxip_staging(
             job_result = staging_results[job_name]
             if not "status" in job_result or job_result["status"] != "successful":
                 logger.info(
-                    f"Staging job '{job_name}' with ID {job_result['jobID']} FAILED.\nStatus: {job_result['status']} - Reason: {job_result['message']}",
+                    f"Staging job '{job_name}' with ID {job_result['jobID']} FAILED.\n"
+                    f"Status: {job_result['status']} - Reason: {job_result['message']}",
                 )
                 logger.debug({job_name: job_result})
                 return_status = False
