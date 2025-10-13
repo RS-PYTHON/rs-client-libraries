@@ -193,8 +193,8 @@ class DprProcessIn:  # pylint: disable=too-many-instance-attributes
 
     def __post_init__(self) -> None:
         # Enforce the "pipeline XOR unit" rule
-        has_pipeline = self.pipeline is not None and self.pipeline != ""
-        has_unit = self.unit is not None and self.unit != ""
+        has_pipeline = bool(self.pipeline)
+        has_unit = bool(self.unit)
         if has_pipeline == has_unit:
             raise ValueError("Exactly one of 'pipeline' or 'unit' must be provided.")
 
