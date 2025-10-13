@@ -55,7 +55,7 @@ async def catalog_search(
             stac_filter=catalog_cql2.get("filter"),
             max_items=catalog_cql2.get("limit"),
             sortby=catalog_cql2.get("sortby"),
-        )
+        ).item_collection()
         if (not found) and error_if_empty:
             raise ValueError(
                 f"No Catalog item found for CQL2 filter: {json.dumps(catalog_cql2, indent=2)}",
