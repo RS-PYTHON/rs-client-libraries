@@ -155,7 +155,7 @@ class StagingClient(OgcApiClient):
         logger=None,
         # timeout: int | float = math.inf,
         poll_interval: int = 2,
-    ):
+    ) -> dict[str, dict]:
         """
         Wait for job to finish.
 
@@ -165,6 +165,9 @@ class StagingClient(OgcApiClient):
             timeout: Job completion timeout in seconds
                     NOTE: This argument has been disabled, see the comment in super().wait_for_job() function
             poll_interval: When to check again for job completion in seconds
+
+        Returns:
+            dict[str, dict]: Completed job status
 
         Raises:
             RuntimeError in case of error

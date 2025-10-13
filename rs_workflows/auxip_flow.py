@@ -18,10 +18,11 @@ import datetime
 import json
 
 from prefect import flow, get_run_logger, task
-from prefect.artifacts import create_markdown_artifact, create_table_artifact
-from pystac import ItemCollection
+from prefect.artifacts import acreate_table_artifact
+from pystac import Item, ItemCollection
 
 from rs_client.stac.auxip_client import AuxipClient
+from rs_workflows.catalog_flow import catalog_search_task
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task_auxip
 
@@ -97,6 +98,7 @@ async def auxip_staging(
             error_if_empty=False,
         )
 
+        # Timeout on search task
         if timeout_seconds >= 0:
             auxip_search_task.wait(timeout_seconds)
 
@@ -105,27 +107,61 @@ async def auxip_staging(
         # Stop process if search task didn't return any item
         if len(auxip_items) == 0:
             logger.info("Nothing to stage: Auxip search with given filter returned empty result.")
-            return
+            return True, None
 
-        # Stage Auxip items
+        # Search catalog items
+        catalog_items: ItemCollection = catalog_search_task.submit(
+            flow_env.serialize(),
+            catalog_cql2=cql2_filter,
+            error_if_empty=False,
+        ).result()
+
+        # Compare results of Auxip search with results of Catalog search
+        # to see what is missing in Catalog
+        missing_items_list: list[Item] = []
+        for item in auxip_items:
+            if item not in catalog_items:
+                missing_items_list.append(item)
+        missing_auxip_items = ItemCollection(missing_items_list)
+        logger.info(f"Number of items missing in the catalog to stage: {len(missing_auxip_items)}")
+
+        # Stop process if all the Auxip items found are already in the catalog
+        if len(missing_auxip_items) == 0:
+            logger.info("Nothing to stage: all Auxip items found are already in the catalog.")
+            return True, None
+
+        # Stage missing Auxip items
         staged = staging_task_auxip.submit(
             flow_env.serialize(),
-            auxip_items,
+            missing_auxip_items,
             catalog_collection_identifier,
         )
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        staging_results = staged.result()  # type: ignore[unused-coroutine]
+        staging_results: dict = staged.result()
 
-        # TODO Create prefect artifact with results
-        create_table_artifact(
-            table={"auxip_staging_results": staging_results},
-            key="auxip_staging_results",
-            description="Results of Auxip staging execution",
-        )
+        # Check that all jobs monitored were successful. Otherwise, return status is "False"
+        return_status = True
+        for job_name in staging_results:
+            job_result = staging_results[job_name]
+            if not "status" in job_result or job_result["status"] != "successful":
+                logger.info(
+                    f"Staging job '{job_name}' with ID {job_result['jobID']} FAILED.\nStatus: {job_result['status']} - Reason: {job_result['message']}",
+                )
+                logger.debug({job_name: job_result})
+                return_status = False
 
-        # TODO Return values
+        # Create artifact if all jobs succeeded
+        if return_status:
+            logger.info("Staging successful, creating artifact with a list of staged items.")
+            await acreate_table_artifact(
+                table=[missing_auxip_items.to_dict()],
+                key="auxiliary-files",
+                description="Auxiliary files added to catalog.",
+            )
+
+        return return_status, missing_auxip_items
 
 
 @flow(name="On-demand Auxip staging")
