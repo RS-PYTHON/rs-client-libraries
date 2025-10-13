@@ -16,11 +16,26 @@
 
 
 from collections.abc import Iterable
+from datetime import datetime
 from typing import Any
 
 
 class TaskTableError(ValueError):
     """Errors related to Task Table parsing/validation."""
+
+
+def _replace_external_variables(obj, start_datetime, end_datetime):
+    if isinstance(obj, dict):
+        return {k: _replace_external_variables(v, start_datetime, end_datetime) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_replace_external_variables(v, start_datetime, end_datetime) for v in obj]
+    if isinstance(obj, str):
+        if obj == "{external_variable.start_datetime}":
+            return start_datetime
+        if obj == "{external_variable.end_datetime}":
+            return end_datetime
+        return obj
+    return obj
 
 
 def _select_unit_names(tasktable: dict[str, Any], *, pipeline: str | None) -> list[str]:
@@ -52,6 +67,8 @@ def _build_entries(
     unit_name: str,
     origin_kind: str,
     origin_map_by_unit: dict[str, dict[str, dict[str, Any]]],
+    start_datetime: datetime | None,
+    end_datetime: datetime | None,
 ) -> list[dict[str, Any]]:
     """
     Build STEP 1 entries for input_products / input_adfs / output_products.
@@ -99,10 +116,15 @@ def _build_entries(
 
         # Merge IO config
         io_cfg = io_index.get(name, {}) or {}
+        merged_cfg: dict[str, Any] = {}
         for k, v in io_cfg.items():
             if k in ("name", "mandatory"):
                 continue
-            out[k] = v
+            merged_cfg[k] = v
+
+        if merged_cfg:
+            merged_cfg = _replace_external_variables(merged_cfg, start_datetime, end_datetime)
+            out.update(merged_cfg)
 
         kept.append(out)
 
@@ -114,6 +136,9 @@ def build_units_list(
     pipeline: str | None = None,
     unit: str | None = None,
     processing_mode: Iterable[str] | None = None,
+    *,
+    start_datetime: datetime | None = None,
+    end_datetime: datetime | None = None,
 ) -> dict[str, Any]:
     """
     STEP 1: Build the list of processing units from the Task Table.
@@ -210,6 +235,8 @@ def build_units_list(
             unit_name=uname,
             origin_kind="in",
             origin_map_by_unit=origin_map_by_unit,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
         )
         input_adfs = _build_entries(
             udef.get("input_adfs", []),
@@ -219,6 +246,8 @@ def build_units_list(
             unit_name=uname,
             origin_kind="in",
             origin_map_by_unit=origin_map_by_unit,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
         )
         output_products = _build_entries(
             udef.get("output_products", []),
@@ -228,6 +257,8 @@ def build_units_list(
             unit_name=uname,
             origin_kind="out",
             origin_map_by_unit=origin_map_by_unit,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
         )
 
         out_units.append(

@@ -120,12 +120,14 @@ async def dpr_processing(
                 f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
             )
 
-        processing_mode = [m.value for m in dpr_input.processing_mode] if dpr_input.processing_mode else None
+        processing_mode = [m for m in dpr_input.processing_mode] if dpr_input.processing_mode else None
         out = build_units_list(
             tasktable=task_table,
             pipeline=dpr_input.pipeline,
             unit=dpr_input.unit,
             processing_mode=processing_mode,
+            start_datetime=dpr_input.start_datetime,
+            end_datetime=dpr_input.end_datetime,
         )
         units_list = out["units"]
         md = "# Units list\n\n```json\n" + json.dumps(units_list, indent=2) + "\n```"
