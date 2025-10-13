@@ -17,6 +17,8 @@
 import datetime
 import json
 import os
+import re
+from copy import deepcopy
 from pathlib import Path
 
 from prefect import flow
@@ -36,6 +38,35 @@ from rs_workflows.staging_flow import (
     staging_task_cadip,
     staging_task_prip,
 )
+
+
+# To be later moved ?
+def build_cql2_json(task_table, query_name, values):
+    """
+    Recursively replaces placeholders of the form {var} in a dictionary or list
+    using the mapping from 'values'.
+    """
+    template = {}
+    for cql_filter in task_table["queries"]:
+        if cql_filter["name"] == query_name:
+            # Work on a deep copy so we don't mutate the original
+            template = deepcopy(cql_filter)
+    pattern = re.compile(r"^{(.*)}$")  # matches exactly "{var}" (whole string)
+
+    def _replace(item):
+        if isinstance(item, str):
+            match = pattern.match(item)
+            if match:
+                key = match.group(1)
+                return values.get(key, item)  # replace if found, else keep
+            return item
+        if isinstance(item, list):
+            return [_replace(x) for x in item]
+        if isinstance(item, dict):
+            return {k: _replace(v) for k, v in item.items()}
+        return item
+
+    return _replace(template)
 
 
 @flow(name="dpr-processing")
@@ -81,9 +112,9 @@ async def dpr_processing(
 
         # read tasktable and construct list of processing units
         if not dpr_input.use_dpr_mockup:
-            tt = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name.value, cluster_info)
-        else:  # use old mockup payload file
-            tt = flow_env.rs_client.get_dpr_client().get_process("mockup", cluster_info)
+            task_table = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name.value, cluster_info)
+        else:
+            task_table = flow_env.rs_client.get_dpr_client().get_process("mockup", cluster_info)
             s3_payload_template = (
                 f"s3://rs-dev-cluster-temp/prefect-share/users/{flow_env.owner_id}/"
                 f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
@@ -91,7 +122,7 @@ async def dpr_processing(
 
         processing_mode = [m for m in dpr_input.processing_mode] if dpr_input.processing_mode else None
         out = build_units_list(
-            tasktable=tt,
+            tasktable=task_table,
             pipeline=dpr_input.pipeline,
             unit=dpr_input.unit,
             processing_mode=processing_mode,
@@ -103,31 +134,54 @@ async def dpr_processing(
         # Artifact key must only contain lowercase letters, numbers, and dashes.
         await acreate_markdown_artifact(key="units-list", markdown=md, description="List of processing units")
 
-        # Search Cadip sessions
-        cadip_items = cadip_flow.search_task.submit(
-            flow_env.serialize(),
-            cadip_collection_identifier,
-            session_identifier,
-            error_if_empty=False,
-        )
-        # Search Auxip products
-        auxip_items = auxip_flow.search_task.submit(flow_env.serialize(), auxip_cql2, error_if_empty=True)
+        auxip_staged_items = []
+        for unit in units_list:
+            try:
+                # For each input_adfs element computed on STEP 1
+                for input_adfs in unit["input_adfs"]:
+                    # and for each "alternative" ( get it following the "order" )
+                    for idx, alternative in enumerate(input_adfs["alternatives"]):
+                        # 1. Get the "query" with the "parameters" and "timeout_seconds" information
+                        # 2. Get the corresponding "query.name" on the section "query" of the task table
+                        timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
+                        name, parameters = alternative["query"]["name"], alternative["query"]["parameters"]
+                        # 3. Build the CQL2 JSON by replacing the parameters
+                        auxip_cql2 = build_cql2_json(task_table, name, parameters)
+                        auxip_items = auxip_flow.search_task.submit(
+                            flow_env.serialize(),
+                            auxip_cql2,
+                            error_if_empty=True,
+                        )
+                        # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
+                        catalog_collection_identifier = "s1-aux"  # to be updated
+                        # catalog_collection_identifier = f"{dpr_input.satellite}-aux"
+                        if auxip_items:
+                            # Found items → stop searching alternatives, start staging
+                            break
+                        if idx == len(input_adfs["alternatives"]) - 1:
+                            #  Last one and still nothing → raise runtime
+                            raise RuntimeError("All ADFS searched, no items found.")
+                # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
+                # timeout currently disabled
+                # note: auxip-staged-items should be a tuple (aux-name, s3_path)
+                auxip_staged_items = staging_task_auxip.submit(
+                    flow_env.serialize(),
+                    auxip_items,
+                    catalog_collection_identifier,
+                )
+            except KeyError as kerr:
+                raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
 
-        # Auxip and Cadip item ids
+        # Auxip item ids
         item_ids = []
-        for items in [cadip_items.result(), auxip_items.result()]:
+        for items in auxip_items.result():
             for item in items or []:  # type: ignore[union-attr]
                 item_ids.append(item.id)
 
-        # Stage Auxip and Cadip items.
+        # Stage Auxip items.
         # Note: the only difference between staging_task_auxip and
-        # staging_task_cadip is the task name in the prefect dashboard.
         staged = [
-            staging_task_auxip.submit(
-                flow_env.serialize(),
-                auxip_items,
-                catalog_collection_identifier,
-            ),
+            auxip_staged_items
         ]
 
         # Write the final payload file from its template version and staged items.
