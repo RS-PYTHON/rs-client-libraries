@@ -168,15 +168,14 @@ async def dpr_processing(
             except KeyError as kerr:
                 raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
 
-        # Auxip and Cadip item ids
+        # Auxip item ids
         item_ids = []
-        for items in [cadip_items.result(), auxip_items.result()]:
+        for items in auxip_items.result():
             for item in items or []:  # type: ignore[union-attr]
                 item_ids.append(item.id)
 
-        # Stage Auxip and Cadip items.
+        # Stage Auxip items.
         # Note: the only difference between staging_task_auxip and
-        # staging_task_cadip is the task name in the prefect dashboard.
         staged = [
             auxip_staged_items
         ]
