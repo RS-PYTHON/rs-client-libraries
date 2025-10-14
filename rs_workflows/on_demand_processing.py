@@ -21,7 +21,7 @@ import re
 from copy import deepcopy
 from pathlib import Path
 
-from prefect import flow
+from prefect import flow, get_run_logger
 from prefect.artifacts import acreate_markdown_artifact
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
@@ -38,6 +38,7 @@ from rs_workflows.staging_flow import (
     staging_task_cadip,
     staging_task_prip,
 )
+from rs_workflows.auxip_flow import auxip_staging
 
 
 # To be later moved ?
@@ -134,7 +135,6 @@ async def dpr_processing(
         # Artifact key must only contain lowercase letters, numbers, and dashes.
         await acreate_markdown_artifact(key="units-list", markdown=md, description="List of processing units")
 
-        auxip_staged_items = []
         for unit in units_list:
             try:
                 # For each input_adfs element computed on STEP 1
@@ -147,31 +147,16 @@ async def dpr_processing(
                         name, parameters = alternative["query"]["name"], alternative["query"]["parameters"]
                         # 3. Build the CQL2 JSON by replacing the parameters
                         auxip_cql2 = build_cql2_json(task_table, name, parameters)
-                        auxip_items = auxip_flow.search_task.submit(
-                            flow_env.serialize(),
-                            auxip_cql2,
-                            error_if_empty=True,
-                        )
                         # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
-                        catalog_collection_identifier = "s1-aux"  # to be updated
-                        # catalog_collection_identifier = f"{dpr_input.satellite}-aux"
-                        if auxip_items:
-                            # Found items → stop searching alternatives, start staging
-                            break
+                        catalog_collection_identifier = f"{dpr_input.satellite}-aux"
+                        # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
+                        auxip_items = await auxip_staging(dpr_input.env, auxip_cql2, catalog_collection_identifier, timeout)
+
                         if idx == len(input_adfs["alternatives"]) - 1:
                             #  Last one and still nothing → raise runtime
                             raise RuntimeError("All ADFS searched, no items found.")
-                # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
-                # timeout currently disabled
-                # note: auxip-staged-items should be a tuple (aux-name, s3_path)
-                auxip_staged_items = staging_task_auxip.submit(
-                    flow_env.serialize(),
-                    auxip_items,
-                    catalog_collection_identifier,
-                )
             except KeyError as kerr:
                 raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
-
         # Auxip item ids
         item_ids = []
         for items in auxip_items.result():
@@ -181,7 +166,7 @@ async def dpr_processing(
         # Stage Auxip items.
         # Note: the only difference between staging_task_auxip and
         staged = [
-            auxip_staged_items
+            auxip_items
         ]
 
         # Write the final payload file from its template version and staged items.
