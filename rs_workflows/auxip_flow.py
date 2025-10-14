@@ -22,7 +22,7 @@ from prefect.artifacts import acreate_markdown_artifact
 from pystac import ItemCollection
 
 from rs_client.stac.auxip_client import AuxipClient
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, create_valcover_filter
 from rs_workflows.staging_flow import staging_task_auxip
 
 ###############
@@ -174,26 +174,8 @@ async def on_demand_auxip_staging(
         ItemCollection: List of Items retrieved from the Auxip search and staged to the catalog
     """
 
-    # Convert datetime inputs to str
-    if isinstance(start_datetime, datetime.datetime):
-        start_datetime = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    if isinstance(end_datetime, datetime.datetime):
-        end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
     # CQL2 filter: we use a filter combining a ValCover filter and a product type filter
-    cql2_filter = {
-        "op": "and",
-        "args": [
-            {"op": "=", "args": [{"property": "product:type"}, product_type]},
-            {
-                "op": "t_contains",
-                "args": [
-                    {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                    {"interval": [start_datetime, end_datetime]},
-                ],
-            },
-        ],
-    }
+    cql2_filter = create_valcover_filter(start_datetime, end_datetime, product_type)
 
     return await auxip_staging.fn(
         env=env,

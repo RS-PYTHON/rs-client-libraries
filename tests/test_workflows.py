@@ -28,6 +28,7 @@ from pydantic import SecretStr
 from pystac import Item, ItemCollection
 
 from rs_client.rs_client import RsClient
+from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
 from rs_workflows import (
     auxip_flow,
@@ -345,6 +346,22 @@ async def test_on_demand_prip_staging(mocker, mock_prefect):  # pylint: disable=
     # Check calls
     for fn, call_count in spied.items():
         assert fn.await_count == call_count
+
+
+@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
+@patch.object(RsClient, "get_catalog_client", MockRsClient)
+async def test_catalog_search(mocker, mock_prefect):  # pylint: disable=unused-argument
+    """Test the catalog_search flow"""
+
+    await setup_worklow_test_env()
+
+    spy_search = mocker.spy(MockRsClient, "search")
+
+    # Run the prefect flow
+    await catalog_flow.catalog_search(env=FlowEnvArgs(owner_id=OWNER_ID), catalog_cql2={"filter": {}})
+
+    assert spy_search.call_count == 1
+    spy_search.reset_mock()
 
 
 def test_create_schema(monkeypatch, patch_prefect_logger):  # pylint: disable=unused-argument

@@ -29,7 +29,12 @@ from rs_workflows.dpr_flow import (
     run_processor,
     write_payload,
 )
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
+from rs_workflows.flow_utils import (
+    FlowEnv,
+    FlowEnvArgs,
+    ProcessorEnum,
+    create_valcover_filter,
+)
 from rs_workflows.staging_flow import (
     staging_task_auxip,
     staging_task_cadip,
@@ -192,7 +197,7 @@ async def on_demand_cadip_staging(
 
 
 @flow(name="On-demand Prip staging")
-async def on_demand_prip_staging(  # pylint: disable=duplicate-code
+async def on_demand_prip_staging(
     env: FlowEnvArgs,
     start_datetime: datetime.datetime | str,
     end_datetime: datetime.datetime | str,
@@ -220,26 +225,8 @@ async def on_demand_prip_staging(  # pylint: disable=duplicate-code
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "on-demand-prip-staging"):
 
-        # Convert datetime inputs to str
-        if isinstance(start_datetime, datetime.datetime):
-            start_datetime = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-        if isinstance(end_datetime, datetime.datetime):
-            end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
         # CQL2 filter: filter on product type and time interval
-        cql2_filter = {
-            "op": "and",
-            "args": [
-                {"op": "=", "args": [{"property": "product:type"}, product_type]},
-                {
-                    "op": "t_contains",
-                    "args": [
-                        {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                        {"interval": [start_datetime, end_datetime]},
-                    ],
-                },
-            ],
-        }
+        cql2_filter = create_valcover_filter(start_datetime, end_datetime, product_type)
 
         # Search Prip products
         prip_items = prip_flow.search_task.submit(
