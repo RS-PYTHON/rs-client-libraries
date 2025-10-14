@@ -72,7 +72,7 @@ async def auxip_staging(
     cql2_filter: dict,
     catalog_collection_identifier: str,
     timeout_seconds: int = -1,
-) -> tuple[bool, ItemCollection]:
+) -> tuple[bool, ItemCollection | None]:
     """
     Generic flow to retrieve a list of items matching the STAC CQL2 filter given, and to stage the ones
     that are not already in the catalog.
@@ -95,7 +95,7 @@ async def auxip_staging(
     with flow_env.start_span(__name__, "auxip-staging"):
 
         # Search Auxip products
-        auxip_items = (
+        auxip_items: ItemCollection | None = (
             search_task.with_options(timeout_seconds=timeout_seconds if timeout_seconds >= 0 else None)
             .submit(
                 flow_env.serialize(),
@@ -152,7 +152,7 @@ async def on_demand_auxip_staging(
     end_datetime: datetime.datetime | str,
     product_type: str,
     catalog_collection_identifier: str,
-) -> tuple[bool, ItemCollection]:
+) -> tuple[bool, ItemCollection | None]:
     """
     Flow to retrieve Auxip files using a ValCover filter with the given time interval defined by
     start_datetime and end_datetime, select only the type of files wanted if eopf_type is given, stage
