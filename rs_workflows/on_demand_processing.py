@@ -92,10 +92,10 @@ async def dpr_processing(
     s3_payload_template = (
         "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
     )
-    auxip_cql2 = {}  # type: ignore[var-annotated]
-    catalog_collection_identifier = "SPRINT24_TEST_COLLECTION"
-    processor = ProcessorEnum.S3L0
-    s3_output_data = "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/output/s3"
+
+    bucket = "rs-dev-cluster-temp"
+    prefix = "prefect-share"
+    s3_output_data = f"s3://{bucket}/{prefix}/users/{flow_env.owner_id}/l0/output/s3"
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(dpr_input.env)
@@ -109,15 +109,12 @@ async def dpr_processing(
         )
 
         # read tasktable and construct list of processing units
-        if not dpr_input.use_dpr_mockup:
-            task_table = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name.value, cluster_info)
-        else:
-            task_table = flow_env.rs_client.get_dpr_client().get_process("mockup", cluster_info)
+        if dpr_input.processor_name == "mockup":
             s3_payload_template = (
                 f"s3://rs-dev-cluster-temp/prefect-share/users/{flow_env.owner_id}/"
                 f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
             )
-
+        task_table = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name.value, cluster_info)
         processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
         out = build_unit_list(
             tasktable=task_table,
