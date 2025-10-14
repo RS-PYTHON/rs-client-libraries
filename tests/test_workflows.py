@@ -25,7 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
-from pystac import Item
+from pystac import Item, ItemCollection
 
 from rs_client.rs_client import RsClient
 from rs_common import prefect_utils
@@ -77,10 +77,11 @@ class MockRsClient(Mock):
 
     def search(self, *_, **__):
         """Mock stac search"""
-        return [
+        return_values = [
             Item(id="test1", properties={}, geometry={}, bbox=[], datetime=datetime.now()),
             Item(id="test2", properties={}, geometry={}, bbox=[], datetime=datetime.now()),
         ]
+        return ItemCollection(return_values)
 
     def get_items(self, *_, **__):
         """Mock stac get_items"""

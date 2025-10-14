@@ -102,8 +102,8 @@ async def auxip_staging(
                 auxip_cql2=cql2_filter,
                 error_if_empty=False,
             )
-            .result()
-        )  # type: ignore
+            .result()  # type: ignore
+        )
 
         # Stop process if search task didn't return any item
         if not auxip_items or len(auxip_items) == 0:
