@@ -28,7 +28,6 @@ from pydantic import SecretStr
 from pystac import Item, ItemCollection
 
 from rs_client.rs_client import RsClient
-from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
 from rs_workflows import (
     auxip_flow,
