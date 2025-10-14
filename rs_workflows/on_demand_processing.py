@@ -114,7 +114,7 @@ async def dpr_processing(
                         # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
                         auxip_items = await auxip_flow.auxip_staging(
                             dpr_input.env,
-                            auxip_cql2,
+                            auxip_cql2['stac'],
                             catalog_collection_identifier,
                             timeout,
                         )
@@ -124,9 +124,9 @@ async def dpr_processing(
                         # Artifact key must only contain lowercase letters, numbers, and dashes.
                         await acreate_markdown_artifact(key="auxip-cql", markdown=md, description="Auxip CQL2 filter")
 
-                        if idx == len(input_adfs["alternatives"]) - 1:
+                        if idx == len(input_adfs["alternatives"]) - 1 and not auxip_items:
                             #  Last one and still nothing → raise runtime
-                            raise RuntimeError("All ADFS searched, no items found.")
+                            raise RuntimeError(f"All ADFS searched, no items found.")
             except KeyError as kerr:
                 raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
 
@@ -134,10 +134,6 @@ async def dpr_processing(
 
         # Auxip item ids
         item_ids = []
-        for items in auxip_items.result():
-            for item in items or []:  # type: ignore[union-attr]
-                item_ids.append(item.id)
-
         # Stage Auxip items.
         # Note: the only difference between staging_task_auxip and
         staged = [auxip_items]
