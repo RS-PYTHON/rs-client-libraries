@@ -17,8 +17,6 @@
 import datetime
 import json
 import os
-import re
-from copy import deepcopy
 from pathlib import Path
 
 from prefect import flow, get_run_logger
@@ -33,41 +31,12 @@ from rs_workflows.dpr_flow import (
     write_payload,
 )
 from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs, ProcessorEnum
-from rs_workflows.payload_builder import build_units_list
+from rs_workflows.payload_builder import build_cql2_json, build_units_list
 from rs_workflows.staging_flow import (
     staging_task_auxip,
     staging_task_cadip,
     staging_task_prip,
 )
-
-
-# To be later moved ?
-def build_cql2_json(task_table, query_name, values):
-    """
-    Recursively replaces placeholders of the form {var} in a dictionary or list
-    using the mapping from 'values'.
-    """
-    template = {}
-    for cql_filter in task_table["queries"]:
-        if cql_filter["name"] == query_name:
-            # Work on a deep copy so we don't mutate the original
-            template = deepcopy(cql_filter)
-    pattern = re.compile(r"^{(.*)}$")  # matches exactly "{var}" (whole string)
-
-    def _replace(item):
-        if isinstance(item, str):
-            match = pattern.match(item)
-            if match:
-                key = match.group(1)
-                return values.get(key, item)  # replace if found, else keep
-            return item
-        if isinstance(item, list):
-            return [_replace(x) for x in item]
-        if isinstance(item, dict):
-            return {k: _replace(v) for k, v in item.items()}
-        return item
-
-    return _replace(template)
 
 
 @flow(name="dpr-processing")
