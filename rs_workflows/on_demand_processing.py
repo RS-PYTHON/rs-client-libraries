@@ -32,7 +32,7 @@ from rs_workflows.dpr_flow import (
     write_payload,
 )
 from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs, ProcessorEnum
-from rs_workflows.payload_builder import build_units_list
+from rs_workflows.payload_builder import build_unit_list
 from rs_workflows.staging_flow import (
     staging_task_auxip,
     staging_task_cadip,
@@ -94,8 +94,6 @@ async def dpr_processing(
     )
     auxip_cql2 = {}  # type: ignore[var-annotated]
     catalog_collection_identifier = "SPRINT24_TEST_COLLECTION"
-    cadip_collection_identifier = "sgs_sentinel1"
-    session_identifier = "S1A_20200105072204051312"
     processor = ProcessorEnum.S3L0
     s3_output_data = "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/output/s3"
 
@@ -120,8 +118,8 @@ async def dpr_processing(
                 f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
             )
 
-        processing_mode = [m for m in dpr_input.processing_mode] if dpr_input.processing_mode else None
-        out = build_units_list(
+        processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
+        out = build_unit_list(
             tasktable=task_table,
             pipeline=dpr_input.pipeline,
             unit=dpr_input.unit,
@@ -129,13 +127,13 @@ async def dpr_processing(
             start_datetime=dpr_input.start_datetime,
             end_datetime=dpr_input.end_datetime,
         )
-        units_list = out["units"]
-        md = "# Units list\n\n```json\n" + json.dumps(units_list, indent=2) + "\n```"
+        unit_list = out["units"]
+        md = "# Units list\n\n```json\n" + json.dumps(unit_list, indent=2) + "\n```"
         # Artifact key must only contain lowercase letters, numbers, and dashes.
-        await acreate_markdown_artifact(key="units-list", markdown=md, description="List of processing units")
+        await acreate_markdown_artifact(key="processing-unit-list", markdown=md, description="List of processing units")
 
         auxip_staged_items = []
-        for unit in units_list:
+        for unit in unit_list:
             try:
                 # For each input_adfs element computed on STEP 1
                 for input_adfs in unit["input_adfs"]:
@@ -180,9 +178,7 @@ async def dpr_processing(
 
         # Stage Auxip items.
         # Note: the only difference between staging_task_auxip and
-        staged = [
-            auxip_staged_items
-        ]
+        staged = [auxip_staged_items]
 
         # Write the final payload file from its template version and staged items.
         # It will be uploaded in the same s3 dir than the template file.

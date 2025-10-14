@@ -152,7 +152,7 @@ class WorkflowType(str, Enum):
     SYSTEMATIC = "systematic"
 
 
-class ProcessingMode(Enum):
+class ProcessingMode(str, Enum):
     """
     List of mode to be applied when calling the DPR processor.
     """

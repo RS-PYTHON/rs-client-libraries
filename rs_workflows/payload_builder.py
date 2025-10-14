@@ -131,7 +131,7 @@ def _build_entries(
     return kept
 
 
-def build_units_list(
+def build_unit_list(
     tasktable: dict[str, Any],
     pipeline: str | None = None,
     unit: str | None = None,
