@@ -16,6 +16,7 @@
 
 import datetime
 import json
+from types import CoroutineType
 
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
@@ -95,7 +96,7 @@ async def auxip_staging(
     with flow_env.start_span(__name__, "auxip-staging"):
 
         # Search Auxip products
-        auxip_items: ItemCollection | None = (
+        auxip_items: ItemCollection | None = (  # type: ignore
             search_task.with_options(timeout_seconds=timeout_seconds if timeout_seconds >= 0 else None)
             .submit(
                 flow_env.serialize(),

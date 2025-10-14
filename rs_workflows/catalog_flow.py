@@ -60,7 +60,7 @@ async def catalog_search(
             raise ValueError(
                 f"No Catalog item found for CQL2 filter: {json.dumps(catalog_cql2, indent=2)}",
             )
-        logger.info(f"Catalog search found {len(found)} results: {found}")
+        logger.info(f"Catalog search found {len(found)} results: {found}")  # type: ignore
         return found
 
 
