@@ -17,6 +17,7 @@
 import json
 import os
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
@@ -24,6 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
+from pystac import Item
 
 from rs_client.rs_client import RsClient
 from rs_common import prefect_utils
@@ -79,7 +81,10 @@ class MockRsClient(Mock):
 
     def search(self, *_, **__):
         """Mock stac search"""
-        return [MockRsClient()] * 2
+        return [
+            Item(id="test1", properties={}, geometry={}, bbox=[], datetime=datetime.now()),
+            Item(id="test2", properties={}, geometry={}, bbox=[], datetime=datetime.now()),
+        ]
 
     def get_items(self, *_, **__):
         """Mock stac get_items"""
@@ -92,6 +97,10 @@ class MockRsClient(Mock):
     def wait_for_job(self, *_, **__):
         """Mock DprClient wait_for_job"""
         return [MOCK_DICT()] * 2
+
+    def wait_for_jobs(self, *_, **__):
+        """Mock DprClient wait_for_jobs"""
+        return {"job_status": {"status": "successful"}}
 
 
 @pytest.fixture(autouse=True)
@@ -278,6 +287,7 @@ async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
 @patch.object(RsClient, "get_auxip_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
+@patch.object(RsClient, "get_catalog_client", MockRsClient)
 @patch.object(catalog_flow, "datetime", Mock())
 async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
     """Test the on_demand_auxip_staging flow"""
@@ -289,15 +299,18 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
     spied = {
         mocker.spy(prefect_function, "fn"): call_count  # spy on <flow>.fn or <task>.fn = the underlying python function
         for prefect_function, call_count in {
+            auxip_flow.auxip_staging: 1,
             auxip_flow.search: 1,
             auxip_flow.search_task: 1,
+            catalog_flow.catalog_search: 1,
+            catalog_flow.catalog_search_task: 1,
             staging_flow.staging_task_auxip: 1,
             staging_flow.staging: 1,
         }.items()
     }
 
     # Run the prefect flow
-    await on_demand_processing.on_demand_auxip_staging(
+    await auxip_flow.on_demand_auxip_staging(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         start_datetime="2024-05-27T09:44:09.509000Z",
         end_datetime="2024-05-27T09:44:19.509000Z",

@@ -15,7 +15,9 @@
 """."""
 
 
+import re
 from collections.abc import Iterable
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
@@ -272,3 +274,31 @@ def build_unit_list(
         )
 
     return {"units": out_units}
+
+
+def build_cql2_json(task_table, query_name, values):
+    """
+    Recursively replaces placeholders of the form {var} in a dictionary or list
+    using the mapping from 'values'.
+    """
+    template = {}
+    for cql_filter in task_table["queries"]:
+        if cql_filter["name"] == query_name:
+            # Work on a deep copy so we don't mutate the original
+            template = deepcopy(cql_filter)
+    pattern = re.compile(r"^{(.*)}$")  # matches exactly "{var}" (whole string)
+
+    def _replace(item):
+        if isinstance(item, str):
+            match = pattern.match(item)
+            if match:
+                key = match.group(1)
+                return values.get(key, item)  # replace if found, else keep
+            return item
+        if isinstance(item, list):
+            return [_replace(x) for x in item]
+        if isinstance(item, dict):
+            return {k: _replace(v) for k, v in item.items()}
+        return item
+
+    return _replace(template)

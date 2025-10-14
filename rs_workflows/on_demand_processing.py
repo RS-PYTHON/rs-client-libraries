@@ -17,8 +17,6 @@
 import datetime
 import json
 import os
-import re
-from copy import deepcopy
 from pathlib import Path
 
 from prefect import flow
@@ -31,42 +29,12 @@ from rs_workflows.dpr_flow import (
     run_processor,
     write_payload,
 )
-from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs, ProcessorEnum
-from rs_workflows.payload_builder import build_unit_list
+from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs
+from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.staging_flow import (
-    staging_task_auxip,
     staging_task_cadip,
     staging_task_prip,
 )
-
-
-# To be later moved ?
-def build_cql2_json(task_table, query_name, values):
-    """
-    Recursively replaces placeholders of the form {var} in a dictionary or list
-    using the mapping from 'values'.
-    """
-    template = {}
-    for cql_filter in task_table["queries"]:
-        if cql_filter["name"] == query_name:
-            # Work on a deep copy so we don't mutate the original
-            template = deepcopy(cql_filter)
-    pattern = re.compile(r"^{(.*)}$")  # matches exactly "{var}" (whole string)
-
-    def _replace(item):
-        if isinstance(item, str):
-            match = pattern.match(item)
-            if match:
-                key = match.group(1)
-                return values.get(key, item)  # replace if found, else keep
-            return item
-        if isinstance(item, list):
-            return [_replace(x) for x in item]
-        if isinstance(item, dict):
-            return {k: _replace(v) for k, v in item.items()}
-        return item
-
-    return _replace(template)
 
 
 @flow(name="dpr-processing")
@@ -93,12 +61,13 @@ async def dpr_processing(
         "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
     )
 
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(dpr_input.env)
+
     bucket = "rs-dev-cluster-temp"
     prefix = "prefect-share"
     s3_output_data = f"s3://{bucket}/{prefix}/users/{flow_env.owner_id}/l0/output/s3"
 
-    # Init flow environment and opentelemetry span
-    flow_env = FlowEnv(dpr_input.env)
     with flow_env.start_span(__name__, "dpr-processing"):
 
         # Create cluster info from JUPYTERHUB_API_TOKEN env var (only in cluster mode, read from the
@@ -129,7 +98,6 @@ async def dpr_processing(
         # Artifact key must only contain lowercase letters, numbers, and dashes.
         await acreate_markdown_artifact(key="processing-unit-list", markdown=md, description="List of processing units")
 
-        auxip_staged_items = []
         for unit in unit_list:
             try:
                 # For each input_adfs element computed on STEP 1
@@ -142,40 +110,34 @@ async def dpr_processing(
                         name, parameters = alternative["query"]["name"], alternative["query"]["parameters"]
                         # 3. Build the CQL2 JSON by replacing the parameters
                         auxip_cql2 = build_cql2_json(task_table, name, parameters)
-                        auxip_items = auxip_flow.search_task.submit(
-                            flow_env.serialize(),
-                            auxip_cql2,
-                            error_if_empty=True,
-                        )
                         # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
-                        catalog_collection_identifier = "s1-aux"  # to be updated
-                        # catalog_collection_identifier = f"{dpr_input.satellite}-aux"
-                        if auxip_items:
-                            # Found items → stop searching alternatives, start staging
-                            break
-                        if idx == len(input_adfs["alternatives"]) - 1:
+                        catalog_collection_identifier = f"{dpr_input.satellite}-aux"
+                        # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
+                        auxip_items = await auxip_flow.auxip_staging(
+                            dpr_input.env,
+                            auxip_cql2["stac"],
+                            catalog_collection_identifier,
+                            timeout,
+                        )
+
+                        # save auxip cql2 json as flow artefact
+                        md = "# Auxip CQL2 JSON \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
+                        # Artifact key must only contain lowercase letters, numbers, and dashes.
+                        await acreate_markdown_artifact(key="auxip-cql", markdown=md, description="Auxip CQL2 filter")
+
+                        if idx == len(input_adfs["alternatives"]) - 1 and not auxip_items:
                             #  Last one and still nothing → raise runtime
-                            raise RuntimeError("All ADFS searched, no items found.")
-                # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
-                # timeout currently disabled
-                # note: auxip-staged-items should be a tuple (aux-name, s3_path)
-                auxip_staged_items = staging_task_auxip.submit(
-                    flow_env.serialize(),
-                    auxip_items,
-                    catalog_collection_identifier,
-                )
+                            raise RuntimeError(f"All ADFS searched, no items found.")
             except KeyError as kerr:
                 raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
 
+        # start RSPY 800
+
         # Auxip item ids
         item_ids = []
-        for items in auxip_items.result():
-            for item in items or []:  # type: ignore[union-attr]
-                item_ids.append(item.id)
-
         # Stage Auxip items.
         # Note: the only difference between staging_task_auxip and
-        staged = [auxip_staged_items]
+        staged = [auxip_items]
 
         # Write the final payload file from its template version and staged items.
         # It will be uploaded in the same s3 dir than the template file.
@@ -189,11 +151,12 @@ async def dpr_processing(
             s3_payload_run,
             wait_for=staged,  # wait for items to be staged in the catalog
         )
+        ## end RSPY800
 
         # Run the DPR processor
         processed_items = run_processor.submit(
             flow_env.serialize(),
-            processor,
+            dpr_input.processor_name,
             cluster_info,
             s3_payload_run,
             dpr_input.use_dpr_mockup,
@@ -252,7 +215,7 @@ async def on_demand_cadip_staging(
 
 
 @flow(name="On-demand Prip staging")
-async def on_demand_prip_staging(
+async def on_demand_prip_staging(  # pylint: disable=duplicate-code
     env: FlowEnvArgs,
     start_datetime: datetime.datetime | str,
     end_datetime: datetime.datetime | str,
@@ -317,73 +280,4 @@ async def on_demand_prip_staging(
         )
 
         # Wait for last task to end (unwrap exceptions if any)
-        staged.result()  # type: ignore[unused-coroutine]
-
-
-@flow(name="On-demand Auxip staging")
-async def on_demand_auxip_staging(
-    env: FlowEnvArgs,
-    start_datetime: datetime.datetime | str,
-    end_datetime: datetime.datetime | str,
-    product_type: str,
-    catalog_collection_identifier: str,
-):
-    """
-    Flow to retrieve Auxip files using a ValCover filter with the given time interval defined by
-    start_datetime and end_datetime, select only the type of files wanted if eopf_type is given, stage
-    the files and add STAC items into the catalog.
-    Informations on ValCover filter:
-    https://pforge-exchange2.astrium.eads.net/confluence/display/COPRS/4.+External+data+selection+policies
-
-    Args:
-        env: Prefect flow environment
-        start_datetime: Start datetime for the time interval used to filter the files
-            (select a date or directly enter a timestamp, e.g. "2025-08-07T11:51:12.509000Z")
-        end_datetime: End datetime for the time interval used to filter the files
-            (select a date or directly enter a timestamp, e.g. "2025-08-10T14:00:00.509000Z")
-        product_type: Auxiliary file type wanted
-        catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
-    """
-
-    # Init flow environment and opentelemetry span
-    flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "on-demand-auxip-staging"):
-
-        # Convert datetime inputs to str
-        if isinstance(start_datetime, datetime.datetime):
-            start_datetime = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-        if isinstance(end_datetime, datetime.datetime):
-            end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
-        # CQL2 filter: we use a filter combining a ValCover filter and a product type filter
-        cql2_filter = {
-            "op": "and",
-            "args": [
-                {"op": "=", "args": [{"property": "product:type"}, product_type]},
-                {
-                    "op": "t_contains",
-                    "args": [
-                        {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                        {"interval": [start_datetime, end_datetime]},
-                    ],
-                },
-            ],
-        }
-
-        # Search Auxip products
-        auxip_items = auxip_flow.search_task.submit(
-            flow_env.serialize(),
-            auxip_cql2={"filter": cql2_filter},
-            error_if_empty=False,
-        )
-
-        # Stage Auxip items.
-        staged = staging_task_auxip.submit(
-            flow_env.serialize(),
-            auxip_items,
-            catalog_collection_identifier,
-        )
-
-        # Wait for last task to end.
-        # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
         staged.result()  # type: ignore[unused-coroutine]
