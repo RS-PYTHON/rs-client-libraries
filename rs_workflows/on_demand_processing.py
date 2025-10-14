@@ -27,6 +27,7 @@ from prefect.artifacts import acreate_markdown_artifact
 from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
+from rs_workflows.auxip_flow import auxip_staging
 from rs_workflows.dpr_flow import (
     run_processor,
     write_payload,
@@ -38,7 +39,6 @@ from rs_workflows.staging_flow import (
     staging_task_cadip,
     staging_task_prip,
 )
-from rs_workflows.auxip_flow import auxip_staging
 
 
 # To be later moved ?
@@ -93,11 +93,6 @@ async def dpr_processing(
     s3_payload_template = (
         "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
     )
-    auxip_cql2 = {}  # type: ignore[var-annotated]
-    catalog_collection_identifier = "SPRINT24_TEST_COLLECTION"
-    cadip_collection_identifier = "sgs_sentinel1"
-    session_identifier = "S1A_20200105072204051312"
-    processor = ProcessorEnum.S3L0
     s3_output_data = "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/output/s3"
 
     # Init flow environment and opentelemetry span
@@ -150,13 +145,26 @@ async def dpr_processing(
                         # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
                         catalog_collection_identifier = f"{dpr_input.satellite}-aux"
                         # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
-                        auxip_items = await auxip_staging(dpr_input.env, auxip_cql2, catalog_collection_identifier, timeout)
+                        auxip_items = await auxip_staging(
+                            dpr_input.env,
+                            auxip_cql2,
+                            catalog_collection_identifier,
+                            timeout,
+                        )
+
+                        # save auxip cql2 json as flow artefact
+                        md = "# Auxip CQL2 JSON \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
+                        # Artifact key must only contain lowercase letters, numbers, and dashes.
+                        await acreate_markdown_artifact(key="auxip-cql", markdown=md, description="Auxip CQL2 filter")
 
                         if idx == len(input_adfs["alternatives"]) - 1:
                             #  Last one and still nothing → raise runtime
                             raise RuntimeError("All ADFS searched, no items found.")
             except KeyError as kerr:
                 raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
+
+        # start RSPY 800
+
         # Auxip item ids
         item_ids = []
         for items in auxip_items.result():
@@ -165,9 +173,7 @@ async def dpr_processing(
 
         # Stage Auxip items.
         # Note: the only difference between staging_task_auxip and
-        staged = [
-            auxip_items
-        ]
+        staged = [auxip_items]
 
         # Write the final payload file from its template version and staged items.
         # It will be uploaded in the same s3 dir than the template file.
@@ -181,11 +187,12 @@ async def dpr_processing(
             s3_payload_run,
             wait_for=staged,  # wait for items to be staged in the catalog
         )
+        ## end RSPY800
 
         # Run the DPR processor
         processed_items = run_processor.submit(
             flow_env.serialize(),
-            processor,
+            dpr_input.processor_name,
             cluster_info,
             s3_payload_run,
             dpr_input.use_dpr_mockup,
