@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 
-from rs_workflows.payload_builder import TaskTableError, build_units_list
+from rs_workflows.payload_builder import TaskTableError, build_unit_list
 
 SCENARIOS: dict[str, dict] = {
     # S3 L0
@@ -86,14 +86,14 @@ SCENARIOS: dict[str, dict] = {
 
 
 @pytest.mark.parametrize("case_id,cfg", SCENARIOS.items())
-def test_build_units_list_returns_dict(case_id, cfg):  # pylint: disable=unused-argument
+def test_build_unit_list_returns_dict(case_id, cfg):  # pylint: disable=unused-argument
     """Verify the result is a dict and that 'units' is a list whose items include the keys
     'name', 'module', 'input_products', 'input_adfs', and 'output_products'."""
     tt_path = Path(__file__).parent / "resources" / cfg["json_path"]
     with tt_path.open("r", encoding="utf-8") as f:
         tt = json.load(f)
 
-    out = build_units_list(
+    out = build_unit_list(
         tasktable=tt,
         pipeline=cfg["kwargs"].get("pipeline"),
         unit=cfg["kwargs"].get("unit"),
@@ -126,58 +126,58 @@ def _valid_tasktable():
     }
 
 
-def test_build_units_list_rejects_both_pipeline_and_unit():
-    """Test that build_units_list raises TaskTableError when both 'pipeline' and 'unit' are provided."""
+def test_build_unit_list_rejects_both_pipeline_and_unit():
+    """Test that build_unit_list raises TaskTableError when both 'pipeline' and 'unit' are provided."""
     tt = _valid_tasktable()
     with pytest.raises(TaskTableError, match='Provide either "pipeline" or "unit", not both\\.'):
-        build_units_list(tt, pipeline="p1", unit="u1")
+        build_unit_list(tt, pipeline="p1", unit="u1")
 
 
-def test_build_units_list_requires_one_of_pipeline_or_unit():
-    """Test that build_units_list raises TaskTableError when neither 'pipeline' nor 'unit' is provided."""
+def test_build_unit_list_requires_one_of_pipeline_or_unit():
+    """Test that build_unit_list raises TaskTableError when neither 'pipeline' nor 'unit' is provided."""
     tt = _valid_tasktable()
     with pytest.raises(TaskTableError, match='One of "pipeline" or "unit" must be provided\\.'):
-        build_units_list(tt, pipeline=None, unit=None)
+        build_unit_list(tt, pipeline=None, unit=None)
 
 
-def test_build_units_list_invalid_tasktable_root_type():
+def test_build_unit_list_invalid_tasktable_root_type():
     """Test that providing a non-dict task table raises TaskTableError with the expected message."""
     with pytest.raises(TaskTableError, match=r"Task table root must be a JSON object \(dict\)\."):
-        build_units_list("not a dict", pipeline="p1")  # type: ignore[arg-type]
+        build_unit_list("not a dict", pipeline="p1")  # type: ignore[arg-type]
 
 
-def test_build_units_list_missing_or_invalid_pipelines_list():
+def test_build_unit_list_missing_or_invalid_pipelines_list():
     """Test that a missing or non-list 'pipelines' field in the task table raises
     TaskTableError with the expected message."""
     tt: dict[str, Any] = {"units": [], "io": []}
     with pytest.raises(TaskTableError, match='Missing or invalid "pipelines" list in task table\\.'):
-        build_units_list(tt, pipeline="p1")
+        build_unit_list(tt, pipeline="p1")
 
 
-def test_build_units_list_missing_or_invalid_units_list():
+def test_build_unit_list_missing_or_invalid_units_list():
     """Test that a missing or non-list 'units' field in the task table raises
     TaskTableError with the expected message."""
     tt: dict[str, Any] = {"pipelines": [], "io": []}
     with pytest.raises(TaskTableError, match='Missing or invalid "units" list in task table\\.'):
-        build_units_list(tt, pipeline="p1")
+        build_unit_list(tt, pipeline="p1")
 
 
-def test_build_units_list_missing_or_invalid_io_list():
+def test_build_unit_list_missing_or_invalid_io_list():
     """Test that a missing or non-list 'io' field in the task table raises TaskTableError with the expected message."""
     tt = {
         "pipelines": [{"name": "p1", "steps": [{"order": 1, "unit_name": "u1"}]}],
         "units": [{"name": "u1", "module": "m", "input_products": [], "input_adfs": [], "output_products": []}],
     }
     with pytest.raises(TaskTableError, match='Missing or invalid "io" list in task table\\.'):
-        build_units_list(tt, pipeline="p1")
+        build_unit_list(tt, pipeline="p1")
 
 
 def test_case_8_exact_output():
-    """Test build_units_list function"""
+    """Test build_unit_list function"""
     tt_path = Path(__file__).parent / "resources" / "TaskTable_S1_ARD_generated_by_rs_python_v1.json"
     tt = json.loads(tt_path.read_text(encoding="utf-8"))
 
-    out = build_units_list(
+    out = build_unit_list(
         tasktable=tt,
         pipeline="s1_ard_full",
         processing_mode=["nrt", "reprocessing"],

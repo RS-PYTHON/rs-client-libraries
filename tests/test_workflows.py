@@ -221,10 +221,10 @@ async def test_dpr_processing(
         processor_version="1.0",
         pipeline="s1_l0_full",
         dask_cluster_label="cluster_label",
-        input_products=[],  # Item STAC
+        input_products={},  # Item STAC
         generated_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
         auxiliary_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
-        processing_mode=["nrt"],
+        processing_mode=["nrt"],  # type: ignore[list-item]
         use_dpr_mockup=False,
         start_datetime=None,
         end_datetime=None,
