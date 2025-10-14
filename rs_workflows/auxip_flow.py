@@ -92,25 +92,23 @@ async def auxip_staging(
     with flow_env.start_span(__name__, "auxip-staging"):
 
         # Search Auxip products
-        auxip_search_task = search_task.submit(
-            flow_env.serialize(),
-            auxip_cql2=cql2_filter,
-            error_if_empty=False,
+        auxip_items = (
+            search_task.with_options(timeout_seconds=timeout_seconds if timeout_seconds >= 0 else None)
+            .submit(
+                flow_env.serialize(),
+                auxip_cql2=cql2_filter,
+                error_if_empty=False,
+            )
+            .result()
         )
 
-        # Timeout on search task
-        if timeout_seconds >= 0:
-            auxip_search_task.wait(timeout_seconds)
-
-        auxip_items: ItemCollection = auxip_search_task.result()
-
         # Stop process if search task didn't return any item
-        if len(auxip_items) == 0:
+        if not auxip_items or len(auxip_items) == 0:
             logger.info("Nothing to stage: Auxip search with given filter returned empty result.")
             return True, None
 
         # Search catalog items
-        catalog_items: ItemCollection = catalog_search_task.submit(
+        catalog_items = catalog_search_task.submit(
             flow_env.serialize(),
             catalog_cql2=cql2_filter,
             error_if_empty=False,
@@ -118,11 +116,14 @@ async def auxip_staging(
 
         # Compare results of Auxip search with results of Catalog search
         # to see what is missing in Catalog
-        missing_items_list: list[Item] = []
-        for item in auxip_items:
-            if item not in catalog_items:
-                missing_items_list.append(item)
-        missing_auxip_items = ItemCollection(missing_items_list)
+        if not catalog_items or len(catalog_items) == 0:
+            missing_auxip_items = auxip_items
+        else:
+            missing_items_list = []
+            for item in auxip_items:
+                if item not in catalog_items:
+                    missing_items_list.append(item)
+            missing_auxip_items = ItemCollection(missing_items_list)
         logger.info(f"Number of items missing in the catalog to stage: {len(missing_auxip_items)}")
 
         # Stop process if all the Auxip items found are already in the catalog
@@ -139,7 +140,7 @@ async def auxip_staging(
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        staging_results: dict = staged.result()
+        staging_results = staged.result()
 
         # Check that all jobs monitored were successful. Otherwise, return status is "False"
         return_status = True
