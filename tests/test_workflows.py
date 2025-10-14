@@ -40,7 +40,11 @@ from rs_workflows import (
     prip_flow,
     staging_flow,
 )
-from rs_workflows.flow_utils import FlowEnvArgs, ProcessorEnum
+from rs_workflows.flow_utils import (
+    DprProcessIn,
+    FlowEnvArgs,
+    ProcessorEnum,
+)
 from rs_workflows.pi_db_models import Base
 
 OWNER_ID = "OWNER_ID"
@@ -190,12 +194,12 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_dpr_client", MockRsClient)
 @patch.object(catalog_flow, "datetime", Mock())
-async def test_on_demand_processing(
+async def test_dpr_processing(
     mocker,
     mock_prefect,
     mock_record_performance_indicators,
 ):  # pylint: disable=unused-argument, redefined-outer-name
-    """Test the on_demand_processing flow"""
+    """Test the dpr_processing flow"""
 
     # Save env vars in prefect secret blocks
     await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": "JUPYTERHUB_API_TOKEN"})
@@ -210,7 +214,6 @@ async def test_on_demand_processing(
             cadip_flow.search: 1,
             cadip_flow.search_task: 1,
             dpr_flow.read_payload_values: 1,
-            dpr_flow.read_tasktable: 1,
             dpr_flow.write_payload: 1,
             dpr_flow.run_processor: 1,
             staging_flow.staging_task_auxip: 1,
@@ -221,17 +224,22 @@ async def test_on_demand_processing(
     }
 
     # Run the prefect flow
-    await on_demand_processing.on_demand_processing(
+    dpr_input = DprProcessIn(
         env=FlowEnvArgs(owner_id=OWNER_ID),
-        processor=ProcessorEnum.S1L0,
-        cluster_label="cluster_label",
-        cadip_collection_identifier="cadip_collection_identifier",
-        session_identifier="session_identifier",
-        catalog_collection_identifier="catalog_collection_identifier",
-        s3_payload_template=S3_PAYLOAD,
-        s3_output_data="s3_output_data",
+        processor_name=ProcessorEnum.S1L0,
+        processor_version="1.0",
+        pipeline="s1_l0_full",
+        dask_cluster_label="cluster_label",
+        input_products=[],  # Item STAC
+        generated_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
+        auxiliary_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
+        processing_mode=["nrt"],
         use_dpr_mockup=False,
+        start_datetime=None,
+        end_datetime=None,
+        satellite="S3A",
     )
+    await on_demand_processing.dpr_processing(dpr_input)
 
     # Check calls
     for fn, call_count in spied.items():
