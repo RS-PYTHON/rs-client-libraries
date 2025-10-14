@@ -279,7 +279,6 @@ async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
 @patch.object(RsClient, "get_auxip_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
-@patch.object(RsClient, "get_catalog_client", MockRsClient)
 @patch.object(catalog_flow, "datetime", Mock())
 async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
     """Test the on_demand_auxip_staging flow"""
@@ -294,8 +293,6 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
             auxip_flow.auxip_staging: 1,
             auxip_flow.search: 1,
             auxip_flow.search_task: 1,
-            catalog_flow.catalog_search: 1,
-            catalog_flow.catalog_search_task: 1,
             staging_flow.staging_task_auxip: 1,
             staging_flow.staging: 1,
         }.items()

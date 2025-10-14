@@ -18,11 +18,10 @@ import datetime
 import json
 
 from prefect import flow, get_run_logger, task
-from prefect.artifacts import acreate_table_artifact
+from prefect.artifacts import acreate_markdown_artifact
 from pystac import ItemCollection
 
 from rs_client.stac.auxip_client import AuxipClient
-from rs_workflows.catalog_flow import catalog_search_task
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task_auxip
 
@@ -73,7 +72,7 @@ async def auxip_staging(
     cql2_filter: dict,
     catalog_collection_identifier: str,
     timeout_seconds: int = -1,
-):
+) -> tuple[bool, ItemCollection]:
     """
     Generic flow to retrieve a list of items matching the STAC CQL2 filter given, and to stage the ones
     that are not already in the catalog.
@@ -107,34 +106,10 @@ async def auxip_staging(
             logger.info("Nothing to stage: Auxip search with given filter returned empty result.")
             return True, None
 
-        # Search catalog items
-        catalog_items = catalog_search_task.submit(
-            flow_env.serialize(),
-            catalog_cql2=cql2_filter,
-            error_if_empty=False,
-        ).result()
-
-        # Compare results of Auxip search with results of Catalog search
-        # to see what is missing in Catalog
-        if not catalog_items or len(catalog_items) == 0:
-            missing_auxip_items = auxip_items
-        else:
-            missing_items_list = []
-            for item in auxip_items:
-                if item not in catalog_items:
-                    missing_items_list.append(item)
-            missing_auxip_items = ItemCollection(missing_items_list)
-        logger.info(f"Number of items missing in the catalog to stage: {len(missing_auxip_items)}")
-
-        # Stop process if all the Auxip items found are already in the catalog
-        if len(missing_auxip_items) == 0:
-            logger.info("Nothing to stage: all Auxip items found are already in the catalog.")
-            return True, None
-
-        # Stage missing Auxip items
+        # Stage Auxip items
         staged = staging_task_auxip.submit(
             flow_env.serialize(),
-            missing_auxip_items,
+            auxip_items,
             catalog_collection_identifier,
         )
 
@@ -157,13 +132,13 @@ async def auxip_staging(
         # Create artifact if all jobs succeeded
         if return_status:
             logger.info("Staging successful, creating artifact with a list of staged items.")
-            await acreate_table_artifact(
-                table=[missing_auxip_items.to_dict()],
+            await acreate_markdown_artifact(
+                markdown=f"{auxip_items}",
                 key="auxiliary-files",
                 description="Auxiliary files added to catalog.",
             )
 
-        return return_status, missing_auxip_items
+        return return_status, auxip_items
 
 
 @flow(name="On-demand Auxip staging")
