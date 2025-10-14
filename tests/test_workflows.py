@@ -103,25 +103,6 @@ class MockRsClient(Mock):
         return {"job_status": {"status": "successful"}}
 
 
-class MockItemSearch(Mock):
-    """Mock ItemSearch returned by catalog search"""
-
-    def item_collection(self):
-        """Mock function returning an Item collection"""
-        return [
-            Item(id="test1", properties={}, geometry={}, bbox=[], datetime=datetime.now()),
-            Item(id="test2", properties={}, geometry={}, bbox=[], datetime=datetime.now()),
-        ]
-
-
-class MockRsClientCatalog(MockRsClient):
-    """Mock specifities of catalog client"""
-
-    def search(self, *_, **__):
-        """Mock stac catalog search"""
-        return MockItemSearch()
-
-
 @pytest.fixture(autouse=True)
 def mock_record_performance_indicators(mocker):
     """
@@ -306,7 +287,7 @@ async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
 @patch.object(RsClient, "get_auxip_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
-@patch.object(RsClient, "get_catalog_client", MockRsClientCatalog)
+@patch.object(RsClient, "get_catalog_client", MockRsClient)
 @patch.object(catalog_flow, "datetime", Mock())
 async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
     """Test the on_demand_auxip_staging flow"""

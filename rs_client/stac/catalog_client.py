@@ -21,10 +21,9 @@ import logging
 import re
 from collections.abc import Iterator
 
-from pystac import Collection, Item, Link, RelType
+from pystac import Collection, Item, ItemCollection, Link, RelType
 from pystac_client import Client
 from pystac_client.collection_client import CollectionClient
-from pystac_client.item_search import ItemSearch
 from requests import HTTPError, Response
 
 from rs_client.rs_client import TIMEOUT
@@ -223,7 +222,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     def search(  # type: ignore # pylint: disable=too-many-arguments, arguments-differ
         self,
         **kwargs,
-    ) -> ItemSearch | None:
+    ) -> ItemCollection | None:
         """Search items inside a specific collection."""
 
         if "collections" in kwargs:
