@@ -83,6 +83,10 @@ async def auxip_staging(
         catalog_collection_identifier (str): Catalog collection identifier where CADIP sessions and AUX data are staged
         timeout_seconds (int): Timeout value for the Auxip search task.
             Optional, if no value is given the process will run until it is completed
+
+    Returns:
+        bool: Return status: False if staging failed, True otherwise
+        ItemCollection: List of Items retrieved from the Auxip search and staged to the catalog
     """
     logger = get_run_logger()
 
@@ -148,7 +152,7 @@ async def on_demand_auxip_staging(
     end_datetime: datetime.datetime | str,
     product_type: str,
     catalog_collection_identifier: str,
-):
+) -> tuple[bool, ItemCollection]:
     """
     Flow to retrieve Auxip files using a ValCover filter with the given time interval defined by
     start_datetime and end_datetime, select only the type of files wanted if eopf_type is given, stage
@@ -164,6 +168,10 @@ async def on_demand_auxip_staging(
             (select a date or directly enter a timestamp, e.g. "2025-08-10T14:00:00.509000Z")
         product_type: Auxiliary file type wanted
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
+
+    Returns:
+        bool: Return status: False if staging failed, True otherwise
+        ItemCollection: List of Items retrieved from the Auxip search and staged to the catalog
     """
 
     # Convert datetime inputs to str
