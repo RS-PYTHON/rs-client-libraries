@@ -19,21 +19,19 @@ import json
 import os
 from pathlib import Path
 
-from prefect import flow, get_run_logger
+from prefect import flow
 from prefect.artifacts import acreate_markdown_artifact
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
-from rs_workflows.auxip_flow import auxip_staging
 from rs_workflows.dpr_flow import (
     run_processor,
     write_payload,
 )
-from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs, ProcessorEnum
+from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs
 from rs_workflows.payload_builder import build_cql2_json, build_units_list
 from rs_workflows.staging_flow import (
-    staging_task_auxip,
     staging_task_cadip,
     staging_task_prip,
 )
@@ -85,7 +83,7 @@ async def dpr_processing(
                 f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
             )
 
-        processing_mode = [m for m in dpr_input.processing_mode] if dpr_input.processing_mode else None
+        processing_mode = dpr_input.processing_mode[0] or None
         out = build_units_list(
             tasktable=task_table,
             pipeline=dpr_input.pipeline,
@@ -114,7 +112,7 @@ async def dpr_processing(
                         # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
                         catalog_collection_identifier = f"{dpr_input.satellite}-aux"
                         # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
-                        auxip_items = await auxip_staging(
+                        auxip_items = await auxip_flow.auxip_staging(
                             dpr_input.env,
                             auxip_cql2,
                             catalog_collection_identifier,
