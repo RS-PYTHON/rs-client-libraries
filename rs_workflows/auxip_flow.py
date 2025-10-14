@@ -92,7 +92,7 @@ async def auxip_staging(
     with flow_env.start_span(__name__, "auxip-staging"):
 
         # Search Auxip products
-        _any, _any, auxip_items = (
+        auxip_items = (
             search_task.with_options(timeout_seconds=timeout_seconds if timeout_seconds >= 0 else None)
             .submit(
                 flow_env.serialize(),
@@ -108,7 +108,7 @@ async def auxip_staging(
             return True, None
 
         # Search catalog items
-        _any, _any, catalog_items = catalog_search_task.submit(
+        catalog_items = catalog_search_task.submit(
             flow_env.serialize(),
             catalog_cql2=cql2_filter,
             error_if_empty=False,
@@ -140,7 +140,7 @@ async def auxip_staging(
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        _any, _any, staging_results = staged.result()
+        staging_results = staged.result()
 
         # Check that all jobs monitored were successful. Otherwise, return status is "False"
         return_status = True
