@@ -18,11 +18,11 @@ import datetime
 import json
 
 from prefect import flow, get_run_logger, task
-from prefect.artifacts import acreate_table_artifact
+from prefect.artifacts import acreate_markdown_artifact
 from pystac import ItemCollection
 
 from rs_client.stac.auxip_client import AuxipClient
-from rs_workflows.catalog_flow import catalog_search_task
+from rs_common.utils import create_valcover_filter
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task_auxip
 
@@ -73,7 +73,7 @@ async def auxip_staging(
     cql2_filter: dict,
     catalog_collection_identifier: str,
     timeout_seconds: int = -1,
-):
+) -> tuple[bool, ItemCollection | None]:
     """
     Generic flow to retrieve a list of items matching the STAC CQL2 filter given, and to stage the ones
     that are not already in the catalog.
@@ -84,6 +84,10 @@ async def auxip_staging(
         catalog_collection_identifier (str): Catalog collection identifier where CADIP sessions and AUX data are staged
         timeout_seconds (int): Timeout value for the Auxip search task.
             Optional, if no value is given the process will run until it is completed
+
+    Returns:
+        bool: Return status: False if staging failed, True otherwise
+        ItemCollection: List of Items retrieved from the Auxip search and staged to the catalog
     """
     logger = get_run_logger()
 
@@ -92,14 +96,14 @@ async def auxip_staging(
     with flow_env.start_span(__name__, "auxip-staging"):
 
         # Search Auxip products
-        auxip_items = (
+        auxip_items: ItemCollection | None = (
             search_task.with_options(timeout_seconds=timeout_seconds if timeout_seconds >= 0 else None)
             .submit(
                 flow_env.serialize(),
                 auxip_cql2=cql2_filter,
                 error_if_empty=False,
             )
-            .result()
+            .result()  # type: ignore
         )
 
         # Stop process if search task didn't return any item
@@ -107,34 +111,10 @@ async def auxip_staging(
             logger.info("Nothing to stage: Auxip search with given filter returned empty result.")
             return True, None
 
-        # Search catalog items
-        catalog_items = catalog_search_task.submit(
-            flow_env.serialize(),
-            catalog_cql2=cql2_filter,
-            error_if_empty=False,
-        ).result()
-
-        # Compare results of Auxip search with results of Catalog search
-        # to see what is missing in Catalog
-        if not catalog_items or len(catalog_items) == 0:
-            missing_auxip_items = auxip_items
-        else:
-            missing_items_list = []
-            for item in auxip_items:
-                if item not in catalog_items:
-                    missing_items_list.append(item)
-            missing_auxip_items = ItemCollection(missing_items_list)
-        logger.info(f"Number of items missing in the catalog to stage: {len(missing_auxip_items)}")
-
-        # Stop process if all the Auxip items found are already in the catalog
-        if len(missing_auxip_items) == 0:
-            logger.info("Nothing to stage: all Auxip items found are already in the catalog.")
-            return True, None
-
-        # Stage missing Auxip items
+        # Stage Auxip items
         staged = staging_task_auxip.submit(
             flow_env.serialize(),
-            missing_auxip_items,
+            auxip_items,
             catalog_collection_identifier,
         )
 
@@ -157,13 +137,13 @@ async def auxip_staging(
         # Create artifact if all jobs succeeded
         if return_status:
             logger.info("Staging successful, creating artifact with a list of staged items.")
-            await acreate_table_artifact(
-                table=[missing_auxip_items.to_dict()],
+            await acreate_markdown_artifact(
+                markdown=f"{auxip_items.to_dict()}",
                 key="auxiliary-files",
                 description="Auxiliary files added to catalog.",
             )
 
-        return return_status, missing_auxip_items
+        return return_status, auxip_items
 
 
 @flow(name="On-demand Auxip staging")
@@ -173,7 +153,7 @@ async def on_demand_auxip_staging(
     end_datetime: datetime.datetime | str,
     product_type: str,
     catalog_collection_identifier: str,
-):
+) -> tuple[bool, ItemCollection | None]:
     """
     Flow to retrieve Auxip files using a ValCover filter with the given time interval defined by
     start_datetime and end_datetime, select only the type of files wanted if eopf_type is given, stage
@@ -189,28 +169,14 @@ async def on_demand_auxip_staging(
             (select a date or directly enter a timestamp, e.g. "2025-08-10T14:00:00.509000Z")
         product_type: Auxiliary file type wanted
         catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
+
+    Returns:
+        bool: Return status: False if staging failed, True otherwise
+        ItemCollection: List of Items retrieved from the Auxip search and staged to the catalog
     """
 
-    # Convert datetime inputs to str
-    if isinstance(start_datetime, datetime.datetime):
-        start_datetime = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    if isinstance(end_datetime, datetime.datetime):
-        end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
     # CQL2 filter: we use a filter combining a ValCover filter and a product type filter
-    cql2_filter = {
-        "op": "and",
-        "args": [
-            {"op": "=", "args": [{"property": "product:type"}, product_type]},
-            {
-                "op": "t_contains",
-                "args": [
-                    {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                    {"interval": [start_datetime, end_datetime]},
-                ],
-            },
-        ],
-    }
+    cql2_filter = create_valcover_filter(start_datetime, end_datetime, product_type)
 
     return await auxip_staging.fn(
         env=env,

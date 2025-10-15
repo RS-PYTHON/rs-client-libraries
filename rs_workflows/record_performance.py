@@ -15,6 +15,7 @@
 """Module with task used to insert or update flow run table."""
 
 import os
+import re
 import sys
 from datetime import datetime
 from importlib.metadata import version
@@ -273,43 +274,94 @@ def record_product_realised(flow_run_id, stac_items):
         db.close()
 
 
-def record_product_expected(flow_run_id: str):
-    """Insert a hardcoded record in product_expected table by flow_run_id."""
+def extract_min_datetime(list_items):
+    """Finds the earliest datetime to insert in column sensing_start_datetime of product_expected."""
+
+    datetime_patterns = [(re.compile(r"\d{8}T\d{6}"), "%Y%m%dT%H%M%S"), (re.compile(r"\d{20}"), "%Y%m%d%H%M%S%f")]
+    earliest = None
+
+    for item in list_items:
+        for pattern, fmt in datetime_patterns:
+            match = pattern.search(item)
+            if match:
+                try:
+                    dt = datetime.strptime(match.group(), fmt)
+                    if earliest is None or dt < earliest:
+                        earliest = dt
+                    break
+                except ValueError:
+                    continue
+
+    return earliest
+
+
+def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
+    """Insert hardcoded records in product_expected table by flow_run_id."""
 
     logger = get_run_logger()
     metadata = MetaData()
     db, engine = get_db_session()
     product_expected = Table("product_expected", metadata, autoload_with=engine)
 
+    eopf_type_dict = []
+    # products expected for S3 Level 0
+    if dpr_processor_name == "s3_l0":
+        eopf_type_dict = [
+            ("S03DORDOP", 1, 1),
+            ("S03DORNAV", 1, 1),
+            ("S03GNSL0_", 1, 1),
+            ("S03MWRL0_", 3, 3),
+            ("S03OLCCR0", 0, 1),
+            ("S03OLCCR1", 0, 1),
+            ("S03OLCL0_", 23, 23),
+            ("S03SLSL0_", 15, 22),
+            ("S03ALTL0_", 12, 13),
+            ("S03SRCRL0", 0, 1),
+            ("S03HKML0_", 2, 2),
+            ("S03NATL0_", 2, 2),
+        ]
+    else:
+        return
+
+    eopf_type_lookup = {k: (min_c, max_c) for k, min_c, max_c in eopf_type_dict}
+
+    list_eopf_types = list(payload["workflow"][0]["outputs"].values())
+    list_items = list((payload["workflow"][0]["inputs"]).values())
+    min_val = extract_min_datetime(list_items)
+
     try:
-        values = {
-            "flow_run_id": flow_run_id,
-            "pi_category_id": 1,
-            "eopf_type": "HARDCODED_TYPE",  # hardcoded
-            "sensing_start_datetime": datetime.now(),
-            "min_count": 1,
-            "max_count": 5,
-        }
+        for eopf_type in list_eopf_types:
 
-        # check if record already exists for this flow_run_id
-        existing = db.execute(
-            select(product_expected.c.id).where(product_expected.c.flow_run_id == flow_run_id),
-        ).fetchone()
+            try:
+                min_c, max_c = eopf_type_lookup[eopf_type]
+            except KeyError:
+                logger.error(f"EOPF type '{eopf_type}' not found in eopf_type_lookup.")
+                raise
+            except Exception as e:
+                logger.exception(f"Unexpected error accessing eopf_type_lookup with key '{eopf_type}': {e}")
+                raise
 
-        if existing:
-            stmt = (
-                update(product_expected)
-                .where(product_expected.c.flow_run_id == flow_run_id)
-                .values(**{k: v for k, v in values.items() if k != "flow_run_id"})
-            )
-            db.execute(stmt)
-            logger.info(f"Updated product_expected for flow_run_id={flow_run_id}")
-        else:
-            stmt = insert(product_expected).values(**values)  # type: ignore
-            db.execute(stmt)
-            logger.info(f"Inserted product_expected for flow_run_id={flow_run_id}")
+            values = {
+                "flow_run_id": flow_run_id,
+                "pi_category_id": get_pi_category_id(eopf_type),
+                "eopf_type": eopf_type,
+                "sensing_start_datetime": min_val,
+                "min_count": min_c,
+                "max_count": max_c,
+            }
 
-        db.commit()
+            existing = db.execute(
+                select(product_expected.c.id).where(
+                    (product_expected.c.flow_run_id == flow_run_id) & (product_expected.c.eopf_type == eopf_type),
+                ),
+            ).fetchone()
+
+            if not existing:
+                stmt = insert(product_expected).values(**values)  # type: ignore
+                db.execute(stmt)
+                logger.info(f"Inserted product_expected for flow_run_id={flow_run_id} for eopf_type={eopf_type}")
+
+            db.commit()
 
     except Exception as e:
         db.rollback()
@@ -451,6 +503,7 @@ def record_performance_indicators(
     dpr_processor_version: str | None = None,
     dpr_processor_unit: str | None = None,
     dpr_processing_input_stac_items: str | None = None,
+    payload: dict | None = None,
     # product_realised params
     stac_items=None,
 ):
@@ -473,7 +526,7 @@ def record_performance_indicators(
             dpr_processor_unit,
             dpr_processing_input_stac_items,
         )
-        record_product_expected(flow_run_id)
+        record_product_expected(flow_run_id, dpr_processor_name, payload)
 
         record_product_realised(flow_run_id, stac_items)
 
