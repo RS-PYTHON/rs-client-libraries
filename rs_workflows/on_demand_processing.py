@@ -115,12 +115,17 @@ async def dpr_processing(
                         # 3. Build the CQL2 JSON by replacing the parameters
                         auxip_cql2 = build_cql2_json(task_table, name, parameters)
                         # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
-                        catalog_collection_identifier = f"{dpr_input.satellite}-aux"
+                        product_type = parameters["product_type"]
+                        default_aux_collection = f"{dpr_input.satellite}-aux-{product_type}"
+                        collection = dpr_input.auxiliary_product_to_collection_identifier.get(
+                            product_type,
+                            dpr_input.auxiliary_product_to_collection_identifier.get("*", default_aux_collection),
+                        )
                         # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
                         auxip_items = await auxip_flow.auxip_staging(
                             dpr_input.env,
                             auxip_cql2["stac"],
-                            catalog_collection_identifier,
+                            collection,
                             timeout,
                         )
 
