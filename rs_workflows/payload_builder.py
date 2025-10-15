@@ -21,6 +21,8 @@ from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
+from rs_common.utils import strftime_millis
+
 
 class TaskTableError(ValueError):
     """Errors related to Task Table parsing/validation."""
@@ -33,9 +35,9 @@ def _replace_external_variables(obj, start_datetime, end_datetime):
         return [_replace_external_variables(v, start_datetime, end_datetime) for v in obj]
     if isinstance(obj, str):
         if obj == "{external_variable.start_datetime}":
-            return start_datetime
+            return strftime_millis(start_datetime)
         if obj == "{external_variable.end_datetime}":
-            return end_datetime
+            return strftime_millis(end_datetime)
         return obj
     return obj
 
