@@ -135,10 +135,13 @@ async def on_demand_processing(
             wait_for=staged,  # wait for items to be staged in the catalog
         )
 
+        payload = written.result()
+
         # Run the DPR processor
         processed_items = run_processor.submit(
             flow_env.serialize(),
             processor,
+            payload,
             cluster_info,
             s3_payload_run,
             use_dpr_mockup,

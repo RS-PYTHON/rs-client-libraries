@@ -110,7 +110,7 @@ async def write_payload(
     catalog_collection_identifier: str,
     s3_output_data: str,
     s3_payload_run: str,
-):
+) -> dict:
     """
     Write the final payload file from its template version and staged items.
 
@@ -238,11 +238,15 @@ async def write_payload(
             # Upload the new config payload file back to S3
             await prefect_utils.s3_upload_file(temp.name, s3_payload_run)
 
+        # Output used by product_expected
+        return payload
+
 
 @task(name="Run DPR processor")
 async def run_processor(
     env: FlowEnvArgs,
     processor: ProcessorEnum,
+    payload: dict,
     cluster_info: ClusterInfo,
     s3_payload_run: str,
     use_dpr_mockup: bool = False,
@@ -265,6 +269,7 @@ async def run_processor(
             start_date=datetime.datetime.now(),
             status="OK",
             dpr_processing_input_stac_items=s3_payload_run,
+            payload=payload,
             dpr_processor_name=processor.value,
         )
         # Trigger the processor run from the dpr service

@@ -14,6 +14,7 @@
 """Module for testing <<record flow run>>"""
 
 import sys
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -21,6 +22,7 @@ from sqlalchemy import Boolean, Column, Integer, MetaData, Select, String, Table
 from sqlalchemy.sql.dml import Insert, Update
 
 import rs_workflows.record_performance as record_flow_module
+from rs_workflows.record_performance import extract_min_datetime
 
 # pylint: disable = redefined-outer-name, unused-argument, assignment-from-none
 
@@ -63,6 +65,18 @@ def mock_db_env(monkeypatch, mocker):
         Column("eopf_type", String),
     )
 
+    mock_product_expected_table = Table(
+        "product_expected",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("flow_run_id", String),
+        Column("pi_category_id", Integer),
+        Column("eopf_type", String),
+        Column("sensing_start_datetime", String),
+        Column("min_count", Integer),
+        Column("max_count", Integer),
+    )
+
     def table_side_effect(name, metadata, **kwargs):
         if name == "product_realised":
             return mock_product_table
@@ -81,6 +95,8 @@ def mock_db_env(monkeypatch, mocker):
                 Column("id", Integer, primary_key=True),
                 Column("prefect_flow_id", String),
             )
+        if name == "product_expected":
+            return mock_product_expected_table
         raise ValueError(f"Unmocked table: {name}")
 
     mocker.patch("rs_workflows.record_performance.Table", side_effect=table_side_effect)
@@ -407,6 +423,92 @@ def test_get_flow_run_id_db_exception(mock_db_env):
     mock_session.close.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    "input_item, expected_str, datetime_format",
+    [
+        ("S1A_OPER_MPL_ORBSCT_20200829T150704_99999999T999999_0025", "20200829T150704", "%Y%m%dT%H%M%S"),
+        ("S1A_20200105072204051312", "20200105072204051312", "%Y%m%d%H%M%S%f"),
+    ],
+)
+def test_min_valid_datetime_formats(input_item, expected_str, datetime_format):
+    """Test for the minimum datetime from an input_item"""
+    expected = datetime.strptime(expected_str, datetime_format)
+    assert extract_min_datetime([input_item]) == expected
+
+
+def test_record_product_expected_insert_data(mock_db_env, mocker):
+    """
+    Test that product_expected inserts new records into the product_expected table
+    when no existing records are found.
+    """
+    mock_session, _ = mock_db_env
+
+    # Simulate: no record exists for this flow_run_id + eopf_type
+    mock_session.execute.return_value.fetchone.return_value = None
+
+    flow_run_id = "test-flow-id"
+    dpr_processor_name = "s3_l0"
+    payload = {
+        "workflow": [
+            {
+                "inputs": {"AUX1": "S1A_OPER_AUX_RESORB_OPOD_20251008T123456_V20200123T071044_20200123T102814"},
+                "outputs": {"out1": "S03DORDOP", "out2": "S03MWRL0_"},
+            },
+        ],
+    }
+
+    # Patch dependencies
+    mocker.patch.object(record_flow_module, "extract_min_datetime", return_value="2025-10-08T12:34:56")
+    mocker.patch.object(record_flow_module, "get_pi_category_id", return_value=99)
+
+    # Call the function
+    record_flow_module.record_product_expected(flow_run_id, dpr_processor_name, payload)
+
+    # Grab all insert calls
+    execute_calls = mock_session.execute.call_args_list
+    insert_calls = [call for call in execute_calls if isinstance(call[0][0], Insert)]
+
+    assert len(insert_calls) == 2, "Expected 2 INSERT calls for 2 eopf_type outputs"
+
+    for call in insert_calls:
+        insert_stmt = call[0][0]
+        assert insert_stmt.table.name == "product_expected"
+
+    assert mock_session.commit.call_count == 2
+
+
+def test_record_product_expected_rollback_on_keyerror(mocker, mock_db_env):
+    """
+    Test that product_expected rolls back and logs error if an unknown eopf_type causes KeyError.
+    """
+    mock_session, _ = mock_db_env
+
+    mock_logger = MagicMock()
+    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+
+    mocker.patch("rs_workflows.record_performance.extract_min_datetime", return_value="2025-01-01T00:00:00")
+    mocker.patch("rs_workflows.record_performance.get_pi_category_id", return_value=1)
+
+    # Provide a payload with an unknown eopf_type
+    payload = {
+        "workflow": [
+            {"inputs": {"AUX1": "S1A_OPER_AUX_OBMEMC_PDMC_20210211T000000"}, "outputs": {"out1": "UNKNOWN_EOPF_TYPE"}},
+        ],
+    }
+
+    with pytest.raises(KeyError):
+        record_flow_module.record_product_expected("flow-error", "s3_l0", payload)
+
+    mock_session.rollback.assert_called_once()
+
+    assert any(
+        "EOPF type 'UNKNOWN_EOPF_TYPE' not found in eopf_type_lookup" in str(call.args[0])
+        for call in mock_logger.error.call_args_list
+    )
+
+    mock_session.close.assert_called_once()
+
+
 def test_inserts_missing_products(mock_db_env, mock_tables, mocker):
     """Should insert into product_missing when realised < min_count and not already recorded."""
     mock_session, _ = mock_db_env
@@ -625,55 +727,3 @@ def test_rollback_on_exception(mock_db_env, mock_tables, mocker):
     mock_session.rollback.assert_called_once()
     logger.error.assert_any_call("Error in validate_products: err!")
     mock_session.close.assert_called_once()
-
-
-def test_record_product_expected_insert(mock_tables, mocker):
-    """Should insert a new product_expected if none exists."""
-
-    # Mock logger
-    mock_logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
-
-    # Mock DB session
-    mock_db = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_db_session", return_value=(mock_db, MagicMock()))
-
-    # No existing record
-    mock_db.execute.return_value.fetchone.return_value = None
-
-    flow_run_id = "FLOW123"
-    record_flow_module.record_product_expected(flow_run_id)
-
-    stmt = mock_db.execute.call_args[0][0]
-    # Check that it tried to insert
-    assert isinstance(stmt, Insert) or hasattr(stmt, "values")
-    mock_logger.info.assert_any_call(f"Inserted product_expected for flow_run_id={flow_run_id}")
-    mock_db.commit.assert_called_once()
-    mock_db.rollback.assert_not_called()
-    mock_db.close.assert_called_once()
-
-
-def test_record_product_expected_update(mock_tables, mocker):
-    """Should update product_expected if record already exists."""
-
-    # Mock logger
-    mock_logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
-
-    # Mock DB session
-    mock_db = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_db_session", return_value=(mock_db, MagicMock()))
-
-    # Existing record
-    mock_db.execute.return_value.fetchone.return_value = (1,)
-
-    flow_run_id = "FLOW123"
-    record_flow_module.record_product_expected(flow_run_id)
-
-    stmt = mock_db.execute.call_args[0][0]
-    # Check that it tried to update
-    assert isinstance(stmt, Update) or hasattr(stmt, "values")
-    mock_logger.info.assert_any_call(f"Updated product_expected for flow_run_id={flow_run_id}")
-    mock_db.commit.assert_called_once()
-    mock_db.rollback.assert_not_called()
-    mock_db.close.assert_called_once()
