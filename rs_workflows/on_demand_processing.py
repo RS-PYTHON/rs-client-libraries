@@ -153,13 +153,14 @@ async def dpr_processing(
         )
         ## end RSPY800
 
+        use_dpr_mockup = dpr_input.processor_name == "mockup"
         # Run the DPR processor
         processed_items = run_processor.submit(
             flow_env.serialize(),
             dpr_input.processor_name,
             cluster_info,
             s3_payload_run,
-            dpr_input.use_dpr_mockup,
+            use_dpr_mockup,
             wait_for=written,
         )
 

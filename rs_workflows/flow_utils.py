@@ -40,6 +40,38 @@ class ProcessorEnum(str, Enum):
     S1ARD = "s1_ard"
 
 
+class Priority(str, Enum):
+    """
+    Priority for the cluster dask to be able to prioritise task execution.
+    """
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class WorkflowType(str, Enum):
+    """
+    Workflow type.
+    """
+
+    BENCHMARKING = "benchmarking"
+    ON_DEMAND = "on-demand"
+    SYSTEMATIC = "systematic"
+
+
+class ProcessingMode(str, Enum):
+    """
+    List of mode to be applied when calling the DPR processor.
+    """
+
+    NRT = "nrt"
+    NTC = "ntc"
+    REPROCESSING = "reprocessing"
+    SUBS = "subs"
+    ALWAYS = "always"
+
+
 @dataclass
 class FlowEnvArgs:
     """
@@ -132,38 +164,6 @@ class FlowEnv:
             yield span
 
 
-class Priority(str, Enum):
-    """
-    Priority for the cluster dask to be able to prioritise task execution.
-    """
-
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-
-
-class WorkflowType(str, Enum):
-    """
-    Workflow type.
-    """
-
-    BENCHMARKING = "benchmarking"
-    ON_DEMAND = "on-demand"
-    SYSTEMATIC = "systematic"
-
-
-class ProcessingMode(str, Enum):
-    """
-    List of mode to be applied when calling the DPR processor.
-    """
-
-    NRT = "nrt"
-    NTC = "ntc"
-    REPROCESSING = "reprocessing"
-    SUBS = "subs"
-    ALWAYS = "always"
-
-
 @dataclass
 class DprProcessIn:  # pylint: disable=too-many-instance-attributes
     """
@@ -186,7 +186,6 @@ class DprProcessIn:  # pylint: disable=too-many-instance-attributes
     auxiliary_product_to_collection_identifier: dict[str, str] = field(default_factory=dict)
 
     processing_mode: list[ProcessingMode] = field(default_factory=list)
-    use_dpr_mockup: bool = False
     start_datetime: datetime | None = None
     end_datetime: datetime | None = None
     satellite: str | None = None

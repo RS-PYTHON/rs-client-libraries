@@ -234,7 +234,6 @@ async def test_dpr_processing(
         generated_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
         auxiliary_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
         processing_mode=["nrt"],  # type: ignore[list-item]
-        use_dpr_mockup=False,
         start_datetime=None,
         end_datetime=None,
         satellite="S3A",
