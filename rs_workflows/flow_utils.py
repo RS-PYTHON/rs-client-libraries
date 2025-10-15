@@ -26,18 +26,9 @@ from opentelemetry.util._decorator import _agnosticcontextmanager
 from prefect import get_run_logger
 from pystac import Item
 
+from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_client.rs_client import RsClient
 from rs_common import init_opentelemetry, prefect_utils
-
-
-class ProcessorEnum(str, Enum):
-    """DPR processor name"""
-
-    # String value = resource name in the rs-dpr-service
-    MOCKUP = "mockup"
-    S1L0 = "s1_l0"
-    S3L0 = "s3_l0"
-    S1ARD = "s1_ard"
 
 
 class Priority(str, Enum):
@@ -171,7 +162,7 @@ class DprProcessIn:  # pylint: disable=too-many-instance-attributes
     """
 
     env: FlowEnvArgs
-    processor_name: ProcessorEnum
+    processor_name: DprProcessor
     processor_version: str
     dask_cluster_label: str
     # 'pipeline' or 'unit' must be provided

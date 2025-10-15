@@ -22,7 +22,7 @@ from pathlib import Path
 from prefect import flow
 from prefect.artifacts import acreate_markdown_artifact
 
-from rs_client.ogcapi.dpr_client import ClusterInfo
+from rs_client.ogcapi.dpr_client import ClusterInfo, DprProcessor
 from rs_common import prefect_utils
 from rs_common.utils import create_valcover_filter
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
@@ -34,7 +34,6 @@ from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
     FlowEnvArgs,
-    ProcessorEnum,
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.staging_flow import (
@@ -61,7 +60,6 @@ async def dpr_processing(
         s3_payload_template: S3 bucket location of the DPR payload file template.
         s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
         catalog bucket.
-        use_dpr_mockup: Use the real or the mockup DPR processor ?
     """
     s3_payload_template = (
         "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
@@ -84,7 +82,7 @@ async def dpr_processing(
         )
 
         # read tasktable and construct list of processing units
-        if dpr_input.processor_name == "mockup":
+        if dpr_input.processor_name == DprProcessor.MOCKUP:
             s3_payload_template = (
                 f"s3://rs-dev-cluster-temp/prefect-share/users/{flow_env.owner_id}/"
                 f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
@@ -159,7 +157,6 @@ async def dpr_processing(
         )
         ## end RSPY800
 
-        use_dpr_mockup = dpr_input.processor_name == "mockup"
         payload = written.result()
 
         # Run the DPR processor
@@ -169,7 +166,6 @@ async def dpr_processing(
             payload,
             cluster_info,
             s3_payload_run,
-            use_dpr_mockup,
             wait_for=written,
         )
 

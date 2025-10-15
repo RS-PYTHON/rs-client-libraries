@@ -24,10 +24,10 @@ from prefect import get_run_logger, task
 from pydantic import BaseModel
 from pystac import ItemCollection
 
-from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcess
+from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, ProcessorEnum
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.record_performance import record_performance_indicators
 
 
@@ -75,7 +75,7 @@ async def read_payload_values(s3_payload: str) -> PayloadValues:
 @task(name="Read TaskTable")
 async def read_tasktable(
     env: FlowEnvArgs,
-    processor: ProcessorEnum,  # pylint: disable=unused-argument
+    processor: DprProcessor,  # pylint: disable=unused-argument
     cluster_info: ClusterInfo,  # pylint: disable=unused-argument
     payload_values: PayloadValues,  # pylint: disable=unused-argument
     cadip_items: ItemCollection,  # pylint: disable=unused-argument
@@ -245,11 +245,10 @@ async def write_payload(
 @task(name="Run DPR processor")
 async def run_processor(
     env: FlowEnvArgs,
-    processor: ProcessorEnum,
+    processor: DprProcessor,
     payload: dict,
     cluster_info: ClusterInfo,
     s3_payload_run: str,
-    use_dpr_mockup: bool = False,
 ) -> list[dict]:
     """
     Run the DPR processor.
@@ -258,7 +257,6 @@ async def run_processor(
         env: Prefect flow environment
         processor: DPR processor name
         s3_payload_run: S3 bucket location of the output final DPR payload file.
-        use_dpr_mockup: Use the real or the mockup DPR processor ?
     """
     logger = get_run_logger()
 
@@ -275,7 +273,7 @@ async def run_processor(
         # Trigger the processor run from the dpr service
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
         job_status = dpr_client.run_process(
-            process=DprProcess.MOCKUP if use_dpr_mockup else DprProcess(processor.value),
+            process=processor,
             cluster_info=cluster_info,
             s3_config_dir=osp.dirname(s3_payload_run),
             payload_subpath=osp.basename(s3_payload_run),
