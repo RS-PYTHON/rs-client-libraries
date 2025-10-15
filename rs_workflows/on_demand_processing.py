@@ -22,6 +22,7 @@ from prefect import flow
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
+from rs_common.utils import create_valcover_filter
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
 from rs_workflows.dpr_flow import (
     read_payload_values,
@@ -33,7 +34,6 @@ from rs_workflows.flow_utils import (
     FlowEnv,
     FlowEnvArgs,
     ProcessorEnum,
-    create_valcover_filter,
 )
 from rs_workflows.staging_flow import (
     staging_task_auxip,

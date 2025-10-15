@@ -22,7 +22,8 @@ from prefect.artifacts import acreate_markdown_artifact
 from pystac import ItemCollection
 
 from rs_client.stac.auxip_client import AuxipClient
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, create_valcover_filter
+from rs_common.utils import create_valcover_filter
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task_auxip
 
 ###############

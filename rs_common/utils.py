@@ -16,6 +16,7 @@
 
 import os
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass
@@ -68,3 +69,45 @@ def env_bool(var: str, default: bool) -> bool:
     if val in ("n", "no", "f", "false", "off", "0"):
         return False
     return default
+
+
+def strftime_millis(date: datetime):
+    """Format datetime with milliseconds precision"""
+    return date.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def create_valcover_filter(
+    start_datetime: datetime | str,
+    end_datetime: datetime | str,
+    product_type: str,
+) -> dict:
+    """Creates a ValCover filter from the input values to be used in flows
+
+    Args:
+        start_datetime: Start datetime for the time interval used to filter the files
+        end_datetime: End datetime for the time interval used to filter the files
+        product_type: Auxiliary file type wanted
+
+    Returns:
+        dict: ValCover filter
+    """
+    # Convert datetime inputs to str
+    if isinstance(start_datetime, datetime):
+        start_datetime = strftime_millis(start_datetime)
+    if isinstance(end_datetime, datetime):
+        end_datetime = strftime_millis(end_datetime)
+
+    # CQL2 filter: we use a filter combining a ValCover filter and a product type filter
+    return {
+        "op": "and",
+        "args": [
+            {"op": "=", "args": [{"property": "product:type"}, product_type]},
+            {
+                "op": "t_contains",
+                "args": [
+                    {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                    {"interval": [start_datetime, end_datetime]},
+                ],
+            },
+        ],
+    }

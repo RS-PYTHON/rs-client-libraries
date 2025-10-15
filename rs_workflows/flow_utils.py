@@ -14,7 +14,6 @@
 
 """Utility module for the Prefect flows."""
 
-import datetime
 import os
 from collections.abc import Iterator
 from enum import Enum
@@ -127,40 +126,3 @@ class FlowEnv:
         ) as span:
             self.this_span = trace.get_current_span().get_span_context()
             yield span
-
-
-def create_valcover_filter(
-    start_datetime: datetime.datetime | str,
-    end_datetime: datetime.datetime | str,
-    product_type: str,
-) -> dict:
-    """Creates a ValCover filter from the input values to be used in flows
-
-    Args:
-        start_datetime: Start datetime for the time interval used to filter the files
-        end_datetime: End datetime for the time interval used to filter the files
-        product_type: Auxiliary file type wanted
-
-    Returns:
-        dict: ValCover filter
-    """
-    # Convert datetime inputs to str
-    if isinstance(start_datetime, datetime.datetime):
-        start_datetime = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-    if isinstance(end_datetime, datetime.datetime):
-        end_datetime = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
-    # CQL2 filter: we use a filter combining a ValCover filter and a product type filter
-    return {
-        "op": "and",
-        "args": [
-            {"op": "=", "args": [{"property": "product:type"}, product_type]},
-            {
-                "op": "t_contains",
-                "args": [
-                    {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                    {"interval": [start_datetime, end_datetime]},
-                ],
-            },
-        ],
-    }
