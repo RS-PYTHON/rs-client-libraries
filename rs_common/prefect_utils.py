@@ -35,6 +35,7 @@ from prefect.exceptions import ObjectNotFound
 from prefect.utilities.asyncutils import sync_compatible
 from prefect_aws import AwsCredentials, S3Bucket
 
+from rs_common.logging import Logging
 from rs_common.utils import env_bool
 
 # In local mode, all your services are running locally.
@@ -54,6 +55,8 @@ BLOCK_NAME_SHARE_BUCKET_USER: str = "share-bucket-{0}"  # share bucket for the u
 
 # S3 bucket object for each bucket name.
 S3_BUCKETS: dict[str, S3Bucket] = {}
+
+logger = Logging.default(__name__)
 
 
 def init_global_env(new_owner_id: str | None = None):
@@ -92,7 +95,7 @@ def format_env_user(block_name: str, any_owner_id: str):
 
 
 @sync_compatible
-async def read_apikey(optional: bool = True, save_to_env: bool = True) -> None:
+async def read_apikey(optional: bool = False, save_to_env: bool = True) -> None:
     """
     Read the API key, either from the environment variable or from an interactive input form.
 
@@ -107,8 +110,11 @@ async def read_apikey(optional: bool = True, save_to_env: bool = True) -> None:
     # If the API is saved as an env var in the ~/.env file, then it has already
     # been read automatically by rs-infra-core/.github/jupyter/resources/00-read-env.py
     apikey = os.getenv("RSPY_APIKEY")
-    if (not apikey) and (not optional):
-
+    if apikey:
+        logger.debug(f"Use API key (probably from '~/.env'): '{apikey[:4]}***'")
+    elif optional:
+        logger.debug("Don't use any API key")
+    else:
         # Else read it from user input
         apikey = getpass.getpass("Enter your API key:")
 
@@ -120,7 +126,7 @@ async def read_apikey(optional: bool = True, save_to_env: bool = True) -> None:
         if save_to_env:
             with open(os.path.expanduser("~/.env"), "a", encoding="utf-8") as env_file:
                 env_file.write(f"\nRSPY_APIKEY={apikey}\n")
-                print("API key saved to ~/.env.")
+                logger.debug("API key saved to '~/.env'")
 
 
 @sync_compatible
@@ -223,13 +229,13 @@ async def wait_for_deployment(name: str, wait: int | float = 1, max_retry: int =
         while True:
             try:
                 await client.read_deployment_by_name(name)
-                print(f"Finished deploying prefect flow: {name!r}")
+                logger.info(f"Finished deploying prefect flow: {name!r}")
                 return
             except ObjectNotFound:
                 retry += 1
                 if retry >= max_retry:
                     raise
-                print(f"Wait for deployment of prefect flow: {name!r} ...")
+                logger.info(f"Wait for deployment of prefect flow: {name!r} ...")
                 await asyncio.sleep(wait)
 
 
