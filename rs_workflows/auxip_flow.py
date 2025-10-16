@@ -24,7 +24,7 @@ from pystac import ItemCollection
 from rs_client.stac.auxip_client import AuxipClient
 from rs_common.utils import create_valcover_filter
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from rs_workflows.staging_flow import staging_task_auxip
+from rs_workflows.staging_flow import staging_task
 
 ###############
 # Auxip flows #
@@ -112,7 +112,7 @@ async def auxip_staging(
             return True, None
 
         # Stage Auxip items
-        staged = staging_task_auxip.submit(
+        staged = staging_task.submit(
             flow_env.serialize(),
             auxip_items,
             catalog_collection_identifier,
@@ -194,3 +194,9 @@ async def on_demand_auxip_staging(
 async def search_task(*args, **kwargs) -> ItemCollection | None:
     """See: search"""
     return await search.fn(*args, **kwargs)
+
+
+@task(name="Auxip staging")
+async def auxip_staging_task(*args, **kwargs) -> tuple[bool, ItemCollection | None]:
+    """See: auxip_staging"""
+    return await auxip_staging.fn(*args, **kwargs)

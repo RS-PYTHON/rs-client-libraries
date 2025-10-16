@@ -37,15 +37,12 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
-from rs_workflows.staging_flow import (
-    staging_task_cadip,
-    staging_task_prip,
-)
+from rs_workflows.staging_flow import staging_task
 
 
 @task
 async def process_input_adfs(input_adfs, dpr_input, task_table):
-    # returnează lista de auxip_items găsite
+    # Return list of auxip items
     all_auxip_items = []
 
     # For each "alternative" ( get it following the "order" )
@@ -64,12 +61,12 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
             dpr_input.auxiliary_product_to_collection_identifier.get("*", default_aux_collection),
         )
         # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
-        auxip_items = await auxip_flow.auxip_staging(
+        auxip_items = auxip_flow.auxip_staging_task.submit(
             dpr_input.env,
-            auxip_cql2["stac"],
+            auxip_cql2,  # ["stac"],
             collection,
             timeout,
-        )
+        ).result()
         # save auxip cql2 json as flow artefact
         md = "# Auxip CQL2 filter \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
         # Artifact key must only contain lowercase letters, numbers, and dashes.
@@ -84,7 +81,7 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
     return all_auxip_items
 
 
-@flow(name="dpr-processing", task_runner=ConcurrentTaskRunner())
+@flow(name="dpr-processing")
 async def dpr_processing(
     dpr_input: DprProcessIn,
 ):
@@ -154,12 +151,14 @@ async def dpr_processing(
             except KeyError as kerr:
                 raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
 
+        # Wait for Alex part
+        return
+
         # start RSPY 800
 
         # Auxip item ids
         item_ids: list[str] = []
-        # Stage Auxip items.
-        # Note: the only difference between staging_task_auxip and
+        # Stage Auxip items
         staged = [auxip_items]
 
         # Write the final payload file from its template version and staged items.
@@ -232,7 +231,7 @@ async def on_demand_cadip_staging(
         )
 
         # Stage Cadip items.
-        staged = staging_task_cadip.submit(flow_env.serialize(), cadip_items, catalog_collection_identifier)
+        staged = staging_task.submit(flow_env.serialize(), cadip_items, catalog_collection_identifier)
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
@@ -280,7 +279,7 @@ async def on_demand_prip_staging(
         )
 
         # Stage Prip items
-        staged = staging_task_prip.submit(
+        staged = staging_task.submit(
             flow_env.serialize(),
             prip_items,
             catalog_collection_identifier,
