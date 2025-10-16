@@ -15,6 +15,7 @@
 """Test the payload_builder module"""
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -98,6 +99,8 @@ def test_build_unit_list_returns_dict(case_id, cfg):  # pylint: disable=unused-a
         pipeline=cfg["kwargs"].get("pipeline"),
         unit=cfg["kwargs"].get("unit"),
         processing_mode=cfg["kwargs"].get("processing_mode"),
+        start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
     )
     assert isinstance(out, dict)
 

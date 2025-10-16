@@ -136,14 +136,14 @@ async def dpr_processing(
 
                         if idx == len(input_adfs["alternatives"]) - 1 and not auxip_items:
                             #  Last one and still nothing → raise runtime
-                            raise RuntimeError(f"All ADFS searched, no items found.")
+                            raise RuntimeError("All ADFS searched, no items found.")
             except KeyError as kerr:
                 raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
 
         # start RSPY 800
 
         # Auxip item ids
-        item_ids = []
+        item_ids: list[str] = []
         # Stage Auxip items.
         # Note: the only difference between staging_task_auxip and
         staged = [auxip_items]
@@ -155,7 +155,7 @@ async def dpr_processing(
             flow_env.serialize(),
             s3_payload_template,
             item_ids,
-            catalog_collection_identifier,
+            "*",
             s3_output_data,
             s3_payload_run,
             wait_for=staged,  # wait for items to be staged in the catalog
@@ -177,7 +177,7 @@ async def dpr_processing(
         # Publish processed items to the catalog
         published = catalog_flow.publish.submit(
             flow_env.serialize(),
-            catalog_collection_identifier,
+            "*",
             processed_items,
             s3_output_data,
         )

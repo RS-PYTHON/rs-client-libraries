@@ -49,7 +49,9 @@ def _select_unit_names(tasktable: dict[str, Any], *, pipeline: str | None) -> li
     # Find pipeline by name
     pl = next((p for p in tasktable["pipelines"] if p.get("name") == pipeline), None)
     if not pl:
-        raise TaskTableError(f'Pipeline "{pipeline}" not found.')
+        available = [p.get("name") for p in tasktable.get("pipelines", []) if p.get("name")]
+        available_str = ", ".join([f'"{n}"' for n in available]) if available else '"<none>"'
+        raise TaskTableError(f'Pipeline "{pipeline}" not found. Available pipelines: {available_str}')
 
     steps = pl.get("steps")
     if not isinstance(steps, list) or not steps:
@@ -179,7 +181,9 @@ def build_unit_list(
     if unit:
         unit_names = [unit]
         if unit not in units_index:
-            raise TaskTableError(f'Unit {unit} not found in "units".')
+            units = list(units_index)
+            available = ", ".join(f"'{u}'" for u in units)
+            raise TaskTableError(f'Unit "{unit}" not found in "units". Available units: {available}.')
     else:
         unit_names = _select_unit_names(tasktable, pipeline=pipeline)
 
