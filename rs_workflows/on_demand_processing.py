@@ -98,7 +98,7 @@ async def dpr_processing(
             end_datetime=dpr_input.end_datetime,
         )
         unit_list = out["units"]
-        md = "# Units list\n\n```json\n" + json.dumps(unit_list, indent=2) + "\n```"
+        md = "# List of processing units\n\n```json\n" + json.dumps(unit_list, indent=2) + "\n```"
         # Artifact key must only contain lowercase letters, numbers, and dashes.
         await acreate_markdown_artifact(key="processing-unit-list", markdown=md, description="List of processing units")
 
@@ -130,9 +130,9 @@ async def dpr_processing(
                         )
 
                         # save auxip cql2 json as flow artefact
-                        md = "# Auxip CQL2 JSON \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
+                        md = "# Auxip CQL2 filter \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
                         # Artifact key must only contain lowercase letters, numbers, and dashes.
-                        await acreate_markdown_artifact(key="auxip-cql", markdown=md, description="Auxip CQL2 filter")
+                        await acreate_markdown_artifact(key="auxip-cql2", markdown=md, description="Auxip CQL2 filter")
 
                         if idx == len(input_adfs["alternatives"]) - 1 and not auxip_items:
                             #  Last one and still nothing → raise runtime
