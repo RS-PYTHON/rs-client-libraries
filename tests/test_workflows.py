@@ -17,7 +17,7 @@
 import json
 import os
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
@@ -51,7 +51,7 @@ OWNER_ID = "OWNER_ID"
 S3_PAYLOAD = "S3_PAYLOAD"
 RSPY_WEBSITE = "RSPY_WEBSITE"
 RSPY_APIKEY = "RSPY_APIKEY"
-
+CONFIG_DIR = Path(__file__).parent / "resources"
 # Recursive defaultdict, see: https://stackoverflow.com/a/8702435
 MOCK_DICT = lambda: defaultdict(MOCK_DICT)  # type: ignore # pylint: disable=unnecessary-lambda-assignment # noqa: E731
 
@@ -103,6 +103,12 @@ class MockRsClient(Mock):
         """Mock DprClient wait_for_jobs"""
         return {"job_status": {"status": "successful"}}
 
+    def get_process(self, *_, **__):
+        """Mock DprClient get_process"""
+        filename = "tasktable.json"
+        with open(CONFIG_DIR / filename, encoding="utf-8") as f:
+            return json.load(f)
+
 
 @pytest.fixture(autouse=True)
 def mock_record_performance_indicators(mocker):
@@ -123,7 +129,7 @@ def mock_record_performance_indicators(mocker):
 
 
 async def mock_s3_download_file(
-    s3_path: str,
+    s3_path: str,  # pylint: disable=unused-argument
     to_path: str | Path | None,
     **__: dict[str, Any],
 ) -> Path:
@@ -132,10 +138,9 @@ async def mock_s3_download_file(
         return Path()
 
     # Mock the downloading of S3_PAYLOAD
-    if s3_path.startswith(S3_PAYLOAD):
-        with open(to_path, "w", encoding="utf-8") as opened:
-            opened.write(
-                """
+    with open(to_path, "w", encoding="utf-8") as opened:
+        opened.write(
+            """
 workflow:
 - name: workflow_name
   module: workflow_module
@@ -144,8 +149,7 @@ workflow:
     out1: output1
     out2: output2
 """,
-            )
-
+        )
     return Path(to_path)
 
 
@@ -210,15 +214,15 @@ async def test_dpr_processing(
     spied = {
         mocker.spy(prefect_function, "fn"): call_count  # spy on <flow>.fn or <task>.fn = the underlying python function
         for prefect_function, call_count in {
-            auxip_flow.search: 1,
-            auxip_flow.search_task: 1,
-            cadip_flow.search: 1,
-            cadip_flow.search_task: 1,
-            dpr_flow.read_payload_values: 1,
+            auxip_flow.search: 2,
+            auxip_flow.search_task: 2,
+            cadip_flow.search: 0,
+            cadip_flow.search_task: 0,
+            dpr_flow.read_payload_values: 0,
             dpr_flow.write_payload: 1,
             dpr_flow.run_processor: 1,
-            staging_flow.staging_task_auxip: 1,
-            staging_flow.staging_task_cadip: 1,
+            staging_flow.staging_task_auxip: 2,
+            staging_flow.staging_task_cadip: 0,
             staging_flow.staging: 2,
             catalog_flow.publish: 1,
         }.items()
@@ -227,17 +231,17 @@ async def test_dpr_processing(
     # Run the prefect flow
     dpr_input = DprProcessIn(
         env=FlowEnvArgs(owner_id=OWNER_ID),
-        processor_name=DprProcessor.S1L0,
+        processor_name=DprProcessor.MOCKUP,
         processor_version="1.0",
-        pipeline="s1_l0_full",
+        pipeline="mockup_full",
         dask_cluster_label="cluster_label",
         input_products={},  # Item STAC
         generated_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
         auxiliary_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
         processing_mode=["nrt"],  # type: ignore[list-item]
-        start_datetime=None,
-        end_datetime=None,
-        satellite="S3A",
+        start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+        satellite="S1A",
     )
     await on_demand_processing.dpr_processing(dpr_input)
 
