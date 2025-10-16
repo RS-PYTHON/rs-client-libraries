@@ -40,7 +40,7 @@ from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.staging_flow import staging_task
 
 
-@task
+@task(name="Process input ADFS")
 async def process_input_adfs(input_adfs, dpr_input, task_table):
     # Return list of auxip items
     all_auxip_items = []
