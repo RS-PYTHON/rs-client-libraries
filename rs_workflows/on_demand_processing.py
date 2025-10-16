@@ -176,7 +176,7 @@ async def dpr_processing(
             s3_payload_run,
             wait_for=staged,  # wait for items to be staged in the catalog
         )
-        ## end RSPY800
+        # end RSPY800
 
         payload = written.result()
 
