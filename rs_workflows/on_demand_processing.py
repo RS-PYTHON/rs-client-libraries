@@ -18,7 +18,6 @@
 import datetime
 import json
 import os
-from pathlib import Path
 
 from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
@@ -26,11 +25,7 @@ from prefect.artifacts import acreate_markdown_artifact
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprProcessor
 from rs_common import prefect_utils
 from rs_common.utils import create_valcover_filter
-from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
-from rs_workflows.dpr_flow import (
-    run_processor,
-    write_payload,
-)
+from rs_workflows import auxip_flow, cadip_flow, prip_flow
 from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
@@ -103,16 +98,9 @@ async def dpr_processing(
         s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
         catalog bucket.
     """
-    s3_payload_template = (
-        "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
-    )
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(dpr_input.env)
-
-    bucket = "rs-dev-cluster-temp"
-    prefix = "prefect-share"
-    s3_output_data = f"s3://{bucket}/{prefix}/users/{flow_env.owner_id}/l0/output/s3"
 
     with flow_env.start_span(__name__, "dpr-processing"):
 
@@ -125,6 +113,7 @@ async def dpr_processing(
 
         # read tasktable and construct list of processing units
         if dpr_input.processor_name == DprProcessor.MOCKUP:
+            # pylint: disable-next=unused-variable
             s3_payload_template = (
                 f"s3://rs-dev-cluster-temp/prefect-share/users/{flow_env.owner_id}/"
                 f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
@@ -151,57 +140,13 @@ async def dpr_processing(
                 tasks.append(process_input_adfs.submit(input_adfs, dpr_input, task_table))
 
         try:
+            # pylint: disable-next=unused-variable
             auxip_items = [item for t in tasks for item in t.result()]
         except KeyError as kerr:
             raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
 
         # Wait for Alex part
         return
-
-        # start RSPY 800
-
-        # Auxip item ids
-        item_ids: list[str] = []
-        # Stage Auxip items
-        staged = [auxip_items]
-
-        # Write the final payload file from its template version and staged items.
-        # It will be uploaded in the same s3 dir than the template file.
-        s3_payload_run = s3_payload_template + ".run" + Path(s3_payload_template).suffix
-        written = write_payload.submit(
-            flow_env.serialize(),
-            s3_payload_template,
-            item_ids,
-            "*",
-            s3_output_data,
-            s3_payload_run,
-            wait_for=staged,  # wait for items to be staged in the catalog
-        )
-        # end RSPY800
-
-        payload = written.result()
-
-        # Run the DPR processor
-        processed_items = run_processor.submit(
-            flow_env.serialize(),
-            dpr_input.processor_name,
-            payload,
-            cluster_info,
-            s3_payload_run,
-            wait_for=written,
-        )
-
-        # Publish processed items to the catalog
-        published = catalog_flow.publish.submit(
-            flow_env.serialize(),
-            "*",
-            processed_items,
-            s3_output_data,
-        )
-
-        # Wait for last task to end.
-        # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        published.result()  # type: ignore[unused-coroutine]
 
 
 @flow(name="On-demand Cadip staging")
