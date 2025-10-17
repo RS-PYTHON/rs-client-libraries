@@ -96,8 +96,9 @@ class GeneralConfiguration(BaseModel):
     triggering__dask_monitor__cancel: Optional[bool] = None
     triggering__dask_monitor__cancel_state: Optional[str] = None
     
-    # allow future unknown fields
+    
     class Config:
+        """Allow future unknown fields"""
         extra = "allow"  
 
 class ExternalModule(BaseModel):
@@ -194,11 +195,15 @@ class PayloadSchema(BaseModel):
     external_modules: Optional[List[ExternalModule]] = None
     breakpoints: Optional[Breakpoints] = None
     workflow: Optional[List[WorkflowStep]] = None
-    io: Optional[IOConfig] = None
+    io: Optional[IOConfig] = Field(None, alias="I/O")
     dask_context: Optional[DaskContext] = None
     logging: Optional[List[str]] = None
     config: Optional[List[str]] = None
     eoqc: Optional[EOQCConfig] = None
+    
+    class Config:
+        """Allow population by name"""
+        populate_by_name = True
 
 
 # Disable validation globally. Do we want this? If yes, uncomment the import of ConfigDict

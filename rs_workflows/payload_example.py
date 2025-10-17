@@ -77,7 +77,7 @@ payload = PayloadSchema(
         )
     ),
     workflow=[workflow_step],
-    I_O=IOConfig(
+    io=IOConfig(
         input_products=[
             InputProduct(id="OLCI", path="s3::zip::/mnt/1TERA/EOPF/Test_data_unit/S3A_OL_1_EFR.zip",
                          store_type="safe", store_params=StoreParams(multiplicity="exactly_one")),
@@ -118,11 +118,8 @@ payload = PayloadSchema(
 
 output_file = Path("payload_example.yaml")
 with output_file.open("w", encoding="utf-8") as f:
-    f.write("# Triggering payload example\n")
-    f.write("# Any tag with #Optional can be absent from the payload\n")
-    f.write("#\n---\n")
-    # Convert Pydantic model to dict
-    print (payload.model_dump(by_alias=True))
+    f.write("# Triggering payload \n")
+    
     yaml.dump(payload.model_dump(by_alias=True), f, sort_keys=False)
 
 print(f"Payload YAML written to {output_file}")
