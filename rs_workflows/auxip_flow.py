@@ -138,7 +138,7 @@ async def auxip_staging(
         if return_status:
             logger.info("Staging successful, creating artifact with a list of staged items.")
             await acreate_markdown_artifact(
-                markdown=f"{auxip_items.to_dict()}",
+                markdown=f"{json.dumps(auxip_items.to_dict(), indent=2)}",
                 key="auxiliary-files",
                 description="Auxiliary files added to catalog.",
             )
