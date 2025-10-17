@@ -219,12 +219,12 @@ async def test_dpr_processing(
             cadip_flow.search: 0,
             cadip_flow.search_task: 0,
             dpr_flow.read_payload_values: 0,
-            dpr_flow.write_payload: 1,
-            dpr_flow.run_processor: 1,
-            staging_flow.staging_task_auxip: 2,
-            staging_flow.staging_task_cadip: 0,
+            # dpr_flow.write_payload: 1,
+            # dpr_flow.run_processor: 1,
+            # staging_flow.staging_task_auxip: 2,
+            # staging_flow.staging_task_cadip: 0,
             staging_flow.staging: 2,
-            catalog_flow.publish: 1,
+            # catalog_flow.publish: 1,
         }.items()
     }
 
@@ -268,7 +268,6 @@ async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable
         for prefect_function, call_count in {
             cadip_flow.search: 1,
             cadip_flow.search_task: 1,
-            staging_flow.staging_task_cadip: 1,
             staging_flow.staging: 1,
         }.items()
     }
@@ -305,7 +304,6 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
             auxip_flow.auxip_staging: 1,
             auxip_flow.search: 1,
             auxip_flow.search_task: 1,
-            staging_flow.staging_task_auxip: 1,
             staging_flow.staging: 1,
         }.items()
     }

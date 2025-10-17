@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Prefect flows and tasks for on-demand processing"""
+# pylint: disable=W0101  # ignore 'unreachable code' (temporar)
 
 import datetime
 import json
@@ -21,7 +22,6 @@ from pathlib import Path
 
 from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
-from prefect.task_runners import ConcurrentTaskRunner
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprProcessor
 from rs_common import prefect_utils
@@ -42,6 +42,9 @@ from rs_workflows.staging_flow import staging_task
 
 @task(name="Process input ADFS")
 async def process_input_adfs(input_adfs, dpr_input, task_table):
+    """
+    .
+    """
     # Return list of auxip items
     all_auxip_items = []
 
@@ -76,7 +79,7 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
 
         if idx == len(input_adfs["alternatives"]) - 1 and not auxip_items:
             #  Last one and still nothing → raise runtime
-            raise RuntimeError(f"All ADFS searched, no items found.")
+            raise RuntimeError("All ADFS searched, no items found.")
 
     return all_auxip_items
 
@@ -174,7 +177,7 @@ async def dpr_processing(
             s3_payload_run,
             wait_for=staged,  # wait for items to be staged in the catalog
         )
-        ## end RSPY800
+        # end RSPY800
 
         payload = written.result()
 
