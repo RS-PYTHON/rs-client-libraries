@@ -20,6 +20,7 @@ import sys
 
 import requests
 from cachetools import TTLCache, cached
+from pystac_client.stac_api_io import Timeout
 
 from rs_common import utils
 from rs_common.logging import Logging
@@ -27,7 +28,7 @@ from rs_common.utils import AuthInfo
 
 APIKEY_HEADER = "x-api-key"
 
-# Timeout in seconds
+# Default timeout in seconds
 TIMEOUT = 30
 
 # API Key Manager URL used to get an API Key information.
@@ -57,6 +58,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         local_mode (bool): Indicates whether the client is running in local mode.
         apikey_headers (dict): API key headers for HTTP requests.
         http_session (requests.Session): HTTP session for handling requests.
+        timeout (Timeout): timeout in seconds when contacting API key manager. Default to 30s.
     """
 
     def __init__(  # pylint: disable=too-many-branches, too-many-arguments, too-many-positional-arguments
@@ -65,6 +67,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         rs_server_api_key: str | None = None,
         owner_id: str | None = None,
         logger: logging.Logger | None = None,
+        timeout: Timeout = TIMEOUT,
     ):
         """
         Initializes an RsClient instance.
@@ -108,6 +111,8 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         self.http_session = requests.Session()
         if self.rs_server_oauth2_cookie:
             self.http_session.cookies.set("session", self.rs_server_oauth2_cookie)
+
+        self.timeout = timeout
 
     def log_and_raise(self, message: str, original: Exception):
         """
@@ -167,7 +172,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         # Request the API key manager, pass user-defined api key in http header
         self.logger.debug("Call the API key manager")
-        response = self.http_session.get(RSPY_UAC_CHECK_URL, **self.apikey_headers, timeout=TIMEOUT)
+        response = self.http_session.get(RSPY_UAC_CHECK_URL, **self.apikey_headers, timeout=self.timeout)
         if not response.ok:
             raise RuntimeError(
                 f"API key manager status code {response.status_code}: {utils.read_response_error(response)}",
