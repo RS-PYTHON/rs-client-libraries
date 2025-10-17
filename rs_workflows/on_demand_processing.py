@@ -53,6 +53,10 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
         name, parameters = alternative["query"]["name"], alternative["query"]["parameters"]
         # 3. Build the CQL2 JSON by replacing the parameters
         auxip_cql2 = build_cql2_json(task_table, name, parameters)
+        # save auxip cql2 json as flow artefact
+        md = "# Auxip CQL2 filter \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
+        # Artifact key must only contain lowercase letters, numbers, and dashes.
+        await acreate_markdown_artifact(key="auxip-cql2", markdown=md, description="Auxip CQL2 filter")
         # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
         product_type = parameters.get("product_type", "*")
         default_aux_collection = f"{dpr_input.satellite}-aux-{product_type}"
@@ -67,10 +71,6 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
             collection,
             timeout,
         ).result()
-        # save auxip cql2 json as flow artefact
-        md = "# Auxip CQL2 filter \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
-        # Artifact key must only contain lowercase letters, numbers, and dashes.
-        await acreate_markdown_artifact(key="auxip-cql2", markdown=md, description="Auxip CQL2 filter")
 
         all_auxip_items.append(auxip_items)
 
@@ -141,15 +141,29 @@ async def dpr_processing(
         # Artifact key must only contain lowercase letters, numbers, and dashes.
         await acreate_markdown_artifact(key="processing-unit-list", markdown=md, description="List of processing units")
 
-        for unit in unit_list:
-            try:
+        parallel = False  # TEMP: PARALLEL IS NOT WORKING
+        if parallel:
+            tasks = []
+            for unit in unit_list:
                 # For each input_adfs element computed on STEP 1
-                tasks = [
-                    process_input_adfs.submit(input_adfs, dpr_input, task_table) for input_adfs in unit["input_adfs"]
-                ]
-                auxip_items = [t.result() for t in tasks]
+                for input_adfs in unit["input_adfs"]:
+                    tasks.append(process_input_adfs.submit(input_adfs, dpr_input, task_table))
+
+            try:
+                auxip_items = [item for t in tasks for item in t.result()]
             except KeyError as kerr:
                 raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
+
+        else:
+            all_items = []
+            for unit in unit_list:
+                # For each input_adfs element computed on STEP 1
+                for input_adfs in unit["input_adfs"]:
+                    try:
+                        all_items.append(process_input_adfs.submit(input_adfs, dpr_input, task_table).result())
+                    except KeyError as kerr:
+                        raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
+            auxip_items = [item for t in all_items for item in t]
 
         # Wait for Alex part
         return
