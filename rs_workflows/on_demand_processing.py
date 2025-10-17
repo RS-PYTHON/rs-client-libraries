@@ -114,7 +114,7 @@ async def dpr_processing(
         # read tasktable and construct list of processing units
         if dpr_input.processor_name == DprProcessor.MOCKUP:
             # pylint: disable-next=unused-variable
-            s3_payload_template = (
+            s3_payload_template = (  # noqa: F841
                 f"s3://rs-dev-cluster-temp/prefect-share/users/{flow_env.owner_id}/"
                 f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
             )
@@ -141,7 +141,7 @@ async def dpr_processing(
 
         try:
             # pylint: disable-next=unused-variable
-            auxip_items = [item for t in tasks for item in t.result()]
+            auxip_items = [item for t in tasks for item in t.result()]  # noqa: F841
         except KeyError as kerr:
             raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
 
