@@ -462,7 +462,7 @@ def validate_products(flow_run_id: str):
             elif realised_count > max_count:
                 # case 2: update 'product_realised.unexpected'
                 stmt = (
-                    update(product_realised)
+                    update(product_realised)  # type: ignore
                     .where(
                         product_realised.c.flow_run_id == flow_run_id,
                         product_realised.c.eopf_type == eopf_type,
@@ -487,7 +487,7 @@ def validate_products(flow_run_id: str):
         extra_types = set(realised_types) - set(expected_types)
         for eopf_type in extra_types:
             stmt = (
-                update(product_realised)
+                update(product_realised)  # type: ignore
                 .where(
                     product_realised.c.flow_run_id == flow_run_id,
                     product_realised.c.eopf_type == eopf_type,
