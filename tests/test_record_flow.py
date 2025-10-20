@@ -567,6 +567,7 @@ def test_inserts_missing_products(mock_db_env, mock_tables, mocker):
 
     mock_session.commit.assert_called_once()
 
+
 def test_inserts_missing_products_else_branch(mock_db_env, mock_tables, mocker):
     """Test behaviour when no realised_info is found (fetchone() returns None)."""
     mock_session, _ = mock_db_env
@@ -604,12 +605,11 @@ def test_inserts_missing_products_else_branch(mock_db_env, mock_tables, mocker):
     record_flow_module.validate_products(flow_id)
 
     # Assert warning about missing realised info (else branch)
-    logger.warning.assert_any_call(
-        "No realised info found for TYPE1, leaving category and start_datetime as NULL"
-    )
+    logger.warning.assert_any_call("No realised info found for TYPE1, leaving category and start_datetime as NULL")
 
     # Assuming commit still happens:
     mock_session.commit.assert_called_once()
+
 
 def test_skips_when_missing_already_recorded(mock_db_env, mock_tables, mocker):
     """Should skip insert when missing record already exists."""
