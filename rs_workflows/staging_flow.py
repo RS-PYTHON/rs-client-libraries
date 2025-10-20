@@ -28,7 +28,7 @@ async def staging(
     catalog_collection_identifier: str,
     # timeout: int = 1200,
     poll_interval: int = 2,
-):
+) -> dict[str, dict]:
     """
     Stage STAC items.
 
@@ -44,6 +44,9 @@ async def staging(
         timeout: Job completion timeout in seconds
             NOTE: This argument has been disabled, see the comment in staging_client.wait_for_jobs function
         poll_interval: When to check again for job completion in seconds
+
+    Returns:
+        dict[str, dict]: Job status after completion
     """
     logger = get_run_logger()
 
@@ -59,12 +62,14 @@ async def staging(
 
         # Trigger the staging and wait for jobs to finish
         job_status = staging_client.run_staging(stac_input, catalog_collection_identifier)
-        staging_client.wait_for_jobs(
+        job_status = staging_client.wait_for_jobs(
             job_status,
             logger,
             # timeout,
             poll_interval,
         )
+
+        return job_status
 
 
 ###########################
@@ -72,19 +77,7 @@ async def staging(
 ###########################
 
 
-@task(name="Auxip staging")
-async def staging_task_auxip(*args, **kwargs):
-    """See: staging"""
-    return await staging.fn(*args, **kwargs)
-
-
-@task(name="Prip staging")
-async def staging_task_prip(*args, **kwargs):
-    """See: staging"""
-    return await staging.fn(*args, **kwargs)
-
-
-@task(name="Cadip staging")
-async def staging_task_cadip(*args, **kwargs):
+@task(name="Staging")
+async def staging_task(*args, **kwargs):
     """See: staging"""
     return await staging.fn(*args, **kwargs)

@@ -17,11 +17,56 @@
 import json
 from datetime import datetime
 
-from prefect import get_run_logger, task
-from pystac import Asset, Item
+from prefect import flow, get_run_logger, task
+from pystac import Asset, Item, ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+
+#################
+# Catalog flows #
+#################
+
+
+@flow(name="Catalog search")
+async def catalog_search(
+    env: FlowEnvArgs,
+    catalog_cql2: dict,
+    error_if_empty: bool = False,
+) -> ItemCollection | None:
+    """
+    Search Catalog items.
+
+    Args:
+        env: Prefect flow environment (at least the owner_id is required)
+        catalog_cql2: CQL2 filter.
+        error_if_empty: Raise a ValueError if the results are empty.
+    """
+    logger = get_run_logger()
+
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "catalog-search"):
+
+        logger.info("Start Catalog search")
+        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+        found = catalog_client.search(
+            method="POST",
+            stac_filter=catalog_cql2.get("filter"),
+            max_items=catalog_cql2.get("limit"),
+            sortby=catalog_cql2.get("sortby"),
+        )
+        if (not found) and error_if_empty:
+            raise ValueError(
+                f"No Catalog item found for CQL2 filter: {json.dumps(catalog_cql2, indent=2)}",
+            )
+        logger.info(f"Catalog search found {len(found)} results: {found}")  # type: ignore
+        return found
+
+
+#################
+# Catalog tasks #
+#################
 
 
 @task(name="Publish to catalog")
@@ -69,3 +114,9 @@ async def publish(
         logger.info(f"ID: {collection.id}, Title: {collection.title}")
 
     logger.info("End catalog publishing")
+
+
+@task(name="Catalog search")
+async def catalog_search_task(*args, **kwargs) -> ItemCollection | None:
+    """See: search"""
+    return await catalog_search.fn(*args, **kwargs)

@@ -16,30 +16,57 @@
 
 import os
 from collections.abc import Iterator
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanContext
 from opentelemetry.util._decorator import _agnosticcontextmanager
 from prefect import get_run_logger
-from pydantic import BaseModel, Field
+from pystac import Item
 
+from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_client.rs_client import RsClient
 from rs_common import init_opentelemetry, prefect_utils
 
 
-class ProcessorEnum(str, Enum):
-    """DPR processor name"""
-
-    # String value = resource name in the rs-dpr-service
-    S1L0 = "s1_l0"
-    S3L0 = "s3_l0"
-    S1ARD = "s1_ard"
-
-
-class FlowEnvArgs(BaseModel):
+class Priority(str, Enum):
     """
-    Prefect flow environment, as a Pydantic serializable object.
+    Priority for the cluster dask to be able to prioritise task execution.
+    """
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class WorkflowType(str, Enum):
+    """
+    Workflow type.
+    """
+
+    BENCHMARKING = "benchmarking"
+    ON_DEMAND = "on-demand"
+    SYSTEMATIC = "systematic"
+
+
+class ProcessingMode(str, Enum):
+    """
+    List of mode to be applied when calling the DPR processor.
+    """
+
+    NRT = "nrt"
+    NTC = "ntc"
+    REPROCESSING = "reprocessing"
+    SUBS = "subs"
+    ALWAYS = "always"
+
+
+@dataclass
+class FlowEnvArgs:
+    """
+    Prefect flow environment arguments.
 
     Attributes:
         owner_id: User/owner ID (necessary to retrieve the user info: API key and OAuth2 cookie)
@@ -48,8 +75,8 @@ class FlowEnvArgs(BaseModel):
         calling_span (tuple): Serialized OpenTelemetry span of the calling flow, if any.
     """
 
-    owner_id: str = Field(description="User/owner ID")
-    calling_span: tuple[int, int, bool] | None = Field(description="OpenTelemetry info", default=None)
+    owner_id: str
+    calling_span: tuple[int, int, bool] | None = None
 
 
 class FlowEnv:
@@ -126,3 +153,56 @@ class FlowEnv:
         ) as span:
             self.this_span = trace.get_current_span().get_span_context()
             yield span
+
+
+@dataclass
+class DprProcessIn:  # pylint: disable=too-many-instance-attributes
+    """
+    Input parameters for the 'dpr-process' flow
+    """
+
+    env: FlowEnvArgs
+    processor_name: DprProcessor
+    processor_version: str
+    dask_cluster_label: str
+    # 'pipeline' or 'unit' must be provided
+    pipeline: str | None = None
+    unit: str | None = None
+
+    priority: Priority = Priority.LOW
+    workflow_type: WorkflowType = WorkflowType.ON_DEMAND
+
+    input_products: dict[str, str] = field(default_factory=dict)
+    generated_product_to_collection_identifier: dict[str, str] = field(default_factory=dict)
+    auxiliary_product_to_collection_identifier: dict[str, str] = field(default_factory=dict)
+
+    processing_mode: list[ProcessingMode] = field(default_factory=list)
+    start_datetime: datetime | None = None
+    end_datetime: datetime | None = None
+    satellite: str | None = None
+
+    def __post_init__(self) -> None:
+        # Enforce the "pipeline XOR unit" rule
+        has_pipeline = bool(self.pipeline)
+        has_unit = bool(self.unit)
+        if has_pipeline == has_unit:
+            raise ValueError("Exactly one of 'pipeline' or 'unit' must be provided.")
+
+        # if not self.input_products:
+        #    raise ValueError("'input_products' must contain at least one pystac.Item.")
+
+        if not self.generated_product_to_collection_identifier:
+            raise ValueError("'generated_product_to_collection_identifier' must not be empty.")
+
+        if not self.auxiliary_product_to_collection_identifier:
+            raise ValueError("'auxiliary_product_to_collection_identifier' must not be empty.")
+
+
+@dataclass
+class DprProcessOut:
+    """
+    Output parameters for the 'dpr-process' flow
+    """
+
+    status: bool
+    product_identifier: list[Item] = field(default_factory=list)

@@ -24,7 +24,7 @@ import pytest
 import responses
 from starlette import status
 
-from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcess
+from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_client.rs_client import RsClient
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
@@ -79,8 +79,8 @@ def get_dpr_response_sample() -> dict:
 
 
 @responses.activate
-@pytest.mark.parametrize("process", [DprProcess.MOCKUP, DprProcess.S1L0])
-def test_dpr_client(mocker, dpr_client: DprClient, process: DprProcess, dummy_href: str, dpr_response_sample: dict):
+@pytest.mark.parametrize("process", [DprProcessor.MOCKUP, DprProcessor.S1L0])
+def test_dpr_client(mocker, dpr_client: DprClient, process: DprProcessor, dummy_href: str, dpr_response_sample: dict):
     """Test nominal DPR service response"""
 
     # Mock response from DPR service

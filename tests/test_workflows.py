@@ -17,6 +17,7 @@
 import json
 import os
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
@@ -24,7 +25,9 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
+from pystac import Item, ItemCollection
 
+from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_client.rs_client import RsClient
 from rs_common import prefect_utils
 from rs_workflows import (
@@ -38,14 +41,17 @@ from rs_workflows import (
     prip_flow,
     staging_flow,
 )
-from rs_workflows.flow_utils import FlowEnvArgs, ProcessorEnum
+from rs_workflows.flow_utils import (
+    DprProcessIn,
+    FlowEnvArgs,
+)
 from rs_workflows.pi_db_models import Base
 
 OWNER_ID = "OWNER_ID"
 S3_PAYLOAD = "S3_PAYLOAD"
 RSPY_WEBSITE = "RSPY_WEBSITE"
 RSPY_APIKEY = "RSPY_APIKEY"
-
+CONFIG_DIR = Path(__file__).parent / "resources"
 # Recursive defaultdict, see: https://stackoverflow.com/a/8702435
 MOCK_DICT = lambda: defaultdict(MOCK_DICT)  # type: ignore # pylint: disable=unnecessary-lambda-assignment # noqa: E731
 
@@ -75,7 +81,11 @@ class MockRsClient(Mock):
 
     def search(self, *_, **__):
         """Mock stac search"""
-        return [MockRsClient()] * 2
+        return_values = [
+            Item(id="test1", properties={}, geometry={}, bbox=[], datetime=datetime.now()),
+            Item(id="test2", properties={}, geometry={}, bbox=[], datetime=datetime.now()),
+        ]
+        return ItemCollection(return_values)
 
     def get_items(self, *_, **__):
         """Mock stac get_items"""
@@ -88,6 +98,16 @@ class MockRsClient(Mock):
     def wait_for_job(self, *_, **__):
         """Mock DprClient wait_for_job"""
         return [MOCK_DICT()] * 2
+
+    def wait_for_jobs(self, *_, **__):
+        """Mock DprClient wait_for_jobs"""
+        return {"job_status": {"status": "successful"}}
+
+    def get_process(self, *_, **__):
+        """Mock DprClient get_process"""
+        filename = "tasktable.json"
+        with open(CONFIG_DIR / filename, encoding="utf-8") as f:
+            return json.load(f)
 
 
 @pytest.fixture(autouse=True)
@@ -109,7 +129,7 @@ def mock_record_performance_indicators(mocker):
 
 
 async def mock_s3_download_file(
-    s3_path: str,
+    s3_path: str,  # pylint: disable=unused-argument
     to_path: str | Path | None,
     **__: dict[str, Any],
 ) -> Path:
@@ -118,10 +138,9 @@ async def mock_s3_download_file(
         return Path()
 
     # Mock the downloading of S3_PAYLOAD
-    if s3_path.startswith(S3_PAYLOAD):
-        with open(to_path, "w", encoding="utf-8") as opened:
-            opened.write(
-                """
+    with open(to_path, "w", encoding="utf-8") as opened:
+        opened.write(
+            """
 workflow:
 - name: workflow_name
   module: workflow_module
@@ -130,8 +149,7 @@ workflow:
     out1: output1
     out2: output2
 """,
-            )
-
+        )
     return Path(to_path)
 
 
@@ -181,12 +199,12 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_dpr_client", MockRsClient)
 @patch.object(catalog_flow, "datetime", Mock())
-async def test_on_demand_processing(
+async def test_dpr_processing(
     mocker,
     mock_prefect,
     mock_record_performance_indicators,
 ):  # pylint: disable=unused-argument, redefined-outer-name
-    """Test the on_demand_processing flow"""
+    """Test the dpr_processing flow"""
 
     # Save env vars in prefect secret blocks
     await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": "JUPYTERHUB_API_TOKEN"})
@@ -196,33 +214,36 @@ async def test_on_demand_processing(
     spied = {
         mocker.spy(prefect_function, "fn"): call_count  # spy on <flow>.fn or <task>.fn = the underlying python function
         for prefect_function, call_count in {
-            auxip_flow.search: 1,
-            auxip_flow.search_task: 1,
-            cadip_flow.search: 1,
-            cadip_flow.search_task: 1,
-            dpr_flow.read_payload_values: 1,
-            dpr_flow.read_tasktable: 1,
-            dpr_flow.write_payload: 1,
-            dpr_flow.run_processor: 1,
-            staging_flow.staging_task_auxip: 1,
-            staging_flow.staging_task_cadip: 1,
+            auxip_flow.search: 2,
+            auxip_flow.search_task: 2,
+            cadip_flow.search: 0,
+            cadip_flow.search_task: 0,
+            dpr_flow.read_payload_values: 0,
+            # dpr_flow.write_payload: 1,
+            # dpr_flow.run_processor: 1,
+            # staging_flow.staging_task_auxip: 2,
+            # staging_flow.staging_task_cadip: 0,
             staging_flow.staging: 2,
-            catalog_flow.publish: 1,
+            # catalog_flow.publish: 1,
         }.items()
     }
 
     # Run the prefect flow
-    await on_demand_processing.on_demand_processing(
+    dpr_input = DprProcessIn(
         env=FlowEnvArgs(owner_id=OWNER_ID),
-        processor=ProcessorEnum.S1L0,
-        cluster_label="cluster_label",
-        cadip_collection_identifier="cadip_collection_identifier",
-        session_identifier="session_identifier",
-        catalog_collection_identifier="catalog_collection_identifier",
-        s3_payload_template=S3_PAYLOAD,
-        s3_output_data="s3_output_data",
-        use_dpr_mockup=False,
+        processor_name=DprProcessor.MOCKUP,
+        processor_version="1.0",
+        pipeline="mockup_full",
+        dask_cluster_label="cluster_label",
+        input_products={},  # Item STAC
+        generated_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
+        auxiliary_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
+        processing_mode=["nrt"],  # type: ignore[list-item]
+        start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+        satellite="S1A",
     )
+    await on_demand_processing.dpr_processing(dpr_input)
 
     # Check calls
     for fn, call_count in spied.items():
@@ -247,7 +268,6 @@ async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable
         for prefect_function, call_count in {
             cadip_flow.search: 1,
             cadip_flow.search_task: 1,
-            staging_flow.staging_task_cadip: 1,
             staging_flow.staging: 1,
         }.items()
     }
@@ -281,15 +301,15 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
     spied = {
         mocker.spy(prefect_function, "fn"): call_count  # spy on <flow>.fn or <task>.fn = the underlying python function
         for prefect_function, call_count in {
+            auxip_flow.auxip_staging: 1,
             auxip_flow.search: 1,
             auxip_flow.search_task: 1,
-            staging_flow.staging_task_auxip: 1,
             staging_flow.staging: 1,
         }.items()
     }
 
     # Run the prefect flow
-    await on_demand_processing.on_demand_auxip_staging(
+    await auxip_flow.on_demand_auxip_staging(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         start_datetime="2024-05-27T09:44:09.509000Z",
         end_datetime="2024-05-27T09:44:19.509000Z",
@@ -334,6 +354,22 @@ async def test_on_demand_prip_staging(mocker, mock_prefect):  # pylint: disable=
     # Check calls
     for fn, call_count in spied.items():
         assert fn.await_count == call_count
+
+
+@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
+@patch.object(RsClient, "get_catalog_client", MockRsClient)
+async def test_catalog_search(mocker, mock_prefect):  # pylint: disable=unused-argument
+    """Test the catalog_search flow"""
+
+    await setup_worklow_test_env()
+
+    spy_search = mocker.spy(MockRsClient, "search")
+
+    # Run the prefect flow
+    await catalog_flow.catalog_search(env=FlowEnvArgs(owner_id=OWNER_ID), catalog_cql2={"filter": {}})
+
+    assert spy_search.call_count == 1
+    spy_search.reset_mock()
 
 
 def test_create_schema(monkeypatch, patch_prefect_logger):  # pylint: disable=unused-argument

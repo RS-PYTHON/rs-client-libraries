@@ -40,11 +40,10 @@ PATH_TO_YAML_OPENAPI = osp.realpath(
 )
 
 
-class DprProcess(str, Enum):
+class DprProcessor(str, Enum):
     """DPR processor name"""
 
     # String value = resource name in the rs-dpr-service
-    CONV_SAFE_ZARR = "conv_safe_zarr"
     MOCKUP = "mockup"
     S1L0 = "s1_l0"
     S3L0 = "s3_l0"
@@ -109,7 +108,7 @@ class DprClient(OgcApiClient):
 
     def run_process(
         self,
-        process: DprProcess,
+        process: DprProcessor,
         cluster_info: ClusterInfo,
         s3_config_dir: str,
         payload_subpath: str,
@@ -132,7 +131,7 @@ class DprClient(OgcApiClient):
             (or None if endpoint fails) of the running job
         """
 
-        use_mockup = process == DprProcess.MOCKUP
+        use_mockup = process == DprProcessor.MOCKUP
 
         # Data to pass to the real processor
         data = {}
