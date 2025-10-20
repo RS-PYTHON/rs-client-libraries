@@ -18,7 +18,16 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
-from sqlalchemy import Boolean, Column, Integer, MetaData, Select, String, Table
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Integer,
+    MetaData,
+    Select,
+    String,
+    Table,
+)
 from sqlalchemy.sql.dml import Insert, Update
 
 import rs_workflows.record_performance as record_flow_module
@@ -145,7 +154,9 @@ def mock_tables(monkeypatch):
         metadata,
         Column("flow_run_id", String),
         Column("eopf_type", String),
+        Column("pi_category_id", Integer),
         Column("unexpected", Boolean, default=False),
+        Column("sensing_start_datetime", DateTime, nullable=True),
     )
 
     product_missing = Table(
@@ -153,7 +164,9 @@ def mock_tables(monkeypatch):
         metadata,
         Column("id", Integer, primary_key=True),
         Column("flow_run_id", String),
+        Column("pi_category_id", Integer, nullable=True),
         Column("eopf_type", String),
+        Column("sensing_start_datetime", DateTime, nullable=True),
         Column("count", Integer),
     )
 
@@ -518,19 +531,83 @@ def test_inserts_missing_products(mock_db_env, mock_tables, mocker):
 
     flow_id = "FLOW123"
 
-    # Make a generic result mock
-    result = MagicMock()
-    result.fetchall.return_value = [("TYPE1", 5, 10)]
-    result.scalar.return_value = 3
-    result.fetchone.return_value = None
-    result.rowcount = 1
+    # Mock values to simulate DB calls
+    expected_result = MagicMock()
+    expected_result.fetchall.return_value = [("TYPE1", 5, 10)]  # expected_rows
+    expected_result.scalar.return_value = 3  # realised_count (less than min_count)
+    expected_result.fetchone.return_value = None  # no existing record in product_missing
+    expected_result.rowcount = 1
 
-    # Always return the same mock result for any execute()
-    mock_session.execute.return_value = result
+    # When we call select(pi_category_id, sensing_start_datetime), we need to return something specific
+    realised_info_result = MagicMock()
+    realised_info_result.fetchone.return_value = (42, "2022-11-01 09:24:39.695148")
+
+    # Patch execute() to return different mocks depending on query
+    def execute_side_effect(statement, *args, **kwargs):
+        sql_str = str(statement)
+        if "FROM product_expected" in sql_str:
+            return expected_result
+        if "count(" in sql_str:
+            return expected_result
+        if "FROM product_missing" in sql_str:
+            return expected_result
+        if "FROM product_realised" in sql_str and "pi_category_id" in sql_str:
+            return realised_info_result
+        return expected_result
+
+    mock_session.execute.side_effect = execute_side_effect
 
     record_flow_module.validate_products(flow_id)
 
-    logger.warning.assert_any_call("Missing products for TYPE1: inserted 2 into product_missing")
+    # Assert that we logged the correct warning with the new fields
+    logger.warning.assert_any_call(
+        "Missing products for TYPE1: inserted 2 into product_missing "
+        "(pi_category_id=42, sensing_start_datetime=2022-11-01 09:24:39.695148)",
+    )
+
+    mock_session.commit.assert_called_once()
+
+
+def test_inserts_missing_products_else_branch(mock_db_env, mock_tables, mocker):
+    """Test behaviour when no realised_info is found (fetchone() returns None)."""
+    mock_session, _ = mock_db_env
+    _, _, _ = mock_tables
+    logger = MagicMock()
+    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=logger)
+
+    flow_id = "FLOW123"
+
+    # Mock values to simulate DB calls
+    expected_result = MagicMock()
+    expected_result.fetchall.return_value = [("TYPE1", 5, 10)]  # expected_rows
+    expected_result.scalar.return_value = 3  # realised_count (less than min_count)
+    expected_result.fetchone.return_value = None  # no existing record in product_missing
+    expected_result.rowcount = 1
+
+    # Patch execute() to return different mocks depending on query
+    def execute_side_effect(statement, *args, **kwargs):
+        sql_str = str(statement)
+        if "FROM product_expected" in sql_str:
+            return expected_result
+        if "count(" in sql_str:
+            return expected_result
+        if "FROM product_missing" in sql_str:
+            return expected_result
+        if "FROM product_realised" in sql_str and "pi_category_id" in sql_str:
+            # This is the else branch case: no realised info found
+            realised_info_result = MagicMock()
+            realised_info_result.fetchone.return_value = None
+            return realised_info_result
+        return expected_result
+
+    mock_session.execute.side_effect = execute_side_effect
+
+    record_flow_module.validate_products(flow_id)
+
+    # Assert warning about missing realised info (else branch)
+    logger.warning.assert_any_call("No realised info found for TYPE1, leaving category and start_datetime as NULL")
+
+    # Assuming commit still happens:
     mock_session.commit.assert_called_once()
 
 
