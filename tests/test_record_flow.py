@@ -567,6 +567,49 @@ def test_inserts_missing_products(mock_db_env, mock_tables, mocker):
 
     mock_session.commit.assert_called_once()
 
+def test_inserts_missing_products_else_branch(mock_db_env, mock_tables, mocker):
+    """Test behaviour when no realised_info is found (fetchone() returns None)."""
+    mock_session, _ = mock_db_env
+    _, _, _ = mock_tables
+    logger = MagicMock()
+    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=logger)
+
+    flow_id = "FLOW123"
+
+    # Mock values to simulate DB calls
+    expected_result = MagicMock()
+    expected_result.fetchall.return_value = [("TYPE1", 5, 10)]  # expected_rows
+    expected_result.scalar.return_value = 3  # realised_count (less than min_count)
+    expected_result.fetchone.return_value = None  # no existing record in product_missing
+    expected_result.rowcount = 1
+
+    # Patch execute() to return different mocks depending on query
+    def execute_side_effect(statement, *args, **kwargs):
+        sql_str = str(statement)
+        if "FROM product_expected" in sql_str:
+            return expected_result
+        if "count(" in sql_str:
+            return expected_result
+        if "FROM product_missing" in sql_str:
+            return expected_result
+        if "FROM product_realised" in sql_str and "pi_category_id" in sql_str:
+            # This is the else branch case: no realised info found
+            realised_info_result = MagicMock()
+            realised_info_result.fetchone.return_value = None
+            return realised_info_result
+        return expected_result
+
+    mock_session.execute.side_effect = execute_side_effect
+
+    record_flow_module.validate_products(flow_id)
+
+    # Assert warning about missing realised info (else branch)
+    logger.warning.assert_any_call(
+        "No realised info found for TYPE1, leaving category and start_datetime as NULL"
+    )
+
+    # Assuming commit still happens:
+    mock_session.commit.assert_called_once()
 
 def test_skips_when_missing_already_recorded(mock_db_env, mock_tables, mocker):
     """Should skip insert when missing record already exists."""
