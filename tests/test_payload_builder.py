@@ -175,6 +175,121 @@ def test_build_unit_list_missing_or_invalid_io_list():
         build_unit_list(tt, pipeline="p1")
 
 
+def test_select_unit_names_reports_available_pipelines():
+    """Build a minimal task table with a single valid pipeline"""
+    tasktable = {
+        "units": [
+            {
+                "name": "u1",
+                "module": "pkg.u1",
+                "input_products": [],
+                "input_adfs": [],
+                "output_products": [],
+            },
+        ],
+        "io": [],
+        "pipelines": [
+            {
+                "name": "good_pipeline",
+                "steps": [{"unit_name": "u1", "order": 1, "input_products": {}, "output_products": {}}],
+            },
+        ],
+    }
+
+    # Ask for a non-existing pipeline -> should raise with the "Available pipelines: ..." message
+    with pytest.raises(TaskTableError) as exc:
+        build_unit_list(tasktable, pipeline="missing_pipeline", unit=None, processing_mode=None)
+
+    # checks
+    msg = str(exc.value)
+    assert 'Pipeline "missing_pipeline" not found' in msg
+    assert 'Available pipelines: "good_pipeline"' in msg
+
+
+def test_build_unit_list_reports_available_units():
+    """Minimal task table with two valid units"""
+    tasktable = {
+        "units": [
+            {"name": "u1", "module": "pkg.u1", "input_products": [], "input_adfs": [], "output_products": []},
+            {"name": "u2", "module": "pkg.u2", "input_products": [], "input_adfs": [], "output_products": []},
+        ],
+        "io": [],
+        "pipelines": [],  # not needed for this case
+    }
+
+    # Call with an invalid unit name -> should include available units in the message
+    with pytest.raises(TaskTableError) as exc:
+        build_unit_list(tasktable, pipeline=None, unit="ghost", processing_mode=None)
+
+    msg = str(exc.value)
+    assert 'Unit "ghost" not found in "units".' in msg
+    assert "Available units:" in msg
+    assert "'u1'" in msg and "'u2'" in msg
+
+
+def test_build_entries_filters_by_mode():
+    """One unit having inputs with mode: always / None / nrt / ntc"""
+    tasktable = {
+        "units": [
+            {
+                "name": "flt",
+                "module": "pkg.flt",
+                "input_products": [
+                    {"name": "always_p", "mode": "always", "mandatory": True},
+                    {"name": "none_p", "mandatory": True},  # no "mode" key -> treated as None
+                    {"name": "nrt_p", "mode": "nrt", "mandatory": True},
+                    {"name": "ntc_p", "mode": "ntc", "mandatory": True},
+                ],
+                "input_adfs": [],
+                "output_products": [],
+            },
+        ],
+        # Provide minimal IO entries so build_unit_list can resolve types
+        "io": [
+            {"name": "always_p", "type": "folder", "store_type": "safe"},
+            {"name": "none_p", "type": "folder", "store_type": "safe"},
+            {"name": "nrt_p", "type": "folder", "store_type": "safe"},
+            {"name": "ntc_p", "type": "folder", "store_type": "safe"},
+        ],
+        "pipelines": [
+            {
+                "name": "p_full",
+                "steps": [
+                    {
+                        "unit_name": "flt",
+                        "order": 1,
+                        "input_products": {
+                            "always_p": "pipeline_input",
+                            "none_p": "pipeline_input",
+                            "nrt_p": "pipeline_input",
+                            "ntc_p": "pipeline_input",
+                        },
+                        "output_products": {},
+                    },
+                ],
+            },
+        ],
+    }
+
+    # Case A: no processing_mode provided -> keep "always" and None, drop others
+    out = build_unit_list(tasktable, pipeline="p_full", unit=None, processing_mode=None)
+    names = {ip["name"] for ip in out["units"][0]["input_products"]}
+    assert "always_p" in names and "none_p" in names
+    assert "nrt_p" not in names and "ntc_p" not in names
+
+    # Case B: processing_mode=["nrt"] -> keep always/none/nrt, drop ntc
+    out = build_unit_list(tasktable, pipeline="p_full", unit=None, processing_mode=["nrt"])
+    names = {ip["name"] for ip in out["units"][0]["input_products"]}
+    assert {"always_p", "none_p", "nrt_p"} <= names
+    assert "ntc_p" not in names
+
+    # Case C: processing_mode=["ntc"] -> keep always/none/ntc, drop nrt
+    out = build_unit_list(tasktable, pipeline="p_full", unit=None, processing_mode=["ntc"])
+    names = {ip["name"] for ip in out["units"][0]["input_products"]}
+    assert {"always_p", "none_p", "ntc_p"} <= names
+    assert "nrt_p" not in names
+
+
 def test_case_8_exact_output():
     """Test build_unit_list function"""
     tt_path = Path(__file__).parent / "resources" / "TaskTable_S1_ARD_generated_by_rs_python_v1.json"

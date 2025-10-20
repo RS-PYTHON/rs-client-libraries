@@ -13,24 +13,19 @@
 # limitations under the License.
 
 """Prefect flows and tasks for on-demand processing"""
+# pylint: disable=W0101  # ignore 'unreachable code' (temporar)
 
 import datetime
 import json
 import os
-from pathlib import Path
 
 from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
-from prefect.task_runners import ConcurrentTaskRunner
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprProcessor
 from rs_common import prefect_utils
 from rs_common.utils import create_valcover_filter
-from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
-from rs_workflows.dpr_flow import (
-    run_processor,
-    write_payload,
-)
+from rs_workflows import auxip_flow, cadip_flow, prip_flow
 from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
@@ -42,6 +37,9 @@ from rs_workflows.staging_flow import staging_task
 
 @task(name="Process input ADFS")
 async def process_input_adfs(input_adfs, dpr_input, task_table):
+    """
+    .
+    """
     # Return list of auxip items
     all_auxip_items = []
 
@@ -51,8 +49,8 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
         # 2. Get the corresponding "query.name" on the section "query" of the task table
         timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
         name, parameters = alternative["query"]["name"], alternative["query"]["parameters"]
-        # 3. Build the CQL2 JSON by replacing the parameters
-        auxip_cql2 = build_cql2_json(task_table, name, parameters)
+        # 3. Build the CQL2 JSON by replacing the parameters. Only keep the "stac" field.
+        auxip_cql2 = build_cql2_json(task_table, name, parameters)["stac"]
         # save auxip cql2 json as flow artefact
         md = "# Auxip CQL2 filter \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
         # Artifact key must only contain lowercase letters, numbers, and dashes.
@@ -67,16 +65,16 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
         # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
         auxip_items = auxip_flow.auxip_staging_task.submit(
             dpr_input.env,
-            auxip_cql2,  # ["stac"],
+            auxip_cql2,
             collection,
-            timeout,
+            timeout if timeout else -1,
         ).result()
 
         all_auxip_items.append(auxip_items)
 
         if idx == len(input_adfs["alternatives"]) - 1 and not auxip_items:
             #  Last one and still nothing → raise runtime
-            raise RuntimeError(f"All ADFS searched, no items found.")
+            raise RuntimeError("All ADFS searched, no items found.")
 
     return all_auxip_items
 
@@ -100,16 +98,9 @@ async def dpr_processing(
         s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
         catalog bucket.
     """
-    s3_payload_template = (
-        "s3://rs-dev-cluster-temp/prefect-share/users/abutu/l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
-    )
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(dpr_input.env)
-
-    bucket = "rs-dev-cluster-temp"
-    prefix = "prefect-share"
-    s3_output_data = f"s3://{bucket}/{prefix}/users/{flow_env.owner_id}/l0/output/s3"
 
     with flow_env.start_span(__name__, "dpr-processing"):
 
@@ -122,7 +113,8 @@ async def dpr_processing(
 
         # read tasktable and construct list of processing units
         if dpr_input.processor_name == DprProcessor.MOCKUP:
-            s3_payload_template = (
+            # pylint: disable-next=unused-variable
+            s3_payload_template = (  # noqa: F841
                 f"s3://rs-dev-cluster-temp/prefect-share/users/{flow_env.owner_id}/"
                 f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
             )
@@ -141,77 +133,20 @@ async def dpr_processing(
         # Artifact key must only contain lowercase letters, numbers, and dashes.
         await acreate_markdown_artifact(key="processing-unit-list", markdown=md, description="List of processing units")
 
-        parallel = False  # TEMP: PARALLEL IS NOT WORKING
-        if parallel:
-            tasks = []
-            for unit in unit_list:
-                # For each input_adfs element computed on STEP 1
-                for input_adfs in unit["input_adfs"]:
-                    tasks.append(process_input_adfs.submit(input_adfs, dpr_input, task_table))
+        tasks = []
+        for unit in unit_list:
+            # For each input_adfs element computed on STEP 1
+            for input_adfs in unit["input_adfs"]:
+                tasks.append(process_input_adfs.submit(input_adfs, dpr_input, task_table))
 
-            try:
-                auxip_items = [item for t in tasks for item in t.result()]
-            except KeyError as kerr:
-                raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
-
-        else:
-            all_items = []
-            for unit in unit_list:
-                # For each input_adfs element computed on STEP 1
-                for input_adfs in unit["input_adfs"]:
-                    try:
-                        all_items.append(process_input_adfs.submit(input_adfs, dpr_input, task_table).result())
-                    except KeyError as kerr:
-                        raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
-            auxip_items = [item for t in all_items for item in t]
+        try:
+            # pylint: disable-next=unused-variable
+            auxip_items = [item for t in tasks for item in t.result()]  # noqa: F841
+        except KeyError as kerr:
+            raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
 
         # Wait for Alex part
         return
-
-        # start RSPY 800
-
-        # Auxip item ids
-        item_ids: list[str] = []
-        # Stage Auxip items
-        staged = [auxip_items]
-
-        # Write the final payload file from its template version and staged items.
-        # It will be uploaded in the same s3 dir than the template file.
-        s3_payload_run = s3_payload_template + ".run" + Path(s3_payload_template).suffix
-        written = write_payload.submit(
-            flow_env.serialize(),
-            s3_payload_template,
-            item_ids,
-            "*",
-            s3_output_data,
-            s3_payload_run,
-            wait_for=staged,  # wait for items to be staged in the catalog
-        )
-        ## end RSPY800
-
-        payload = written.result()
-
-        # Run the DPR processor
-        processed_items = run_processor.submit(
-            flow_env.serialize(),
-            dpr_input.processor_name,
-            payload,
-            cluster_info,
-            s3_payload_run,
-            wait_for=written,
-        )
-
-        # Publish processed items to the catalog
-        published = catalog_flow.publish.submit(
-            flow_env.serialize(),
-            "*",
-            processed_items,
-            s3_output_data,
-        )
-
-        # Wait for last task to end.
-        # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        published.result()  # type: ignore[unused-coroutine]
 
 
 @flow(name="On-demand Cadip staging")
