@@ -400,7 +400,7 @@ def validate_products(flow_run_id: str):
             eopf_type, min_count, max_count = row
 
             realised_count = db.execute(
-                select(func.count())  # pylint: disable=not-callable
+                select(func.count())  # pylint: disable = not-callable
                 .select_from(product_realised)
                 .where(
                     product_realised.c.flow_run_id == flow_run_id,
@@ -423,21 +423,46 @@ def validate_products(flow_run_id: str):
                 ).fetchone()
 
                 if not exists_missing:
+                    # try to retrieve pi_category_id and sensing_start_datetime from product_realised
+                    realised_info = db.execute(
+                        select(
+                            product_realised.c.pi_category_id,
+                            product_realised.c.sensing_start_datetime,
+                        )
+                        .where(
+                            product_realised.c.flow_run_id == flow_run_id,
+                            product_realised.c.eopf_type == eopf_type,
+                        )
+                        .limit(1),
+                    ).fetchone()
+
+                    if realised_info:
+                        pi_category_id, sensing_start_datetime = realised_info
+                    else:
+                        pi_category_id, sensing_start_datetime = None, None
+                        logger.warning(
+                            f"No realised info found for {eopf_type}, leaving category and start_datetime as NULL",
+                        )
+
                     stmt = insert(product_missing).values(
                         flow_run_id=flow_run_id,
                         eopf_type=eopf_type,
                         count=missing_count,
+                        pi_category_id=pi_category_id,
+                        sensing_start_datetime=sensing_start_datetime,
                     )
                     db.execute(stmt)
-                    logger.warning(f"Missing products for {eopf_type}: inserted {missing_count} into product_missing")
+                    logger.warning(
+                        f"Missing products for {eopf_type}: inserted {missing_count} into product_missing "
+                        f"(pi_category_id={pi_category_id}, sensing_start_datetime={sensing_start_datetime})",
+                    )
                 else:
                     logger.info(f"Missing products for {eopf_type} already recorded, skipping insert")
 
             elif realised_count > max_count:
                 # case 2: update 'product_realised.unexpected'
-                # only update if not already marked
                 stmt = (
-                    update(product_realised)  # type: ignore
+                    update(product_realised)
                     .where(
                         product_realised.c.flow_run_id == flow_run_id,
                         product_realised.c.eopf_type == eopf_type,
@@ -459,15 +484,10 @@ def validate_products(flow_run_id: str):
         realised_types = [r[0] for r in realised_types]
         expected_types = [r[0] for r in expected_rows]
 
-        # For each ‘eopf_type’ from ‘product_realised’, check that there is a corresponding
-        # record for "product_expected".
-        #
-        # In case there is no correspondance, set ‘product_realised.unexpected’ to true for
-        # all records for this ‘eopf_type’.
         extra_types = set(realised_types) - set(expected_types)
         for eopf_type in extra_types:
             stmt = (
-                update(product_realised)  # type: ignore
+                update(product_realised)
                 .where(
                     product_realised.c.flow_run_id == flow_run_id,
                     product_realised.c.eopf_type == eopf_type,
