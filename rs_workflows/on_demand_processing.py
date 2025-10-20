@@ -38,45 +38,52 @@ from rs_workflows.staging_flow import staging_task
 @task(name="Process input ADFS")
 async def process_input_adfs(input_adfs, dpr_input, task_table):
     """
-    .
+    Stage ADFS files from the tasktable.
     """
     # Return list of auxip items
     all_auxip_items = []
 
-    # For each "alternative" ( get it following the "order" )
-    for idx, alternative in enumerate(input_adfs["alternatives"]):
-        # 1. Get the "query" with the "parameters" and "timeout_seconds" information
-        # 2. Get the corresponding "query.name" on the section "query" of the task table
-        timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
-        name, parameters = alternative["query"]["name"], alternative["query"]["parameters"]
-        # 3. Build the CQL2 JSON by replacing the parameters. Only keep the "stac" field.
-        auxip_cql2 = build_cql2_json(task_table, name, parameters)["stac"]
-        # save auxip cql2 json as flow artefact
-        md = "# Auxip CQL2 filter \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
-        # Artifact key must only contain lowercase letters, numbers, and dashes.
-        await acreate_markdown_artifact(key="auxip-cql2", markdown=md, description="Auxip CQL2 filter")
-        # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
-        product_type = parameters.get("product_type", "*")
-        default_aux_collection = f"{dpr_input.satellite}-aux-{product_type}"
-        collection = dpr_input.auxiliary_product_to_collection_identifier.get(
-            product_type,
-            dpr_input.auxiliary_product_to_collection_identifier.get("*", default_aux_collection),
-        )
-        # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
-        auxip_items = auxip_flow.auxip_staging_task.submit(
-            dpr_input.env,
-            auxip_cql2,
-            collection,
-            timeout if timeout else -1,
-        ).result()
+    try:
 
-        all_auxip_items.append(auxip_items)
+        # For each "alternative" ( get it following the "order" )
+        for idx, alternative in enumerate(input_adfs["alternatives"]):
+            # 1. Get the "query" with the "parameters" and "timeout_seconds" information
+            # 2. Get the corresponding "query.name" on the section "query" of the task table
+            timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
+            name, parameters = alternative["query"]["name"], alternative["query"]["parameters"]
+            # 3. Build the CQL2 JSON by replacing the parameters. Only keep the "stac" field.
+            auxip_cql2 = build_cql2_json(task_table, name, parameters)["stac"]
+            # save auxip cql2 json as flow artefact
+            md = "# Auxip CQL2 filter \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
+            # Artifact key must only contain lowercase letters, numbers, and dashes.
+            await acreate_markdown_artifact(key="auxip-cql2", markdown=md, description="Auxip CQL2 filter")
+            # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
+            product_type = parameters.get("product_type", "*")
+            default_aux_collection = f"{dpr_input.satellite}-aux-{product_type}"
+            collection = dpr_input.auxiliary_product_to_collection_identifier.get(
+                product_type,
+                dpr_input.auxiliary_product_to_collection_identifier.get("*", default_aux_collection),
+            )
+            # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
+            auxip_items = auxip_flow.auxip_staging_task.submit(
+                dpr_input.env,
+                auxip_cql2,
+                collection,
+                timeout if timeout else -1,
+            ).result()
 
-        if idx == len(input_adfs["alternatives"]) - 1 and not auxip_items:
-            #  Last one and still nothing → raise runtime
-            raise RuntimeError("All ADFS searched, no items found.")
+            all_auxip_items.append(auxip_items)
 
-    return all_auxip_items
+            if idx == len(input_adfs["alternatives"]) - 1 and not auxip_items:
+                #  Last one and still nothing → raise runtime
+                raise RuntimeError("All ADFS searched, no items found.")
+
+        return all_auxip_items
+
+    except KeyError as kerr:
+        raise RuntimeError(
+            f"Unable to read / process tasktable and build cql2-json for: {json.dumps(input_adfs)}",
+        ) from kerr
 
 
 @flow(name="dpr-processing")
@@ -139,11 +146,8 @@ async def dpr_processing(
             for input_adfs in unit["input_adfs"]:
                 tasks.append(process_input_adfs.submit(input_adfs, dpr_input, task_table))
 
-        try:
-            # pylint: disable-next=unused-variable
-            auxip_items = [item for t in tasks for item in t.result()]  # noqa: F841
-        except KeyError as kerr:
-            raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
+        # pylint: disable-next=unused-variable
+        auxip_items = [item for t in tasks for item in t.result()]  # noqa: F841
 
         # Wait for Alex part
         return
