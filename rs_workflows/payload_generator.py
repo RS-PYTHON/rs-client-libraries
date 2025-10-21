@@ -52,7 +52,7 @@ def build_workflow_step(unit):
             if isinstance(input_product, dict) and \
                 "origin" in input_product and \
                 "name" in input_product:
-                if "pipeline" in input_product["origin"]:
+                if "pipeline_input" in input_product["origin"]:
                     input_products.append({input_product["name"] : input_product["name"]})
                 else:
                     input_products.append({input_product["name"] : input_product["origin"]})
@@ -63,7 +63,16 @@ def build_workflow_step(unit):
             if isinstance(input_adf, dict) and "name" in input_adf:
                 adfs.append({"dem": input_adf["name"]})
     # get outputs
-
+    output_products = [Dict[str, str]]
+    if "output_products" in unit:
+        for output_product in unit["output_products"]:
+            if isinstance(output_product, dict) and "name" in output_product:                
+                left_part = output_product["regex"] if "regex" in output_product else output_product["name"]
+                right_part = output_product["name"]
+                if "origin" in output_product and "pipeline_output" not in output_product["origin"]:
+                    right_part = output_product["origin"]
+                output_products.append({left_part : right_part})
+    
     # get parameters
 
     try:
@@ -75,10 +84,9 @@ def build_workflow_step(unit):
             processing_unit = unit["name"],
             inputs = input_products if input_products else None,
             adfs = adfs if adfs else None,
-            outputs =
-
-            parameters =
-        )
+            outputs = output_products,            
+            parameters = None,
+        )        
     except KeyError as ke:
         raise ValueError(f"Key {ke} not found in unit list")
 
@@ -166,22 +174,23 @@ async def generate_payload(
     with flow_env.start_span(__name__, "write-payload"):
 
         workflow_steps = []
-        io_units = []
+        io_config = []
+        logger.info("Geting workflow and I/O sections")
         for unit in unit_list:
             try:
                 workflow_steps.append(build_workflow_step(unit))
-                io_units.append(build_io_config(unit))
+                io_config.append(build_io_config(unit, dpr_input))
 
             except KeyError as ke:
-                raise ValueError(f"Key {ke} not found in unit list")
+                raise ValueError(f"Key {ke} not found in unit list") from ke
         # Build the full payload using the schema
-
+        logger.info("Building the payload")
         payload = PayloadSchema(
             general_configuration = GeneralConfiguration(
                                 logging={"level": "DEBUG"},
             ),
             workflow = workflow_steps,
-            io =
+            io = io_config,
         )
 
         return payload

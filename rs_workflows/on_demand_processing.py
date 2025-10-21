@@ -129,6 +129,7 @@ async def dpr_processing(
             end_datetime=dpr_input.end_datetime,
         )
         unit_list = out["units"]
+        print(unit_list)
         md = "# List of processing units\n\n```json\n" + json.dumps(unit_list, indent=2) + "\n```"
         # Artifact key must only contain lowercase letters, numbers, and dashes.
         await acreate_markdown_artifact(key="processing-unit-list", markdown=md, description="List of processing units")
@@ -144,7 +145,9 @@ async def dpr_processing(
             auxip_items = [item for t in tasks for item in t.result()]  # noqa: F841
         except KeyError as kerr:
             raise RuntimeError("Unable to read / process tasktable and build cql2-json") from kerr
-
+        print(auxip_items[0][1].to_dict())
+        for item in auxip_items[0][1]:
+            print(item.to_dict())
         # Wait for Alex part
         return
 
