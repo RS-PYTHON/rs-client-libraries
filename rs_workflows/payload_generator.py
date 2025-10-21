@@ -36,6 +36,8 @@ from rs_workflows.payload_template import (
     IOConfig,
     OutputProduct,
     PayloadSchema,
+    StorageOptions,
+    StoreOptionsWrapper,
     StoreParams,
     WorkflowStep,
 )
@@ -107,13 +109,28 @@ def build_io_config(unit, flow_input_product):
         for inp in unit['input_products']
     ]
     # To be updated, read from block or from env?
-    outputs_store_param = StoreParams()
+    store_params = StoreParams(
+        options=[
+            StoreOptionsWrapper(
+                storage_options=[
+                    StorageOptions(
+                        key="${S3_ACCESSKEY_CLUSTER}",
+                        secret="${S3_SECRETKEY_CLUSTER}",
+                        client_kwargs={
+                            "endpoint_url": "${S3_ENDPOINT_CLUSTER}",
+                            "region_name": "${S3_REGION_CLUSTER}"
+                        }
+                    )
+                ]
+            )
+        ]
+    )
     outputs = [
         OutputProduct(
             id=outp['name'],
             path='/tmp/output',
             store_type=outp['store_type'],
-            store_params = outputs_store_param,
+            store_params = store_params,
             type=outp.get('type', 'filename'),
             opening_mode=outp.get('opening_mode', 'CREATE')
         )
