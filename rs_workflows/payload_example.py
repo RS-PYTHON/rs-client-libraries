@@ -19,7 +19,7 @@ workflow_step = WorkflowStep(
     validate_output=False,
     module="eopf.computing.utils",
     processing_unit="EORechunkingUnit",
-    inputs={"l1a": "MSI"},
+    inputs=None,
     adfs={"dem": "DEM"},
     outputs={
         "l1a": "output_l1a_internal",
@@ -120,6 +120,6 @@ output_file = Path("payload_example.yaml")
 with output_file.open("w", encoding="utf-8") as f:
     f.write("# Triggering payload \n")
     
-    yaml.dump(payload.model_dump(by_alias=True), f, sort_keys=False)
+    yaml.dump(payload.dump(), f, sort_keys=False)
 
 print(f"Payload YAML written to {output_file}")

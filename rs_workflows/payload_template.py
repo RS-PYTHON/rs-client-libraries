@@ -21,20 +21,40 @@
 from typing import Dict, List, Optional, Union
 from pydantic import BaseModel, Field, field_validator#, ConfigDict
 
-
+class BasePayloadModel(BaseModel):
+    """Base class shared by all the schema models"""
+    class Config:
+        """Configuration for pydantic"""
+        # Allow using field names even when aliases are set
+        populate_by_name = True
+        # Optional: disable validation errors
+        validate_assignment = False
+        arbitrary_types_allowed = True
+        extra = "allow"  # ignore unknown fields
+        
+    def dump(self, **kwargs):
+        """Custom dump that:
+         - skips None fields by default.
+         - skips all unset
+         - use the alias for fields by default
+         """
+        return self.model_dump(by_alias=True, 
+                               exclude_none=True, 
+                               exclude_unset=True,
+                               **kwargs)
 # Utility / Common classes
 
-class StorageOptions(BaseModel):
+class StorageOptions(BasePayloadModel):
     """Options to access a storage backend"""
     key: Optional[str] = None
     secret: Optional[str] = None
     client_kwargs: Optional[Dict[str, str]] = None
 
-class StoreOptionsWrapper(BaseModel):
+class StoreOptionsWrapper(BasePayloadModel):
     """Wrapper for a list of storage options"""
     storage_options: List[StorageOptions]
 
-class StoreParams(BaseModel):
+class StoreParams(BasePayloadModel):
     """Flexible store_params representation for payloads"""
     # Either a simple S3 secret alias
     s3_secret_alias: Optional[str] = None
@@ -71,12 +91,12 @@ class StoreParams(BaseModel):
             return cls(options=wrappers)
         raise ValueError("Invalid store_params format")
 
-class LoggingConfig(BaseModel):
+class LoggingConfig(BasePayloadModel):
     level: Optional[str] = Field(default="INFO", description="Logging level")
     
 # Main sections
 
-class GeneralConfiguration(BaseModel):
+class GeneralConfiguration(BasePayloadModel):
     """General configuration options for EOConfiguration behavior"""
     logging: Optional[LoggingConfig] = None
 
@@ -101,7 +121,7 @@ class GeneralConfiguration(BaseModel):
         """Allow future unknown fields"""
         extra = "allow"  
 
-class ExternalModule(BaseModel):
+class ExternalModule(BasePayloadModel):
     """Definition of an external module to import dynamically"""
     name: str
     alias: Optional[str] = None
@@ -109,14 +129,14 @@ class ExternalModule(BaseModel):
     folder: Optional[str] = None
 
 
-class Breakpoints(BaseModel):
+class Breakpoints(BasePayloadModel):
     """Configuration for debugging breakpoints"""
     activate_all: Optional[bool] = None
     folder: Optional[str] = None
     store_params: Optional[StoreParams] = None
     ids: Optional[List[str]] = None
 
-class WorkflowStep(BaseModel):
+class WorkflowStep(BasePayloadModel):
     """Definition of a workflow step (processing unit)"""
     name: str
     active: Optional[bool] = True
@@ -133,7 +153,7 @@ class WorkflowStep(BaseModel):
                                          ]]] = None
 
 
-class InputProduct(BaseModel):
+class InputProduct(BasePayloadModel):
     """Definition of an input product in the I/O configuration"""
     id: str
     path: str
@@ -142,7 +162,7 @@ class InputProduct(BaseModel):
     store_params: Optional[StoreParams] = None
 
 
-class OutputProduct(BaseModel):
+class OutputProduct(BasePayloadModel):
     """Definition of an output product in the I/O configuration"""
     id: str
     path: str
@@ -153,21 +173,21 @@ class OutputProduct(BaseModel):
     apply_eoqc: Optional[bool] = Field(default=False)
 
 
-class AdfConfig(BaseModel):
+class AdfConfig(BasePayloadModel):
     """Definition of an ADF configuration entry"""
     id: str
     path: str
     store_params: Optional[StoreParams] = None
 
 
-class IOConfig(BaseModel):
+class IOConfig(BasePayloadModel):
     """Input/output configuration"""
     input_products: List[InputProduct] = []
     output_products: List[OutputProduct] = []
     adfs: List[AdfConfig] = []
 
 
-class DaskContext(BaseModel):
+class DaskContext(BasePayloadModel):
     """Configuration for the DaskContext"""
     cluster_type: Optional[str] = None
     cluster_config: Optional[Dict[str, Union[str, int, bool]]] = None
@@ -176,7 +196,7 @@ class DaskContext(BaseModel):
     performance_report_file: Optional[str] = None
 
 
-class EOQCConfig(BaseModel):
+class EOQCConfig(BasePayloadModel):
     """Configuration for the EOQC processor"""
     config_folder: Optional[str] = Field(default="default")
     parameters: Optional[Dict[str, Union[str, int, float, bool]]] = Field(default_factory=dict)
@@ -188,7 +208,7 @@ class EOQCConfig(BaseModel):
 
 # Root payload model
 
-class PayloadSchema(BaseModel):
+class PayloadSchema(BasePayloadModel):
     """Root payload schema containing all configuration sections"""
     dotenv: Optional[List[str]] = None
     general_configuration: Optional[GeneralConfiguration] = None
@@ -208,4 +228,4 @@ class PayloadSchema(BaseModel):
 
 # Disable validation globally. Do we want this? If yes, uncomment the import of ConfigDict
 
-#BaseModel.model_config = ConfigDict(validate_assignment=False, extra='allow', arbitrary_types_allowed=True)
+#BasePayloadModel.model_config = ConfigDict(validate_assignment=False, extra='allow', arbitrary_types_allowed=True)
