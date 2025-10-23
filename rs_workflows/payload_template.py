@@ -18,8 +18,8 @@
     The schema is based on Pydantic (standard for schema + validation + autocompletion).
 """
 
-from typing import Dict, List, Optional, Union
-from pydantic import BaseModel, Field, field_validator#, ConfigDict
+from typing import Optional, Union
+from pydantic import BaseModel, Field, field_validator#, Configdict
 
 class BasePayloadModel(BaseModel):
     """Base class shared by all the schema models"""
@@ -48,18 +48,18 @@ class StorageOptions(BasePayloadModel):
     """Options to access a storage backend"""
     key: Optional[str] = None
     secret: Optional[str] = None
-    client_kwargs: Optional[Dict[str, str]] = None
+    client_kwargs: Optional[dict[str, str]] = None
 
 class StoreOptionsWrapper(BasePayloadModel):
     """Wrapper for a list of storage options"""
-    storage_options: List[StorageOptions]
+    storage_options: list[StorageOptions]
 
 class StoreParams(BasePayloadModel):
     """Flexible store_params representation for payloads"""
     # Either a simple S3 secret alias
     s3_secret_alias: Optional[str] = None
     # Or a list of storage options
-    options: Optional[List[StoreOptionsWrapper]] = None
+    options: Optional[list[StoreOptionsWrapper]] = None
     # Or a regex + multiplicity
     regex: Optional[str] = None
     multiplicity: Optional[Union[str, int]] = None
@@ -134,7 +134,7 @@ class Breakpoints(BasePayloadModel):
     activate_all: Optional[bool] = None
     folder: Optional[str] = None
     store_params: Optional[StoreParams] = None
-    ids: Optional[List[str]] = None
+    ids: Optional[list[str]] = None
 
 class WorkflowStep(BasePayloadModel):
     """Definition of a workflow step (processing unit)"""
@@ -144,13 +144,20 @@ class WorkflowStep(BasePayloadModel):
     step: Optional[int] = None    
     module: Optional[str] = None
     processing_unit: Optional[str] = None
-    inputs: Optional[Dict[str, str]] = None
-    outputs: Optional[Dict[str, str]] = None
-    adfs: Optional[Dict[str, str]] = None
-    parameters: Optional[Dict[str, Union[str, int, float, bool,
-                                         Union[int, List[int]],
-                                         Union[str, List[str]],
-                                         ]]] = None
+    inputs: Optional[list[dict[str, str]]] = None
+    outputs: Optional[list[dict[str, str]]] = None
+    adfs: Optional[list[dict[str, str]]] = None
+    parameters: Optional[dict[
+        str,
+        Union[
+            str,
+            int,
+            float,
+            bool,
+            list[int],
+            list[str],
+        ],
+    ]] = None
 
 
 class InputProduct(BasePayloadModel):
@@ -182,43 +189,43 @@ class AdfConfig(BasePayloadModel):
 
 class IOConfig(BasePayloadModel):
     """Input/output configuration"""
-    input_products: List[InputProduct] = []
-    output_products: List[OutputProduct] = []
-    adfs: List[AdfConfig] = []
+    input_products: list[InputProduct] = []
+    output_products: list[OutputProduct] = []
+    adfs: list[AdfConfig] = []
 
 
 class DaskContext(BasePayloadModel):
     """Configuration for the DaskContext"""
     cluster_type: Optional[str] = None
-    cluster_config: Optional[Dict[str, Union[str, int, bool]]] = None
-    client_config: Optional[Dict[str, Union[str, int, bool]]] = None
-    dask_config: Optional[Dict[str, Union[str, int, bool]]] = None
+    cluster_config: Optional[dict[str, Union[str, int, bool]]] = None
+    client_config: Optional[dict[str, Union[str, int, bool]]] = None
+    dask_config: Optional[dict[str, Union[str, int, bool]]] = None
     performance_report_file: Optional[str] = None
 
 
 class EOQCConfig(BasePayloadModel):
     """Configuration for the EOQC processor"""
     config_folder: Optional[str] = Field(default="default")
-    parameters: Optional[Dict[str, Union[str, int, float, bool]]] = Field(default_factory=dict)
+    parameters: Optional[dict[str, Union[str, int, float, bool]]] = Field(default_factory=dict)
     update_attrs: Optional[bool] = Field(default=True)
     report_path: Optional[str] = None
     config_path: Optional[str] = None
-    additional_config_folders: Optional[List[str]] = None
+    additional_config_folders: Optional[list[str]] = None
 
 
 # Root payload model
 
 class PayloadSchema(BasePayloadModel):
     """Root payload schema containing all configuration sections"""
-    dotenv: Optional[List[str]] = None
+    dotenv: Optional[list[str]] = None
     general_configuration: Optional[GeneralConfiguration] = None
-    external_modules: Optional[List[ExternalModule]] = None
+    external_modules: Optional[list[ExternalModule]] = None
     breakpoints: Optional[Breakpoints] = None
-    workflow: Optional[List[WorkflowStep]] = None
+    workflow: Optional[list[WorkflowStep]] = None
     io: Optional[IOConfig] = Field(None, alias="I/O")
     dask_context: Optional[DaskContext] = None
-    logging: Optional[List[str]] = None
-    config: Optional[List[str]] = None
+    logging: Optional[list[str]] = None
+    config: Optional[list[str]] = None
     eoqc: Optional[EOQCConfig] = None
     
     class Config:
@@ -226,6 +233,6 @@ class PayloadSchema(BasePayloadModel):
         populate_by_name = True
 
 
-# Disable validation globally. Do we want this? If yes, uncomment the import of ConfigDict
+# Disable validation globally. Do we want this? If yes, uncomment the import of Configdict
 
-#BasePayloadModel.model_config = ConfigDict(validate_assignment=False, extra='allow', arbitrary_types_allowed=True)
+#BasePayloadModel.model_config = Configdict(validate_assignment=False, extra='allow', arbitrary_types_allowed=True)

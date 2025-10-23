@@ -15,8 +15,6 @@
 """."""
 
 
-from typing import Dict
-
 import yaml
 from prefect import get_run_logger, task
 from pydantic import BaseModel
@@ -46,7 +44,7 @@ from rs_workflows.record_performance import record_performance_indicators
 
 def build_workflow_step(unit):
     # get inputs
-    input_products = [Dict[str, str]]
+    input_products = []
     if "input_products" in unit:
         for input_product in unit["input_products"]:
             if isinstance(input_product, dict) and \
@@ -57,13 +55,13 @@ def build_workflow_step(unit):
                 else:
                     input_products.append({input_product["name"] : input_product["origin"]})
     # get adfs
-    adfs = [Dict[str, str]]
+    adfs = []
     if "input_adfs" in unit:
         for input_adf in unit["input_adfs"]:
             if isinstance(input_adf, dict) and "name" in input_adf:
                 adfs.append({"dem": input_adf["name"]})
     # get outputs
-    output_products = [Dict[str, str]]
+    output_products = []
     if "output_products" in unit:
         for output_product in unit["output_products"]:
             if isinstance(output_product, dict) and "name" in output_product:                
@@ -88,7 +86,7 @@ def build_workflow_step(unit):
             parameters = None,
         )        
     except KeyError as ke:
-        raise ValueError(f"Key {ke} not found in unit list")
+        raise ValueError(f"Key {ke} not found in unit list") from ke
 
 def build_io_config(unit, flow_input_product):
     """
@@ -153,7 +151,7 @@ def build_io_config(unit, flow_input_product):
 
 @task(name="Generate payload file")
 async def generate_payload(
-    env: FlowEnvArgs,
+    #env: FlowEnvArgs,
     unit_list: list[dict],
     auxip_items: list[(bool, ItemCollection)],
     dpr_input
@@ -167,32 +165,33 @@ async def generate_payload(
 
     # TODO: should be moved to dpr_client.py and it should call dpr_client.py::update_configuration
 
-    logger = get_run_logger()
+    #logger = get_run_logger()
 
     # Init flow environment and opentelemetry span
-    flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "write-payload"):
+    #flow_env = FlowEnv(env)
+    #with flow_env.start_span(__name__, "write-payload"):
 
-        workflow_steps = []
-        io_config = []
-        logger.info("Geting workflow and I/O sections")
-        for unit in unit_list:
-            try:
-                workflow_steps.append(build_workflow_step(unit))
-                io_config.append(build_io_config(unit, dpr_input))
+    workflow_steps = []    
+    #logger.info("Geting workflow and I/O sections")
+    print("Geting workflow and I/O sections")
+    for unit in unit_list:
+        try:
+            workflow_steps.append(build_workflow_step(unit))
+            io_config = build_io_config(unit, dpr_input)
 
-            except KeyError as ke:
-                raise ValueError(f"Key {ke} not found in unit list") from ke
-        # Build the full payload using the schema
-        logger.info("Building the payload")
-        payload = PayloadSchema(
-            general_configuration = GeneralConfiguration(
-                                logging={"level": "DEBUG"},
-            ),
-            workflow = workflow_steps,
-            io = io_config,
-        )
+        except KeyError as ke:
+            raise ValueError(f"Key {ke} not found in unit list") from ke
+    # Build the full payload using the schema
+    #logger.info("Building the payload")
+    print("Building the payload")
+    payload = PayloadSchema(
+        general_configuration = GeneralConfiguration(
+                            logging={"level": "DEBUG"},
+        ),
+        workflow = workflow_steps,
+        io = io_config,
+    )
 
-        return payload
+    return payload
 
     return None
