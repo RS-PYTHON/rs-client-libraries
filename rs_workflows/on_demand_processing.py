@@ -149,7 +149,7 @@ async def dpr_processing(
 
         # pylint: disable-next=unused-variable
         auxip_items = [item for t in tasks for item in t.result()]  # noqa: F841
-        
+
         print(auxip_items[0][1].to_dict())
         for item in auxip_items[0][1]:
             print(item.to_dict())

@@ -1,10 +1,12 @@
-import yaml
 import asyncio
 from pathlib import Path
+
+import yaml
+from flow_utils import DprProcessIn, Priority, ProcessingMode, WorkflowType
+from payload_generator import generate_payload
 from payload_template import (
     PayloadSchema,
 )
-from payload_generator import generate_payload
 
 # # -------------------------------
 # # Dynamic input
@@ -125,7 +127,7 @@ unit_list = [
                 "mandatory": True,
                 "type": "folder",
                 "store_type": "cadu",
-            }
+            },
         ],
         "input_adfs": [
             {
@@ -147,7 +149,7 @@ unit_list = [
                                 "dTb": 0,
                             },
                         },
-                    }
+                    },
                 ],
             },
             {
@@ -169,7 +171,7 @@ unit_list = [
                                 "dTb": 0,
                             },
                         },
-                    }
+                    },
                 ],
             },
         ],
@@ -181,23 +183,126 @@ unit_list = [
                 "type": "folder",
                 "store_type": "zarr",
                 "opening_mode": "CREATE_OVERWRITE",
-            }
+            },
         ],
-    }
+    },
+    {
+        "name": "next_unit",
+        "module": "single_unit.output",
+        "input_products": [
+            {
+                "name": "S2CADUS",
+                "origin": "pipeline_input",
+                "mandatory": True,
+                "type": "folder",
+                "store_type": "cadu",
+            },
+        ],
+        "input_adfs": [
+            {
+                "name": "OSF_2",
+                "mandatory": False,
+                "type": "filename",
+                "store_type": "safe",
+                "alternatives": [
+                    {
+                        "order": 1,
+                        "timeout_seconds": 0,
+                        "query": {
+                            "name": "LatestValCover",
+                            "parameters": {
+                                "product_type": "2_OPER_AUX_OBMEMC_PDMC",
+                                "start_datetime": "2023-11-03T11:00:00.000Z",
+                                "end_datetime": "2025-11-03T11:00:00.000Z",
+                                "dTa": 0,
+                                "dTb": 0,
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                "name": "FRO_2",
+                "mandatory": False,
+                "type": "filename",
+                "store_type": "safe",
+                "alternatives": [
+                    {
+                        "order": 1,
+                        "timeout_seconds": 0,
+                        "query": {
+                            "name": "LatestValCover",
+                            "parameters": {
+                                "product_type": "2_AUX_PP2",
+                                "start_datetime": "2023-11-03T11:00:00.000Z",
+                                "end_datetime": "2025-11-03T11:00:00.000Z",
+                                "dTa": 7200,
+                                "dTb": 0,
+                            },
+                        },
+                    },
+                ],
+            },
+        ],
+        "output_products": [
+            {
+                "name": "output_folder_next_unit",
+                "origin": "pipeline_output",
+                "mandatory": True,
+                "type": "folder",
+                "store_type": "zarr",
+                "opening_mode": "CREATE_OVERWRITE",
+            },
+        ],
+    },
 ]
 
-dpr_input = {"name": "S1CADUS"}
- 
+flow_env_args = {
+    "env": {
+        "owner_id": "alex",
+    },
+}
+INPUT_COLLECTION = "TEST_FLOW_INPUT"
+AUXIP_COLLECTION = "TEST_FLOW_AUXIP"
+OUTPUT_COLLECTION = "TEST_FLOW_OUTPUT"
+dpr_process_in = DprProcessIn(
+    **flow_env_args,
+    processor_name="mockup_full",
+    processor_version="",  # NOTE: is it used ?
+    dask_cluster_label="cluster_label",
+    pipeline="set_me_later",
+    unit="",
+    priority=Priority.LOW,
+    workflow_type=WorkflowType.ON_DEMAND,
+    input_products={
+        "S1CADUS": "s3://s1-input/S1CADUS",
+        "S2CADUS": "s3://s1-input/S2CADUS",
+    },
+    auxiliary_product_to_collection_identifier={"*": AUXIP_COLLECTION},
+    generated_product_to_collection_identifier={"*": OUTPUT_COLLECTION},
+    processing_mode=[ProcessingMode.ALWAYS],
+    start_datetime="2023-10-01T11:00:00Z",
+    end_datetime="2025-10-03T11:00:00Z",
+    satellite=None,
+)
+
+auxip_items = [
+    ("AUX_PP2", "s3://s1-input/L2_inputs/S1A_AUX_PP2_V20190228T092500_G20220323T152739.SAFE"),
+    ("AUX_CLM", "s3://s1-input/L2_inputs/land-polygons-split-4326"),
+]
+
+
 async def main():
-    payload = await generate_payload.fn(unit_list, None, dpr_input)
-    print(payload)
+    payload = await generate_payload.fn(unit_list, auxip_items, dpr_process_in)
+    # print(payload)
     output_file = Path("payload_example.yaml")
     with output_file.open("w", encoding="utf-8") as f:
         f.write("# Triggering payload \n")
-        
+
         yaml.dump(payload.dump(), f, sort_keys=False)
 
     print(f"Payload YAML written to {output_file}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
