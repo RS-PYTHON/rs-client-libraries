@@ -88,7 +88,7 @@ async def auxip_staging(
 
     Returns:
         bool: Return status: False if staging failed, True otherwise
-        ItemCollection: List of Items retrieved from the Auxip search and staged to the catalog
+        ItemCollection: List of catalog Items staged from Auxip station
     """
     logger = get_run_logger()
 
@@ -153,7 +153,7 @@ async def auxip_staging(
                 description="Auxiliary files added to catalog.",
             )
 
-        return return_status, auxip_items
+        return return_status, catalog_items
 
 
 @flow(name="On-demand Auxip staging")
