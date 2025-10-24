@@ -22,6 +22,7 @@ from prefect.artifacts import acreate_markdown_artifact
 from pystac import ItemCollection
 
 from rs_client.stac.auxip_client import AuxipClient
+from rs_client.stac.catalog_client import CatalogClient
 from rs_common.utils import create_valcover_filter
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task
@@ -87,7 +88,7 @@ async def auxip_staging(
 
     Returns:
         bool: Return status: False if staging failed, True otherwise
-        ItemCollection: List of Items retrieved from the Auxip search and staged to the catalog
+        ItemCollection: List of catalog Items staged from Auxip station
     """
     logger = get_run_logger()
 
@@ -134,16 +135,25 @@ async def auxip_staging(
                 logger.debug({job_name: job_result})
                 return_status = False
 
+        # Get staged items from catalog (to have the correct href)
+        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+        catalog_items = ItemCollection(
+            catalog_client.get_items(
+                collection_id=catalog_collection_identifier,
+                items_ids=[item.id for item in auxip_items],
+            ),
+        )
+
         # Create artifact if all jobs succeeded
         if return_status:
             logger.info("Staging successful, creating artifact with a list of staged items.")
             await acreate_markdown_artifact(
-                markdown=f"{json.dumps(auxip_items.to_dict(), indent=2)}",
+                markdown=f"{json.dumps(catalog_items.to_dict(), indent=2)}",
                 key="auxiliary-files",
                 description="Auxiliary files added to catalog.",
             )
 
-        return return_status, auxip_items
+        return return_status, catalog_items
 
 
 @flow(name="On-demand Auxip staging")
