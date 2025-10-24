@@ -89,7 +89,7 @@ class MockRsClient(Mock):
 
     def get_items(self, *_, **__):
         """Mock stac get_items"""
-        return [MockRsClient()] * 2
+        return self.search()
 
     def get_collections(self, *_, **__):
         """Mock stac get_collections"""
@@ -290,6 +290,7 @@ async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
 @patch.object(RsClient, "get_auxip_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
+@patch.object(RsClient, "get_catalog_client", MockRsClient)
 @patch.object(catalog_flow, "datetime", Mock())
 async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
     """Test the on_demand_auxip_staging flow"""
