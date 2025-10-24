@@ -150,9 +150,14 @@ async def dpr_processing(
         # pylint: disable-next=unused-variable
         auxip_items = [item for t in tasks for item in t.result()]  # noqa: F841
 
-        print(auxip_items[0][1].to_dict())
-        for item in auxip_items[0][1]:
-            print(item.to_dict())
+        result = []
+        for status, item_collection in auxip_items:
+            for item in item_collection.items:
+                if status:
+                    product_type = item.properties.get("product:type")
+                    asset = next(iter(item.assets.values()))
+                    result.append((product_type, asset.href))
+
         # Wait for Alex part
         return
 
