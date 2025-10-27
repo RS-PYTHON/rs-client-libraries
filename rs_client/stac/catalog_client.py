@@ -225,10 +225,15 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     ) -> ItemCollection | None:
         """Search items inside a specific collection."""
 
+        def _norm(collection: str) -> str:
+            if ":" in collection:
+                o, c = collection.split(":", 1)
+                return self.full_collection_id(o, c, "_")
+            return self.full_collection_id(kwargs.get("owner_id"), collection, "_")
+
         if "collections" in kwargs:
-            kwargs["collections"] = [
-                self.full_collection_id(kwargs.get("owner_id"), collection, "_") for collection in kwargs["collections"]
-            ]  # type: ignore
+            kwargs["collections"] = [_norm(collection) for collection in kwargs["collections"]]
+        
         return super().search(**kwargs)  # type: ignore
 
     # end of STAC read opperations
