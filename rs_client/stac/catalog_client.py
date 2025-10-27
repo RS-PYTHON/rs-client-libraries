@@ -192,6 +192,20 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         self.clear_collection_cache()
         return response
 
+    def resolve_collection_id(
+        self,
+        collection: str,
+        owner_id_from_kwargs: str | None = None,
+        sep: str = "_",
+    ) -> str:
+        """Accepts 'owner:collection' or plain 'collection' and returns the full collection id.
+        Falls back to self.owner_id when owner_id_from_kwargs is None.
+        """
+        if ":" in collection:
+            owner, collection_id = collection.split(":", 1)
+            return self.full_collection_id(owner, collection_id, sep)
+        return self.full_collection_id(owner_id_from_kwargs, collection, sep)
+
     ################################
     # Specific STAC implementation #
     ################################
@@ -225,15 +239,12 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     ) -> ItemCollection | None:
         """Search items inside a specific collection."""
 
-        def _norm(collection: str) -> str:
-            if ":" in collection:
-                o, c = collection.split(":", 1)
-                return self.full_collection_id(o, c, "_")
-            return self.full_collection_id(kwargs.get("owner_id"), collection, "_")
-
         if "collections" in kwargs:
-            kwargs["collections"] = [_norm(collection) for collection in kwargs["collections"]]
-        
+            owner = kwargs.get("owner_id")
+            kwargs["collections"] = [
+                self.resolve_collection_id(collection, owner) for collection in kwargs["collections"]  # type: ignore
+            ]
+
         return super().search(**kwargs)  # type: ignore
 
     # end of STAC read opperations
