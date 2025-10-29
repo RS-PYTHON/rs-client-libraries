@@ -286,9 +286,10 @@ dpr_process_in = DprProcessIn(
     satellite=None,
 )
 
+
 auxip_items = [
-    ("AUX_PP2", "s3://s1-input/L2_inputs/S1A_AUX_PP2_V20190228T092500_G20220323T152739.SAFE"),
-    ("AUX_CLM", "s3://s1-input/L2_inputs/land-polygons-split-4326"),
+    ("OPER_AUX_OBMEMC_PDMC", "s3://rs-dev-cluster-...000000.xml"),
+    ("AUX_PP2", "s3://rs-dev-cluster-...062732.EOF"),
 ]
 
 

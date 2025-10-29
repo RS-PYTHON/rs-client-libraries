@@ -100,6 +100,8 @@ class StoreParams(BasePayloadModel):
 
 
 class LoggingConfig(BasePayloadModel):
+    """Logging configuration used in the general_configuration section"""
+
     level: str | None = Field(default="INFO", description="Logging level")
 
 
@@ -110,7 +112,6 @@ class GeneralConfiguration(BasePayloadModel):
     """General configuration options for EOConfiguration behavior"""
 
     logging: LoggingConfig | None = None
-
     triggering__use_basic_logging: bool | None = None
     triggering__wait_before_exit: int | None = None
     dask__export_graphs: str | None = None
@@ -126,11 +127,6 @@ class GeneralConfiguration(BasePayloadModel):
     triggering__dask_monitor__enabled: bool | None = None
     triggering__dask_monitor__cancel: bool | None = None
     triggering__dask_monitor__cancel_state: str | None = None
-
-    class Config:
-        """Allow future unknown fields"""
-
-        extra = "allow"
 
 
 class ExternalModule(BasePayloadModel):
@@ -166,14 +162,7 @@ class WorkflowStep(BasePayloadModel):
     parameters: None | (
         dict[
             str,
-            (
-                str |
-                int |
-                float |
-                bool |
-                list[int] |
-                list[str]
-            ),
+            (str | int | float | bool | list[int] | list[str]),
         ]
     ) = None
 

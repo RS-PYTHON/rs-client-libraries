@@ -14,22 +14,15 @@
 
 """."""
 
-
-import yaml
-from flow_utils import DprProcessIn
 from prefect import get_run_logger, task
-from pydantic import BaseModel
-from pystac import ItemCollection
 
-from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
-from rs_client.stac.catalog_client import CatalogClient
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from rs_workflows.payload_template import (
+from rs_workflows.flow_utils import (
+    DprProcessIn,
+    FlowEnv,
+    FlowEnvArgs,
+)
+from rs_workflows.payload_template import (  # Breakpoints,; DaskContext,; EOQCConfig,; ExternalModule,
     AdfConfig,
-    Breakpoints,
-    DaskContext,
-    EOQCConfig,
-    ExternalModule,
     GeneralConfiguration,
     InputProduct,
     IOConfig,
@@ -40,7 +33,6 @@ from rs_workflows.payload_template import (
     StoreParams,
     WorkflowStep,
 )
-from rs_workflows.record_performance import record_performance_indicators
 
 
 def build_workflow_step(unit):
@@ -87,13 +79,10 @@ def build_workflow_step(unit):
         for output_product in unit["output_products"]:
             if isinstance(output_product, dict) and "name" in output_product:
                 left_part = output_product["regex"] if "regex" in output_product else output_product["name"]
-                right_part = output_product["name"]
-                if "origin" in output_product and "pipeline_output" not in output_product["origin"]:
-                    right_part = output_product["origin"]
+                right_part = output_product["name"]  # ==> "*pdf" : "name"
+                # if "origin" in output_product and "pipeline_output" not in output_product["origin"]:
+                #     right_part = output_product["origin"]
                 output_products.append({left_part: right_part})
-
-    # get parameters
-
     try:
         return WorkflowStep(
             name=unit["name"],
@@ -160,10 +149,10 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams):
 
 
 @task(name="Generate payload file")
-async def generate_payload(
-    # env: FlowEnvArgs,
+def generate_payload(
+    env: FlowEnvArgs,
     unit_list: list[dict],
-    auxip_items: list[(str, str)],
+    adfs: list[(str, str)],
     dpr_process_in: DprProcessIn,
 ) -> dict:
     """
@@ -193,11 +182,9 @@ async def generate_payload(
 
     # TODO: should be moved to dpr_client.py and it should call dpr_client.py::update_configuration
 
-    # logger = get_run_logger()
-
-    # Init flow environment and opentelemetry span
-    # flow_env = FlowEnv(env)
-    # with flow_env.start_span(__name__, "write-payload"):
+    logger = get_run_logger()
+    # the values should be name of the secrets, and not the values of these secrets.
+    # it's up to the processor to retrieve the values at the running time
     store_params = StoreParams(
         options=[
             StoreOptionsWrapper(
@@ -214,8 +201,7 @@ async def generate_payload(
 
     workflow_steps = []
     io_config = IOConfig()
-    # logger.info("Geting workflow and I/O sections")
-    print("Geting workflow and I/O sections")
+    logger.info("Geting workflow and I/O sections")
     for unit in unit_list:
         try:
             workflow_steps.append(build_workflow_step(unit))
@@ -225,19 +211,18 @@ async def generate_payload(
         except KeyError as ke:
             raise ValueError(f"Key {ke} not found in unit list") from ke
 
-    io_config.adfs = [AdfConfig(id=auxip[0], path=auxip[1], store_params=store_params) for auxip in auxip_items]
+    io_config.adfs = [AdfConfig(id=adf[0], path=adf[1], store_params=store_params) for adf in adfs]
     # Build the full payload using the schema
-    # logger.info("Building the payload")
-
-    print("Building the payload")
+    logger.info("Building the payload")
     payload = PayloadSchema(
+        # add some default params, as stated in a comment from jira (story 800)
         general_configuration=GeneralConfiguration(
             logging={"level": "DEBUG"},
+            triggering__use_basic_logging=True,
+            triggering__wait_before_exit=10,
         ),
         workflow=workflow_steps,
         io=io_config,
     )
-
+    logger.debug(f"Generated payload file: \n {payload}")
     return payload
-
-    return None

@@ -20,6 +20,7 @@ Fixtures defined in a conftest.py can be used by any test in that package withou
 (pytest will automatically discover them).
 """
 import logging
+from unittest.mock import MagicMock
 
 import pytest
 import responses
@@ -29,7 +30,12 @@ from rs_client.rs_client import RsClient
 from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from rs_common.utils import env_bool
-from rs_workflows import init_pi_db_flow
+from rs_workflows.payload_template import (
+    StorageOptions,
+    StoreOptionsWrapper,
+    StoreParams,
+    init_pi_db_flow,
+)
 from tests import common
 
 # Use dummy values
@@ -561,3 +567,47 @@ def patch_prefect_logger(monkeypatch):
     Replaces Prefect’s logger with a standard Python logger.
     """
     monkeypatch.setattr(init_pi_db_flow, "get_run_logger", lambda: logging.getLogger("test"))
+
+
+@pytest.fixture
+def sample_unit():
+    """Sample unit definition for workflow step generation"""
+    return {
+        "name": "unit_a",
+        "module": "rs.processor.unit_a",
+        "input_products": [
+            {"name": "S1", "origin": "pipeline_input_1"},
+            {"name": "S2", "origin": "external_input"},
+        ],
+        "input_adfs": [{"name": "dem_adf"}],
+        "output_products": [
+            {"name": "S1_OUT", "regex": "*.tif"},
+            {"name": "S2_OUT"},
+        ],
+    }
+
+
+@pytest.fixture
+def mock_dpr_process_in():
+    """Mock DprProcessIn used by get_io"""
+    m = MagicMock()
+    m.input_products = {"S1": "/tmp/in_s1.tif", "S2": "/tmp/in_s2.tif"}
+    return m
+
+
+@pytest.fixture
+def mock_store_params():
+    """Sample store params"""
+    return StoreParams(
+        options=[
+            StoreOptionsWrapper(
+                storage_options=[
+                    StorageOptions(
+                        key="${S3_ACCESSKEY}",
+                        secret="${S3_SECRETKEY}",
+                        client_kwargs={"endpoint_url": "${S3_ENDPOINT}", "region_name": "${S3_REGION}"},
+                    ),
+                ],
+            ),
+        ],
+    )

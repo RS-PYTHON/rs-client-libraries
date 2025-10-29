@@ -18,8 +18,10 @@
 import datetime
 import json
 import os
+import tempfile
 
-from prefect import flow, task
+import yaml
+from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprProcessor
@@ -32,6 +34,7 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
+from rs_workflows.payload_generator import generate_payload
 from rs_workflows.staging_flow import staging_task
 
 
@@ -105,7 +108,7 @@ async def dpr_processing(
         s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
         catalog bucket.
     """
-
+    logger = get_run_logger()
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(dpr_input.env)
 
@@ -136,7 +139,7 @@ async def dpr_processing(
             end_datetime=dpr_input.end_datetime,
         )
         unit_list = out["units"]
-        print(unit_list)
+
         md = "# List of processing units\n\n```json\n" + json.dumps(unit_list, indent=2) + "\n```"
         # Artifact key must only contain lowercase letters, numbers, and dashes.
         await acreate_markdown_artifact(key="processing-unit-list", markdown=md, description="List of processing units")
@@ -147,18 +150,33 @@ async def dpr_processing(
             for input_adfs in unit["input_adfs"]:
                 tasks.append(process_input_adfs.submit(input_adfs, dpr_input, task_table))
 
-        # pylint: disable-next=unused-variable
         auxip_items = [item for t in tasks for item in t.result()]  # noqa: F841
 
-        result = []
+        adfs = []
         for status, item_collection in auxip_items:
             for item in item_collection.items:
                 if status:
                     product_type = item.properties.get("product:type")
                     asset = next(iter(item.assets.values()))
-                    result.append((product_type, asset.href))
+                    adfs.append((product_type, asset.href))
+                else:
+                    raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
+        # generate the dpr payload file
+        task_future = generate_payload.submit(flow_env, unit_list, adfs, dpr_input)
+        # get the payload generation result
+        generated_payload_res = task_future.result()
+        # Write the payload as prefect artifact
+        md = "# DPR Payload\n\n```yaml\n" + yaml.dump(generated_payload_res.dump(), sort_keys=False) + "\n```"
+        s3_payload_file = "s3://rs-dev-cluster-temp/prefect-share/users/agrosu/config/payload_file.yaml"
+        await acreate_markdown_artifact(key="dpr-payload-file", markdown=md, description="")
 
-        # Wait for Alex part
+        # Upload the config payload file to S3
+        with tempfile.NamedTemporaryFile() as temp:
+            with open(temp.name, "w", encoding="utf-8") as tmp_file:
+                yaml.dump(generated_payload_res.dump(), tmp_file, default_flow_style=False, sort_keys=False)
+            logger.debug(f"Writing the payload to file :\n {s3_payload_file}")
+            await prefect_utils.s3_upload_file(temp.name, s3_payload_file)
+
         return
 
 
