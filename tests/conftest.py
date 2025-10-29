@@ -30,11 +30,11 @@ from rs_client.rs_client import RsClient
 from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from rs_common.utils import env_bool
+from rs_workflows import init_pi_db_flow
 from rs_workflows.payload_template import (
     StorageOptions,
     StoreOptionsWrapper,
     StoreParams,
-    init_pi_db_flow,
 )
 from tests import common
 
@@ -571,41 +571,38 @@ def patch_prefect_logger(monkeypatch):
 
 @pytest.fixture
 def sample_unit():
-    """Sample unit definition for workflow step generation"""
     return {
-        "name": "unit_a",
-        "module": "rs.processor.unit_a",
+        "name": "unit1",
+        "module": "module1",
         "input_products": [
-            {"name": "S1", "origin": "pipeline_input_1"},
-            {"name": "S2", "origin": "external_input"},
+            {"name": "input1", "origin": "pipeline_input_1", "store_type": "S3"},
         ],
-        "input_adfs": [{"name": "dem_adf"}],
+        "input_adfs": [
+            {"name": "adf1"},
+        ],
         "output_products": [
-            {"name": "S1_OUT", "regex": "*.tif"},
-            {"name": "S2_OUT"},
+            {"name": "output1", "regex": "*.tif", "store_type": "S3"},
         ],
     }
 
 
 @pytest.fixture
 def mock_dpr_process_in():
-    """Mock DprProcessIn used by get_io"""
-    m = MagicMock()
-    m.input_products = {"S1": "/tmp/in_s1.tif", "S2": "/tmp/in_s2.tif"}
-    return m
+    mock = MagicMock()
+    mock.input_products = {"input1": "/tmp/input1.tif"}
+    return mock
 
 
 @pytest.fixture
 def mock_store_params():
-    """Sample store params"""
     return StoreParams(
         options=[
             StoreOptionsWrapper(
                 storage_options=[
                     StorageOptions(
-                        key="${S3_ACCESSKEY}",
-                        secret="${S3_SECRETKEY}",
-                        client_kwargs={"endpoint_url": "${S3_ENDPOINT}", "region_name": "${S3_REGION}"},
+                        key="key",
+                        secret="secret",
+                        client_kwargs={"endpoint_url": "http://localhost", "region_name": "test"},
                     ),
                 ],
             ),
