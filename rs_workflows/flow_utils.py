@@ -165,6 +165,8 @@ class DprProcessIn:  # pylint: disable=too-many-instance-attributes
     processor_name: DprProcessor
     processor_version: str
     dask_cluster_label: str
+    s3_payload_file: str
+    s3_output_data: str
     # 'pipeline' or 'unit' must be provided
     pipeline: str | None = None
     unit: str | None = None

@@ -165,15 +165,15 @@ async def dpr_processing(
         generated_payload_res = task_future.result()
         # Write the payload as prefect artifact
         md = "# DPR Payload\n\n```yaml\n" + yaml.dump(generated_payload_res.dump(), sort_keys=False) + "\n```"
-        s3_payload_file = "s3://rs-dev-cluster-temp/prefect-share/users/agrosu/config/payload_file.yaml"
+
         await acreate_markdown_artifact(key="dpr-payload-file", markdown=md, description="")
 
         # Upload the config payload file to S3
         with tempfile.NamedTemporaryFile() as temp:
             with open(temp.name, "w", encoding="utf-8") as tmp_file:
                 yaml.dump(generated_payload_res.dump(), tmp_file, default_flow_style=False, sort_keys=False)
-            logger.debug(f"Writing the payload to file :\n {s3_payload_file}")
-            await prefect_utils.s3_upload_file(temp.name, s3_payload_file)
+            logger.debug(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
+            await prefect_utils.s3_upload_file(temp.name, dpr_input.s3_payload_file)
 
         return
 

@@ -19,6 +19,7 @@ The conftest.py file serves as a means of providing fixtures for an entire direc
 Fixtures defined in a conftest.py can be used by any test in that package without needing to import them
 (pytest will automatically discover them).
 """
+import json
 import logging
 from unittest.mock import MagicMock
 
@@ -592,6 +593,8 @@ def mock_dpr_process_in():
     """Fixture that mocks the DPR process input"""
     mock = MagicMock()
     mock.input_products = {"input1": "/tmp/input1.tif"}  # nosec B108: test-only temp path
+    mock.s3_output_data = "s3://mocked/output/path"
+    mock.s3_payload_file = "s3://mocked/payload_file.yaml"
     return mock
 
 
@@ -611,3 +614,36 @@ def mock_store_params():
             ),
         ],
     )
+
+
+@pytest.fixture
+def fake_storage_config(tmp_path):
+    """Creates a fake JSON storage configuration file."""
+    config = {
+        "storage": [
+            {
+                "name": "s3",
+                "storage_options": {
+                    "key": "S3_ACCESSKEY",
+                    "secret": "S3_SECRETKEY",
+                    "endpoint_url": "http://fake_s3_link",
+                    "region_name": "sbg",
+                },
+            },
+            {
+                "name": "shared_disk",
+                "opening_mode": "CREATE_OVERWRITE",
+                "relative_path": "/shared/${JOB_IDENTIFIER}",
+            },
+            {
+                "name": "local_disk",
+                "opening_mode": "CREATE_OVERWRITE",
+                "relative_path": "/local/${JOB_IDENTIFIER}",
+            },
+        ],
+    }
+
+    path = tmp_path / "storage_configuration.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(config, f)
+    return str(path)

@@ -13,6 +13,8 @@
 # limitations under the License.
 
 """."""
+import json
+import os
 
 from prefect import get_run_logger, task
 
@@ -137,7 +139,7 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams):
     outputs = [
         OutputProduct(
             id=outp["name"],
-            path="/tmp/output",  # nosec B108: placeholder path in generated payload
+            path=dpr_process_in.s3_output_data,
             store_type=outp["store_type"],
             store_params=store_params,
             type=outp.get("type", "filename"),
@@ -146,6 +148,60 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams):
         for outp in unit["output_products"]
     ]
     return inputs, outputs
+
+
+def load_store_params_from_config(config_path: str = "/etc/storage_configuration.json") -> StoreParams:
+    """
+    Loads storage configuration from a JSON file and constructs a StoreParams object.
+
+    Args:
+        config_path (str): Path to the storage configuration JSON file.
+            Defaults to '/etc/storage_configuration.json'.
+
+    Returns:
+        StoreParams: The StoreParams object built from the configuration file.
+
+    Raises:
+        FileNotFoundError: If the JSON file does not exist.
+        ValueError: If the JSON structure is invalid or missing required fields.
+    """
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Storage configuration file not found: {config_path}")
+
+    with open(config_path, encoding="utf-8") as f:
+        storage_config = json.load(f)
+
+    store_options_wrappers = []
+
+    for storage_entry in storage_config.get("storage", []):
+        name = storage_entry.get("name")
+        if not name:
+            continue
+
+        # S3 configuration
+        if name == "s3":
+            opts = StorageOptions(
+                key=f"${{{storage_entry['storage_options']['key']}}}",
+                secret=f"${{{storage_entry['storage_options']['secret']}}}",
+                client_kwargs={
+                    "endpoint_url": storage_entry["storage_options"]["endpoint_url"],
+                    "region_name": storage_entry["storage_options"]["region_name"],
+                },
+            )
+            store_options_wrappers.append(StoreOptionsWrapper(storage_options=[opts]))
+
+        # Non-S3 storage: shared_disk or local_disk
+        else:
+            opts = StorageOptions(
+                key=None,
+                secret=None,
+                client_kwargs=None,
+                relative_path=storage_entry.get("relative_path"),
+                opening_mode=storage_entry.get("opening_mode", "CREATE_OVERWRITE"),
+            )
+            store_options_wrappers.append(StoreOptionsWrapper(storage_options=[opts]))
+
+    return StoreParams(options=store_options_wrappers)
 
 
 @task(name="Generate payload file")
@@ -185,20 +241,11 @@ def generate_payload(  # pylint: disable=unused-argument
     logger = get_run_logger()
     # the values should be name of the secrets, and not the values of these secrets.
     # it's up to the processor to retrieve the values at the running time
-    # TODO: maybe these names should be taken from env ?
-    store_params = StoreParams(
-        options=[
-            StoreOptionsWrapper(
-                storage_options=[
-                    StorageOptions(
-                        key="${S3_ACCESSKEY}",
-                        secret="${S3_SECRETKEY}",  # nosec B106: placeholder, not a real secret
-                        client_kwargs={"endpoint_url": "${S3_ENDPOINT}", "region_name": "${S3_REGION}"},
-                    ),
-                ],
-            ),
-        ],
-    )
+    # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
+    # in cluster mode, it should be mounted as volume from a predefined (?) configmap
+
+    logger.info("Loading StoreParams configuration")
+    store_params = load_store_params_from_config()
 
     workflow_steps = []
     io_config = IOConfig()
