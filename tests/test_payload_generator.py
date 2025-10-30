@@ -15,27 +15,28 @@
 """Test the payload_generator module"""
 import json
 from unittest.mock import MagicMock
+
 import pytest
 
 from rs_workflows.payload_generator import (
     build_workflow_step,
+    generate_payload,
     get_io,
     load_store_params_from_config,
-    generate_payload,
 )
-
 from rs_workflows.payload_template import (
-    WorkflowStep,
-    InputProduct,
-    StoreParams,
-    StorageOptions,
-    OutputProduct,
-    IOConfig,
-    PayloadSchema,
     GeneralConfiguration,
+    InputProduct,
+    IOConfig,
+    OutputProduct,
+    PayloadSchema,
+    StorageOptions,
+    StoreParams,
+    WorkflowStep,
 )
 
 # Tests for build_workflow_step
+
 
 def test_build_workflow_step_valid(sample_unit):
     """Test building a valid WorkflowStep from a well-formed unit."""
@@ -48,6 +49,7 @@ def test_build_workflow_step_valid(sample_unit):
     assert any(d == {"dem": "adf1"} for d in (step.adfs or []))
     assert any(d == {"*.tif": "output1"} for d in (step.outputs or []))
 
+
 def test_build_workflow_step_missing_key_raises():
     """Ensure missing required keys raise a ValueError."""
     with pytest.raises(ValueError):
@@ -55,6 +57,7 @@ def test_build_workflow_step_missing_key_raises():
 
 
 # Tests for get_io
+
 
 def test_get_io_builds_input_and_output(sample_unit, mock_dpr_process_in, mock_store_params):
     """Verify correct InputProduct and OutputProduct creation."""
@@ -76,7 +79,7 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params):
 
 
 def test_load_store_params_from_config_valid(tmp_path):
-    """Test with a valid storage configuration """
+    """Test with a valid storage configuration"""
     config_data = {
         "storage": [
             {
@@ -93,9 +96,9 @@ def test_load_store_params_from_config_valid(tmp_path):
                 "relative_path": "/mnt/shared",
                 "opening_mode": "CREATE_OVERWRITE",
             },
-        ]
+        ],
     }
-    
+
     config_file = tmp_path / "storage_configuration.json"
     config_file.write_text(json.dumps(config_data))
 
@@ -105,7 +108,7 @@ def test_load_store_params_from_config_valid(tmp_path):
     assert result.options is not None
     assert len(result.options) == 2
     # pylint: disable=unsubscriptable-object
-    #s3_opts = result.options[0].storage_options[0]
+    # s3_opts = result.options[0].storage_options[0]
     s3_opts = result.options[0]
     # pylint: enable=unsubscriptable-object
     assert isinstance(s3_opts, StorageOptions)
@@ -114,15 +117,17 @@ def test_load_store_params_from_config_valid(tmp_path):
 
 
 def test_load_store_params_from_config_missing(tmp_path):
-    """Test with a missing storage configuration """
+    """Test with a missing storage configuration"""
     missing_file = tmp_path / "missing.json"
     with pytest.raises(FileNotFoundError):
         load_store_params_from_config(str(missing_file))
-        
+
+
 # TESTS FOR generate_payload
 
+
 def test_generate_payload_success(mocker, sample_unit, mock_dpr_process_in):
-    """Test successful generation of the payload schema with mocked Prefect logger."""   
+    """Test successful generation of the payload schema with mocked Prefect logger."""
     mock_store_params = StoreParams(options=[])
     mocker.patch(
         "rs_workflows.payload_generator.load_store_params_from_config",
@@ -161,7 +166,7 @@ def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in):
         "rs_workflows.payload_generator.load_store_params_from_config",
         return_value=mock_store_params,
     )
-    
+
     mock_logger = MagicMock()
     mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=mock_logger)
 
@@ -173,4 +178,3 @@ def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in):
             adfs=[],
             dpr_process_in=mock_dpr_process_in,
         )
-
