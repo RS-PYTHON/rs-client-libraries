@@ -147,7 +147,7 @@ class DummyFutureFail:
             datetime=datetime.now(),
         )
         it.add_asset("data", Asset(href="s3://mock-bucket/unstaged1.bin"))
-        return [(False, ItemCollection([it]))]
+        return [("ADFS_NAME", (False, ItemCollection([it])))]
 
 
 class MockPrefectTaskFail(Mock):
