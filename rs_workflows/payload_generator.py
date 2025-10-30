@@ -19,13 +19,13 @@ from prefect import get_run_logger, task
 from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
-    FlowEnvArgs,
 )
 from rs_workflows.payload_template import (  # Breakpoints,; DaskContext,; EOQCConfig,; ExternalModule,
     AdfConfig,
     GeneralConfiguration,
     InputProduct,
     IOConfig,
+    LoggingConfig,
     OutputProduct,
     PayloadSchema,
     StorageOptions,
@@ -87,7 +87,7 @@ def build_workflow_step(unit):
         return WorkflowStep(
             name=unit["name"],
             active=True,
-            validate_output=False,
+            validate=False,
             module=unit["module"],
             processing_unit=unit["name"],
             inputs=input_products if input_products else None,
@@ -150,11 +150,11 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams):
 
 @task(name="Generate payload file")
 def generate_payload(
-    env: FlowEnvArgs,
+    env: FlowEnv,
     unit_list: list[dict],
-    adfs: list[(str, str)],
+    adfs: list[tuple[str, str]],
     dpr_process_in: DprProcessIn,
-) -> dict:
+) -> PayloadSchema:
     """
     Assembles and generates a payload schema for a DPR (Data Processing Request) job.
 
@@ -163,11 +163,11 @@ def generate_payload(
     `PayloadSchema` object compatible with RS-Server DPR jobs.
 
     Args:
-        env (FlowEnvArgs): Environment configuration for the Prefect flow, including
+        env (FlowEnv): Environment configuration for the Prefect flow, including
             credentials, tracing, and runtime context.
         unit_list (list[dict]): List of workflow unit definitions containing I/O
             specifications and processing parameters.
-        auxip_items (list[tuple[str, str]]): List of auxiliary item
+        adfs (list[tuple[str, str]]): List of auxiliary item
             tuples, where each tuple includes the eopf type and the s3 storage path.
         dpr_process_in (DprProcessIn): DPR input process definition containing
             product paths and parameters.
@@ -185,6 +185,7 @@ def generate_payload(
     logger = get_run_logger()
     # the values should be name of the secrets, and not the values of these secrets.
     # it's up to the processor to retrieve the values at the running time
+    # TODO: maybe these names should be taken from env ?
     store_params = StoreParams(
         options=[
             StoreOptionsWrapper(
@@ -217,12 +218,12 @@ def generate_payload(
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (story 800)
         general_configuration=GeneralConfiguration(
-            logging={"level": "DEBUG"},
+            logging=LoggingConfig(level="DEBUG"),
             triggering__use_basic_logging=True,
             triggering__wait_before_exit=10,
         ),
         workflow=workflow_steps,
-        io=io_config,
+        io=io_config,  # type: ignore
     )
     logger.debug(f"Generated payload file: \n {payload}")
     return payload

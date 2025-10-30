@@ -571,6 +571,7 @@ def patch_prefect_logger(monkeypatch):
 
 @pytest.fixture
 def sample_unit():
+    """Fixture that builds a test sample unit"""
     return {
         "name": "unit1",
         "module": "module1",
@@ -588,6 +589,7 @@ def sample_unit():
 
 @pytest.fixture
 def mock_dpr_process_in():
+    """Fixture that mocks the DPR process input"""
     mock = MagicMock()
     mock.input_products = {"input1": "/tmp/input1.tif"}
     return mock
@@ -595,6 +597,7 @@ def mock_dpr_process_in():
 
 @pytest.fixture
 def mock_store_params():
+    """Fixture that mocks the store params"""
     return StoreParams(
         options=[
             StoreOptionsWrapper(

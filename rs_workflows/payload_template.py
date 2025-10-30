@@ -18,23 +18,20 @@ https://cpm.pages.eopf.copernicus.eu/eopf-cpm/main/processor-orchestration-guide
 The schema is based on Pydantic (standard for schema + validation + autocompletion).
 """
 
-from typing import Optional, Union
-
-from pydantic import BaseModel, Field, field_validator  # , Configdict
+from pydantic import BaseModel, ConfigDict, Field, field_validator  # , Configdict
 
 
 class BasePayloadModel(BaseModel):
     """Base class shared by all the schema models"""
 
-    class Config:
-        """Configuration for pydantic"""
-
+    model_config = ConfigDict(
         # Allow using field names even when aliases are set
-        populate_by_name = True
+        populate_by_name=True,
         # Optional: disable validation errors
-        validate_assignment = False
-        arbitrary_types_allowed = True
-        extra = "allow"  # ignore unknown fields
+        validate_assignment=False,
+        arbitrary_types_allowed=True,
+        extra="allow",  # ignore unknown fields
+    )
 
     def dump(self, **kwargs):
         """Custom dump that:
@@ -81,7 +78,7 @@ class StoreParams(BasePayloadModel):
             return v
         if isinstance(v, str) and v not in {"exactly_one", "at_least_one", "more_than_one"}:
             raise ValueError('multiplicity must be "exactly_one", "at_least_one", "more_than_one" or an integer')
-        elif not isinstance(v, (str, int)):
+        if not isinstance(v, (str, int)):
             raise ValueError("multiplicity must be a string or an integer")
         return v
 
@@ -91,7 +88,7 @@ class StoreParams(BasePayloadModel):
         if isinstance(data, dict):
             if "s3_secret_alias" in data:
                 return cls(s3_secret_alias=data["s3_secret_alias"])
-            elif "regex" in data or "multiplicity" in data:
+            if "regex" in data or "multiplicity" in data:
                 return cls(regex=data.get("regex"), multiplicity=data.get("multiplicity"))
         elif isinstance(data, list):
             wrappers = [StoreOptionsWrapper(**item) for item in data]
@@ -242,11 +239,6 @@ class PayloadSchema(BasePayloadModel):
     logging: list[str] | None = None
     config: list[str] | None = None
     eoqc: EOQCConfig | None = None
-
-    class Config:
-        """Allow population by name"""
-
-        populate_by_name = True
 
 
 # Disable validation globally. Do we want this? If yes, uncomment the import of Configdict
