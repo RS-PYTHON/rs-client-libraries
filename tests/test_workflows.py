@@ -25,7 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
-from pystac import Item, ItemCollection
+from pystac import Asset, Item, ItemCollection
 
 from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_client.rs_client import RsClient
@@ -81,11 +81,22 @@ class MockRsClient(Mock):
 
     def search(self, *_, **__):
         """Mock stac search"""
-        return_values = [
-            Item(id="test1", properties={}, geometry={}, bbox=[], datetime=datetime.now()),
-            Item(id="test2", properties={}, geometry={}, bbox=[], datetime=datetime.now()),
-        ]
-        return ItemCollection(return_values)
+        items = []
+        # Return two minimal STAC Items that mimic AUXIP search results.
+        for i in ["test1", "test2"]:
+            # Each item has:
+            #   - properties["product:type"] - read by dpr_processing to label the ADF type
+            #   - a single asset with an S3 href - dpr_processing takes the first asset.href
+            it = Item(
+                id=i,
+                properties={"product:type": "AUX_MOCK"},
+                geometry={},
+                bbox=[],
+                datetime=datetime.now(),
+            )
+            it.add_asset("data", Asset(href=f"s3://mock-bucket/{i}.bin"))
+            items.append(it)
+        return ItemCollection(items)
 
     def get_items(self, *_, **__):
         """Mock stac get_items"""
@@ -108,6 +119,40 @@ class MockRsClient(Mock):
         filename = "tasktable.json"
         with open(CONFIG_DIR / filename, encoding="utf-8") as f:
             return json.load(f)
+
+
+# ---------- Prefect task mocks used by flow ----------
+class DummyPayload:
+    def dump(self):
+        return {"workflow": [], "io": {"input_products": [], "output_products": []}}
+
+
+class DummyFuture:
+    def result(self):
+        return DummyPayload()
+
+
+class MockPrefectTask(Mock):
+    def submit(self, *_, **__):
+        return DummyFuture()
+
+
+class DummyFutureFail:
+    def result(self):
+        it = Item(
+            id="unstaged1",
+            properties={"product:type": "AUX_MOCK"},
+            geometry={},
+            bbox=[],
+            datetime=datetime.now(),
+        )
+        it.add_asset("data", Asset(href="s3://mock-bucket/unstaged1.bin"))
+        return [(False, ItemCollection([it]))]
+
+
+class MockPrefectTaskFail(Mock):
+    def submit(self, *_, **__):
+        return DummyFutureFail()
 
 
 @pytest.fixture(autouse=True)
@@ -198,6 +243,7 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 @patch.object(RsClient, "get_catalog_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_dpr_client", MockRsClient)
+@patch.object(on_demand_processing, "generate_payload", MockPrefectTask())
 @patch.object(catalog_flow, "datetime", Mock())
 async def test_dpr_processing(
     mocker,
@@ -248,6 +294,43 @@ async def test_dpr_processing(
     # Check calls
     for fn, call_count in spied.items():
         assert fn.await_count == call_count
+
+
+@patch.dict(os.environ, {}, clear=False)
+@patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
+@patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(RsClient, "get_auxip_client", MockRsClient)
+@patch.object(RsClient, "get_cadip_client", MockRsClient)
+@patch.object(RsClient, "get_catalog_client", MockRsClient)
+@patch.object(RsClient, "get_staging_client", MockRsClient)
+@patch.object(RsClient, "get_dpr_client", MockRsClient)
+@patch.object(on_demand_processing, "process_input_adfs", MockPrefectTaskFail())
+@patch.object(catalog_flow, "datetime", Mock())
+async def test_dpr_processing_raises_on_unstaged_adf(
+    mocker,
+    mock_prefect,
+    mock_record_performance_indicators,
+):  # pylint: disable=unused-argument, redefined-outer-name
+    """The flow should raise ValueError when an ADF could not be staged (status=False)."""
+
+    await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": "JUPYTERHUB_API_TOKEN"})
+
+    dpr_input = DprProcessIn(
+        env=FlowEnvArgs(owner_id=OWNER_ID),
+        processor_name=DprProcessor.MOCKUP,
+        processor_version="1.0",
+        pipeline="mockup_full",
+        dask_cluster_label="cluster_label",
+        input_products={},
+        generated_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
+        auxiliary_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
+        processing_mode=["nrt"],  # type: ignore[list-item]
+        start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+        satellite="S1A",
+    )
+    with pytest.raises(ValueError, match="was not correctly staged"):
+        await on_demand_processing.dpr_processing(dpr_input)
 
 
 @patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
