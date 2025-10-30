@@ -18,8 +18,8 @@
 import datetime
 import json
 import os
-import tempfile
 
+import anyio
 import yaml
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
@@ -169,10 +169,16 @@ async def dpr_processing(
         await acreate_markdown_artifact(key="dpr-payload-file", markdown=md, description="")
 
         # Upload the config payload file to S3
-        with tempfile.NamedTemporaryFile() as temp:
-            with open(temp.name, "w", encoding="utf-8") as tmp_file:
-                yaml.dump(generated_payload_res.dump(), tmp_file, default_flow_style=False, sort_keys=False)
-            logger.debug(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
+        async with await anyio.tempfile.NamedTemporaryFile() as temp:  # type: ignore[attr-defined]
+            async with await anyio.open_file(temp.name, "w", encoding="utf-8") as tmp_file:
+                await tmp_file.write(
+                    yaml.dump(
+                        generated_payload_res.dump(),
+                        default_flow_style=False,
+                        sort_keys=False,
+                    ),
+                )
+            logger.debug(f"Writing the payload to file:\n {dpr_input.s3_payload_file}")
             await prefect_utils.s3_upload_file(temp.name, dpr_input.s3_payload_file)
 
         return
