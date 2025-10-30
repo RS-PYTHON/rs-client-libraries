@@ -75,7 +75,7 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
                 timeout if timeout else -1,
             ).result()
 
-            all_auxip_items.append(auxip_items)
+            all_auxip_items.append((input_adfs["name"], auxip_items))
 
             if idx == len(input_adfs["alternatives"]) - 1 and not auxip_items:
                 #  Last one and still nothing → raise runtime
@@ -150,15 +150,13 @@ async def dpr_processing(
             for input_adfs in unit["input_adfs"]:
                 tasks.append(process_input_adfs.submit(input_adfs, dpr_input, task_table))
 
-        auxip_items = [item for t in tasks for item in t.result()]  # noqa: F841
-
+        auxip_items = [(name, item) for t in tasks for name, item in t.result()]  # noqa: F841
         adfs = []
-        for status, item_collection in auxip_items:
+        for name, (status, item_collection) in auxip_items:
             for item in item_collection.items:
                 if status:
-                    product_type = item.properties.get("product:type")
                     asset = next(iter(item.assets.values()))
-                    adfs.append((product_type, asset.href))
+                    adfs.append((name, asset.href))
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
         # generate the dpr payload file
