@@ -19,7 +19,7 @@ import os
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
@@ -267,6 +267,10 @@ async def test_dpr_processing(
 ):  # pylint: disable=unused-argument, redefined-outer-name
     """Test the dpr_processing flow"""
 
+    # Spy/patch artifact creation to assert keys
+    artifact_mock = AsyncMock()
+    mocker.patch.object(on_demand_processing, "acreate_markdown_artifact", artifact_mock)
+
     # Save env vars in prefect secret blocks
     await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": "JUPYTERHUB_API_TOKEN"})
 
@@ -303,12 +307,27 @@ async def test_dpr_processing(
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         satellite="S1A",
+        s3_payload_file="s3://test-bucket/payload.yaml",
+        s3_output_data="s3://test-bucket/output/",
     )
     await on_demand_processing.dpr_processing(dpr_input)
 
     # Check calls
     for fn, call_count in spied.items():
         assert fn.await_count == call_count
+
+    # --- verify s3_upload_file was called with the expected destination (second arg) ---
+    upload_mock = cast(AsyncMock, prefect_utils.s3_upload_file)
+    upload_calls = upload_mock.await_args_list
+    assert len(upload_calls) == 1
+    args = upload_calls[0].args
+    assert isinstance(args[0], (str, Path))  # temp file path
+    assert args[1] == dpr_input.s3_payload_file  # destination S3 path
+
+    # Verify the two artifact calls use the correct keys
+    keys = [c.kwargs.get("key") for c in artifact_mock.await_args_list]
+    assert artifact_mock.await_count == 4
+    assert keys == ["processing-unit-list", "auxip-cql2", "auxip-cql2", "dpr-payload-file"]
 
 
 @patch.dict(os.environ, {}, clear=False)
@@ -343,6 +362,8 @@ async def test_dpr_processing_raises_on_unstaged_adf(
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         satellite="S1A",
+        s3_payload_file="s3://test-bucket/payload.yaml",
+        s3_output_data="s3://test-bucket/output/",
     )
     with pytest.raises(ValueError, match="was not correctly staged"):
         await on_demand_processing.dpr_processing(dpr_input)
