@@ -137,7 +137,7 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams):
     outputs = [
         OutputProduct(
             id=outp["name"],
-            path="/tmp/output",
+            path="/tmp/output",  # nosec B108: placeholder path in generated payload
             store_type=outp["store_type"],
             store_params=store_params,
             type=outp.get("type", "filename"),
@@ -192,7 +192,7 @@ def generate_payload(  # pylint: disable=unused-argument
                 storage_options=[
                     StorageOptions(
                         key="${S3_ACCESSKEY}",
-                        secret="${S3_SECRETKEY}",
+                        secret="${S3_SECRETKEY}",  # nosec B106: placeholder, not a real secret
                         client_kwargs={"endpoint_url": "${S3_ENDPOINT}", "region_name": "${S3_REGION}"},
                     ),
                 ],

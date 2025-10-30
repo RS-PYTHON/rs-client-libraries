@@ -591,7 +591,7 @@ def sample_unit():
 def mock_dpr_process_in():
     """Fixture that mocks the DPR process input"""
     mock = MagicMock()
-    mock.input_products = {"input1": "/tmp/input1.tif"}
+    mock.input_products = {"input1": "/tmp/input1.tif"}  # nosec B108: test-only temp path
     return mock
 
 
@@ -604,7 +604,7 @@ def mock_store_params():
                 storage_options=[
                     StorageOptions(
                         key="key",
-                        secret="secret",
+                        secret="secret",  # nosec B106: test-only fake secret
                         client_kwargs={"endpoint_url": "http://localhost", "region_name": "test"},
                     ),
                 ],
