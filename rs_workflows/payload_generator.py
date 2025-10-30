@@ -149,7 +149,7 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams):
 
 
 @task(name="Generate payload file")
-def generate_payload(
+def generate_payload(  # pylint: disable=unused-argument
     env: FlowEnv,
     unit_list: list[dict],
     adfs: list[tuple[str, str]],

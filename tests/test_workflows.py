@@ -122,23 +122,35 @@ class MockRsClient(Mock):
 
 
 # ---------- Prefect task mocks used by flow ----------
-class DummyPayload:
+class PayloadStub:  # pylint: disable=too-few-public-methods
+    """Minimal payload object used by the flow tests."""
+
     def dump(self):
+        """Return the minimal structure consumed by yaml.dump()."""
         return {"workflow": [], "io": {"input_products": [], "output_products": []}}
 
 
-class DummyFuture:
+class PrefectFutureStub:  # pylint: disable=too-few-public-methods
+    """Mock future that mimics Prefect's Future API for tests."""
+
     def result(self):
-        return DummyPayload()
+        """Return a PayloadStub instance."""
+        return PayloadStub()
 
 
-class MockPrefectTask(Mock):
+class GeneratePayloadTaskMock(Mock):
+    """Mock of a Prefect task used to stub generate_payload.submit()."""
+
     def submit(self, *_, **__):
-        return DummyFuture()
+        """Return a PrefectFutureStub."""
+        return PrefectFutureStub()
 
 
-class DummyFutureFail:
+class PrefectFutureFailStub:  # pylint: disable=too-few-public-methods
+    """Mock future that returns a failed ADF staging result to trigger ValueError."""
+
     def result(self):
+        """Return [(False, ItemCollection([...]))] with an item that has one asset."""
         it = Item(
             id="unstaged1",
             properties={"product:type": "AUX_MOCK"},
@@ -150,9 +162,12 @@ class DummyFutureFail:
         return [("ADFS_NAME", (False, ItemCollection([it])))]
 
 
-class MockPrefectTaskFail(Mock):
+class ProcessInputAdfsTaskFailMock(Mock):
+    """Mock of process_input_adfs to force status=False in the flow."""
+
     def submit(self, *_, **__):
-        return DummyFutureFail()
+        """Return a PrefectFutureFailStub."""
+        return PrefectFutureFailStub()
 
 
 @pytest.fixture(autouse=True)
@@ -243,7 +258,7 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 @patch.object(RsClient, "get_catalog_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_dpr_client", MockRsClient)
-@patch.object(on_demand_processing, "generate_payload", MockPrefectTask())
+@patch.object(on_demand_processing, "generate_payload", GeneratePayloadTaskMock())
 @patch.object(catalog_flow, "datetime", Mock())
 async def test_dpr_processing(
     mocker,
@@ -304,7 +319,7 @@ async def test_dpr_processing(
 @patch.object(RsClient, "get_catalog_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_dpr_client", MockRsClient)
-@patch.object(on_demand_processing, "process_input_adfs", MockPrefectTaskFail())
+@patch.object(on_demand_processing, "process_input_adfs", ProcessInputAdfsTaskFailMock())
 @patch.object(catalog_flow, "datetime", Mock())
 async def test_dpr_processing_raises_on_unstaged_adf(
     mocker,
