@@ -48,15 +48,16 @@ class BasePayloadModel(BaseModel):
 class StorageOptions(BasePayloadModel):
     """Options to access a storage backend"""
 
+    name: str
     key: str | None = None
     secret: str | None = None
     client_kwargs: dict[str, str] | None = None
 
 
-class StoreOptionsWrapper(BasePayloadModel):
-    """Wrapper for a list of storage options"""
+# class StoreOptionsWrapper(BasePayloadModel):
+#     """Wrapper for a list of storage options"""
 
-    storage_options: list[StorageOptions]
+#     storage_options: list[StorageOptions]
 
 
 class StoreParams(BasePayloadModel):
@@ -65,7 +66,8 @@ class StoreParams(BasePayloadModel):
     # Either a simple S3 secret alias
     s3_secret_alias: str | None = None
     # Or a list of storage options
-    options: list[StoreOptionsWrapper] | None = None
+    # options: list[StoreOptionsWrapper] | None = None
+    options: list[StorageOptions] | None = None
     # Or a regex + multiplicity
     regex: str | None = None
     multiplicity: str | int | None = None
@@ -82,18 +84,18 @@ class StoreParams(BasePayloadModel):
             raise ValueError("multiplicity must be a string or an integer")
         return v
 
-    @classmethod
-    def from_dict(cls, data):
-        """Helper to parse from dict-like YAML structure"""
-        if isinstance(data, dict):
-            if "s3_secret_alias" in data:
-                return cls(s3_secret_alias=data["s3_secret_alias"])
-            if "regex" in data or "multiplicity" in data:
-                return cls(regex=data.get("regex"), multiplicity=data.get("multiplicity"))
-        elif isinstance(data, list):
-            wrappers = [StoreOptionsWrapper(**item) for item in data]
-            return cls(options=wrappers)
-        raise ValueError("Invalid store_params format")
+    # @classmethod
+    # def from_dict(cls, data):
+    #     """Helper to parse from dict-like YAML structure"""
+    #     if isinstance(data, dict):
+    #         if "s3_secret_alias" in data:
+    #             return cls(s3_secret_alias=data["s3_secret_alias"])
+    #         if "regex" in data or "multiplicity" in data:
+    #             return cls(regex=data.get("regex"), multiplicity=data.get("multiplicity"))
+    #     elif isinstance(data, list):
+    #         wrappers = [StoreOptionsWrapper(**item) for item in data]
+    #         return cls(options=wrappers)
+    #     raise ValueError("Invalid store_params format")
 
 
 class LoggingConfig(BasePayloadModel):

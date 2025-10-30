@@ -22,7 +22,7 @@ from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
 )
-from rs_workflows.payload_template import (  # Breakpoints,; DaskContext,; EOQCConfig,; ExternalModule,
+from rs_workflows.payload_template import (
     AdfConfig,
     GeneralConfiguration,
     InputProduct,
@@ -31,7 +31,6 @@ from rs_workflows.payload_template import (  # Breakpoints,; DaskContext,; EOQCC
     OutputProduct,
     PayloadSchema,
     StorageOptions,
-    StoreOptionsWrapper,
     StoreParams,
     WorkflowStep,
 )
@@ -171,7 +170,7 @@ def load_store_params_from_config(config_path: str = "/etc/storage_configuration
     with open(config_path, encoding="utf-8") as f:
         storage_config = json.load(f)
 
-    store_options_wrappers = []
+    store_options = []
 
     for storage_entry in storage_config.get("storage", []):
         name = storage_entry.get("name")
@@ -181,6 +180,7 @@ def load_store_params_from_config(config_path: str = "/etc/storage_configuration
         # S3 configuration
         if name == "s3":
             opts = StorageOptions(
+                name="s3",
                 key=f"${{{storage_entry['storage_options']['key']}}}",
                 secret=f"${{{storage_entry['storage_options']['secret']}}}",
                 client_kwargs={
@@ -188,20 +188,23 @@ def load_store_params_from_config(config_path: str = "/etc/storage_configuration
                     "region_name": storage_entry["storage_options"]["region_name"],
                 },
             )
-            store_options_wrappers.append(StoreOptionsWrapper(storage_options=[opts]))
+            # store_options.append(StoreOptionsWrapper(storage_options=[opts]))
 
         # Non-S3 storage: shared_disk or local_disk
         else:
             opts = StorageOptions(
+                name=name,
                 key=None,
                 secret=None,
-                client_kwargs=None,
-                relative_path=storage_entry.get("relative_path"),
-                opening_mode=storage_entry.get("opening_mode", "CREATE_OVERWRITE"),
+                client_kwargs={
+                    "opening_mode": storage_entry["opening_mode"],
+                    "relative_path": storage_entry["relative_path"],
+                },
             )
-            store_options_wrappers.append(StoreOptionsWrapper(storage_options=[opts]))
+            # store_options.append(StoreOptionsWrapper(storage_options=[opts]))
+        store_options.append(opts)
 
-    return StoreParams(options=store_options_wrappers)
+    return StoreParams(options=store_options)
 
 
 @task(name="Generate payload file")

@@ -32,9 +32,8 @@ from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from rs_common.utils import env_bool
 from rs_workflows import init_pi_db_flow
-from rs_workflows.payload_template import (
+from rs_workflows.payload_template import (  # StoreOptionsWrapper,
     StorageOptions,
-    StoreOptionsWrapper,
     StoreParams,
 )
 from tests import common
@@ -603,15 +602,16 @@ def mock_store_params():
     """Fixture that mocks the store params"""
     return StoreParams(
         options=[
-            StoreOptionsWrapper(
-                storage_options=[
-                    StorageOptions(
-                        key="key",
-                        secret="secret",  # nosec B106: test-only fake secret
-                        client_kwargs={"endpoint_url": "http://localhost", "region_name": "test"},
-                    ),
-                ],
+            # StoreOptionsWrapper(
+            # storage_options=[
+            StorageOptions(
+                name="s3",
+                key="key",
+                secret="secret",  # nosec B106: test-only fake secret
+                client_kwargs={"endpoint_url": "http://localhost", "region_name": "test"},
             ),
+            # ],
+            # ),
         ],
     )
 
