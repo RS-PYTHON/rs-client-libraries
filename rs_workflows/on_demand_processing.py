@@ -18,6 +18,7 @@
 import datetime
 import json
 import os
+import tempfile as std_tempfile
 
 import anyio
 import yaml
@@ -169,17 +170,17 @@ async def dpr_processing(
         await acreate_markdown_artifact(key="dpr-payload-file", markdown=md, description="")
 
         # Upload the config payload file to S3
-        async with await anyio.tempfile.NamedTemporaryFile() as temp:  # type: ignore[attr-defined]
-            async with await anyio.open_file(temp.name, "w", encoding="utf-8") as tmp_file:
-                await tmp_file.write(
-                    yaml.dump(
-                        generated_payload_res.dump(),
-                        default_flow_style=False,
-                        sort_keys=False,
-                    ),
-                )
-            logger.debug(f"Writing the payload to file:\n {dpr_input.s3_payload_file}")
-            await prefect_utils.s3_upload_file(temp.name, dpr_input.s3_payload_file)
+        tmp_dir = std_tempfile.gettempdir()
+        tmp_file_path = os.path.join(tmp_dir, f"dpr_payload_{datetime.datetime.now().timestamp()}.yaml")
+
+        async with await anyio.open_file(tmp_file_path, "w", encoding="utf-8") as tmp_file:
+            yaml.dump(generated_payload_res.dump(), tmp_file, default_flow_style=False, sort_keys=False)
+
+        logger.debug(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
+        await prefect_utils.s3_upload_file(tmp_file_path, dpr_input.s3_payload_file)
+
+        # Clean up (although useless maybe)
+        await anyio.Path(tmp_file_path).unlink()
 
         return
 
