@@ -68,6 +68,7 @@ prefect = { version = "3.2.13", extras = ["aws"] }
 requests = "^2.32.4"
 urllib3 = ">=2.5.0"
 SQLAlchemy = "^2.0.37"
+uv = ">=0.9.7"
 
 [tool.poetry.group.dev]
 optional = true
