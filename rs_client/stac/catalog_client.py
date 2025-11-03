@@ -273,6 +273,10 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         full_collection_id = self.full_collection_id(owner_id, short_collection_id)
         collection.id = full_collection_id
 
+        # Default title (NOTE: this is how the collection is displayed in the Stac Browser)
+        if not collection.title:
+            collection.title = full_collection_id
+
         # Default description
         if not collection.description:
             collection.description = f"This is the collection {short_collection_id} from user {full_owner_id}."
