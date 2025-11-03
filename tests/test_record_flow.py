@@ -31,7 +31,10 @@ from sqlalchemy import (
 from sqlalchemy.sql.dml import Insert, Update
 
 import rs_workflows.record_performance as record_flow_module
-from rs_workflows.record_performance import extract_min_datetime
+from rs_workflows.record_performance import (
+    extract_min_datetime,
+    update_timeliness_fields,
+)
 
 # pylint: disable = redefined-outer-name, unused-argument, assignment-from-none
 
@@ -804,3 +807,109 @@ def test_rollback_on_exception(mock_db_env, mock_tables, mocker):
     mock_session.rollback.assert_called_once()
     logger.error.assert_any_call("Error in validate_products: err!")
     mock_session.close.assert_called_once()
+
+
+def test_no_products_found(mocker, mock_db_env):
+    """Should log and return if no product_realised records exist for the flow_run_id."""
+
+    mock_session, _ = mock_db_env
+    mock_logger = MagicMock()
+
+    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+    flow_run_id = "FLOW999"
+
+    # Mock empty DB result
+    mock_session.execute.return_value.fetchall.return_value = []
+
+    update_timeliness_fields(flow_run_id=flow_run_id)
+
+    mock_logger.info.assert_any_call("No records provided — skipping updating the timeliness in product_realised.")
+    mock_session.execute.assert_called_once()
+
+
+def test_update_timeliness_fields_exception(mocker, mock_db_env):
+    """Should rollback and re-raise if an exception occurs."""
+
+    mock_session, _ = mock_db_env
+    mock_logger = MagicMock()
+    flow_run_id = "FLOWEXC"
+
+    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+
+    # Make execute raise an exception
+    mock_session.execute.side_effect = Exception("DB Error")
+
+    # Act & Assert
+    with pytest.raises(Exception, match="DB Error"):
+        update_timeliness_fields(flow_run_id=flow_run_id)
+
+    mock_session.rollback.assert_called_once()
+    mock_session.close.assert_called_once()
+    mock_logger.error.assert_any_call("Unexpected error in update_timeliness_fields: DB Error")
+
+
+def test_update_timeliness_fields(mocker, mock_db_env):
+    """Tests that product_realised is updated."""
+    mock_session, _ = mock_db_env
+    mock_logger = MagicMock()
+    flow_run_id = "FLOW123"
+
+    # Patch logger
+    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+
+    # --- Use real Table objects with in-memory metadata ---
+    metadata = MetaData()
+
+    product_realised = Table(
+        "product_realised",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("flow_run_id", String),
+        Column("pi_category_id", Integer),
+        Column("catalog_stored_datetime", DateTime),
+        Column("origin_date", DateTime),
+        Column("on_time_0_day", Integer),
+        Column("on_time_1_day", Integer),
+        Column("on_time_2_day", Integer),
+        Column("on_time_3_day", Integer),
+        Column("on_time_7_day", Integer),
+    )
+
+    pi_category = Table(
+        "pi_category",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("max_delay_seconds", Integer),
+    )
+
+    # Patch Table() to return our real Table objects
+    mocker.patch(
+        "rs_workflows.record_performance.Table",
+        side_effect=[pi_category, product_realised],
+    )
+
+    # --- Fake product record ---
+    fake_product = MagicMock()
+    fake_product.id = 1
+    fake_product.pi_category_id = 12
+    fake_product.catalog_stored_datetime = datetime(2025, 1, 2)
+    fake_product.origin_date = datetime(2025, 1, 1)
+
+    # Mock execute() results
+    mock_products_result = MagicMock()
+    mock_products_result.fetchall.return_value = [fake_product]
+
+    mock_max_delay_result = MagicMock()
+    mock_max_delay_result.scalar.return_value = 24 * 3600
+
+    # Side effect for execute() calls
+    mock_session.execute.side_effect = [
+        mock_products_result,  # select(product_realised)
+        mock_max_delay_result,  # select(pi_category.c.max_delay_seconds)
+        None,
+    ]
+
+    update_timeliness_fields(flow_run_id=flow_run_id)
+
+    mock_session.commit.assert_called_once()
+    mock_logger.info.assert_any_call(f"Updated timeliness fields for flow_run_id={flow_run_id}")
