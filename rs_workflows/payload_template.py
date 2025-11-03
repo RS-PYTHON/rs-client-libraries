@@ -18,7 +18,30 @@ https://cpm.pages.eopf.copernicus.eu/eopf-cpm/main/processor-orchestration-guide
 The schema is based on Pydantic (standard for schema + validation + autocompletion).
 """
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator  # , Configdict
+from typing import cast
+
+from pydantic import (  # , Configdict
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+DEFAULT_CLUSTER_CONFIG = cast(
+    dict[str, str | int | bool],
+    {
+        "n_workers": 6,
+        "threads_per_worker": 1,
+    },
+)
+
+DEFAULT_DASK_CONFIG = cast(
+    dict[str, str | int | bool],
+    {
+        "distributed.worker.local_directory": "~/eopf/output",
+    },
+)
 
 
 class BasePayloadModel(BaseModel):
@@ -32,6 +55,32 @@ class BasePayloadModel(BaseModel):
         arbitrary_types_allowed=True,
         extra="allow",  # ignore unknown fields
     )
+
+    @model_validator(mode="before")
+    def fill_defaults(cls, values):  # pylint: disable=no-self-argument
+        """Ensure defaults and nested models are properly initialized.
+        Thus, when creating any model, the defaults should be written in the payload
+        IF not provided and IF a default (except NONE) exists
+        """
+        if not isinstance(values, dict):
+            return values
+
+        for name, field in cls.model_fields.items():
+            # If key is missing, fill it with the default (including default_factory)
+            if name not in values:
+                if field.default_factory is not None:
+                    values[name] = field.default_factory()
+                elif field.default is not None:
+                    values[name] = field.default
+
+            # If value is explicitly None, replace with default
+            elif values[name] is None:
+                if field.default_factory is not None:
+                    values[name] = field.default_factory()
+                elif field.default is not None:
+                    values[name] = field.default
+
+        return values
 
     def dump(self, **kwargs):
         """Custom dump that:
@@ -67,7 +116,7 @@ class StoreParams(BasePayloadModel):
     s3_secret_alias: str | None = None
     # Or a list of storage options
     # options: list[StoreOptionsWrapper] | None = None
-    options: list[StorageOptions] | None = None
+    storage_options: list[StorageOptions] | None = None
     # Or a regex + multiplicity
     regex: str | None = None
     multiplicity: str | int | None = None
@@ -110,9 +159,9 @@ class LoggingConfig(BasePayloadModel):
 class GeneralConfiguration(BasePayloadModel):
     """General configuration options for EOConfiguration behavior"""
 
-    logging: LoggingConfig | None = None
-    triggering__use_basic_logging: bool | None = None
-    triggering__wait_before_exit: int | None = None
+    logging: LoggingConfig | None = LoggingConfig(level="DEBUG")
+    triggering__use_basic_logging: bool | None = True
+    triggering__wait_before_exit: int | None = 10
     dask__export_graphs: str | None = None
     breakpoints__folder: str | None = None
     triggering__create_temporary: bool | None = None
@@ -207,11 +256,12 @@ class IOConfig(BasePayloadModel):
 class DaskContext(BasePayloadModel):
     """Configuration for the DaskContext"""
 
-    cluster_type: str | None = None
-    cluster_config: dict[str, str | int | bool] | None = None
-    client_config: dict[str, str | int | bool] | None = None
-    dask_config: dict[str, str | int | bool] | None = None
-    performance_report_file: str | None = None
+    cluster_type: str | None = "local"  # Optional but if not available "address" is mandatory
+    address: str | None = None
+    cluster_config: dict[str, str | int | bool] | None = DEFAULT_CLUSTER_CONFIG
+    client_config: dict[str, str | int | bool] | None = {}
+    dask_config: dict[str, str | int | bool] | None = DEFAULT_DASK_CONFIG
+    performance_report_file: str | None = "report.html"
 
 
 class EOQCConfig(BasePayloadModel):

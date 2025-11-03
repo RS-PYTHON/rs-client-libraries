@@ -24,10 +24,10 @@ from rs_workflows.flow_utils import (
 )
 from rs_workflows.payload_template import (
     AdfConfig,
+    DaskContext,
     GeneralConfiguration,
     InputProduct,
     IOConfig,
-    LoggingConfig,
     OutputProduct,
     PayloadSchema,
     StorageOptions,
@@ -73,7 +73,7 @@ def build_workflow_step(unit):
     if "input_adfs" in unit:
         for input_adf in unit["input_adfs"]:
             if isinstance(input_adf, dict) and "name" in input_adf:
-                adfs.append({"dem": input_adf["name"]})
+                adfs.append({input_adf["name"].lower(): input_adf["name"]})
     # get outputs
     output_products = []
     if "output_products" in unit:
@@ -190,21 +190,22 @@ def load_store_params_from_config(config_path: str = "/etc/storage_configuration
             )
             # store_options.append(StoreOptionsWrapper(storage_options=[opts]))
 
-        # Non-S3 storage: shared_disk or local_disk
-        else:
-            opts = StorageOptions(
-                name=name,
-                key=None,
-                secret=None,
-                client_kwargs={
-                    "opening_mode": storage_entry["opening_mode"],
-                    "relative_path": storage_entry["relative_path"],
-                },
-            )
+            # Non-S3 storage: shared_disk or local_disk
+            # TODO: How do we record these ?
+            # else:
+            #     opts = StorageOptions(
+            #         name=name,
+            #         key=None,
+            #         secret=None,
+            #         client_kwargs={
+            #             "opening_mode": storage_entry["opening_mode"],
+            #             "relative_path": storage_entry["relative_path"],
+            #         },
+            #     )
             # store_options.append(StoreOptionsWrapper(storage_options=[opts]))
-        store_options.append(opts)
+            store_options.append(opts)
 
-    return StoreParams(options=store_options)
+    return StoreParams(storage_options=store_options)
 
 
 @task(name="Generate payload file")
@@ -263,17 +264,18 @@ def generate_payload(  # pylint: disable=unused-argument
             raise ValueError(f"Key {ke} not found in unit list") from ke
 
     io_config.adfs = [AdfConfig(id=adf[0], path=adf[1], store_params=store_params) for adf in adfs]
+    # Build the dask context
+    dask_context = DaskContext(
+        address="test",
+    )
     # Build the full payload using the schema
     logger.info("Building the payload")
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (story 800)
-        general_configuration=GeneralConfiguration(
-            logging=LoggingConfig(level="DEBUG"),
-            triggering__use_basic_logging=True,
-            triggering__wait_before_exit=10,
-        ),
+        general_configuration=GeneralConfiguration(),
         workflow=workflow_steps,
         io=io_config,  # type: ignore
+        dask_context=dask_context,
     )
     logger.debug(f"Generated payload file: \n {payload}")
     return payload

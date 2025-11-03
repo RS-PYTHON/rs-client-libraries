@@ -579,7 +579,7 @@ def sample_unit():
             {"name": "input1", "origin": "pipeline_input_1", "store_type": "S3"},
         ],
         "input_adfs": [
-            {"name": "adf1"},
+            {"name": "ADF1"},
         ],
         "output_products": [
             {"name": "output1", "regex": "*.tif", "store_type": "S3"},
@@ -601,7 +601,7 @@ def mock_dpr_process_in():
 def mock_store_params():
     """Fixture that mocks the store params"""
     return StoreParams(
-        options=[
+        storage_options=[
             # StoreOptionsWrapper(
             # storage_options=[
             StorageOptions(

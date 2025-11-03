@@ -46,7 +46,7 @@ def test_build_workflow_step_valid(sample_unit):
     assert step.name == "unit1"
     assert step.module == "module1"
     assert any(d == {"input1": "input1"} for d in (step.inputs or []))
-    assert any(d == {"dem": "adf1"} for d in (step.adfs or []))
+    assert any(d == {"adf1": "ADF1"} for d in (step.adfs or []))
     assert any(d == {"*.tif": "output1"} for d in (step.outputs or []))
 
 
@@ -105,11 +105,13 @@ def test_load_store_params_from_config_valid(tmp_path):
     result = load_store_params_from_config(str(config_file))
 
     assert isinstance(result, StoreParams)
-    assert result.options is not None
-    assert len(result.options) == 2
+    assert result.storage_options is not None
+    # The test should be changed with == 2 IF the load_store_params_from_config
+    # is changed back to add all the found elements !
+    assert len(result.storage_options) == 1
     # pylint: disable=unsubscriptable-object
     # s3_opts = result.options[0].storage_options[0]
-    s3_opts = result.options[0]
+    s3_opts = result.storage_options[0]
     # pylint: enable=unsubscriptable-object
     assert isinstance(s3_opts, StorageOptions)
     assert s3_opts.client_kwargs is not None
@@ -128,7 +130,7 @@ def test_load_store_params_from_config_missing(tmp_path):
 
 def test_generate_payload_success(mocker, sample_unit, mock_dpr_process_in):
     """Test successful generation of the payload schema with mocked Prefect logger."""
-    mock_store_params = StoreParams(options=[])
+    mock_store_params = StoreParams(storage_options=[])
     mocker.patch(
         "rs_workflows.payload_generator.load_store_params_from_config",
         return_value=mock_store_params,
@@ -161,7 +163,7 @@ def test_generate_payload_success(mocker, sample_unit, mock_dpr_process_in):
 
 def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in):
     """Test that missing keys in unit raise ValueError."""
-    mock_store_params = StoreParams(options=[])
+    mock_store_params = StoreParams(storage_options=[])
     mocker.patch(
         "rs_workflows.payload_generator.load_store_params_from_config",
         return_value=mock_store_params,
