@@ -541,6 +541,7 @@ def update_timeliness_fields(flow_run_id):
             ).scalar()
 
             delay = (catalog_stored_datetime - origin_datetime).total_seconds()
+            logger.info(f"For product {prod.id} delay is {delay} seconds.")
 
             updates = {
                 "on_time_0_day": delay <= max_delay_seconds,

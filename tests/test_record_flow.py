@@ -849,7 +849,7 @@ def test_update_timeliness_fields_exception(mocker, mock_db_env):
 
 
 def test_update_timeliness_fields(mocker, mock_db_env):
-    """Tests that product_realised is updated."""
+    """Tests that product_realised on_time_X_day fields are updated correctly."""
     mock_session, _ = mock_db_env
     mock_logger = MagicMock()
     flow_run_id = "FLOW123"
@@ -857,9 +857,7 @@ def test_update_timeliness_fields(mocker, mock_db_env):
     # Patch logger
     mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
 
-    # --- Use real Table objects with in-memory metadata ---
     metadata = MetaData()
-
     product_realised = Table(
         "product_realised",
         metadata,
@@ -868,11 +866,8 @@ def test_update_timeliness_fields(mocker, mock_db_env):
         Column("pi_category_id", Integer),
         Column("catalog_stored_datetime", DateTime),
         Column("origin_date", DateTime),
-        Column("on_time_0_day", Integer),
-        Column("on_time_1_day", Integer),
-        Column("on_time_2_day", Integer),
-        Column("on_time_3_day", Integer),
-        Column("on_time_7_day", Integer),
+        Column("on_time_0_day", Boolean),
+        Column("on_time_1_day", Boolean),
     )
 
     pi_category = Table(
@@ -882,7 +877,6 @@ def test_update_timeliness_fields(mocker, mock_db_env):
         Column("max_delay_seconds", Integer),
     )
 
-    # Patch Table() to return our real Table objects
     mocker.patch(
         "rs_workflows.record_performance.Table",
         side_effect=[pi_category, product_realised],
@@ -894,6 +888,8 @@ def test_update_timeliness_fields(mocker, mock_db_env):
     fake_product.pi_category_id = 12
     fake_product.catalog_stored_datetime = datetime(2025, 1, 2)
     fake_product.origin_date = datetime(2025, 1, 1)
+    fake_product.on_time_0_day = False
+    fake_product.on_time_1_day = False
 
     # Mock execute() results
     mock_products_result = MagicMock()
@@ -913,3 +909,30 @@ def test_update_timeliness_fields(mocker, mock_db_env):
 
     mock_session.commit.assert_called_once()
     mock_logger.info.assert_any_call(f"Updated timeliness fields for flow_run_id={flow_run_id}")
+
+    expected_values = {
+        "on_time_0_day": True,
+        "on_time_1_day": True,
+        "on_time_2_day": True,
+        "on_time_3_day": True,
+        "on_time_7_day": True,
+    }
+
+    # Check the actual update values from the Update call
+    update_call = None
+    for call in mock_session.execute.call_args_list:
+        arg0 = call.args[0]
+        if (
+            isinstance(arg0, Update)
+            and arg0._values is not None
+            and "on_time_0_day" in arg0._values  # pylint: disable=W0212
+        ):
+            update_call = arg0
+            break
+
+    assert update_call is not None, "Expected an Update call with on_time_0_day"
+
+    for col, expected in expected_values.items():
+        assert update_call._values is not None  # pylint: disable=W0212
+        actual = update_call._values[col].value  # pylint: disable=W0212
+        assert actual is expected, f"Expected {col}={expected}, got {actual}"
