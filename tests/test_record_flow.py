@@ -924,7 +924,7 @@ def test_update_timeliness_fields(mocker, mock_db_env):
         arg0 = call.args[0]
         if (
             isinstance(arg0, Update)
-            and arg0._values is not None
+            and arg0._values is not None  # pylint: disable=W0212
             and "on_time_0_day" in arg0._values  # pylint: disable=W0212
         ):
             update_call = arg0
