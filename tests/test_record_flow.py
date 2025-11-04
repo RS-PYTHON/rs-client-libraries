@@ -886,10 +886,8 @@ def test_update_timeliness_fields(mocker, mock_db_env):
     fake_product = MagicMock()
     fake_product.id = 1
     fake_product.pi_category_id = 12
-    fake_product.catalog_stored_datetime = datetime(2025, 1, 2)
+    fake_product.catalog_stored_datetime = datetime(2025, 1, 2, 1)
     fake_product.origin_date = datetime(2025, 1, 1)
-    fake_product.on_time_0_day = False
-    fake_product.on_time_1_day = False
 
     # Mock execute() results
     mock_products_result = MagicMock()
@@ -909,9 +907,8 @@ def test_update_timeliness_fields(mocker, mock_db_env):
 
     mock_session.commit.assert_called_once()
     mock_logger.info.assert_any_call(f"Updated timeliness fields for flow_run_id={flow_run_id}")
-
     expected_values = {
-        "on_time_0_day": True,
+        "on_time_0_day": False,
         "on_time_1_day": True,
         "on_time_2_day": True,
         "on_time_3_day": True,
