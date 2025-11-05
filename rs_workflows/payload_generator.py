@@ -265,9 +265,9 @@ def generate_payload(  # pylint: disable=unused-argument
 
     io_config.adfs = [AdfConfig(id=adf[0], path=adf[1], store_params=store_params) for adf in adfs]
     # Build the dask context
-    dask_context = DaskContext(
-        address="test",
-    )
+    # dask_context = DaskContext(
+    #     address="test",
+    # )
     # Build the full payload using the schema
     logger.info("Building the payload")
     payload = PayloadSchema(
@@ -275,7 +275,8 @@ def generate_payload(  # pylint: disable=unused-argument
         general_configuration=GeneralConfiguration(),
         workflow=workflow_steps,
         io=io_config,  # type: ignore
-        dask_context=dask_context,
+        # The dask_context section is updated in dpr_service
+        # dask_context=dask_context,
     )
     logger.debug(f"Generated payload file: \n {payload}")
     return payload
