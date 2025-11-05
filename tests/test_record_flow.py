@@ -212,7 +212,7 @@ def test_record_flow_run_inserts_new_entry(mock_db_env, mocker):
     mock_session.execute.return_value.fetchone.return_value = None
     mock_session.execute.return_value.scalar.return_value = 999
 
-    result = record_flow_module.record_flow_run(start_date="2025-01-01", stop_date="2025-01-02", status="OK")
+    result = record_flow_module.record_flow_run.fn(start_date="2025-01-01", stop_date="2025-01-02", status="OK")
 
     # Verify it was insert
     stmt = mock_session.execute.call_args[0][0]
@@ -258,7 +258,7 @@ def test_record_flow_run_updates_existing_entry(mock_db_env, mocker):
 
     mock_session.execute.return_value.fetchone.return_value = ["existing-id"]
 
-    result = record_flow_module.record_flow_run(stop_date="2025-01-03", status="NOK")
+    result = record_flow_module.record_flow_run.fn(stop_date="2025-01-03", status="NOK")
 
     stmt = mock_session.execute.call_args[0][0]
     assert isinstance(stmt, Update)
@@ -281,7 +281,7 @@ def test_record_product_realised_no_items(mock_db_env):
         mock_db_env: A fixture providing a mocked database session and engine.
     """
     mock_session, _ = mock_db_env
-    result = record_flow_module.record_product_realised("flow-1", [])
+    result = record_flow_module.record_product_realised.fn("flow-1", [])
     assert result is None
     mock_session.execute.assert_not_called()
     mock_session.commit.assert_not_called()
@@ -313,7 +313,7 @@ def test_record_product_realised_insert(mock_db_env):
         },
     ]
 
-    record_flow_module.record_product_realised("flow-1", stac_items)
+    record_flow_module.record_product_realised.fn("flow-1", stac_items)
 
     stmt = mock_session.execute.call_args[0][0]
     assert isinstance(stmt, Insert)
@@ -339,7 +339,7 @@ def test_record_product_realised_keyerror_triggers_rollback(mock_db_env):
     stac_items = [{"stac_discovery": {}}]  # type: ignore
 
     with pytest.raises(KeyError):
-        record_flow_module.record_product_realised("flow-1", stac_items)
+        record_flow_module.record_product_realised.fn("flow-1", stac_items)
 
     mock_session.rollback.assert_called_once()
     mock_session.close.assert_called_once()
@@ -478,7 +478,7 @@ def test_record_product_expected_insert_data(mock_db_env, mocker):
     mocker.patch.object(record_flow_module, "get_pi_category_id", return_value=99)
 
     # Call the function
-    record_flow_module.record_product_expected(flow_run_id, dpr_processor_name, payload)
+    record_flow_module.record_product_expected.fn(flow_run_id, dpr_processor_name, payload)
 
     # Grab all insert calls
     execute_calls = mock_session.execute.call_args_list
@@ -513,7 +513,7 @@ def test_record_product_expected_rollback_on_keyerror(mocker, mock_db_env):
     }
 
     with pytest.raises(KeyError):
-        record_flow_module.record_product_expected("flow-error", "s3_l0", payload)
+        record_flow_module.record_product_expected.fn("flow-error", "s3_l0", payload)
 
     mock_session.rollback.assert_called_once()
 
@@ -560,7 +560,7 @@ def test_inserts_missing_products(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     # Assert that we logged the correct warning with the new fields
     logger.warning.assert_any_call(
@@ -605,7 +605,7 @@ def test_inserts_missing_products_else_branch(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     # Assert warning about missing realised info (else branch)
     logger.warning.assert_any_call("No realised info found for TYPE1, leaving category and start_datetime as NULL")
@@ -652,7 +652,7 @@ def test_skips_when_missing_already_recorded(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     logger.info.assert_any_call("Missing products for TYPE1 already recorded, skipping insert")
     mock_session.commit.assert_called_once()
@@ -698,7 +698,7 @@ def test_marks_too_many_as_unexpected(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     logger.error.assert_any_call("Too many products for TYPE1: marked all as unexpected")
     mock_session.commit.assert_called_once()
@@ -744,7 +744,7 @@ def test_skips_when_too_many_already_marked(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     logger.info.assert_any_call("Too many products for TYPE1 already marked, skipping update")
     mock_session.commit.assert_called_once()
@@ -787,7 +787,7 @@ def test_marks_extra_type_as_unexpected(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     logger.error.assert_any_call("Unexpected product type EXTRA: marked all as unexpected")
     mock_session.commit.assert_called_once()
@@ -802,7 +802,7 @@ def test_rollback_on_exception(mock_db_env, mock_tables, mocker):
     mock_session.execute.side_effect = Exception("err!")
 
     with pytest.raises(Exception):
-        record_flow_module.validate_products("FLOW123")
+        record_flow_module.validate_products.fn("FLOW123")
 
     mock_session.rollback.assert_called_once()
     logger.error.assert_any_call("Error in validate_products: err!")
@@ -821,7 +821,7 @@ def test_no_products_found(mocker, mock_db_env):
     # Mock empty DB result
     mock_session.execute.return_value.fetchall.return_value = []
 
-    update_timeliness_fields(flow_run_id=flow_run_id)
+    update_timeliness_fields.fn(flow_run_id=flow_run_id)
 
     mock_logger.info.assert_any_call("No records provided — skipping updating the timeliness in product_realised.")
     mock_session.execute.assert_called_once()
@@ -841,7 +841,7 @@ def test_update_timeliness_fields_exception(mocker, mock_db_env):
 
     # Act & Assert
     with pytest.raises(Exception, match="DB Error"):
-        update_timeliness_fields(flow_run_id=flow_run_id)
+        update_timeliness_fields.fn(flow_run_id=flow_run_id)
 
     mock_session.rollback.assert_called_once()
     mock_session.close.assert_called_once()
@@ -903,7 +903,7 @@ def test_update_timeliness_fields(mocker, mock_db_env):
         None,
     ]
 
-    update_timeliness_fields(flow_run_id=flow_run_id)
+    update_timeliness_fields.fn(flow_run_id=flow_run_id)
 
     mock_session.commit.assert_called_once()
     mock_logger.info.assert_any_call(f"Updated timeliness fields for flow_run_id={flow_run_id}")

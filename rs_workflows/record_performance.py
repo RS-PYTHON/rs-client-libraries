@@ -20,7 +20,7 @@ import sys
 from datetime import datetime
 from importlib.metadata import version
 
-from prefect import flow, get_run_logger, runtime, task
+from prefect import get_run_logger, runtime, task
 from sqlalchemy import MetaData, Table, create_engine, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
@@ -570,7 +570,7 @@ def update_timeliness_fields(flow_run_id):
         db.close()
 
 
-@flow(name="Record Performance Indicators")
+@task(name="Record Performance Indicators")
 def record_performance_indicators(
     # flow_run params
     start_date: datetime | str | None = None,
