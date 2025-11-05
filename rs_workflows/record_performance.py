@@ -20,7 +20,7 @@ import sys
 from datetime import datetime
 from importlib.metadata import version
 
-from prefect import get_run_logger, runtime, task
+from prefect import flow, get_run_logger, runtime, task
 from sqlalchemy import MetaData, Table, create_engine, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
@@ -142,6 +142,7 @@ def get_pi_category_id(eopf_type: str) -> int | None:
         logger.info("DB session closed")
 
 
+@task(name="Record Flow Run")
 def record_flow_run(
     start_date: datetime | str | None = None,
     stop_date: datetime | str | None = None,
@@ -220,6 +221,7 @@ def record_flow_run(
     return flow_run_id
 
 
+@task(name="Record Products Realised")
 def record_product_realised(flow_run_id, stac_items):
     """Insert records in product_realised table"""
     logger = get_run_logger()
@@ -295,6 +297,7 @@ def extract_min_datetime(list_items):
     return earliest
 
 
+@task(name="Record Products Expected")
 def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
     """Insert hardcoded records in product_expected table by flow_run_id."""
 
@@ -371,6 +374,7 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
         db.close()
 
 
+@task(name="Validate Products")
 def validate_products(flow_run_id: str):
     """Validate realised vs expected products for a given flow_run_id.
     : running multiple times won't duplicate inserts/updates.
@@ -511,6 +515,7 @@ def validate_products(flow_run_id: str):
         db.close()
 
 
+@task(name="Update Timeliness Fields")
 def update_timeliness_fields(flow_run_id):
     """
     Compute and update timeliness-related fields for all product_realised records
@@ -565,7 +570,7 @@ def update_timeliness_fields(flow_run_id):
         db.close()
 
 
-@task
+@flow(name="Record Performance Indicators")
 def record_performance_indicators(
     # flow_run params
     start_date: datetime | str | None = None,
