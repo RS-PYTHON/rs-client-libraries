@@ -142,6 +142,7 @@ def get_pi_category_id(eopf_type: str) -> int | None:
         logger.info("DB session closed")
 
 
+@task(name="Record Flow Run")
 def record_flow_run(
     start_date: datetime | str | None = None,
     stop_date: datetime | str | None = None,
@@ -220,6 +221,7 @@ def record_flow_run(
     return flow_run_id
 
 
+@task(name="Record Products Realised")
 def record_product_realised(flow_run_id, stac_items):
     """Insert records in product_realised table"""
     logger = get_run_logger()
@@ -295,6 +297,7 @@ def extract_min_datetime(list_items):
     return earliest
 
 
+@task(name="Record Products Expected")
 def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
     """Insert hardcoded records in product_expected table by flow_run_id."""
 
@@ -371,6 +374,7 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
         db.close()
 
 
+@task(name="Validate Products")
 def validate_products(flow_run_id: str):
     """Validate realised vs expected products for a given flow_run_id.
     : running multiple times won't duplicate inserts/updates.
@@ -511,7 +515,62 @@ def validate_products(flow_run_id: str):
         db.close()
 
 
-@task
+@task(name="Update Timeliness Fields")
+def update_timeliness_fields(flow_run_id):
+    """
+    Compute and update timeliness-related fields for all product_realised records
+    of a given flow_run_id.
+    """
+
+    logger = get_run_logger()
+    metadata = MetaData()
+    db, engine = get_db_session()
+    pi_category = Table("pi_category", metadata, autoload_with=engine)
+    product_realised = Table("product_realised", metadata, autoload_with=engine)
+
+    try:
+
+        products = db.execute(select(product_realised).where(product_realised.c.flow_run_id == flow_run_id)).fetchall()
+
+        if not products:
+            logger.info("No records provided — skipping updating the timeliness in product_realised.")
+            return
+
+        for prod in products:
+            catalog_stored_datetime = prod.catalog_stored_datetime
+            origin_datetime = prod.origin_date
+
+            # Get the allowed max delay (in seconds)
+            max_delay_seconds = db.execute(
+                select(pi_category.c.max_delay_seconds).where(pi_category.c.id == prod.pi_category_id),
+            ).scalar()
+
+            delay = (catalog_stored_datetime - origin_datetime).total_seconds()
+            logger.info(f"For product {prod.id} delay is {delay} seconds.")
+
+            updates = {
+                "on_time_0_day": delay <= max_delay_seconds,
+                "on_time_1_day": delay <= max_delay_seconds + 1 * 24 * 3600,
+                "on_time_2_day": delay <= max_delay_seconds + 2 * 24 * 3600,
+                "on_time_3_day": delay <= max_delay_seconds + 3 * 24 * 3600,
+                "on_time_7_day": delay <= max_delay_seconds + 7 * 24 * 3600,
+            }
+
+            db.execute(update(product_realised).where(product_realised.c.id == prod.id).values(**updates))
+
+        db.commit()
+        logger.info(f"Updated timeliness fields for flow_run_id={flow_run_id}")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Unexpected error in update_timeliness_fields: {e}")
+        raise
+
+    finally:
+        db.close()
+
+
+@task(name="Record Performance Indicators")
 def record_performance_indicators(
     # flow_run params
     start_date: datetime | str | None = None,
@@ -551,6 +610,8 @@ def record_performance_indicators(
         record_product_realised(flow_run_id, stac_items)
 
         validate_products(flow_run_id)
+
+        update_timeliness_fields(flow_run_id)
         logger.info("Transaction committed successfully!")
 
     except Exception as e:
