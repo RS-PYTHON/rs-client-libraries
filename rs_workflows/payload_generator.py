@@ -15,16 +15,19 @@
 """."""
 import json
 import os
+from urllib.parse import urlparse, urlunparse
 
 from prefect import get_run_logger, task
+from pystac import Item
 
+from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
+    FlowEnvArgs,
 )
-from rs_workflows.payload_template import (
+from rs_workflows.payload_template import (  # DaskContext,
     AdfConfig,
-    DaskContext,
     GeneralConfiguration,
     InputProduct,
     IOConfig,
@@ -100,7 +103,40 @@ def build_workflow_step(unit):
         raise ValueError(f"Key {ke} not found in unit list") from ke
 
 
-def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams):
+def get_first_asset_dir(item: Item) -> str | None:
+    """
+    Returns the local or remote path component from the href of the first asset in a pystac Item.
+
+    Args:
+        item (pystac.Item): The STAC item containing assets.
+
+    Returns:
+        str | None: The path component of the first asset's href, or None if no assets exist.
+        Examples:
+            s3://bucket/path/to/file.raw  ->  s3://bucket/path/to
+            /local/path/to/file.raw       ->  /local/path/to
+            https://example.com/data/file.tif -> https://example.com/data
+    """
+    if not item.assets:
+        return None
+
+    first_asset = next(iter(item.assets.values()))
+    href = first_asset.href
+
+    parsed = urlparse(href)
+
+    # Get directory part of the path
+    dir_path = os.path.dirname(parsed.path)
+
+    # Rebuild full URL (keeping scheme and netloc)
+    if parsed.scheme:
+        return urlunparse((parsed.scheme, parsed.netloc, dir_path, "", "", ""))
+
+    # Local file
+    return os.path.abspath(dir_path)
+
+
+def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams, catalog_client: CatalogClient):
     """
     Builds input and output product configurations for a workflow step.
 
@@ -122,18 +158,44 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams):
         KeyError: If a required field (e.g., product name or store_type) is missing
         in the input or output product definitions.
     """
+    inputs = []
+    for input_product in dpr_process_in.input_products:
+        input_task_table = next(iter(input_product))
+        # Find the maping between the input_product.name from input and the task table unit.
+        # The user has to now the name of the constant according to
+        # https://pforge-exchange2.astrium.eads.net/confluence/pages/viewpage.action?pageId=477103370
+        # check the input_products param
+        for inp in unit["input_products"]:
+            if inp["name"] == input_task_table:
+                # get the path where input product is to be found by queying the catalog
+                # TODO: for now, use the first input only. later on (see story 852) multiple
+                # inputs should be handled
+                stac_item_identifier, collection = input_product[input_task_table]
+                stac_item = catalog_client.get_item(collection, stac_item_identifier)
+                if stac_item is None:
+                    raise RuntimeError(
+                        f"Stac item {stac_item_identifier} does \
+                        not exist in the collection {collection}",
+                    )
 
-    inputs = [
-        InputProduct(
-            id=inp["name"],
-            # path is selected from flow_input_product with same name, otherwise, default path
-            path=dpr_process_in.input_products[inp["name"]],
-            type=inp.get("type", "filename"),
-            store_type=inp["store_type"],
-            store_params=store_params,
-        )
-        for inp in unit["input_products"]
-    ]
+                stac_item_path = get_first_asset_dir(stac_item)
+                if stac_item_path is None:
+                    raise RuntimeError(
+                        f"Stac item {stac_item_identifier}  from collection \
+                        collection {collection} has no asset !",
+                    )
+
+                inputs.append(
+                    InputProduct(
+                        id=inp["name"],
+                        path=stac_item_path,
+                        type=inp.get("type", "filename"),
+                        store_type=inp["store_type"],
+                        store_params=store_params,
+                    ),
+                )
+    if not inputs:
+        raise RuntimeError("No inputs for the dpr processor could be found")
 
     outputs = [
         OutputProduct(
@@ -210,7 +272,7 @@ def load_store_params_from_config(config_path: str = "/etc/storage_configuration
 
 @task(name="Generate payload file")
 def generate_payload(  # pylint: disable=unused-argument
-    env: FlowEnv,
+    env: FlowEnvArgs,
     unit_list: list[dict],
     adfs: list[tuple[str, str]],
     dpr_process_in: DprProcessIn,
@@ -243,40 +305,48 @@ def generate_payload(  # pylint: disable=unused-argument
     # TODO: should be moved to dpr_client.py and it should call dpr_client.py::update_configuration
 
     logger = get_run_logger()
-    # the values should be name of the secrets, and not the values of these secrets.
-    # it's up to the processor to retrieve the values at the running time
-    # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
-    # in cluster mode, it should be mounted as volume from a predefined (?) configmap
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "generate-payload"):
+        # the values should be name of the secrets, and not the values of these secrets.
+        # it's up to the processor to retrieve the values at the running time
+        # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
+        # in cluster mode, it should be mounted as volume from a predefined (?) configmap
 
-    logger.info("Loading StoreParams configuration")
-    store_params = load_store_params_from_config()
+        logger.info("Loading StoreParams configuration")
+        store_params = load_store_params_from_config()
 
-    workflow_steps = []
-    io_config = IOConfig()
-    logger.info("Geting workflow and I/O sections")
-    for unit in unit_list:
-        try:
-            workflow_steps.append(build_workflow_step(unit))
-            input_products, output_products = get_io(unit, dpr_process_in, store_params)
-            io_config.input_products += input_products
-            io_config.output_products += output_products
-        except KeyError as ke:
-            raise ValueError(f"Key {ke} not found in unit list") from ke
+        workflow_steps = []
+        io_config = IOConfig()
+        logger.info("Geting workflow and I/O sections")
+        for unit in unit_list:
+            try:
+                workflow_steps.append(build_workflow_step(unit))
+                input_products, output_products = get_io(
+                    unit,
+                    dpr_process_in,
+                    store_params,
+                    flow_env.rs_client.get_catalog_client(),
+                )
+                io_config.input_products += input_products
+                io_config.output_products += output_products
+            except KeyError as ke:
+                raise ValueError(f"Key {ke} not found in unit list") from ke
 
-    io_config.adfs = [AdfConfig(id=adf[0], path=adf[1], store_params=store_params) for adf in adfs]
-    # Build the dask context
-    # dask_context = DaskContext(
-    #     address="test",
-    # )
-    # Build the full payload using the schema
-    logger.info("Building the payload")
-    payload = PayloadSchema(
-        # add some default params, as stated in a comment from jira (story 800)
-        general_configuration=GeneralConfiguration(),
-        workflow=workflow_steps,
-        io=io_config,  # type: ignore
-        # The dask_context section is updated in dpr_service
-        # dask_context=dask_context,
-    )
-    logger.debug(f"Generated payload file: \n {payload}")
-    return payload
+        io_config.adfs = [AdfConfig(id=adf[0], path=adf[1], store_params=store_params) for adf in adfs]
+        # Build the dask context
+        # dask_context = DaskContext(
+        #     address="test",
+        # )
+        # Build the full payload using the schema
+        logger.info("Building the payload")
+        payload = PayloadSchema(
+            # add some default params, as stated in a comment from jira (story 800)
+            general_configuration=GeneralConfiguration(),
+            workflow=workflow_steps,
+            io=io_config,  # type: ignore
+            # The dask_context section is updated in dpr_service
+            # dask_context=dask_context,
+        )
+        logger.info(f"Generated payload file: \n {payload}")
+        return payload

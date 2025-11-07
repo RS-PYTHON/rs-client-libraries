@@ -174,7 +174,7 @@ class DprProcessIn:  # pylint: disable=too-many-instance-attributes
     priority: Priority = Priority.LOW
     workflow_type: WorkflowType = WorkflowType.ON_DEMAND
 
-    input_products: dict[str, str] = field(default_factory=dict)
+    input_products: list[dict[str, tuple[str, str]]] = field(default_factory=list)
     generated_product_to_collection_identifier: dict[str, str] = field(default_factory=dict)
     auxiliary_product_to_collection_identifier: dict[str, str] = field(default_factory=dict)
 
