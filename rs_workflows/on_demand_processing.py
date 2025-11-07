@@ -49,7 +49,7 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
     try:
 
         # For each "alternative" ( get it following the "order" )
-        for alternative in enumerate(input_adfs["alternatives"]):
+        for alternative in input_adfs["alternatives"]:
             # 1. Get the "query" with the "parameters" and "timeout_seconds" information
             timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
             # 2. Get the corresponding "query.name" on the section "query" of the task table
@@ -75,7 +75,7 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
                 timeout if timeout else -1,
             ).result()
             # 6. Return the first found result
-            if auxip_items[1]:
+            if auxip_items[1]: # type: ignore
                 return input_adfs["name"], auxip_items
 
         raise RuntimeError(f"Searching for adfs input {input_adfs['name']} did not return any result")
@@ -140,12 +140,11 @@ async def dpr_processing(
             # For each input_adfs element computed on STEP 1
             for input_adfs in unit["input_adfs"]:
                 tasks.append(process_input_adfs.submit(input_adfs, dpr_input, task_table))
+        
         try:
-            for t in tasks:
-                name, item = t.result()
-                auxip_items = [name, item]  # noqa: F841
-        except (RuntimeError, KeyError):
-            raise
+            auxip_items = [t.result() for t in tasks]
+        except (RuntimeError, KeyError) as err:
+            raise err
 
         adfs = []
         for name, (status, item_collection) in auxip_items:

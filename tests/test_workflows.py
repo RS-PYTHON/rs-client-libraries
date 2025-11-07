@@ -159,7 +159,7 @@ class PrefectFutureFailStub:  # pylint: disable=too-few-public-methods
             datetime=datetime.now(),
         )
         it.add_asset("data", Asset(href="s3://mock-bucket/unstaged1.bin"))
-        return [("ADFS_NAME", (False, ItemCollection([it])))]
+        return ("ADFS_NAME", (False, ItemCollection([it])))
 
 
 class ProcessInputAdfsTaskFailMock(Mock):
