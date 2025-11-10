@@ -330,7 +330,7 @@ def extract_min_datetime(list_items):
 
 
 @task(name="Record Products Expected")
-def record_product_expected(flow_run_id: str, dpr_processor_name, payload):    
+def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
     """
     Insert expected product definitions into the `product_expected` table for a given flow run.
 
