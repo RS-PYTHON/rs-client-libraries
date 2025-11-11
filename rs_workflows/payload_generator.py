@@ -21,10 +21,11 @@ from prefect import get_run_logger, task
 from pystac import Item
 
 from rs_client.stac.catalog_client import CatalogClient
+from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
-    FlowEnvArgs,
+    #FlowEnvArgs,
 )
 from rs_workflows.payload_template import (  # DaskContext,
     AdfConfig,
@@ -165,8 +166,10 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams, catalo
         # The user has to now the name of the constant according to
         # https://pforge-exchange2.astrium.eads.net/confluence/pages/viewpage.action?pageId=477103370
         # check the input_products param
+        found = False
         for inp in unit["input_products"]:
             if inp["name"] == input_task_table:
+                found = True
                 # get the path where input product is to be found by queying the catalog
                 # TODO: for now, use the first input only. later on (see story 852) multiple
                 # inputs should be handled
@@ -194,8 +197,8 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams, catalo
                         store_params=store_params,
                     ),
                 )
-    if not inputs:
-        raise RuntimeError("No inputs for the dpr processor could be found")
+        if not found:
+            raise RuntimeError(f"Couldn't find any input for tasktable entry {input_task_table}")
 
     outputs = [
         OutputProduct(
@@ -269,10 +272,84 @@ def load_store_params_from_config(config_path: str = "/etc/storage_configuration
 
     return StoreParams(storage_options=store_options)
 
+def build_mockup_payload(s3_output_data):
+    """
+    Builds a mock payload schema for testing or demonstration purposes.
+
+    This function generates a simplified `PayloadSchema` structure used for validating
+    data processing pipeline integration without invoking actual DPR (Data Processing Request)
+    logic. It creates one mock workflow step, one input product, and two output products
+    pointing to the specified S3 output location.
+
+    The resulting payload emulates a minimal working configuration for a single-unit
+    processor named `"mockup_processor"`, with placeholder input and output data paths.
+
+    Args:
+        s3_output_data (str): S3 path (e.g., `s3://bucket/output/path`) representing
+            the output location for the mock products.
+
+    Returns:
+        PayloadSchema: A fully populated payload schema containing:
+            - A single workflow step (`mockup_processor`)
+            - One mock input product (`S3ACADUS`)
+            - Two mock output products (`S3MWRL0_`, `S3OLCL0_`)
+            - A default general configuration section
+            - No adfs (sets it to [])
+
+    Notes:
+        - This mock payload is typically used for testing DPR endpoints or
+          integration pipelines when real input data or cluster processing
+          is not required.
+        - The `dask_context` section is intentionally omitted, as it is expected
+          to be injected later by the DPR service layer.
+    """
+    mockup_output_products = ["S03MWRL0_", "S03OLCL0_"]
+    workflow_steps = [WorkflowStep(
+            name = "mockup_processor",
+            active = True,
+            validate = False,
+            module = "lm.sm.mockup_processor",
+            processing_unit = "single_unit",
+            inputs = [{"S3ACADUS": "S3ACADUS"}],
+            adfs = None,
+            outputs = [{"out1": mockup_output_products[0]},
+                      {"out2": mockup_output_products[1]}
+                      ],            
+            parameters=None,
+        )]
+    input_products = [InputProduct(
+        id = "S3ACADUS",
+        path = "s3://mockup_input_path",
+        store_type = "cadu",
+        store_params = {},
+    )]
+        
+    output_products = [
+        OutputProduct(
+            id = outp,
+            path = s3_output_data,
+            store_type = "zarr",            
+            type = "folder",
+            store_params = {},            
+        )
+        for outp in mockup_output_products
+    ]
+    io_config = IOConfig(
+        input_products = input_products,
+        output_products = output_products,
+    )
+    return PayloadSchema(
+        # add some default params, as stated in a comment from jira (story 800)
+        general_configuration = GeneralConfiguration(),
+        workflow = workflow_steps,
+        io = io_config,  # type: ignore
+        # The dask_context section is updated in dpr_service
+        # dask_context=dask_context,
+    )
 
 @task(name="Generate payload file")
 def generate_payload(  # pylint: disable=unused-argument
-    env: FlowEnvArgs,
+    flow_env: FlowEnv,
     unit_list: list[dict],
     adfs: list[tuple[str, str]],
     dpr_process_in: DprProcessIn,
@@ -306,47 +383,51 @@ def generate_payload(  # pylint: disable=unused-argument
 
     logger = get_run_logger()
     # Init flow environment and opentelemetry span
-    flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "generate-payload"):
-        # the values should be name of the secrets, and not the values of these secrets.
-        # it's up to the processor to retrieve the values at the running time
-        # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
-        # in cluster mode, it should be mounted as volume from a predefined (?) configmap
+    # flow_env = FlowEnv(env)
+    #with flow_env.start_span(__name__, "generate-payload"):
+    # the values should be name of the secrets, and not the values of these secrets.
+    # it's up to the processor to retrieve the values at the running time
+    # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
+    # in cluster mode, it should be mounted as volume from a predefined (?) configmap
 
-        logger.info("Loading StoreParams configuration")
-        store_params = load_store_params_from_config()
+    logger.info("Loading StoreParams configuration")
+    if dpr_process_in.processor_name == DprProcessor.MOCKUP:        
+        logger.info("Generating payload for mockup processor")
+        return build_mockup_payload(dpr_process_in.s3_output_data)
+    
+    store_params = load_store_params_from_config()
 
-        workflow_steps = []
-        io_config = IOConfig()
-        logger.info("Geting workflow and I/O sections")
-        for unit in unit_list:
-            try:
-                workflow_steps.append(build_workflow_step(unit))
-                input_products, output_products = get_io(
-                    unit,
-                    dpr_process_in,
-                    store_params,
-                    flow_env.rs_client.get_catalog_client(),
-                )
-                io_config.input_products += input_products
-                io_config.output_products += output_products
-            except KeyError as ke:
-                raise ValueError(f"Key {ke} not found in unit list") from ke
+    workflow_steps = []
+    io_config = IOConfig()
+    logger.info("Geting workflow and I/O sections")
+    for unit in unit_list:
+        try:
+            workflow_steps.append(build_workflow_step(unit))
+            input_products, output_products = get_io(
+                unit,
+                dpr_process_in,
+                store_params,
+                flow_env.rs_client.get_catalog_client(),
+            )
+            io_config.input_products += input_products
+            io_config.output_products += output_products
+        except KeyError as ke:
+            raise ValueError(f"Key {ke} not found in unit list") from ke
 
-        io_config.adfs = [AdfConfig(id=adf[0], path=adf[1], store_params=store_params) for adf in adfs]
-        # Build the dask context
-        # dask_context = DaskContext(
-        #     address="test",
-        # )
-        # Build the full payload using the schema
-        logger.info("Building the payload")
-        payload = PayloadSchema(
-            # add some default params, as stated in a comment from jira (story 800)
-            general_configuration=GeneralConfiguration(),
-            workflow=workflow_steps,
-            io=io_config,  # type: ignore
-            # The dask_context section is updated in dpr_service
-            # dask_context=dask_context,
-        )
-        logger.info(f"Generated payload file: \n {payload}")
-        return payload
+    io_config.adfs = [AdfConfig(id=adf[0], path=adf[1], store_params=store_params) for adf in adfs]
+    # Build the dask context
+    # dask_context = DaskContext(
+    #     address="test",
+    # )
+    # Build the full payload using the schema
+    logger.info("Building the payload")
+    payload = PayloadSchema(
+        # add some default params, as stated in a comment from jira (story 800)
+        general_configuration=GeneralConfiguration(),
+        workflow=workflow_steps,
+        io=io_config,  # type: ignore
+        # The dask_context section is updated in dpr_service
+        # dask_context=dask_context,
+    )
+    logger.info(f"Generated payload: \n {payload}")
+    return payload

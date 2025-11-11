@@ -31,7 +31,10 @@ from sqlalchemy import (
 from sqlalchemy.sql.dml import Insert, Update
 
 import rs_workflows.record_performance as record_flow_module
-from rs_workflows.record_performance import extract_min_datetime
+from rs_workflows.record_performance import (
+    extract_min_datetime,
+    update_timeliness_fields,
+)
 
 # pylint: disable = redefined-outer-name, unused-argument, assignment-from-none
 
@@ -209,7 +212,7 @@ def test_record_flow_run_inserts_new_entry(mock_db_env, mocker):
     mock_session.execute.return_value.fetchone.return_value = None
     mock_session.execute.return_value.scalar.return_value = 999
 
-    result = record_flow_module.record_flow_run(start_date="2025-01-01", stop_date="2025-01-02", status="OK")
+    result = record_flow_module.record_flow_run.fn(start_date="2025-01-01", stop_date="2025-01-02", status="OK")
 
     # Verify it was insert
     stmt = mock_session.execute.call_args[0][0]
@@ -255,7 +258,7 @@ def test_record_flow_run_updates_existing_entry(mock_db_env, mocker):
 
     mock_session.execute.return_value.fetchone.return_value = ["existing-id"]
 
-    result = record_flow_module.record_flow_run(stop_date="2025-01-03", status="NOK")
+    result = record_flow_module.record_flow_run.fn(stop_date="2025-01-03", status="NOK")
 
     stmt = mock_session.execute.call_args[0][0]
     assert isinstance(stmt, Update)
@@ -278,7 +281,7 @@ def test_record_product_realised_no_items(mock_db_env):
         mock_db_env: A fixture providing a mocked database session and engine.
     """
     mock_session, _ = mock_db_env
-    result = record_flow_module.record_product_realised("flow-1", [])
+    result = record_flow_module.record_product_realised.fn("flow-1", [])
     assert result is None
     mock_session.execute.assert_not_called()
     mock_session.commit.assert_not_called()
@@ -310,7 +313,7 @@ def test_record_product_realised_insert(mock_db_env):
         },
     ]
 
-    record_flow_module.record_product_realised("flow-1", stac_items)
+    record_flow_module.record_product_realised.fn("flow-1", stac_items)
 
     stmt = mock_session.execute.call_args[0][0]
     assert isinstance(stmt, Insert)
@@ -336,7 +339,7 @@ def test_record_product_realised_keyerror_triggers_rollback(mock_db_env):
     stac_items = [{"stac_discovery": {}}]  # type: ignore
 
     with pytest.raises(KeyError):
-        record_flow_module.record_product_realised("flow-1", stac_items)
+        record_flow_module.record_product_realised.fn("flow-1", stac_items)
 
     mock_session.rollback.assert_called_once()
     mock_session.close.assert_called_once()
@@ -475,7 +478,7 @@ def test_record_product_expected_insert_data(mock_db_env, mocker):
     mocker.patch.object(record_flow_module, "get_pi_category_id", return_value=99)
 
     # Call the function
-    record_flow_module.record_product_expected(flow_run_id, dpr_processor_name, payload)
+    record_flow_module.record_product_expected.fn(flow_run_id, dpr_processor_name, payload)
 
     # Grab all insert calls
     execute_calls = mock_session.execute.call_args_list
@@ -510,7 +513,7 @@ def test_record_product_expected_rollback_on_keyerror(mocker, mock_db_env):
     }
 
     with pytest.raises(KeyError):
-        record_flow_module.record_product_expected("flow-error", "s3_l0", payload)
+        record_flow_module.record_product_expected.fn("flow-error", "s3_l0", payload)
 
     mock_session.rollback.assert_called_once()
 
@@ -557,7 +560,7 @@ def test_inserts_missing_products(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     # Assert that we logged the correct warning with the new fields
     logger.warning.assert_any_call(
@@ -602,7 +605,7 @@ def test_inserts_missing_products_else_branch(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     # Assert warning about missing realised info (else branch)
     logger.warning.assert_any_call("No realised info found for TYPE1, leaving category and start_datetime as NULL")
@@ -649,7 +652,7 @@ def test_skips_when_missing_already_recorded(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     logger.info.assert_any_call("Missing products for TYPE1 already recorded, skipping insert")
     mock_session.commit.assert_called_once()
@@ -695,7 +698,7 @@ def test_marks_too_many_as_unexpected(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     logger.error.assert_any_call("Too many products for TYPE1: marked all as unexpected")
     mock_session.commit.assert_called_once()
@@ -741,7 +744,7 @@ def test_skips_when_too_many_already_marked(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     logger.info.assert_any_call("Too many products for TYPE1 already marked, skipping update")
     mock_session.commit.assert_called_once()
@@ -784,7 +787,7 @@ def test_marks_extra_type_as_unexpected(mock_db_env, mock_tables, mocker):
 
     mock_session.execute.side_effect = execute_side_effect
 
-    record_flow_module.validate_products(flow_id)
+    record_flow_module.validate_products.fn(flow_id)
 
     logger.error.assert_any_call("Unexpected product type EXTRA: marked all as unexpected")
     mock_session.commit.assert_called_once()
@@ -799,8 +802,134 @@ def test_rollback_on_exception(mock_db_env, mock_tables, mocker):
     mock_session.execute.side_effect = Exception("err!")
 
     with pytest.raises(Exception):
-        record_flow_module.validate_products("FLOW123")
+        record_flow_module.validate_products.fn("FLOW123")
 
     mock_session.rollback.assert_called_once()
     logger.error.assert_any_call("Error in validate_products: err!")
     mock_session.close.assert_called_once()
+
+
+def test_no_products_found(mocker, mock_db_env):
+    """Should log and return if no product_realised records exist for the flow_run_id."""
+
+    mock_session, _ = mock_db_env
+    mock_logger = MagicMock()
+
+    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+    flow_run_id = "FLOW999"
+
+    # Mock empty DB result
+    mock_session.execute.return_value.fetchall.return_value = []
+
+    update_timeliness_fields.fn(flow_run_id=flow_run_id)
+
+    mock_logger.info.assert_any_call("No records provided — skipping updating the timeliness in product_realised.")
+    mock_session.execute.assert_called_once()
+
+
+def test_update_timeliness_fields_exception(mocker, mock_db_env):
+    """Should rollback and re-raise if an exception occurs."""
+
+    mock_session, _ = mock_db_env
+    mock_logger = MagicMock()
+    flow_run_id = "FLOWEXC"
+
+    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+
+    # Make execute raise an exception
+    mock_session.execute.side_effect = Exception("DB Error")
+
+    # Act & Assert
+    with pytest.raises(Exception, match="DB Error"):
+        update_timeliness_fields.fn(flow_run_id=flow_run_id)
+
+    mock_session.rollback.assert_called_once()
+    mock_session.close.assert_called_once()
+    mock_logger.error.assert_any_call("Unexpected error in update_timeliness_fields: DB Error")
+
+
+def test_update_timeliness_fields(mocker, mock_db_env):
+    """Tests that product_realised on_time_X_day fields are updated correctly."""
+    mock_session, _ = mock_db_env
+    mock_logger = MagicMock()
+    flow_run_id = "FLOW123"
+
+    # Patch logger
+    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+
+    metadata = MetaData()
+    product_realised = Table(
+        "product_realised",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("flow_run_id", String),
+        Column("pi_category_id", Integer),
+        Column("catalog_stored_datetime", DateTime),
+        Column("origin_date", DateTime),
+        Column("on_time_0_day", Boolean),
+        Column("on_time_1_day", Boolean),
+    )
+
+    pi_category = Table(
+        "pi_category",
+        metadata,
+        Column("id", Integer, primary_key=True),
+        Column("max_delay_seconds", Integer),
+    )
+
+    mocker.patch(
+        "rs_workflows.record_performance.Table",
+        side_effect=[pi_category, product_realised],
+    )
+
+    # --- Fake product record ---
+    fake_product = MagicMock()
+    fake_product.id = 1
+    fake_product.pi_category_id = 12
+    fake_product.catalog_stored_datetime = datetime(2025, 1, 2, 1)
+    fake_product.origin_date = datetime(2025, 1, 1)
+
+    # Mock execute() results
+    mock_products_result = MagicMock()
+    mock_products_result.fetchall.return_value = [fake_product]
+
+    mock_max_delay_result = MagicMock()
+    mock_max_delay_result.scalar.return_value = 24 * 3600
+
+    # Side effect for execute() calls
+    mock_session.execute.side_effect = [
+        mock_products_result,  # select(product_realised)
+        mock_max_delay_result,  # select(pi_category.c.max_delay_seconds)
+        None,
+    ]
+
+    update_timeliness_fields.fn(flow_run_id=flow_run_id)
+
+    mock_session.commit.assert_called_once()
+    mock_logger.info.assert_any_call(f"Updated timeliness fields for flow_run_id={flow_run_id}")
+    expected_values = {
+        "on_time_0_day": False,
+        "on_time_1_day": True,
+        "on_time_2_day": True,
+        "on_time_3_day": True,
+        "on_time_7_day": True,
+    }
+
+    # Check the actual update values from the Update call
+    update_call = None
+    for call in mock_session.execute.call_args_list:
+        arg0 = call.args[0]
+        if (
+            isinstance(arg0, Update)
+            and arg0._values is not None  # pylint: disable=W0212
+            and "on_time_0_day" in arg0._values  # pylint: disable=W0212
+        ):
+            update_call = arg0
+            break
+
+    assert update_call is not None, "Expected an Update call with on_time_0_day"
+
+    for col, expected in expected_values.items():
+        assert update_call._values is not None  # pylint: disable=W0212
+        actual = update_call._values[col].value  # pylint: disable=W0212
+        assert actual is expected, f"Expected {col}={expected}, got {actual}"

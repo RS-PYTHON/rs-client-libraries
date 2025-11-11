@@ -75,7 +75,7 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
                 timeout if timeout else -1,
             ).result()
             # 6. Return the first found result
-            if auxip_items[1]: # type: ignore
+            if auxip_items[1]:  # type: ignore
                 return input_adfs["name"], auxip_items
 
         raise RuntimeError(f"Searching for adfs input {input_adfs['name']} did not return any result")
@@ -140,7 +140,7 @@ async def dpr_processing(
             # For each input_adfs element computed on STEP 1
             for input_adfs in unit["input_adfs"]:
                 tasks.append(process_input_adfs.submit(input_adfs, dpr_input, task_table))
-        
+
         try:
             auxip_items = [t.result() for t in tasks]
         except (RuntimeError, KeyError) as err:
@@ -155,7 +155,7 @@ async def dpr_processing(
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
         # generate the dpr payload file
-        task_future = generate_payload.submit(flow_env.serialize(), unit_list, adfs, dpr_input)
+        task_future = generate_payload.submit(flow_env, unit_list, adfs, dpr_input)
         # get the payload generation result
         generated_payload_res = task_future.result()
         # create the generated payload as a dictionary, as it will be used for

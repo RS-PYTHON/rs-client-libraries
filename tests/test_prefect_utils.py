@@ -17,7 +17,6 @@
 import getpass
 import os
 import socket
-from datetime import datetime
 from importlib import reload
 from unittest.mock import AsyncMock, Mock, mock_open, patch
 
@@ -127,34 +126,26 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
         assert os.environ[key] == value
 
 
+@pytest.mark.asyncio
 async def test_wait_for_deployment(mocker):
     """Test the wait_for_deployment function"""
 
     wait = 0.1
-    mock_interval = 0.15
 
-    time1 = datetime.now()
-
-    def patch_read_deployment(*_):
-        """Path the read_deployment_by_name function. Return success after n seconds."""
-        diff = datetime.now() - time1
-        if diff.total_seconds() >= mock_interval:
-            return  # success
-        raise ObjectNotFound(RuntimeError())
-
+    # Mock read_deployment_by_name to fail twice, then succeed
     mock_read_deployment = mocker.patch(
         "prefect.client.orchestration._deployments.client.DeploymentAsyncClient.read_deployment_by_name",
-        side_effect=patch_read_deployment,
+        new_callable=AsyncMock,
+        side_effect=[ObjectNotFound(RuntimeError("not found")), ObjectNotFound(RuntimeError("not found")), None],
     )
 
     # Test nominal case
-    time1 = datetime.now()
     await prefect_utils.wait_for_deployment("name", wait)
     assert mock_read_deployment.call_count == 3
 
     # Test timeout
+    mock_read_deployment.side_effect = [ObjectNotFound(RuntimeError("not found"))] * 3
     with pytest.raises(ObjectNotFound):
-        time1 = datetime.now()
         await prefect_utils.wait_for_deployment("name", wait, max_retry=2)
 
 
