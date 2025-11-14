@@ -300,15 +300,14 @@ async def test_dpr_processing(
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label="cluster_label",
-        input_products={},  # Item STAC
-        generated_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
+        input_products=[{"input_name": ("stac_item_id", "collection_name")}],  # Item STAC
+        generated_product_to_collection_identifier=[{"output_folder": ("CATALOG_COLLECTION_ID")}],
         auxiliary_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
         processing_mode=["nrt"],  # type: ignore[list-item]
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         satellite="S1A",
         s3_payload_file="s3://test-bucket/payload.yaml",
-        s3_output_data="s3://test-bucket/output/",
     )
     await on_demand_processing.dpr_processing(dpr_input)
 
@@ -355,15 +354,14 @@ async def test_dpr_processing_raises_on_unstaged_adf(
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label="cluster_label",
-        input_products={},
-        generated_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
+        input_products=[{"input_name": ("stac_item_id", "collection_name")}],  # Item STAC
+        generated_product_to_collection_identifier=[{"output_folder": ("CATALOG_COLLECTION_ID")}],
         auxiliary_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
         processing_mode=["nrt"],  # type: ignore[list-item]
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         satellite="S1A",
         s3_payload_file="s3://test-bucket/payload.yaml",
-        s3_output_data="s3://test-bucket/output/",
     )
     with pytest.raises(ValueError, match="was not correctly staged"):
         await on_demand_processing.dpr_processing(dpr_input)
