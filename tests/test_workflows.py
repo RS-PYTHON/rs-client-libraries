@@ -178,7 +178,7 @@ def mock_record_performance_indicators(mocker):
     """
     fake_task = MagicMock()
     fake_task.fn = MagicMock()
-    mocker.patch("rs_workflows.dpr_flow.record_performance_indicators", fake_task)
+    mocker.patch("rs_workflows.dpr_flow.record_performance_indicators", fake_task, create=True)
 
     return fake_task
 
