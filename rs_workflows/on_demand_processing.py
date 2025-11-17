@@ -184,7 +184,7 @@ async def dpr_processing(
         processed_items = run_processor.submit(
             flow_env.serialize(),
             dpr_input.processor_name,
-            generated_payload_res_as_dict,
+            #generated_payload_res_as_dict,
             cluster_info,
             dpr_input.s3_payload_file,
         )
