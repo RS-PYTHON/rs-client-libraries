@@ -230,10 +230,12 @@ class StacBase(RsClient):
                     items_link,
                     params=params,
                 )
+                # pylint: disable=protected-access
                 item_collection = self.ps_client._parse_item_collection(  # type: ignore[attr-defined]
                     response,
                     collection,
-                )  # pylint: disable=protected-access
+                )
+                # pylint: enable=protected-access
                 return iter(item_collection)
             # Fallback for pystac-client versions without _request
             stac_io = getattr(self.ps_client, "_stac_io", None)
