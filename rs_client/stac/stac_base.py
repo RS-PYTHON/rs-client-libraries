@@ -186,7 +186,12 @@ class StacBase(RsClient):
         return self.ps_client.get_collection(collection_id)
 
     @handle_api_error
-    def get_items(self, collection_id: str, items_ids: list[str] | None = None, **query_params: Any) -> Iterator["Item"]:
+    def get_items(
+        self,
+        collection_id: str,
+        items_ids: list[str] | None = None,
+        **query_params: Any,
+    ) -> Iterator["Item"]:
         """
         Retrieve items from a collection.
 
@@ -215,10 +220,13 @@ class StacBase(RsClient):
                 collection_id,
                 params,
             )
-            items_link = collection.get_single_link("items").get_href()
+            items_link_obj = collection.get_single_link("items")
+            if items_link_obj is None:
+                raise RuntimeError(f"Collection '{collection_id}' has no 'items' link")
+            items_link = items_link_obj.get_href()
             if hasattr(self.ps_client, "_request"):
                 response = self.ps_client._request("GET", items_link, params=params)  # pylint: disable=protected-access
-                item_collection = self.ps_client._parse_item_collection(  # pylint: disable=protected-access
+                item_collection = self.ps_client._parse_item_collection(  # type: ignore[attr-defined]  # pylint: disable=protected-access
                     response,
                     collection,
                 )
