@@ -15,7 +15,8 @@
 """DPR flow implementation"""
 
 import copy
-import datetime
+
+# import datetime
 import tempfile
 from os import path as osp
 
@@ -28,7 +29,8 @@ from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from rs_workflows.record_performance import record_performance_indicators
+
+# from rs_workflows.record_performance import record_performance_indicators
 
 
 class PayloadValues(BaseModel):
@@ -246,7 +248,7 @@ async def write_payload(
 async def run_processor(
     env: FlowEnvArgs,
     processor: DprProcessor,
-    payload: dict,
+    # payload: dict,
     cluster_info: ClusterInfo,
     s3_payload_run: str,
 ) -> list[dict]:
@@ -277,10 +279,10 @@ async def run_processor(
             cluster_info=cluster_info,
             s3_config_dir=osp.dirname(s3_payload_run),
             payload_subpath=osp.basename(s3_payload_run),
-            s3_report_dir=None,
+            s3_report_dir=osp.join(osp.dirname(s3_payload_run)),
         )
         dpr_job = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
         logger.info(f"DPR processor output {dpr_job}")
         # Wait for the job to finish
-        #record_performance_indicators(stop_date=datetime.datetime.now(), status="OK", stac_items=dpr_job)
+        # record_performance_indicators(stop_date=datetime.datetime.now(), status="OK", stac_items=dpr_job)
         return dpr_job

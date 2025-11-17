@@ -28,7 +28,7 @@ from prefect.artifacts import acreate_markdown_artifact
 from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
 from rs_common.utils import create_valcover_filter
-from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
+from rs_workflows import auxip_flow, cadip_flow, prip_flow  # , catalog_flow
 from rs_workflows.dpr_flow import run_processor
 from rs_workflows.flow_utils import (
     DprProcessIn,
@@ -188,18 +188,18 @@ async def dpr_processing(
             cluster_info,
             dpr_input.s3_payload_file,
         )
-
+        logger.debug(f"processed_items = {processed_items}")
         # Publish processed items to the catalog
-        published = catalog_flow.publish.submit(
-            flow_env.serialize(),
-            dpr_input.generated_product_to_collection_identifier.get("*"),
-            processed_items,
-            dpr_input.s3_output_data,
-        )
+        # published = catalog_flow.publish.submit(
+        #     flow_env.serialize(),
+        #     dpr_input.generated_product_to_collection_identifier.get("*"),
+        #     processed_items,
+        #     dpr_input.s3_output_data,
+        # )
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        published.result()  # type: ignore[unused-coroutine]
+        # published.result()  # type: ignore[unused-coroutine]
 
         return
 

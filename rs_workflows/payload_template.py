@@ -200,7 +200,7 @@ class WorkflowStep(BasePayloadModel):
 
     name: str
     active: bool | None = True
-    validate_output: bool | None = Field(True, alias="validate")
+    validate_output: bool | None = Field(default=None, alias="validate")
     step: int | None = None
     module: str | None = None
     processing_unit: str | None = None

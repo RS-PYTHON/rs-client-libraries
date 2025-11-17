@@ -21,7 +21,8 @@ Fixtures defined in a conftest.py can be used by any test in that package withou
 """
 import json
 import logging
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, mock_open
 
 import pytest
 import responses
@@ -32,6 +33,7 @@ from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from rs_common.utils import env_bool
 from rs_workflows import init_pi_db_flow
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.payload_template import (  # StoreOptionsWrapper,
     StorageOptions,
     StoreParams,
@@ -144,6 +146,18 @@ ITEM_RESPONSE = {
         "https://stac-extensions.github.io/file/v2.1.0/schema.json",
     ],
 }
+
+# In-memory CSV strings used for read_bucket_config_file and find_s3_output_bucket functions
+# from payload_generator.py
+CSV_WITH_FALLBACK = r"""*,*,*,90,s3://default-bucket
+test-owner,my-coll,S1*,30,s3://owner-specific-bucket"""
+
+CSV_WITHOUT_FALLBACK = r"""test-owner,my-coll,S1*,30,s3://owner-specific-bucket
+other-owner,other-coll,L1*,60,s3://other-bucket"""
+
+CSV_MALFORMED_SHORT = r"""only,four,columns,here"""
+
+CSV_MALFORMED_LONG = r"""six,columns,too,many,here,ka-boom"""
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -563,10 +577,25 @@ def mocked_stac_catalog_get_item():
 @pytest.fixture(autouse=True, scope="function")
 def patch_prefect_logger(monkeypatch):
     """
-    Patch Prefect get_run_logger to avoid MissingContextError in tests.
-    Replaces Prefect’s logger with a standard Python logger.
+    Patch get_run_logger in rs_workflows.flow_utils to return a real logger.
+    Prevents MissingContextError when FlowEnv.__init__ calls get_run_logger().
     """
+    test_logger = logging.getLogger("test-flow-env")
+    test_logger.setLevel(logging.DEBUG)
+    test_logger.addHandler(logging.NullHandler())
     monkeypatch.setattr(init_pi_db_flow, "get_run_logger", lambda: logging.getLogger("test"))
+    monkeypatch.setattr(
+        "rs_workflows.flow_utils.get_run_logger",
+        lambda **kwargs: test_logger,
+    )
+    monkeypatch.setattr(
+        "rs_workflows.on_demand_processing.get_run_logger",
+        lambda **kwargs: test_logger,
+    )
+    monkeypatch.setattr(
+        "rs_workflows.payload_generator.get_run_logger",
+        lambda **kwargs: test_logger,
+    )
 
 
 @pytest.fixture
@@ -576,24 +605,49 @@ def sample_unit():
         "name": "unit1",
         "module": "module1",
         "input_products": [
-            {"name": "input1", "origin": "pipeline_input_1", "store_type": "S3"},
+            {"name": "S1CADUS", "origin": "pipeline_input_1", "store_type": "S3"},
+            {"name": "S3CADUS", "origin": "external_proc", "store_type": "S3"},
         ],
         "input_adfs": [
             {"name": "ADF1"},
         ],
         "output_products": [
             {"name": "output1", "regex": "*.tif", "store_type": "S3"},
+            {"name": "output2", "store_type": "S3"},
         ],
     }
 
 
 @pytest.fixture
 def mock_dpr_process_in():
-    """Fixture that mocks the DPR process input"""
+    """
+    Realistic mock of DprProcessIn matching actual usage in flow_utils.py.
+    """
     mock = MagicMock()
-    mock.input_products = {"input1": "/tmp/input1.tif"}  # nosec B108: test-only temp path
-    mock.s3_output_data = "s3://mocked/output/path"
-    mock.s3_payload_file = "s3://mocked/payload_file.yaml"
+
+    # input_products: list[dict[product_id, (stac_item_name_of_cadip_session, collection_id)]]
+    mock.input_products = [
+        {"S1CADUS": ("cadip_session", "COLLECTION_CADIP_TEST")},
+        {"S3CADUS": ("another_cadip_session", "COLLECTION_S3")},
+    ]
+
+    # generated_product_to_collection_identifier:
+    # list[dict[output_key, product_type | (product_type, output_collection)]]
+    mock.generated_product_to_collection_identifier = [
+        {
+            "output1": "S1A_IW_GRDH_1S",  # product type (string)
+        },
+        {
+            "output2": ("product_type", "OUTPUT_COLLECTION_GRDH"),  # (origin, collection)
+        },
+    ]
+
+    # s3_payload_file: final payload S3 path
+    mock.s3_payload_file = "s3://mocked-bucket/payloads/test-run.yaml"
+
+    # Optional: processor_name (used in payload_generator)
+    mock.processor_name = "TEST_PROCESSOR"
+
     return mock
 
 
@@ -647,3 +701,94 @@ def fake_storage_config(tmp_path):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(config, f)
     return str(path)
+
+
+@pytest.fixture
+def flow_env(monkeypatch, generic_rs_client: RsClient) -> FlowEnv:
+    """
+    FlowEnv that contains a rs-client (mocked as well).
+    The environment variables that FlowEnv reads from prefect blocks are
+    patched to harmless values.
+    """
+    monkeypatch.setenv("RSPY_WEBSITE", "https://dummy-rspy")
+    monkeypatch.setenv("RSPY_APIKEY", "dummy-key")
+    # prevent FlowEnv from trying to load real Prefect blocks
+    monkeypatch.setattr(
+        "rs_common.prefect_utils.read_prefect_blocks",
+        lambda *args, **kwargs: None,
+    )
+    args = FlowEnvArgs(owner_id="test-owner")
+    env = FlowEnv(args)
+    # replace the rs_client that FlowEnv created with the mocked one
+    env.rs_client = generic_rs_client
+    return env
+
+
+@pytest.fixture
+def catalog_client(generic_rs_client):
+    """The catalog client extracted from the RsClient."""
+    return generic_rs_client.get_catalog_client()
+
+
+@pytest.fixture
+def mock_bucket_config_with_fallback(mocker):
+    """Real CSV parsing, with wildcard * char, fully in memory"""
+    mocker.patch("builtins.open", mock_open(read_data=CSV_WITH_FALLBACK))
+    mocker.patch("os.path.exists", return_value=True)
+    return "/fake/bucket_config.csv"  # path doesn't matter
+
+
+@pytest.fixture
+def mock_bucket_config_no_fallback(mocker):
+    """Real CSV parsing, without wildcard * char, fully in memory"""
+    mocker.patch("builtins.open", mock_open(read_data=CSV_WITHOUT_FALLBACK))
+    mocker.patch("os.path.exists", return_value=True)
+    return "/fake/bucket_config.csv"
+
+
+@pytest.fixture
+def mock_bucket_config_missing_file(mocker):
+    """The configmap can't be found"""
+    mocker.patch("os.path.exists", return_value=False)
+    return "/fake/missing.csv"
+
+
+@pytest.fixture
+def mock_malformed_csv_short(mocker):
+    """Real CSV parsing, but with a record of 4 columns, fully in memory"""
+    # import pdb
+    # pdb.set_trace()
+    mocker.patch("builtins.open", mock_open(read_data=CSV_MALFORMED_SHORT))
+    mocker.patch("os.path.exists", return_value=True)
+    return "/fake/bad.csv"
+
+
+@pytest.fixture
+def mock_malformed_csv_long(mocker):
+    """Real CSV parsing, but with a record of 6 columns, fully in memory"""
+    # import pdb
+    # pdb.set_trace()
+    mocker.patch("builtins.open", mock_open(read_data=CSV_MALFORMED_LONG))
+    mocker.patch("os.path.exists", return_value=True)
+    return "/fake/bad.csv"
+
+
+@pytest.fixture
+def mock_storage_config_json(tmp_path: Path) -> str:
+    """A minimal /etc/storage_configuration.json used by load_store_params_from_config."""
+    data = {
+        "storage": [
+            {
+                "name": "s3",
+                "storage_options": {
+                    "key": "S3_ACCESSKEY",
+                    "secret": "S3_SECRETKEY",
+                    "endpoint_url": "https://s3.tests.moc",
+                    "region_name": "eu-west-1",
+                },
+            },
+        ],
+    }
+    p = tmp_path / "storage_configuration.json"
+    p.write_text(json.dumps(data), encoding="utf-8")
+    return str(p)
