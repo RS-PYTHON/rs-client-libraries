@@ -186,13 +186,15 @@ class StacBase(RsClient):
         return self.ps_client.get_collection(collection_id)
 
     @handle_api_error
-    def get_items(self, collection_id: str, items_ids: list[str] | None = None) -> Iterator["Item"]:
+    def get_items(self, collection_id: str, items_ids: list[str] | None = None, **query_params: Any) -> Iterator["Item"]:
         """
-        Retrieve all items or specific items from a collection.
+        Retrieve items from a collection.
 
         Args:
             collection_id (str): The ID of the collection.
             items_ids (Union[str, None], optional): Specific item ID(s) to retrieve.
+            query_params: Extra query parameters forwarded to the collection /items endpoint
+                          (non-standard STAC extension, used by some services).
 
         Returns:
             Iterator[Item]: An iterator over retrieved items.
@@ -202,6 +204,32 @@ class StacBase(RsClient):
 
         # Retrieve the collection
         collection = self.ps_client.get_collection(collection_id)
+
+        # If non-standard query params are provided, call the /items endpoint manually.
+        if query_params:
+            params = query_params.copy()
+            if items_ids and "ids" not in params:
+                params["ids"] = ",".join(items_ids)
+            self.logger.info(
+                "Retrieving items from collection '%s' with query params: %s.",
+                collection_id,
+                params,
+            )
+            items_link = collection.get_single_link("items").get_href()
+            if hasattr(self.ps_client, "_request"):
+                response = self.ps_client._request("GET", items_link, params=params)  # pylint: disable=protected-access
+                item_collection = self.ps_client._parse_item_collection(  # pylint: disable=protected-access
+                    response,
+                    collection,
+                )
+                return iter(item_collection)
+            # Fallback for pystac-client versions without _request
+            stac_io = getattr(self.ps_client, "_stac_io", None)
+            if stac_io and hasattr(stac_io, "read_json"):
+                response_dict = stac_io.read_json(items_link, parameters=params)
+                return iter(ItemCollection.from_dict(response_dict).items)
+            raise RuntimeError("pystac-client API has changed: cannot perform custom /items request with params.")
+
         # Retrieve a list of items
         if items_ids:
             self.logger.info(f"Retrieving specific items from collection '{collection_id}'.")
