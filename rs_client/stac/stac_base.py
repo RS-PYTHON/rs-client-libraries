@@ -225,11 +225,15 @@ class StacBase(RsClient):
                 raise RuntimeError(f"Collection '{collection_id}' has no 'items' link")
             items_link = items_link_obj.get_href()
             if hasattr(self.ps_client, "_request"):
-                response = self.ps_client._request("GET", items_link, params=params)  # pylint: disable=protected-access
-                item_collection = self.ps_client._parse_item_collection(  # type: ignore[attr-defined]  # pylint: disable=protected-access
+                response = self.ps_client._request(  # pylint: disable=protected-access
+                    "GET",
+                    items_link,
+                    params=params,
+                )
+                item_collection = self.ps_client._parse_item_collection(  # type: ignore[attr-defined]
                     response,
                     collection,
-                )
+                )  # pylint: disable=protected-access
                 return iter(item_collection)
             # Fallback for pystac-client versions without _request
             stac_io = getattr(self.ps_client, "_stac_io", None)
