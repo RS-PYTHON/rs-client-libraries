@@ -21,7 +21,6 @@ Fixtures defined in a conftest.py can be used by any test in that package withou
 """
 import json
 import logging
-from pathlib import Path
 from unittest.mock import MagicMock, mock_open
 
 import pytest
@@ -158,6 +157,26 @@ other-owner,other-coll,L1*,60,s3://other-bucket"""
 CSV_MALFORMED_SHORT = r"""only,four,columns,here"""
 
 CSV_MALFORMED_LONG = r"""six,columns,too,many,here,ka-boom"""
+
+# In-memory json content for storage_configuration.json file, check story 800
+# and STEP 3 from "How to build payload.yaml"
+STORAGE_CONFIG_JSON = """
+{
+    "storage": [
+        {
+            "name": "s3",
+            "storage_options": {
+                "key": "S3_ACCESSKEY",
+                "secret": "S3_SECRETKEY",
+                "endpoint_url": "https://s3.tests.moc",
+                "region_name": "eu-west-1"
+            }
+        }
+    ]
+}
+"""
+# incomplete storage_configuration.json
+INVALID_JSON = '{"storage": [}'
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -774,21 +793,21 @@ def mock_malformed_csv_long(mocker):
 
 
 @pytest.fixture
-def mock_storage_config_json(tmp_path: Path) -> str:
-    """A minimal /etc/storage_configuration.json used by load_store_params_from_config."""
-    data = {
-        "storage": [
-            {
-                "name": "s3",
-                "storage_options": {
-                    "key": "S3_ACCESSKEY",
-                    "secret": "S3_SECRETKEY",
-                    "endpoint_url": "https://s3.tests.moc",
-                    "region_name": "eu-west-1",
-                },
-            },
-        ],
-    }
-    p = tmp_path / "storage_configuration.json"
-    p.write_text(json.dumps(data), encoding="utf-8")
-    return str(p)
+def mock_storage_config_json(mocker) -> str:
+    """
+    Fully in-memory mock of /etc/storage_configuration.json
+    Uses real json.load() and real open() so we have a realistic parsing
+    """
+    mocker.patch("builtins.open", mock_open(read_data=STORAGE_CONFIG_JSON))
+    mocker.patch("os.path.exists", return_value=True)
+    return "/fake/etc/storage_configuration.json"
+
+
+@pytest.fixture
+def mock_storage_config_invalid_json(mocker) -> str:
+    """
+    Mock a read for an invalid storage_configuration.json file
+    """
+    mocker.patch("builtins.open", mock_open(read_data=INVALID_JSON))
+    mocker.patch("os.path.exists", return_value=True)
+    return "/fake/etc/storage_configuration.json"

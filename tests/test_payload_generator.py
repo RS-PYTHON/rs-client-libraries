@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Test the payload_generator module"""
+import json
 from datetime import datetime
 from unittest.mock import MagicMock
 
@@ -89,6 +90,13 @@ def test_get_io_builds_input_and_output(
         "rs_workflows.payload_generator.resolve_stac_input_path",
         return_value="s3://mocked/cadip_session",
     )
+    # the read_bucket_config_file function also needs to be mocked; otherwise,
+    # it will fail to locate the file and the test will not pass.
+    # this function is already tested separately.
+    mocker.patch(
+        "rs_workflows.payload_generator.read_bucket_config_file",
+        return_value="[]",
+    )
     mocker.patch(
         "rs_workflows.payload_generator.find_s3_output_bucket",
         return_value="mocked-output-bucket",
@@ -116,14 +124,17 @@ def test_get_io_builds_input_and_output(
     assert outputs[1].path == "s3://mocked-output-bucket/test-owner/OUTPUT_COLLECTION_GRDH"
 
 
-def test_get_io_missing_field_raises(
-    mock_dpr_process_in,
-    mock_store_params,
-    flow_env,
-):
+def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flow_env, mocker):
     """
     Test that malformed input_products (missing 'name' or 'origin') raise KeyError.
     """
+    # the read_bucket_config_file function also needs to be mocked; otherwise,
+    # it will fail to locate the file and the test will not pass.
+    # this function is already tested separately.
+    mocker.patch(
+        "rs_workflows.payload_generator.read_bucket_config_file",
+        return_value="[]",
+    )
     bad_unit = {
         "input_products": [{"store_type": "S3"}],  # missing name/origin
         "output_products": [],
@@ -163,6 +174,14 @@ def test_load_store_params_from_config_missing_file():
     """
     with pytest.raises(FileNotFoundError):
         load_store_params_from_config("/non/existing/file.json")
+
+
+def test_load_store_params_from_config_invalid_json(mock_storage_config_invalid_json):
+    """
+    Test that an invalid configuration file is raising JSONDecodeError.
+    """
+    with pytest.raises(json.JSONDecodeError):
+        load_store_params_from_config(mock_storage_config_invalid_json)
 
 
 # ----------------------------------------------------------------------
