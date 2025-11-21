@@ -527,7 +527,7 @@ def build_mockup_payload(owner_id):
     output_products = [
         OutputProduct(
             id=outp,
-            path=f"s3://rs-dev-cluster-temp/dpr_mockup_results/{owner_id}/",
+            path=f"s3://rs-dev-cluster-temp/dpr_mockup_results/{owner_id}/TEST_FLOW_OUTPUT/",
             store_type="zarr",
             type="folder",
             store_params=None,
@@ -593,6 +593,11 @@ def generate_payload(  # pylint: disable=unused-argument
     logger.info("Loading StoreParams configuration")
     if dpr_process_in.processor_name == DprProcessor.MOCKUP:
         logger.info("Generating payload for mockup processor")
+        # TODO: the ouput path can be also computed, by using the following 3 lines
+        # and add output_mockup_path as param to build_mockup_payload
+        # config_file_path = os.getenv(FILEPATH_ENV_VAR, DEFAULT_FILEPATH)
+        # config_rows = read_bucket_config_file(config_file_path)
+        # output_mockup_path=build_output_products(unit_list[0], dpr_process_in, store_params, flow_env, config_rows)
         return build_mockup_payload(flow_env.owner_id)
 
     store_params = load_store_params_from_config()

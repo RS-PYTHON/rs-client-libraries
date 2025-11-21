@@ -16,7 +16,6 @@
 
 import json
 import os
-from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
@@ -34,7 +33,6 @@ from rs_workflows import (
     auxip_flow,
     cadip_flow,
     catalog_flow,
-    dpr_flow,
     init_pi_db_flow,
     on_demand_processing,
     pi_db_models,
@@ -44,6 +42,7 @@ from rs_workflows import (
 from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnvArgs,
+    ProcessingMode,
 )
 from rs_workflows.pi_db_models import Base
 
@@ -52,8 +51,28 @@ S3_PAYLOAD = "S3_PAYLOAD"
 RSPY_WEBSITE = "RSPY_WEBSITE"
 RSPY_APIKEY = "RSPY_APIKEY"
 CONFIG_DIR = Path(__file__).parent / "resources"
-# Recursive defaultdict, see: https://stackoverflow.com/a/8702435
-MOCK_DICT = lambda: defaultdict(MOCK_DICT)  # type: ignore # pylint: disable=unnecessary-lambda-assignment # noqa: E731
+
+
+def make_mock_processed_item(item_id: str, product_type: str):
+    """Create a realistic processed item as returned by the DPR processor."""
+    return {
+        "stac_discovery": {
+            "id": item_id,
+            "geometry": {"type": "Polygon", "coordinates": [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]]},
+            "bbox": [-10, 40, 10, 60],
+            "properties": {
+                "datetime": "2024-01-01T12:00:00Z",
+                "product:type": product_type,  # ← this must be a real string!
+            },
+        },
+    }
+
+
+# Realistic processed items returned by run_processor
+MOCK_PROCESSED_ITEMS = [
+    make_mock_processed_item("S1A_20240101_GRD", "S1_GRD"),
+    make_mock_processed_item("S2A_20240101_NTC", "S2_NTC"),
+]
 
 #########
 # Mocks #
@@ -107,11 +126,11 @@ class MockRsClient(Mock):
         return [MockRsClient()] * 2
 
     def wait_for_job(self, *_, **__):
-        """Mock DprClient wait_for_job"""
-        return [MOCK_DICT()] * 2
+        """Mock successful job that returns processed items."""
+        return MOCK_PROCESSED_ITEMS
 
     def wait_for_jobs(self, *_, **__):
-        """Mock DprClient wait_for_jobs"""
+        """Mock wait_for_jobs"""
         return {"job_status": {"status": "successful"}}
 
     def get_process(self, *_, **__):
@@ -250,6 +269,7 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 #############
 
 
+@pytest.mark.asyncio
 @patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
@@ -258,7 +278,6 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 @patch.object(RsClient, "get_catalog_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_dpr_client", MockRsClient)
-@patch.object(on_demand_processing, "generate_payload", GeneratePayloadTaskMock())
 @patch.object(catalog_flow, "datetime", Mock())
 async def test_dpr_processing(
     mocker,
@@ -283,32 +302,77 @@ async def test_dpr_processing(
             auxip_flow.search_task: 2,
             cadip_flow.search: 0,
             cadip_flow.search_task: 0,
-            dpr_flow.read_payload_values: 0,
-            # dpr_flow.write_payload: 1,
-            # dpr_flow.run_processor: 1,
-            # staging_flow.staging_task_auxip: 2,
-            # staging_flow.staging_task_cadip: 0,
             staging_flow.staging: 2,
-            # catalog_flow.publish: 1,
+            catalog_flow.publish: 1,
         }.items()
     }
+    # mock ADF staging — use real pystac.Item, otherwise the pystac will be unhappy
+    # real_adf_item = Item(
+    #     id="AUX_TEST_001",
+    #     geometry=None,
+    #     bbox=None,
+    #     datetime=datetime.now(),
+    #     properties={"product:type": "AUX_TEST"},
+    # )
+    # real_adf_item.add_asset("data", Asset(href="s3://bucket/auxfile.bin"))
 
-    # Run the prefect flow
+    # adf_future = MagicMock()
+    # adf_future.result.return_value = ("AUX_TEST", (True, ItemCollection([real_adf_item])))
+
+    # mocker.patch(
+    #     "rs_workflows.on_demand_processing.process_input_adfs.submit",
+    #     return_value=adf_future,
+    # )
+
+    # mock generate_payload.submit
+    mock_payload = MagicMock()
+    mock_payload.dump.return_value = {
+        "io": {
+            "output_products": [
+                {"id": "GRD", "path": "s3://out/grd"},
+                {"id": "NTC", "path": "s3://out/ntc"},
+            ],
+        },
+    }
+
+    payload_future = MagicMock()
+    payload_future.result.return_value = mock_payload
+
+    mocker.patch(
+        "rs_workflows.on_demand_processing.generate_payload.submit",
+        return_value=payload_future,
+    )
+
+    # mock run_processor.submit → returns processed items
+    run_processor_future = MagicMock()
+    run_processor_future.result.return_value = MOCK_PROCESSED_ITEMS
+
+    mocker.patch(
+        "rs_workflows.dpr_flow.run_processor.submit",
+        return_value=run_processor_future,
+    )
+
+    # build realistic input
     dpr_input = DprProcessIn(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         processor_name=DprProcessor.MOCKUP,
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label="cluster_label",
-        input_products=[{"input_name": ("stac_item_id", "collection_name")}],  # Item STAC
-        generated_product_to_collection_identifier=[{"output_folder": ("CATALOG_COLLECTION_ID")}],
-        auxiliary_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
-        processing_mode=["nrt"],  # type: ignore[list-item]
+        input_products=[{"input_name": ("dummy_id", "dummy_coll")}],
+        generated_product_to_collection_identifier=[
+            {"GRD": ("S1_GRD", "OUTPUT_GRD_COLLECTION")},
+            {"NTC": ("S2_NTC", "OUTPUT_NTC_COLLECTION")},
+        ],
+        auxiliary_product_to_collection_identifier={"*": "AUX_COLLECTION"},
+        processing_mode=[ProcessingMode.NRT],  # type: ignore[list-item]
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         satellite="S1A",
         s3_payload_file="s3://test-bucket/payload.yaml",
     )
+
+    # run the flow
     await on_demand_processing.dpr_processing(dpr_input)
 
     # Check calls
@@ -631,3 +695,151 @@ async def test_init_pi_database(monkeypatch, mock_prefect):  # pylint: disable=u
     mock_create_schema.assert_called_once_with(expected_db_url)
     mock_insert_pi_categories.assert_called_once_with(expected_db_url)
     mock_logger.info.assert_any_call("The initialization of the tables for the performance indicator database finished")
+
+
+@pytest.mark.asyncio
+async def test_publish_task_success(mocker):
+    """Test: publish task adds item to catalog with correct collection and asset"""
+    # mock CatalogClient and FlowEnv
+    mock_catalog_client = MagicMock()
+    mock_rs_client = MagicMock()
+    mock_rs_client.get_catalog_client.return_value = mock_catalog_client
+
+    mock_flow_env = MagicMock()
+    mock_flow_env.rs_client = mock_rs_client
+
+    mocker.patch("rs_workflows.catalog_flow.FlowEnv", return_value=mock_flow_env)
+
+    # mock prefect logger
+    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
+
+    # mock os.path.join
+    mocker.patch("os.path.join", side_effect=lambda *parts: "/".join(parts))
+
+    # input data
+    env = FlowEnvArgs(owner_id="test-owner")
+
+    catalog_collection_identifier = [
+        {"GRD": ("S1_GRD", "OUTPUT_GRD_COLLECTION")},  # ← will match
+        {"NTC": ("S2_NTC", "OUTPUT_NTC_COLLECTION")},
+    ]
+
+    payload_file = MagicMock()
+    payload_file.io.output_products = [
+        MagicMock(id="GRD", path="s3://output-bucket/grd-output"),
+    ]
+
+    items = [
+        {
+            "stac_discovery": {
+                "id": "S1A_20240101_GRD",
+                "geometry": {"type": "Polygon", "coordinates": [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]]},
+                "bbox": [-10, 40, 10, 60],
+                "properties": {
+                    "datetime": "2024-01-01T12:00:00Z",
+                    "product:type": "S1_GRD",
+                },
+            },
+        },
+    ]
+
+    # run the async task
+    await catalog_flow.publish.fn(env, catalog_collection_identifier, payload_file, items)
+
+    # assertions
+    mock_catalog_client.add_item.assert_called_once()
+
+    # verify correct collection and item
+    collection_id, item = mock_catalog_client.add_item.call_args[0]
+    assert collection_id == "OUTPUT_GRD_COLLECTION"
+    assert item.id == "S1A_20240101_GRD"
+    assert item.datetime == datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    # verify asset
+    asset_key = "S1A_20240101_GRD.zarr"
+    asset = item.assets[asset_key]
+    assert asset.href == "s3://output-bucket/grd-output/S1A_20240101_GRD.zarr"
+    assert asset.title == asset_key
+    assert asset.media_type == "application/vnd+zarr"
+    assert asset.roles == ["data", "metadata"]
+
+
+@pytest.mark.asyncio
+async def test_publish_multiple_items(mocker):
+    """Test: multiple items -> multiple add_item calls"""
+    mock_catalog_client = MagicMock()
+    mock_flow_env = MagicMock(rs_client=MagicMock(get_catalog_client=lambda: mock_catalog_client))
+    mocker.patch("rs_workflows.payload_generator.FlowEnv", return_value=mock_flow_env)
+    mocker.patch("rs_workflows.payload_generator.get_run_logger")
+    mocker.patch("rs_workflows.catalog_flow.FlowEnv", return_value=mock_flow_env)
+    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
+    mocker.patch("os.path.join", side_effect=lambda *parts: "/".join(parts))
+
+    payload_file = MagicMock()
+    payload_file.io.output_products = [
+        MagicMock(id="GRD", path="s3://out/grd"),
+        MagicMock(id="NTC", path="s3://out/ntc"),
+    ]
+
+    catalog_collection_identifier = [
+        {"GRD": ("S1_GRD", "COLL_GRD")},
+        {"NTC": ("S2_NTC", "COLL_NTC")},
+    ]
+
+    items = [
+        {
+            "stac_discovery": {
+                "id": "item1",
+                "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
+                "geometry": None,
+                "bbox": None,
+            },
+        },
+        {
+            "stac_discovery": {
+                "id": "item2",
+                "properties": {"product:type": "S2_NTC", "datetime": "2024-01-02T00:00:00Z"},
+                "geometry": None,
+                "bbox": None,
+            },
+        },
+    ]
+
+    await catalog_flow.publish.fn(FlowEnvArgs(owner_id="test"), catalog_collection_identifier, payload_file, items)
+
+    assert mock_catalog_client.add_item.call_count == 2
+    calls = mock_catalog_client.add_item.mock_calls
+    assert calls[0][1][0] == "COLL_GRD"
+    assert calls[1][1][0] == "COLL_NTC"
+
+
+@pytest.mark.asyncio
+async def test_publish_skips_when_no_matching_output_product(mocker):
+    """Test: no matching output product -> item skipped (no error)"""
+    mock_catalog_client = MagicMock()
+    mock_flow_env = MagicMock(rs_client=MagicMock(get_catalog_client=lambda: mock_catalog_client))
+    mocker.patch("rs_workflows.payload_generator.FlowEnv", return_value=mock_flow_env)
+    mocker.patch("rs_workflows.payload_generator.get_run_logger")
+    mocker.patch("rs_workflows.catalog_flow.FlowEnv", return_value=mock_flow_env)
+    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
+    mocker.patch("os.path.join", side_effect=lambda *parts: "/".join(parts))
+
+    payload_file = MagicMock()
+    payload_file.io.output_products = []  # ← no output products!
+
+    catalog_collection_identifier = [{"GRD": ("S1_GRD", "COLL_GRD")}]
+
+    items = [
+        {
+            "stac_discovery": {
+                "id": "item1",
+                "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
+                "geometry": None,
+                "bbox": None,
+            },
+        },
+    ]
+
+    await catalog_flow.publish.fn(FlowEnvArgs(owner_id="test"), catalog_collection_identifier, payload_file, items)
+
+    mock_catalog_client.add_item.assert_not_called()  # ← silently skipped

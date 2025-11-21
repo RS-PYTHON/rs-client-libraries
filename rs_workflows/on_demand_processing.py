@@ -28,7 +28,7 @@ from prefect.artifacts import acreate_markdown_artifact
 from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
 from rs_common.utils import create_valcover_filter
-from rs_workflows import auxip_flow, cadip_flow, prip_flow  # , catalog_flow
+from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
 from rs_workflows.dpr_flow import run_processor
 from rs_workflows.flow_utils import (
     DprProcessIn,
@@ -163,8 +163,10 @@ async def dpr_processing(
         generated_payload_res_as_dict = generated_payload_res.dump()
         # create the YAML string first (synchronous). This will be used for writing both the artifact as well
         # as the tmp file
+        # md = "# Payload file\n\n```json\n" + json.dumps(generated_payload_res_as_dict, indent=2) + "\n```"
         yaml_str = yaml.dump(generated_payload_res_as_dict, default_flow_style=False, sort_keys=False)
         # Write the payload as prefect artifact
+        # await acreate_markdown_artifact(key="dpr-payload-file", markdown=md, description="")
         await acreate_markdown_artifact(key="dpr-payload-file", markdown=yaml_str, description="")
 
         # upload the config payload file to S3
@@ -187,19 +189,21 @@ async def dpr_processing(
             # generated_payload_res_as_dict,
             cluster_info,
             dpr_input.s3_payload_file,
+            wait_for=[task_future],
         )
-        logger.debug(f"processed_items = {processed_items}")
+        processed_items.result()
+
         # Publish processed items to the catalog
-        # published = catalog_flow.publish.submit(
-        #     flow_env.serialize(),
-        #     dpr_input.generated_product_to_collection_identifier.get("*"),
-        #     processed_items,
-        #     dpr_input.s3_output_data,
-        # )
+        published = catalog_flow.publish.submit(
+            flow_env.serialize(),
+            dpr_input.generated_product_to_collection_identifier,
+            generated_payload_res,
+            processed_items,
+        )
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        # published.result()  # type: ignore[unused-coroutine]
+        published.result()  # type: ignore[unused-coroutine]
 
         return
 
