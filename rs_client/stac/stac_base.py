@@ -225,6 +225,7 @@ class StacBase(RsClient):
                 raise RuntimeError(f"Collection '{collection_id}' has no 'items' link")
             items_link = items_link_obj.get_href()
             if hasattr(self.ps_client, "_request"):
+                # Use protected API to call /items with custom query params (default get_items ignores filters).
                 response = self.ps_client._request(  # pylint: disable=protected-access
                     "GET",
                     items_link,
@@ -247,7 +248,19 @@ class StacBase(RsClient):
         # Retrieve a list of items
         if items_ids:
             self.logger.info(f"Retrieving specific items from collection '{collection_id}'.")
-            return collection.get_items(*items_ids)
+
+            # Avoid pystac-client fallback through /search (EDRS has no /search); fetch items one by one.
+            # collection.get_items(*ids) internally triggers a search request, which fails on EDRS.
+            def iter_items():
+                for item_id in items_ids:
+                    try:
+                        item = collection.get_item(item_id)
+                        if item:
+                            yield item
+                    except Exception as exc:  # pylint: disable=broad-exception-caught
+                        self.logger.warning("Failed to retrieve item '%s': %s", item_id, exc)
+
+            return iter_items()
         # Retrieve all items
         self.logger.info(f"Retrieving all items from collection '{collection_id}'.")
         return collection.get_items()
