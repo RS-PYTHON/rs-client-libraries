@@ -27,24 +27,29 @@ class TestStacBase:
     """Test class to group all StacBase methods."""
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client", "edrs_client"])
     def test_cadip_auxip_get_landing(self, client, request):
         """Test GET landing page."""
         client_instance = request.getfixturevalue(client)
         assert isinstance(client_instance.get_landing(), dict)
 
     @pytest.mark.unit
-    def test_cadip_auxip_get_collections(self, mocker, auxip_client, cadip_client):
+    def test_cadip_auxip_get_collections(self, mocker, auxip_client, cadip_client, edrs_client):
         """Test to get all client collections."""
         mock_collections = mocker.patch("rs_client.stac.stac_base.StacBase.get_collections", return_value=[])
         auxip_client.get_collections()
         cadip_client.get_collections()
-        assert mock_collections.call_count == 2
+        edrs_client.get_collections()
+        assert mock_collections.call_count == 3
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "client, collection_id",
-        [("auxip_client", "auxip_collection"), ("cadip_client", "cadip_collection")],
+        [
+            ("auxip_client", "auxip_collection"),
+            ("cadip_client", "cadip_collection"),
+            ("edrs_client", "edrs_collection"),
+        ],
     )
     def test_cadip_auxip_get_collection(self, mocker, client, collection_id, request):
         """Test get valid collection id."""
@@ -57,7 +62,7 @@ class TestStacBase:
         mock_get_collection.assert_called_once_with(collection_id)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client", "edrs_client"])
     def test_cadip_auxip_get_invalid_collection(self, mocker, client, request):
         """Test a invalid collection, should result in a empty response."""
         client_instance = request.getfixturevalue(client)
@@ -100,7 +105,7 @@ class TestStacBase:
         mock_collection.get_items.assert_called_once()
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client", "edrs_client"])
     def test_cadip_auxip_get_invalid_item(self, mocker, client, request):
         """Test to get an invalid should return None"""
         client_instance = request.getfixturevalue(client)
@@ -124,7 +129,7 @@ class TestStacBase:
         mock_collection.get_item.assert_called_once_with("Item1")
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client", "edrs_client"])
     def test_cadip_auxip_get_collection_queryables(self, mocker, client, request):
         """Test to get a specific collection queryables."""
         client_instance = request.getfixturevalue(client)
@@ -138,6 +143,7 @@ class TestStacBase:
         [
             ("auxip_client", MOCKED_URL + "auxip/queryables"),
             ("cadip_client", MOCKED_URL + "cadip/queryables"),
+            ("edrs_client", MOCKED_URL + "edrs/queryables"),
         ],
     )
     @responses.activate
