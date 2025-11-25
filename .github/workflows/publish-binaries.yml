@@ -133,34 +133,6 @@ jobs:
   # Publish Docker images #
   #########################
 
-  publish-docker-store:
-    if: ${{ (github.actor != 'dependabot[bot]') && (needs.set-env.outputs.docker_tag == 'latest') }}
-    runs-on: ubuntu-latest
-    name: "Docker image for wheel storage"
-    needs: [set-env, build-whl]
-    permissions: write-all
-    outputs:
-      docker_image: ${{ steps.publish-docker.outputs.docker_image}}
-    steps:
-      - uses: actions/checkout@v4
-
-      # Download .whl files into ./whl/
-      - name: Download .whl dependencies
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build-whl.outputs.package_name }}
-          path: ./whl
-
-      - id: publish-docker
-        uses: ./.github/actions/publish-docker
-        with:
-          dockerfile: ./.github/dockerfiles/Dockerfile.store
-          build_context_path: ./whl
-          image_suffix: _store
-          version_name: ${{ needs.build-whl.outputs.version_name }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          docker_tag: ${{ needs.set-env.outputs.docker_tag }}
-
   # Local jupyter image with rs-client-libraries
   publish-docker-jupyter:
     if: github.actor != 'dependabot[bot]'
@@ -179,6 +151,10 @@ jobs:
         with:
           name: ${{ needs.build-whl.outputs.package_name }}
           path: ./whl
+
+      - name: Copy Dockerfile requirements
+        run: cp -t ./whl ./.github/scripts/layer-cleanup.sh ./.github/scripts/restore-apt.sh
+        shell: bash
 
       - id: publish-docker
         uses: ./.github/actions/publish-docker
@@ -209,6 +185,10 @@ jobs:
         with:
           name: ${{ needs.build-whl.outputs.package_name }}
           path: ./whl
+
+      - name: Copy layer-cleanup.sh script
+        run: cp -t ./whl ./.github/scripts/layer-cleanup.sh
+        shell: bash
 
       - id: publish-docker
         uses: ./.github/actions/publish-docker
@@ -241,6 +221,10 @@ jobs:
         with:
           name: ${{ needs.build-whl.outputs.package_name }}
           path: ./whl
+
+      - name: Copy Dockerfile requirements
+        run: cp -t ./whl ./.github/scripts/layer-cleanup.sh ./.github/scripts/restore-apt.sh
+        shell: bash
 
       - id: publish-docker
         uses: ./.github/actions/publish-docker
@@ -279,7 +263,7 @@ jobs:
           set -x
 
           # Copy the s3cmd config file to be able to access the "real" s3 bucket
-          echo "${{ secrets.S3CFG_ORANGE_BUCKET }}" > ~/.s3cfg
+          echo "${{ secrets.S3CFG_OVH_BUCKET }}" > ~/.s3cfg
 
           # Clone the rs-demo repository
           git clone https://github.com/RS-PYTHON/rs-demo.git
@@ -295,7 +279,30 @@ jobs:
           docker_tag="${{ needs.set-env.outputs.docker_tag }}"
           docker_tag="${docker_tag:-latest}" # latest by default
           ./test-docker-tag.sh "$docker_tag"
-          docker compose -f docker-compose-test-tag.yml up -d
-          ./run-notebooks.sh "$docker_tag"
+          docker compose -f docker-compose-test-tag.yml up cicd -d
+          ./run-notebooks.sh
+          docker compose down -v
 
+        shell: bash
+
+  ###########################
+  # Trigger other workflows #
+  ###########################
+
+  # See https://docs.github.com/en/rest/actions/workflows?apiVersion=2022-11-28#create-a-workflow-dispatch-event
+  trigger-rs-infra-core:
+    needs: [set-env, test-demo] # this must be the last job to run
+    if: (github.actor != 'dependabot[bot]') && (needs.set-env.outputs.branch_name == 'develop')
+    runs-on: ubuntu-latest
+    name: "Trigger rs-infra-core workflow"
+    steps:
+      - run: |
+          set -x
+          curl -L \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.TRIGGER_WORKFLOWS }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/RS-PYTHON/rs-infra-core/actions/workflows/publish-image.yml/dispatches \
+            -d '{"ref":"develop","inputs":{"docker_tag":"latest"}}'
         shell: bash

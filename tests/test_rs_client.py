@@ -14,48 +14,26 @@
 
 """Unit tests for RsClient, AuxipClient, CadipClient."""
 
-import getpass
-
 import pytest
 import responses
 
-from rs_client.auxip_client import AuxipClient
-from rs_client.cadip_client import CadipClient
-from rs_client.catalog_client import CatalogClient
 from rs_client.rs_client import RsClient
-from rs_common.config import EAuxipStation, ECadipStation
+from rs_client.stac.auxip_client import AuxipClient
+from rs_client.stac.cadip_client import CadipClient
+from rs_client.stac.catalog_client import CatalogClient
+from rs_client.stac.prip_client import PripClient
+from tests.common import json_landing_page
 
-from .conftest import ADGS_STATION, CADIP_STATION, RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL
+from .conftest import RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL
 
 
 @pytest.mark.unit
-def test_get_child_client(auxip_client, cadip_client, stac_client):  # pylint: disable=redefined-outer-name
+def test_get_child_client(auxip_client, cadip_client, prip_client, stac_client):  # pylint: disable=redefined-outer-name
     """Test get_auxip_client, get_cadip_client, get_stac_client"""
     assert isinstance(auxip_client, AuxipClient)
     assert isinstance(cadip_client, CadipClient)
+    assert isinstance(prip_client, PripClient)
     assert isinstance(stac_client, CatalogClient)
-
-
-@pytest.mark.unit
-def test_station_names(generic_rs_client):  # pylint: disable=redefined-outer-name
-    """Test the station name returned by the AuxipClient and CadipClient"""
-    # Try with invalid stations name, should raise runtime
-    with pytest.raises(RuntimeError):
-        generic_rs_client.get_auxip_client("Invalid")
-    with pytest.raises(RuntimeError):
-        generic_rs_client.get_auxip_client(ECadipStation.CADIP)
-    with pytest.raises(RuntimeError):
-        generic_rs_client.get_cadip_client("Invalid")
-    with pytest.raises(RuntimeError):
-        generic_rs_client.get_cadip_client(EAuxipStation.ADGS)
-
-    # Try with station  as str
-    assert "ADGS" in generic_rs_client.get_auxip_client(ADGS_STATION).station_name
-    assert "CADIP" in generic_rs_client.get_cadip_client(CADIP_STATION).station_name
-    # Try with station as enum
-    assert "ADGS" in generic_rs_client.get_auxip_client(EAuxipStation.ADGS).station_name
-    assert "CADIP" in generic_rs_client.get_cadip_client(ECadipStation.CADIP).station_name
-    assert isinstance(generic_rs_client.get_catalog_client(), CatalogClient)
 
 
 @pytest.mark.unit
@@ -92,7 +70,8 @@ def test_apikey_security(mocker):
     assert rs_client.apikey_user_login == initial_response["user_login"]
 
     # Check that the owner id is taken from the apikey user login
-    assert rs_client.owner_id == initial_response["user_login"]
+    responses.get(url=f"{dummy_href}/catalog/", status=200, json=json_landing_page(dummy_href, "ownerid:collection_id"))
+    assert rs_client.get_catalog_client().owner_id == initial_response["user_login"]
 
     # If the UAC manager response changes, we won't see it because the previous result was cached
     modified_response = {
@@ -148,7 +127,8 @@ def test_oauth2_security(mocker, monkeypatch):
     assert rs_client.oauth2_user_login == auth_info["user_login"]
 
     # Check that the owner id is taken from the user login
-    assert rs_client.owner_id == auth_info["user_login"]
+    responses.get(url=f"{dummy_href}/catalog/", status=200, json=json_landing_page(dummy_href, "ownerid:collection_id"))
+    assert rs_client.get_catalog_client().owner_id == auth_info["user_login"]
 
 
 @pytest.mark.unit
@@ -160,78 +140,6 @@ def test_no_security():
 
     with pytest.raises(RuntimeError):
         RsClient(dummy_href)  # "API key or OAuth2 cookie is mandatory for RS-Server authentication"
-
-
-@responses.activate
-@pytest.mark.parametrize("mode", ["local", "hybrid", "cluster"])
-def test_owner_id(mode, mocker, monkeypatch):
-    """
-    Test different ways to set the owner_id, in local, hybrid and cluster mode.
-    """
-    local = mode == "local"
-    hybrid = mode == "hybrid"
-    cluster = mode == "cluster"
-
-    # Configure the mode. The server URL is set only in hybrid and cluster modes.
-    dummy_href = "https://DUMMY_HREF"
-    rs_server_href = None if local else dummy_href
-
-    # The uac manager url is set only in cluster mode
-    if cluster:
-        mocker.patch("rs_client.rs_client.RSPY_UAC_CHECK_URL", new=RSPY_UAC_CHECK_URL, autospec=False)
-
-    # Different owner_id values, depending on how it is set. Don't use special characters.
-    by_param = "param"
-    by_envvar = "envvar"
-    by_apikey = "apikey"
-    by_oauth2 = "oauth2"
-
-    # Error messages
-    error_auth = "API key or OAuth2 cookie is mandatory"
-    error_hybrid = "In hybrid mode, the owner_id must be set explicitly"
-
-    # If the owner_id is not set, in local mode, it takes the system username
-    if local:
-        assert RsClient(rs_server_href).owner_id == getpass.getuser()
-    # In hybrid or cluster mode, we have an exception saying the apikey or oauth2 must be set
-    else:
-        with pytest.raises(RuntimeError) as e:
-            RsClient(rs_server_href)
-        assert error_auth in str(e.value)
-
-    # Try setting owner_id from lowest to hight priority ways. It can be deduced from the oauth2.
-    monkeypatch.setenv("RSPY_OAUTH2_COOKIE", "RSPY_OAUTH2_COOKIE")
-    responses.get(url=f"{dummy_href}/auth/me", status=200, json={"user_login": by_oauth2, "iam_roles": []})
-    # In local mode we don't use neither apikey or oauth2
-    if local:
-        assert RsClient(rs_server_href).owner_id == getpass.getuser()
-    # In hybrid mode and don't use oauth2 and the URL to get api key info is unreachable
-    elif hybrid:
-        with pytest.raises(RuntimeError) as e:
-            RsClient(rs_server_href)
-        assert error_hybrid in str(e.value)
-    # In cluster mode we deduce the owner id from the oauth2 cookie
-    elif cluster:
-        assert RsClient(rs_server_href).owner_id == by_oauth2
-
-    # owner_id deduced from the API key has higher priority than from oauth2.
-    RsClient.apikey_security_cache.clear()
-    responses.get(url=RSPY_UAC_CHECK_URL, status=200, json={"user_login": by_apikey, "iam_roles": [], "config": {}})
-    if local:
-        assert RsClient(rs_server_href, RS_SERVER_API_KEY).owner_id == getpass.getuser()
-    elif hybrid:
-        with pytest.raises(RuntimeError) as e:
-            RsClient(rs_server_href, RS_SERVER_API_KEY)
-        assert error_hybrid in str(e.value)
-    elif cluster:
-        assert RsClient(rs_server_href, RS_SERVER_API_KEY).owner_id == by_apikey
-
-    # owner_id set by env var has higher priority than deduced from api key or oauth2
-    monkeypatch.setenv("RSPY_HOST_USER", by_envvar)
-    assert RsClient(rs_server_href, RS_SERVER_API_KEY).owner_id == by_envvar
-
-    # owner_id set by parameter has higher priority than all others
-    assert RsClient(rs_server_href, RS_SERVER_API_KEY, by_param).owner_id == by_param
 
 
 def test_log_and_raise_runtime_error(generic_rs_client, mocker):

@@ -15,37 +15,40 @@
 # This docker installs the rs-client-libraries wheel
 # into the jupyter docker image that is used by rs-demo in local mode.
 # This jupyter base image already contains prefect and dask.
+FROM ghcr.io/rs-python/jupyter/minimal-notebook:latest
 
-ARG PYTHON_VERSION=3.13.9
-FROM ghcr.io/rs-python/quay.io/jupyter/base-notebook:hub-5.4.2-py${PYTHON_VERSION}
+USER root
 
-# pip install using specific kernel
-ARG USE_KERNEL="source activate py3.11.7"
+COPY ./layer-cleanup.sh ./restore-apt.sh /usr/local/bin/
+RUN chmod 755 /usr/local/bin/layer-cleanup.sh /usr/local/bin/restore-apt.sh && layer-cleanup.sh
+
+# We need psycopg2 to debug from Jupyter in some demos
+RUN \
+    restore-apt.sh && \
+    apt update && apt install -y libpq-dev gcc && \
+    pip install psycopg2 && \
+    apt autoremove -y gcc && \
+    layer-cleanup.sh
+
+ARG USER=jovyan
+USER $USER
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
 RUN mkdir -p /tmp/whl
 ADD ./*.whl /tmp/whl
 
-
-
-
-# TEMP
-RUN pip install /tmp/whl/rs_client_libraries-*.whl && \
-    opentelemetry-bootstrap -a install
-# && layer-cleanup.sh
-RUN pip install papermill
-# && layer-cleanup.sh
-
-
 # Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
-RUN ${USE_KERNEL} && \
-    pip install /tmp/whl/rs_client_libraries-*.whl && \
-    opentelemetry-bootstrap -a install && \
+RUN pip install --no-cache-dir /tmp/whl/rs_client_libraries-*.whl && opentelemetry-bootstrap -a install && \
     layer-cleanup.sh
 
 # Install other useful dependencies for rs-demo in local mode.
-RUN ${USE_KERNEL} && pip install papermill && layer-cleanup.sh
+RUN pip install --no-cache-dir papermill && layer-cleanup.sh
+
+# Remove apt repository list and custom scripts
+USER root
+RUN rm -f /etc/apt/sources.list /usr/local/bin/layer-cleanup.sh /usr/local/bin/restore-apt.sh
+USER $USER
 
 # Set labels based on the Open Containers Initiative (OCI):
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys

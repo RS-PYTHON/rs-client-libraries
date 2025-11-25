@@ -19,23 +19,27 @@ The conftest.py file serves as a means of providing fixtures for an entire direc
 Fixtures defined in a conftest.py can be used by any test in that package without needing to import them
 (pytest will automatically discover them).
 """
+import logging
 
 import pytest
 import responses
+from prefect.testing.utilities import prefect_test_harness
 
 from rs_client.rs_client import RsClient
+from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
+from rs_common.utils import env_bool
+from rs_workflows import init_pi_db_flow
 from tests import common
 
 # Use dummy values
 RSPY_UAC_CHECK_URL = "https://www.rspy-uac-manager.com"
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
-CADIP_STATION = "CADIP"
-ADGS_STATION = "ADGS"
 PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 
 HTTP_OK = 200
+HTTP_ERROR = 500
 OWNER = "toto"
 COLLECTION_ID = "S1_L1"
 
@@ -131,6 +135,7 @@ ITEM_RESPONSE = {
     "stac_extensions": [
         "https://stac-extensions.github.io/file/v2.1.0/schema.json",
         "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/file/v2.1.0/schema.json",
     ],
 }
 
@@ -156,6 +161,27 @@ def before_and_after(session_mocker):
     ###################
 
 
+@pytest.fixture(scope="function", autouse=True)
+def clear_caches():
+    """Clear caches at the end of each test"""
+    yield
+    StacBase.get_collection.cache_clear()  # pylint:disable=no-member
+
+
+@pytest.fixture(name="mock_prefect", scope="session")
+def __mock_prefect():
+    """
+    Init a mockup prefect server, see: https://docs.prefect.io/v3/how-to-guides/workflows/test-workflows
+    """
+    # NOTE: this takes long, so for local testing you can comment it,
+    # and replace with "docker compose up" from rs-demo and set this env var to "1"
+    if env_bool("SKIP_PREFECT_TEST_HARNESS", False):
+        yield
+    else:
+        with prefect_test_harness():
+            yield
+
+
 @pytest.fixture
 def mocked_stac_catalog_delete_item():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
@@ -177,23 +203,24 @@ def mocked_stac_catalog_delete_item():
 
 
 @pytest.fixture
-def mocked_stac_catalog_add_item():
+def mocked_stac_catalog_add_update_item():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
     with responses.RequestsMock() as resp:
         # This is the returned content when calling a real STAC catalog service with:
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
         json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}", conforms_to=False)
         resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
-        resp.get(
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}",
-            json=COLLECTION_RESPONSE,
-            status=HTTP_OK,
-        )
 
         json_status = {"status": HTTP_OK}
         resp.add(
             "POST",
             url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items",
+            json=json_status,
+            status=HTTP_OK,
+        )
+        resp.add(
+            "PUT",
+            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items/item_0",
             json=json_status,
             status=HTTP_OK,
         )
@@ -222,7 +249,7 @@ def mocked_stac_catalog_delete_collection():
 
 
 @pytest.fixture
-def mocked_stac_catalog_add_collection():
+def mocked_stac_catalog_add_update_collection():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
     with responses.RequestsMock() as resp:
         # This is the returned content when calling a real STAC catalog service with:
@@ -230,6 +257,18 @@ def mocked_stac_catalog_add_collection():
         json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
         resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
         resp.add("POST", url=f"{MOCKED_URL}/catalog/collections", json={"status": HTTP_OK}, status=HTTP_OK)
+        resp.add("PUT", url=f"{MOCKED_URL}/catalog/collections/OWNERID:S2_L2", json={"status": HTTP_OK}, status=HTTP_OK)
+
+        yield MOCKED_URL
+
+
+@pytest.fixture
+def mocked_stac_catalog_add_collection_error():
+    """Mock error response from a STAC catalog server made with the "requests" library. Return the mocked server URL."""
+    with responses.RequestsMock() as resp:
+        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
+        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
+        resp.add("POST", url=f"{MOCKED_URL}/catalog/collections", json={"status": HTTP_ERROR}, status=HTTP_ERROR)
 
         yield MOCKED_URL
 
@@ -408,6 +447,7 @@ def mocked_stac_catalog_url_():
         json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
         resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
         resp.get(url=f"{MOCKED_URL}/auxip/", json=json_landing_page, status=HTTP_OK)
+        resp.get(url=f"{MOCKED_URL}/prip/", json=json_landing_page, status=HTTP_OK)
         resp.get(url=f"{MOCKED_URL}/cadip/", json=json_landing_page, status=HTTP_OK)
 
         yield MOCKED_URL
@@ -425,7 +465,8 @@ def set_db_env_var_fixture(monkeypatch):
     envvars = {
         "RSPY_HOST_CATALOG": "https://dummy-catalog/catalog/",
         "RSPY_HOST_CADIP": "https://dummy-cadip/cadip/",
-        "RSPY_HOST_AUXIP": "https://dummy-audxip/auxip/",
+        "RSPY_HOST_AUXIP": "https://dummy-auxip/auxip/",
+        "RSPY_HOST_PRIP": "https://dummy-prip/prip/",
         "RSPY_HOST_STAGING": "https://dummy-staging/staging/",
     }
     for key, val in envvars.items():
@@ -443,13 +484,19 @@ def generic_rs_client_(mocked_stac_catalog_url, monkeypatch):
 @pytest.fixture(name="auxip_client")
 def auxip_client_(generic_rs_client):
     """Return a generic AuxipClient instance for testing."""
-    yield generic_rs_client.get_auxip_client(ADGS_STATION)
+    yield generic_rs_client.get_auxip_client()
 
 
 @pytest.fixture(name="cadip_client")
 def cadip_client_(generic_rs_client):
     """Return a generic CadipClient instance for testing."""
-    yield generic_rs_client.get_cadip_client(CADIP_STATION)
+    yield generic_rs_client.get_cadip_client()
+
+
+@pytest.fixture(name="prip_client")
+def prip_client_(generic_rs_client):
+    """Return a generic PripClient instance for testing."""
+    yield generic_rs_client.get_prip_client()
 
 
 @pytest.fixture(name="stac_client")
@@ -505,3 +552,12 @@ def mocked_stac_catalog_get_item():
         )
 
         yield MOCKED_URL
+
+
+@pytest.fixture(autouse=True, scope="function")
+def patch_prefect_logger(monkeypatch):
+    """
+    Patch Prefect get_run_logger to avoid MissingContextError in tests.
+    Replaces Prefect’s logger with a standard Python logger.
+    """
+    monkeypatch.setattr(init_pi_db_flow, "get_run_logger", lambda: logging.getLogger("test"))

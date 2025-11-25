@@ -48,6 +48,7 @@ def test_get_href_service(
     rs_server_href = "https://dummy-rs-server-href/endpoint/"
     assert get_href_service(rs_server_href, "RSPY_HOST_CATALOG") == "https://dummy-catalog/catalog"
     assert get_href_service(rs_server_href, "RSPY_HOST_CADIP") == "https://dummy-cadip/cadip"
-    assert get_href_service(rs_server_href, "RSPY_HOST_AUXIP") == "https://dummy-audxip/auxip"
+    assert get_href_service(rs_server_href, "RSPY_HOST_AUXIP") == "https://dummy-auxip/auxip"
+    assert get_href_service(rs_server_href, "RSPY_HOST_PRIP") == "https://dummy-prip/prip"
     assert get_href_service(rs_server_href, "RSPY_HOST_STAGING") == "https://dummy-staging/staging"
     assert get_href_service(rs_server_href, "RSPY_HOST_UNKNWON") == rs_server_href.rstrip("/")

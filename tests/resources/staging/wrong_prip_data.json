@@ -1,0 +1,141 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [
+                            -59.3169,
+                            2.6367
+                        ],
+                        [
+                            -63.105,
+                            -14.0539
+                        ],
+                        [
+                            -60.8506,
+                            -14.4245
+                        ],
+                        [
+                            -57.1309,
+                            2.3269
+                        ],
+                        [
+                            -59.3169,
+                            2.6367
+                        ]
+                    ]
+                ]
+            },
+            "properties": {
+                "datetime": "2022-06-26T05:05:33.863Z",
+                "created": "2022-06-26T06:11:22.535Z",
+                "start_datetime": "2022-06-26T05:05:33.863Z",
+                "end_datetime": "2022-06-26T05:10:38.849Z",
+                "platform": "sentinel-1a",
+                "instruments": [
+                    "SAR"
+                ],
+                "constellation": "sentinel-1",
+                "prip:id": "06c91249-b275-4811-9a55-a8d11b534945",
+                "published": "2022-06-26T06:30:34.558Z",
+                "expires": "9999-12-31T23:59:59.999Z",
+                "eopf:origin_datetime": "2022-06-26T06:14:55.468Z",
+                "product:type": "S01SIWSLC",
+                "product:timeliness": null,
+                "product:timeliness_category": null,
+                "processing:datetime": "2022-06-26T06:11:22.535Z",
+                "processing:facility": "S1 Production Service-SERCO",
+                "processing:level": "L1",
+                "sat:absolute_orbit": 43829,
+                "sat:relative_orbit": 43829,
+                "sat:orbit_state": "ASCENDING",
+                "sat:orbit_cycle": 265,
+                "eopf:datatake_id": 342911,
+                "eopf:instrument_configuration_id": 7,
+                "sar:polarizations": "HH",
+                "sar:instrument_mode": "IW"
+            },
+            "id": "S1A_IW_RAW__0NSH_20220626T050533_20220626T051038_043829_053B7F_203C.SAFE",
+            "stac_version": "1.1.0",
+            "assets": {
+                "S1A_IW_RAW__0NSH_20220626T050533_20220626T051038_043829_053B7F_203C.SAFE": {
+                    "href": "http://127.0.0.1:5000/Products(06c91249-b275-4811-9a55-a8d11b534945)/$value",
+                    "type": "application/zip",
+                    "roles": [
+                        "data",
+                        "metadata"
+                    ],
+                    "file:size": 47649797,
+                    "file:checksum": "235f8cac56705aee78b4c8bbb45c7604",
+                    "eviction_datetime": "9999-12-31T23:59:59.999Z"
+                }
+            },
+            "links": [
+                {
+                    "rel": "collection",
+                    "type": "application/json",
+                    "href": "http://127.0.0.1:8005/prip/collections/S1A_L0_IW_RAW"
+                },
+                {
+                    "rel": "parent",
+                    "type": "application/json",
+                    "href": "http://127.0.0.1:8005/prip/collections/S1A_L0_IW_RAW"
+                },
+                {
+                    "rel": "root",
+                    "type": "application/json",
+                    "href": "http://127.0.0.1:8005/prip/"
+                },
+                {
+                    "rel": "self",
+                    "type": "application/geo+json",
+                    "href": "http://127.0.0.1:8005/prip/collections/S1A_L0_IW_RAW/items/S1A_IW_RAW__0NSH_20220626T050533_20220626T051038_043829_053B7F_203C.SAFE"
+                }
+            ],
+            "stac_extensions": [
+                "https://stac-extensions.github.io/sat/v1.1.0/schema.json",
+                "https://stac-extensions.github.io/product/v1.0.0/schema.json",
+                "https://stac-extensions.github.io/processing/v1.2.0/schema.json",
+                "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+                "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+                "https://stac-extensions.github.io/grid/v1.1.0/schema.json",
+                "https://stac-extensions.github.io/view/v1.1.0/schema.json",
+                "https://stac-extensions.github.io/sar/v1.3.0/schema.json",
+                "https://cs-si.github.io/eopf-stac-extension/v1.2.0/schema.json",
+                "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json",
+                "https://stac-extensions.github.io/authentication/v1.1.0/schema.json"
+            ],
+            "collection": "S1A_L0_IW_RAW"
+        }
+    ],
+    "links": [
+        {
+            "rel": "collection",
+            "type": "application/json",
+            "href": "http://127.0.0.1:8005/prip/collections/S1A_L0_IW_RAW",
+            "title": "Collection"
+        },
+        {
+            "rel": "parent",
+            "type": "application/json",
+            "href": "http://127.0.0.1:8005/prip/collections/S1A_L0_IW_RAW",
+            "title": "Parent Catalog"
+        },
+        {
+            "rel": "root",
+            "type": "application/json",
+            "href": "http://127.0.0.1:8005/prip/",
+            "title": "STAC Root Catalog"
+        },
+        {
+            "rel": "self",
+            "type": "application/geo+json",
+            "href": "http://127.0.0.1:8005/prip/collections/S1A_L0_IW_RAW/items",
+            "title": "This collection"
+        }
+    ]
+}

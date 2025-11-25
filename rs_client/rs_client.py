@@ -14,23 +14,21 @@
 
 """RsClient class implementation."""
 
-import getpass
 import logging
 import os
-import re
 import sys
 
 import requests
 from cachetools import TTLCache, cached
+from pystac_client.stac_api_io import Timeout
 
 from rs_common import utils
-from rs_common.config import EAuxipStation, ECadipStation
 from rs_common.logging import Logging
 from rs_common.utils import AuthInfo
 
 APIKEY_HEADER = "x-api-key"
 
-# Timeout in seconds
+# Default timeout in seconds
 TIMEOUT = 30
 
 # API Key Manager URL used to get an API Key information.
@@ -44,6 +42,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     - rs-server-staging
     - rs-server-cadip
     - rs-server-auxip
+    - rs-server-prip
     - rs-server-catalog
 
     This class provides methods to authenticate and interact with RS-Server,
@@ -54,18 +53,12 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         rs_server_api_key (str | None): API key for RS-Server authentication.
         rs_server_oauth2_cookie (str | None): OAuth2 session cookie read from
             the `RSPY_OAUTH2_COOKIE` environment variable.
-        owner_id (str): The owner of the STAC catalog collections (no special characters allowed).
-            If not set, we try to read it from the RSPY_HOST_USER environment variable. If still not set:
-            - In local mode, it takes the system username.
-            - In cluster mode, it is deduced from the API key or OAuth2 login = your keycloak username.
-            - In hybrid mode, we raise an Exception.
-            If owner_id is different than your keycloak username, then make sure that your keycloak account has
-            the rights to read/write on this catalog owner.
-            owner_id is also used in the RS-Client logging.
+        owner_id (str | None): Only used in catalog client, see description there
         logger (logging.Logger): Logger instance for logging messages.
         local_mode (bool): Indicates whether the client is running in local mode.
         apikey_headers (dict): API key headers for HTTP requests.
         http_session (requests.Session): HTTP session for handling requests.
+        timeout (Timeout): timeout in seconds when contacting API key manager. Default to 30s.
     """
 
     def __init__(  # pylint: disable=too-many-branches, too-many-arguments, too-many-positional-arguments
@@ -74,6 +67,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         rs_server_api_key: str | None = None,
         owner_id: str | None = None,
         logger: logging.Logger | None = None,
+        timeout: Timeout = TIMEOUT,
     ):
         """
         Initializes an RsClient instance.
@@ -86,7 +80,6 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         Raises:
             RuntimeError: If neither an API key nor an OAuth2 cookie is provided for RS-Server authentication.
-            RuntimeError: If the computed owner ID is empty or contains only special characters.
         """
         self.rs_server_href: str | None = rs_server_href
         self.rs_server_api_key: str | None = rs_server_api_key
@@ -119,30 +112,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         if self.rs_server_oauth2_cookie:
             self.http_session.cookies.set("session", self.rs_server_oauth2_cookie)
 
-        # Determine automatically the owner id
-        if not self.owner_id:
-            # In local mode, we use the local system username
-            if self.local_mode:
-                self.owner_id = getpass.getuser()
-
-            # In hybrid mode, the API Key Manager check URL is not accessible and there is no OAuth2
-            # so the owner id must be set explicitly by the user.
-            elif self.hybrid_mode:
-                raise RuntimeError(
-                    "In hybrid mode, the owner_id must be set explicitly by parameter or environment variable",
-                )
-
-            # In cluster mode, we retrieve the OAuth2 or API key login
-            else:
-                self.owner_id = self.apikey_user_login if self.rs_server_api_key else self.oauth2_user_login
-
-        # Remove special characters
-        self.owner_id = re.sub(r"[^a-zA-Z0-9]+", "", self.owner_id)
-
-        if not self.owner_id:
-            raise RuntimeError("The owner ID is empty or only contains special characters")
-
-        self.logger.debug(f"Owner ID: {self.owner_id!r}")
+        self.timeout = timeout
 
     def log_and_raise(self, message: str, original: Exception):
         """
@@ -202,7 +172,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         # Request the API key manager, pass user-defined api key in http header
         self.logger.debug("Call the API key manager")
-        response = self.http_session.get(RSPY_UAC_CHECK_URL, **self.apikey_headers, timeout=TIMEOUT)
+        response = self.http_session.get(RSPY_UAC_CHECK_URL, **self.apikey_headers, timeout=self.timeout)
         if not response.ok:
             raise RuntimeError(
                 f"API key manager status code {response.status_code}: {utils.read_response_error(response)}",
@@ -256,36 +226,41 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     # Get child class instances #
     #############################
 
-    def get_auxip_client(self, station: EAuxipStation, **kwargs) -> "AuxipClient":  # type: ignore # noqa: F821
+    def get_auxip_client(self, **kwargs) -> "AuxipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
-        Args:
-            station (EAuxipStation): Auxip station
         """
-        from rs_client.auxip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+        from rs_client.stac.auxip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             AuxipClient,
         )
 
-        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger, **kwargs)
+        return AuxipClient(self.rs_server_href, self.rs_server_api_key, self.logger, **kwargs)
 
-    def get_cadip_client(self, station: ECadipStation, **kwargs) -> "CadipClient":  # type: ignore # noqa: F821
+    def get_prip_client(self, **kwargs) -> "PripClient":  # type: ignore # noqa: F821
+        """
+        Return an instance of the child class PripClient, with the same attributes as this "self" instance.
+        """
+        from rs_client.stac.prip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            PripClient,
+        )
+
+        return PripClient(self.rs_server_href, self.rs_server_api_key, self.logger, **kwargs)
+
+    def get_cadip_client(self, **kwargs) -> "CadipClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class CadipClient, with the same attributes as this "self" instance.
-
-        Args:
-            station (ECadipStation): Cadip station
         """
-        from rs_client.cadip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+        from rs_client.stac.cadip_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             CadipClient,
         )
 
-        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, station, self.logger, **kwargs)
+        return CadipClient(self.rs_server_href, self.rs_server_api_key, self.logger, **kwargs)
 
     def get_catalog_client(self, **kwargs) -> "CatalogClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class CatalogClient, with the same attributes as this "self" instance.
         """
-        from rs_client.catalog_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+        from rs_client.stac.catalog_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             CatalogClient,
         )
 
@@ -299,10 +274,20 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
     def get_staging_client(self) -> "StagingClient":  # type: ignore # noqa: F821
         """
-        Return an instance of the child class AuxipClient, with the same attributes as this "self" instance.
+        Return an instance of the child class StagingClient, with the same attributes as this "self" instance.
         """
-        from rs_client.staging_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+        from rs_client.ogcapi.staging_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
             StagingClient,
         )
 
-        return StagingClient(self.rs_server_href, self.rs_server_api_key, self.owner_id, self.logger)
+        return StagingClient(self.rs_server_href, self.rs_server_api_key, None, self.logger)
+
+    def get_dpr_client(self) -> "DprClient":  # type: ignore # noqa: F821
+        """
+        Return an instance of the child class DprClient, with the same attributes as this "self" instance.
+        """
+        from rs_client.ogcapi.dpr_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            DprClient,
+        )
+
+        return DprClient(self.rs_server_href, self.rs_server_api_key, None, self.logger)
