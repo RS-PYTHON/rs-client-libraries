@@ -32,17 +32,12 @@ ARG PREFECT_AWS_TAG=0.5.9
 # Upgrande pip and install dependencies.
 # NOTES:
 #   - Install s3fs before boto3 to have a recent version
-#   - We need the same numpy version as in eopf
-#   - Use latest pydantic-settings
 RUN pip install -U pip && \
     pip install -U pydantic-settings && \
     pip install \
         prefect-aws=="${PREFECT_AWS_TAG}" \
         s3fs \
         boto3 \
-        numpy=="1.26.4" \
-        SQLAlchemy>="2.0.37" \
-        psycopg2-binary>="2.9.10" && \
     layer-cleanup.sh
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
@@ -53,8 +48,8 @@ ADD ./*.whl /tmp/whl
 # Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
 RUN pip install /tmp/whl/rs_client_libraries-*.whl && opentelemetry-bootstrap -a install && layer-cleanup.sh
 
-# Remove apt repository list and custom scripts
-RUN rm -f /etc/apt/sources.list /usr/local/bin/layer-cleanup.sh /usr/local/bin/restore-apt.sh
+# Remove custom scripts
+RUN rm -f /usr/local/bin/layer-cleanup.sh
 
 # Set labels based on the Open Containers Initiative (OCI):
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
