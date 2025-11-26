@@ -13,9 +13,11 @@
 # limitations under the License.
 
 # This docker installs the rs-client-libraries wheel
-# into the jupyter docker image that is used by rs-demo in local mode.
-# This jupyter base image already contains prefect and dask.
-FROM ghcr.io/rs-python/jupyter/minimal-notebook:latest
+# in the jupyter docker image that is used by rs-demo in local mode.
+
+ARG PYTHON_VERSION=3.13.9
+
+FROM ghcr.io/rs-python/quay.io/jupyter/base-notebook:hub-5.4.2-py${PYTHON_VERSION}
 
 USER root
 
