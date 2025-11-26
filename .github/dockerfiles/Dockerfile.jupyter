@@ -32,9 +32,6 @@ RUN \
     apt autoremove -y gcc && \
     layer-cleanup.sh
 
-ARG USER=jovyan
-USER $USER
-
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
 RUN mkdir -p /tmp/whl
@@ -48,9 +45,9 @@ RUN pip install --no-cache-dir /tmp/whl/rs_client_libraries-*.whl && opentelemet
 RUN pip install --no-cache-dir papermill && layer-cleanup.sh
 
 # Remove apt repository list and custom scripts
-USER root
 RUN rm -f /etc/apt/sources.list /usr/local/bin/layer-cleanup.sh /usr/local/bin/restore-apt.sh
-USER $USER
+
+USER jovyan
 
 # Set labels based on the Open Containers Initiative (OCI):
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
