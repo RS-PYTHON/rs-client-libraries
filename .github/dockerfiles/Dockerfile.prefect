@@ -13,7 +13,10 @@
 # limitations under the License.
 
 #
-# This docker installs the rs-client-libraries wheel into the prefect docker image.
+# Prefect image in which we install rs-client-libraries.
+# Target Docker image names:
+# ghcr.io/rs-python/prefect/rs-client-libraries/local
+# ghcr.io/rs-python/prefect/rs-client-libraries/k8s
 #
 
 ARG PYTHON_VERSION=3.13.9
@@ -55,7 +58,4 @@ RUN rm -f /usr/local/bin/layer-cleanup.sh
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
 #
 LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
-LABEL org.opencontainers.image.ref.name="ghcr.io/rs-python/prefect/rs-client-libraries/local;ghcr.io/rs-python/prefect/rs-client-libraries/k8s"
 LABEL dockerfile.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.prefect"
-
-LABEL org.opencontainers.image.description="prefect image in which we installed the rs-client-libraries wheel package."

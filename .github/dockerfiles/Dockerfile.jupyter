@@ -15,6 +15,12 @@
 # This docker installs the rs-client-libraries wheel
 # in the jupyter docker image that is used by rs-demo in local mode.
 
+#
+# Jupyter image for local mode in which we install prefect and rs-client-libraries.
+# Target Docker image name:
+# ghcr.io/rs-python/jupyter/rs-client-libraries/local
+#
+
 ARG PYTHON_VERSION=3.13.9
 
 FROM ghcr.io/rs-python/quay.io/jupyter/base-notebook:hub-5.4.2-py${PYTHON_VERSION}
@@ -53,7 +59,4 @@ USER jovyan
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
 #
 LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
-LABEL org.opencontainers.image.ref.name="ghcr.io/rs-python/jupyter/rs-client-libraries/local"
 LABEL dockerfile.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.jupyter"
-
-LABEL org.opencontainers.image.description="jupyter image for local mode in which we installed dask, prefect and the rs-client-libraries wheel package."
