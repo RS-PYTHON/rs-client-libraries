@@ -148,15 +148,40 @@ def make_session_enum(values: dict[str, str]) -> Enum:
 
 # Available CADIP collections (used as dropdown in Prefect UI)
 class CadipCollections(str, Enum):
-    s1_sgs = "s1_sgs"
-    s1_mps = "s1_mps"
-    s1_mti = "s1_mti"
-    s2_sgs = "s2_sgs"
-    s3_sgs = "s3_sgs"
+    """
+    Enumeration of available CADIP (Copernicus Acquisition Data Information Processing) collections.
+
+    This enum defines the supported satellite data collection identifiers that can be queried
+    from the CADIP service, including collections from Sentinel-1, Sentinel-2, and Sentinel-3 missions.
+    """
+    S1_SGS = "s1_sgs"
+    S1_MPS = "s1_mps"
+    S1_MTI = "s1_mti"
+    S2_SGS = "s2_sgs"
+    S3_SGS = "s3_sgs"
 
 
 @flow(name="select and stage a session")
 async def stage_selected_session(cadip_collection: CadipCollections, owner_identifier: str = "pcuq"):
+    """
+    Stage a selected CADIP session for processing.
+
+    This function searches for CADIP sessions within a 10-hour window from the current UTC time,
+    presents the user with a list of available sessions, and stages the selected session for processing.
+
+    Args:
+        cadip_collection (CadipCollections): The CADIP collection to search within.
+        owner_identifier (str, optional): The owner identifier for the flow environment. Defaults to "pcuq".
+
+    Raises:
+        ValueError: If no CADIP session is found within the specified time window.
+
+    Returns:
+        None
+
+    Example:
+        >>> await stage_selected_session(CadipCollections.S1, owner_identifier="pcuq")
+    """
     logger = get_run_logger()
 
     # Current time in UTC
@@ -189,11 +214,16 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
         session_list[key] = item_.id
 
     # Generate Enum dynamically from session list
-    SessionEnum = make_session_enum(session_list)
+    session_enum = make_session_enum(session_list)
 
     # Pydantic model for Prefect pause input
     class SessionSelection(BaseModel):
-        selected: SessionEnum = Field(title="Session to stage")  # type: ignore
+        """
+
+        Args:
+            BaseModel (_type_): _description_
+        """
+        selected: session_enum = Field(title="Session to stage")  # type: ignore
 
     # Pause Prefect flow to let user select a session
     selection = await pause_flow_run(wait_for_input=SessionSelection)
