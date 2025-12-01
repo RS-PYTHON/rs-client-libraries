@@ -16,7 +16,6 @@
 import json
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Dict
 
 from prefect import flow, get_run_logger, pause_flow_run, task
 from pydantic import BaseModel, Field
@@ -24,7 +23,6 @@ from pystac import ItemCollection  # type: ignore
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from rs_workflows.staging_flow import staging_task  # Ensure this is the correct import
 
 
 @task(name="Cadip session search")
