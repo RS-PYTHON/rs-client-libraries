@@ -127,12 +127,8 @@ async def cadip_session_stage(
 
         # Convert ItemCollection into dictionary for staging
         if isinstance(cadip_items, ItemCollection):
-            cadip_items_dict = cadip_items.to_dict()
-        else:
-            cadip_items_dict = json.loads(cadip_items)
+            cadip_items = cadip_items.to_dict()
 
-        # Trigger staging and wait for jobs to finish
-        job_all_status = staging_client.run_staging(cadip_items_dict, catalog_cadip_collection)
         # Trigger staging and wait for jobs to finish
         job_all_status = staging_client.run_staging(cadip_items, catalog_cadip_collection)
         staging_client.wait_for_jobs(
@@ -142,7 +138,7 @@ async def cadip_session_stage(
         )
 
 
-def make_session_enum(values: dict[str, str]) -> type[Enum]:
+def make_session_enum(values: dict[str, str]) -> Enum:
     """
     Create a dynamic Enum class from a dictionary of session values.
 
@@ -218,13 +214,13 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
 
     if not session_found:
         raise ValueError(
-            f"No Cadip session found for start_datetime={start_datetime!r} " f"and end_datetime={end_datetime!r}",
+            f"No Cadip session found for start_datetime={start_datetime!r} and end_datetime={end_datetime!r}",
         )
 
     # Build dictionary of sessions with descriptive keys
     session_list: dict[str, str] = {}
     for item_ in session_found.items:
-        key = f"📡 {item_.id} " f"🕒 {item_.properties['published']} " f"🌍 {item_.properties['sat:absolute_orbit']}"
+        key = f"📡 {item_.id} 🕒 {item_.properties['published']} 🌍 {item_.properties['sat:absolute_orbit']}"
         session_list[key] = item_.id
 
     # Generate Enum dynamically from session list
