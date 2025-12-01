@@ -69,6 +69,7 @@ requests = "^2.32.4"
 urllib3 = ">=2.5.0"
 SQLAlchemy = "^2.0.37"
 uv = ">=0.9.7"
+psycopg2-binary = ">=2.9.10"
 
 [tool.poetry.group.dev]
 optional = true
