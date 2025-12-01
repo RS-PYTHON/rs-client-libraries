@@ -14,11 +14,10 @@
 
 
 from prefect import task, get_run_logger, flow, pause_flow_run
-from pystac import ItemCollection # type: ignore
+from pystac import ItemCollection  # type: ignore
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from rs_workflows.staging_flow import staging_task  # Ensure this is the correct import
 from enum import Enum
 from pydantic import BaseModel, Field
 from typing import Dict
@@ -128,7 +127,7 @@ async def cadip_session_stage(
         logger = get_run_logger()
 
         # Get staging client from environment
-        staging_client: StagingClient = flow_env.rs_client.get_staging_client()
+        staging_client = flow_env.rs_client.get_staging_client()
 
         # Convert ItemCollection into dictionary for staging
         if isinstance(cadip_items, ItemCollection):
