@@ -137,12 +137,27 @@ async def cadip_session_stage(
         )
 
 
-# Utility function to dynamically create an Enum from a dictionary of sessions
-def make_session_enum(values: dict[str, str]) -> Enum:
-    return Enum("SessionName", {v: k for k, v in values.items()})
+def make_session_enum(values: dict[str, str]) -> type[Enum]:
+    """
+    Create a dynamic Enum class from a dictionary of session values.
+
+    This function takes a dictionary mapping session identifiers to display names
+    and returns a new Enum class with the mapping inverted (values become enum names,
+    keys become enum values).
+
+    Args:
+        values: A dictionary where keys are session identifiers and values are
+                session names/labels to be used as enum member names.
+
+    Returns:
+        A dynamically created Enum class where enum member names correspond to
+        the input dictionary values, and enum member values correspond to the
+        input dictionary keys.
+
+    """
+    return Enum("session_enum", {v: k for k, v in values.items()})  # type: ignore
 
 
-# Available CADIP collections (used as dropdown in Prefect UI)
 class CadipCollections(str, Enum):
     """
     Enumeration of available CADIP (Copernicus Acquisition Data Information Processing) collections.
@@ -174,9 +189,6 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
 
     Returns:
         None
-
-    Example:
-        >>> await stage_selected_session(CadipCollections.S1, owner_identifier="pcuq")
     """
     logger = get_run_logger()
 
