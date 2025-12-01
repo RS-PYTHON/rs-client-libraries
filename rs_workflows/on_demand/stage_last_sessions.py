@@ -252,6 +252,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
     # Stage the selected session
     await cadip_session_stage(
         FlowEnvArgs(owner_id=owner_identifier),
-        cadip_items=f"https://rspy.ops.rs-python.eu/cadip/search?ids={session_list[selection.selected.value]}",  # type: ignore
+        cadip_items=f"https://rspy.ops.rs-python.eu/cadip/search?ids=\
+            {session_list[selection.selected.value]}",  # type: ignore
         catalog_cadip_collection=catalog_cadip_collection,
     )
