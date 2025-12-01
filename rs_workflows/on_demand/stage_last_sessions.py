@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Staging flow implementation"""
 
 import json
 from datetime import datetime, timedelta, timezone
@@ -169,6 +170,7 @@ class CadipCollections(str, Enum):
     This enum defines the supported satellite data collection identifiers that can be queried
     from the CADIP service, including collections from Sentinel-1, Sentinel-2, and Sentinel-3 missions.
     """
+
     S1_SGS = "s1_sgs"
     S1_MPS = "s1_mps"
     S1_MTI = "s1_mti"
@@ -235,12 +237,13 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
         Args:
             BaseModel (_type_): _description_
         """
+
         selected: session_enum = Field(title="Session to stage")  # type: ignore
 
     # Pause Prefect flow to let user select a session
     selection = await pause_flow_run(wait_for_input=SessionSelection)
 
-    logger.info(f"Internal identifier: {session_list[selection.selected.value]}")
+    logger.info(f"Internal identifier: {session_list[selection.selected.value]}")  # type: ignore
 
     # Build catalog collection name based on CADIP collection
     sat = cadip_collection[1]
@@ -249,6 +252,6 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
     # Stage the selected session
     await cadip_session_stage(
         FlowEnvArgs(owner_id=owner_identifier),
-        cadip_items=f"https://rspy.ops.rs-python.eu/cadip/search?ids={session_list[selection.selected.value]}",
+        cadip_items=f"https://rspy.ops.rs-python.eu/cadip/search?ids={session_list[selection.selected.value]}",  # type: ignore
         catalog_cadip_collection=catalog_cadip_collection,
     )
