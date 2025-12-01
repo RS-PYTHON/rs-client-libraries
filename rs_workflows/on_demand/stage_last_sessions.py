@@ -132,12 +132,8 @@ async def cadip_session_stage(
 
         # Convert ItemCollection into dictionary for staging
         if isinstance(cadip_items, ItemCollection):
-            cadip_items_dict = cadip_items.to_dict()
-        else:
-            cadip_items_dict = json.loads(cadip_items)
+            cadip_items = cadip_items.to_dict()
 
-        # Trigger staging and wait for jobs to finish
-        job_all_status = staging_client.run_staging(cadip_items_dict, catalog_cadip_collection)
         # Trigger staging and wait for jobs to finish
         job_all_status = staging_client.run_staging(cadip_items, catalog_cadip_collection)
         staging_client.wait_for_jobs(
