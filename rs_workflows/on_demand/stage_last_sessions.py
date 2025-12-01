@@ -13,17 +13,18 @@
 # limitations under the License.
 
 
-from prefect import task, get_run_logger, flow, pause_flow_run
-from pystac import ItemCollection # type: ignore
+import json
+from datetime import datetime, timedelta, timezone
+from enum import Enum
+from typing import Dict
+
+from prefect import flow, get_run_logger, pause_flow_run, task
+from pydantic import BaseModel, Field
+from pystac import ItemCollection  # type: ignore
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task  # Ensure this is the correct import
-from enum import Enum
-from pydantic import BaseModel, Field
-from typing import Dict
-from datetime import datetime, timedelta, timezone
-import json
 
 
 @task(name="Cadip session search")
@@ -31,7 +32,7 @@ async def cadip_session_search(
     env: FlowEnvArgs,
     cadip_collection_identifier: str,
     start_datetime: str,
-    end_datetime: str
+    end_datetime: str,
 ) -> ItemCollection:
     """
     Search for CADIP sessions within a given time interval.
@@ -76,12 +77,7 @@ async def cadip_session_search(
                 ],
             },
             "limit": 10,
-            "sortby": [
-                {
-                    "field": "datetime",
-                    "direction": "desc"
-                }
-            ]
+            "sortby": [{"field": "datetime", "direction": "desc"}],
         }
 
         # Log query for debugging
@@ -104,7 +100,7 @@ async def cadip_session_search(
 async def cadip_session_stage(
     env: FlowEnvArgs,
     cadip_items: ItemCollection | str,
-    catalog_cadip_collection: str
+    catalog_cadip_collection: str,
 ) -> None:
     """
     Stage CADIP items into the target catalog collection.
@@ -148,7 +144,7 @@ async def cadip_session_stage(
 
 
 # Utility function to dynamically create an Enum from a dictionary of sessions
-def make_session_enum(values: Dict[str, str]) -> Enum:
+def make_session_enum(values: dict[str, str]) -> Enum:
     return Enum("SessionName", {v: k for k, v in values.items()})
 
 
@@ -180,23 +176,18 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
         FlowEnvArgs(owner_id=owner_identifier),
         cadip_collection_identifier=cadip_collection,
         start_datetime=start_str,
-        end_datetime=end_str
+        end_datetime=end_str,
     )
 
     if not session_found:
         raise ValueError(
-            f"No Cadip session found for start_datetime={start_datetime!r} "
-            f"and end_datetime={end_datetime!r}"
+            f"No Cadip session found for start_datetime={start_datetime!r} " f"and end_datetime={end_datetime!r}",
         )
 
     # Build dictionary of sessions with descriptive keys
-    session_list: Dict[str, str] = {}
+    session_list: dict[str, str] = {}
     for item_ in session_found.items:
-        key = (
-            f"📡 {item_.id} "
-            f"🕒 {item_.properties['published']} "
-            f"🌍 {item_.properties['sat:absolute_orbit']}"
-        )
+        key = f"📡 {item_.id} " f"🕒 {item_.properties['published']} " f"🌍 {item_.properties['sat:absolute_orbit']}"
         session_list[key] = item_.id
 
     # Generate Enum dynamically from session list
@@ -212,12 +203,12 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
     logger.info(f"Internal identifier: {session_list[selection.selected.value]}")
 
     # Build catalog collection name based on CADIP collection
-    sat = cadip_collection[1]  
+    sat = cadip_collection[1]
     catalog_cadip_collection = f"s0{sat}-cadip-session"
 
     # Stage the selected session
     await cadip_session_stage(
         FlowEnvArgs(owner_id=owner_identifier),
         cadip_items=f"https://rspy.ops.rs-python.eu/cadip/search?ids={session_list[selection.selected.value]}",
-        catalog_cadip_collection=catalog_cadip_collection
+        catalog_cadip_collection=catalog_cadip_collection,
     )
