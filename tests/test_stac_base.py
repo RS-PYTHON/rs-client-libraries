@@ -15,6 +15,7 @@
 """Unit tests for CatalogClient, AuxipClient, CadipClient."""
 
 import logging
+from typing import Any
 
 import pytest
 import requests
@@ -271,7 +272,7 @@ class StubPsClient:  # pylint: disable=too-few-public-methods
     def __init__(self, collection: StubCollection):
         self.collection = collection
         self.request_called = False
-        self.last_params = None
+        self.last_params: dict[str, Any] = {}
 
     def get_collection(self, _collection_id):
         """Return the stub collection."""
@@ -301,7 +302,7 @@ class StubStacIO:  # pylint: disable=too-few-public-methods
     """Simple STAC IO stub with read_json support for fallback path."""
 
     def __init__(self):
-        self.last_params = None
+        self.last_params: dict[str, Any] = {}
 
     def read_json(self, href, parameters=None):  # pylint: disable=unused-argument
         """Return a minimal FeatureCollection dict, storing the received params."""
@@ -353,8 +354,8 @@ class TestStacBaseExtra:
         result = list(base.get_items("col1", None, limit=1, page=2))
 
         assert ps_client.request_called is True
-        assert ps_client.last_params.get("limit") == 1
-        assert ps_client.last_params.get("page") == 2
+        assert ps_client.last_params["limit"] == 1
+        assert ps_client.last_params["page"] == 2
         assert result == ["parsed"]
 
     def test_get_items_with_ids_fetches_individually(self):
@@ -383,8 +384,8 @@ class TestStacBaseExtra:
 
         items = list(base.get_items("col1", items_ids=["a", "b"], limit=5))
 
-        assert stac_io.last_params.get("ids") == "a,b"
-        assert stac_io.last_params.get("limit") == 5
+        assert stac_io.last_params["ids"] == "a,b"
+        assert stac_io.last_params["limit"] == 5
         assert len(items) == 1
         assert items[0].id == "x"
 
