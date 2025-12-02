@@ -36,7 +36,6 @@ ARG PREFECT_AWS_TAG=0.7.1
 # NOTES:
 #   - Install s3fs before boto3 to have a recent version
 RUN pip install -U pip && \
-    pip install -U pydantic-settings && \
     pip install \
         prefect-aws=="${PREFECT_AWS_TAG}" \
         s3fs \
