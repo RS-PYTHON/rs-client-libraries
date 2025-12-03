@@ -19,12 +19,13 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from prefect import flow, get_run_logger, pause_flow_run, task
-from prefect.artifacts import create_markdown_artifact
+from prefect.artifacts import create_markdown_artifact, create_link_artifact
 from pydantic import BaseModel, Field
 from pystac import ItemCollection  # type: ignore
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from urllib.parse import urlencode
 
 
 @task(name="create result artifact")
@@ -42,6 +43,26 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
 
 """
     await create_markdown_artifact(key="result", markdown=markdown_report, description="session staging output")
+
+    # Base Grafana URL
+    base_url = "https://monitoring.ops.rs-python.eu/d/1a2758bd-a984-4dc8-9a6a-ee7694526850/2-stac-requests"
+
+    # Calcul des bornes temporelles
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(hours=3)
+
+    # Format ISO 8601 avec millisecondes et suffixe Z
+    def to_iso_z(dt: datetime) -> str:
+        return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+    params = {
+        "from": to_iso_z(start_time),
+        "to": to_iso_z(end_time),
+    }
+
+    # Construction de l’URL encodée
+    url = f"{base_url}?{urlencode(params)}"
+    await create_link_artifact(key="grafana-dashboard", link=url, description="# see session item from the catalog")
 
 
 @task(name="Cadip session search")
