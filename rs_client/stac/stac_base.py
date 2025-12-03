@@ -249,18 +249,24 @@ class StacBase(RsClient):
         if items_ids:
             self.logger.info(f"Retrieving specific items from collection '{collection_id}'.")
 
+            try:
+                return collection.get_items(*items_ids)
+
             # Avoid pystac-client fallback through /search (EDRS has no /search); fetch items one by one.
             # collection.get_items(*ids) internally triggers a search request, which fails on EDRS.
-            def iter_items():
-                for item_id in items_ids:
-                    try:
-                        item = collection.get_item(item_id)
-                        if item:
-                            yield item
-                    except Exception as exc:  # pylint: disable=broad-exception-caught
-                        self.logger.warning("Failed to retrieve item '%s': %s", item_id, exc)
+            except Exception:
 
-            return iter_items()
+                def iter_items():
+                    for item_id in items_ids:
+                        try:
+                            item = collection.get_item(item_id)
+                            if item:
+                                yield item
+                        except Exception as exc:  # pylint: disable=broad-exception-caught
+                            self.logger.warning("Failed to retrieve item '%s': %s", item_id, exc)
+
+                return iter_items()
+
         # Retrieve all items
         self.logger.info(f"Retrieving all items from collection '{collection_id}'.")
         return collection.get_items()
