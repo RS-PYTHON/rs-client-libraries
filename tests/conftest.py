@@ -496,6 +496,7 @@ def mocked_stac_catalog_url_():
         resp.get(url=f"{MOCKED_URL}/auxip/", json=json_landing_page, status=HTTP_OK)
         resp.get(url=f"{MOCKED_URL}/prip/", json=json_landing_page, status=HTTP_OK)
         resp.get(url=f"{MOCKED_URL}/cadip/", json=json_landing_page, status=HTTP_OK)
+        resp.get(url=f"{MOCKED_URL}/edrs/", json=json_landing_page, status=HTTP_OK)
 
         yield MOCKED_URL
 
@@ -515,6 +516,7 @@ def set_db_env_var_fixture(monkeypatch):
         "RSPY_HOST_AUXIP": "https://dummy-auxip/auxip/",
         "RSPY_HOST_PRIP": "https://dummy-prip/prip/",
         "RSPY_HOST_STAGING": "https://dummy-staging/staging/",
+        "RSPY_HOST_EDRS": "https://dummy-edrs/edrs/",
     }
     for key, val in envvars.items():
         monkeypatch.setenv(key, val)
@@ -538,6 +540,12 @@ def auxip_client_(generic_rs_client):
 def cadip_client_(generic_rs_client):
     """Return a generic CadipClient instance for testing."""
     yield generic_rs_client.get_cadip_client()
+
+
+@pytest.fixture(name="edrs_client")
+def edrs_client_(generic_rs_client):
+    """Return a generic EdrsClient instance for testing."""
+    yield generic_rs_client.get_edrs_client()
 
 
 @pytest.fixture(name="prip_client")

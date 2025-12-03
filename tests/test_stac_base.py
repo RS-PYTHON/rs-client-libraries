@@ -14,11 +14,16 @@
 
 """Unit tests for CatalogClient, AuxipClient, CadipClient."""
 
+import logging
+from typing import Any
+
 import pytest
 import requests
 import responses
 from pystac import Collection
 from pystac_client.exceptions import APIError
+
+from rs_client.stac.stac_base import StacBase
 
 MOCKED_URL = "https://mocked_stac_catalog_url/"
 
@@ -27,24 +32,29 @@ class TestStacBase:
     """Test class to group all StacBase methods."""
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client", "edrs_client"])
     def test_cadip_auxip_get_landing(self, client, request):
         """Test GET landing page."""
         client_instance = request.getfixturevalue(client)
         assert isinstance(client_instance.get_landing(), dict)
 
     @pytest.mark.unit
-    def test_cadip_auxip_get_collections(self, mocker, auxip_client, cadip_client):
+    def test_cadip_auxip_get_collections(self, mocker, auxip_client, cadip_client, edrs_client):
         """Test to get all client collections."""
         mock_collections = mocker.patch("rs_client.stac.stac_base.StacBase.get_collections", return_value=[])
         auxip_client.get_collections()
         cadip_client.get_collections()
-        assert mock_collections.call_count == 2
+        edrs_client.get_collections()
+        assert mock_collections.call_count == 3
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
         "client, collection_id",
-        [("auxip_client", "auxip_collection"), ("cadip_client", "cadip_collection")],
+        [
+            ("auxip_client", "auxip_collection"),
+            ("cadip_client", "cadip_collection"),
+            ("edrs_client", "edrs_collection"),
+        ],
     )
     def test_cadip_auxip_get_collection(self, mocker, client, collection_id, request):
         """Test get valid collection id."""
@@ -57,7 +67,7 @@ class TestStacBase:
         mock_get_collection.assert_called_once_with(collection_id)
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client", "edrs_client"])
     def test_cadip_auxip_get_invalid_collection(self, mocker, client, request):
         """Test a invalid collection, should result in a empty response."""
         client_instance = request.getfixturevalue(client)
@@ -100,7 +110,7 @@ class TestStacBase:
         mock_collection.get_items.assert_called_once()
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client", "edrs_client"])
     def test_cadip_auxip_get_invalid_item(self, mocker, client, request):
         """Test to get an invalid should return None"""
         client_instance = request.getfixturevalue(client)
@@ -124,7 +134,7 @@ class TestStacBase:
         mock_collection.get_item.assert_called_once_with("Item1")
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client"])
+    @pytest.mark.parametrize("client", ["auxip_client", "cadip_client", "edrs_client"])
     def test_cadip_auxip_get_collection_queryables(self, mocker, client, request):
         """Test to get a specific collection queryables."""
         client_instance = request.getfixturevalue(client)
@@ -138,6 +148,7 @@ class TestStacBase:
         [
             ("auxip_client", MOCKED_URL + "auxip/queryables"),
             ("cadip_client", MOCKED_URL + "cadip/queryables"),
+            ("edrs_client", MOCKED_URL + "edrs/queryables"),
         ],
     )
     @responses.activate
@@ -219,3 +230,171 @@ class TestStacBase:
         mocker.patch.object(client_instance.ps_client, "to_dict", side_effect=APIError)
         with pytest.raises(RuntimeError, match="Pystac client returned exception:"):
             client_instance.get_landing()
+
+
+# Local stubs used to cover the EDRS-specific branches added in StacBase.get_items.
+# These keep existing tests unchanged while providing minimal objects to drive the new code paths.
+class StubLink:  # pylint: disable=too-few-public-methods
+    """Minimal link stub used by StubCollection for get_single_link('items')."""
+
+    def __init__(self, href: str):
+        """Store a fake href."""
+        self._href = href
+
+    def get_href(self) -> str:
+        """Return the stored href."""
+        return self._href
+
+
+class StubCollection:
+    """Minimal collection stub providing items link and per-item fetch tracking."""
+
+    def __init__(self, has_items_link: bool = True):
+        """Track fetched items and optionally expose an 'items' link."""
+        self.items_fetched: list[str] = []
+        self.has_items_link = has_items_link
+
+    def get_single_link(self, rel: str):
+        """Return a fake items link when requested."""
+        if rel == "items" and self.has_items_link:
+            return StubLink("http://fake/items")
+        return None
+
+    def get_item(self, item_id: str):
+        """Record and return a fake item."""
+        self.items_fetched.append(item_id)
+        return {"id": item_id}
+
+
+class StubPsClient:  # pylint: disable=too-few-public-methods
+    """Minimal ps_client stub to drive StacBase.get_items branches with _request present."""
+
+    def __init__(self, collection: StubCollection):
+        self.collection = collection
+        self.request_called = False
+        self.last_params: dict[str, Any] = {}
+
+    def get_collection(self, _collection_id):
+        """Return the stub collection."""
+        return self.collection
+
+    def _request(self, method, url, params=None):  # pylint: disable=unused-argument
+        """Simulate a /items request storing params."""
+        self.request_called = True
+        self.last_params = params or {}
+        return {"features": ["ok"]}
+
+    def _parse_item_collection(self, response, collection):  # pylint: disable=unused-argument
+        """Simulate parsing an item collection."""
+        return ["parsed"]
+
+
+class StubStacBase(StacBase):  # pylint: disable=too-few-public-methods,super-init-not-called
+    """Lightweight StacBase with stubbed ps_client."""
+
+    def __init__(self, ps_client):  # pylint: disable=missing-function-docstring,super-init-not-called
+        # Bypass parent init; just attach logger/ps_client used by get_items
+        self.logger = logging.getLogger("dummy-stac-base")
+        self.ps_client = ps_client
+
+
+class StubStacIO:  # pylint: disable=too-few-public-methods
+    """Simple STAC IO stub with read_json support for fallback path."""
+
+    def __init__(self):
+        self.last_params: dict[str, Any] = {}
+
+    def read_json(self, href, parameters=None):  # pylint: disable=unused-argument
+        """Return a minimal FeatureCollection dict, storing the received params."""
+        self.last_params = parameters or {}
+        return {
+            "type": "FeatureCollection",
+            "stac_version": "1.0.0",
+            "features": [
+                {
+                    "type": "Feature",
+                    "id": "x",
+                    "stac_version": "1.0.0",
+                    "stac_extensions": [],
+                    "properties": {"datetime": "2020-01-01T00:00:00Z"},
+                    "geometry": None,
+                    "links": [],
+                    "assets": {},
+                    "collection": "col1",
+                },
+            ],
+            "links": [],
+        }
+
+
+class StubPsClientNoRequest:  # pylint: disable=too-few-public-methods
+    """ps_client stub without _request, but with _stac_io.read_json (fallback path)."""
+
+    def __init__(self, collection: StubCollection, stac_io: StubStacIO):
+        self.collection = collection
+        self._stac_io = stac_io
+
+    def get_collection(self, _collection_id):
+        """Return the stub collection."""
+        return self.collection
+
+
+class TestStacBaseExtra:
+    """Additional coverage for get_items branches added for EDRS: manual /items and fallback."""
+
+    def test_get_items_with_query_params_manual_items_call(self):
+        """
+        When query_params are provided, StacBase.get_items should hit the manual /items
+        path (EDRS-specific path) and return the parsed collection iterator.
+        """
+        collection = StubCollection()
+        ps_client = StubPsClient(collection)
+        base = StubStacBase(ps_client)
+
+        result = list(base.get_items("col1", None, limit=1, page=2))
+
+        assert ps_client.request_called is True
+        assert ps_client.last_params["limit"] == 1
+        assert ps_client.last_params["page"] == 2
+        assert result == ["parsed"]
+
+    def test_get_items_with_ids_fetches_individually(self):
+        """
+        When items_ids are provided, StacBase.get_items should fetch items one by one
+        (avoid pystac-client /search fallback).
+        """
+        collection = StubCollection()
+        ps_client = StubPsClient(collection)
+        base = StubStacBase(ps_client)
+
+        items = list(base.get_items("col1", items_ids=["a", "b"]))
+
+        assert collection.items_fetched == ["a", "b"]
+        assert items == [{"id": "a"}, {"id": "b"}]
+
+    def test_get_items_with_query_params_stac_io_fallback(self):
+        """
+        If ps_client lacks _request but has _stac_io.read_json, fallback should be used,
+        and ids should be injected into params.
+        """
+        collection = StubCollection()
+        stac_io = StubStacIO()
+        ps_client = StubPsClientNoRequest(collection, stac_io)
+        base = StubStacBase(ps_client)
+
+        items = list(base.get_items("col1", items_ids=["a", "b"], limit=5))
+
+        assert stac_io.last_params["ids"] == "a,b"
+        assert stac_io.last_params["limit"] == 5
+        assert len(items) == 1
+        assert items[0].id == "x"
+
+    def test_get_items_with_query_params_missing_link_raises(self):
+        """If collection has no items link, a RuntimeError should be raised."""
+        collection = StubCollection(has_items_link=False)
+        stac_io = StubStacIO()
+        ps_client = StubPsClientNoRequest(collection, stac_io)
+        base = StubStacBase(ps_client)
+
+        with pytest.raises(RuntimeError, match="has no 'items' link"):
+            list(base.get_items("col1", limit=1))
