@@ -186,13 +186,20 @@ class StacBase(RsClient):
         return self.ps_client.get_collection(collection_id)
 
     @handle_api_error
-    def get_items(self, collection_id: str, items_ids: list[str] | None = None) -> Iterator["Item"]:
+    def get_items(
+        self,
+        collection_id: str,
+        items_ids: list[str] | None = None,
+        **query_params: Any,
+    ) -> Iterator["Item"]:
         """
-        Retrieve all items or specific items from a collection.
+        Retrieve items from a collection.
 
         Args:
             collection_id (str): The ID of the collection.
             items_ids (Union[str, None], optional): Specific item ID(s) to retrieve.
+            query_params: Extra query parameters forwarded to the collection /items endpoint
+                          (non-standard STAC extension, used by some services).
 
         Returns:
             Iterator[Item]: An iterator over retrieved items.
@@ -202,10 +209,58 @@ class StacBase(RsClient):
 
         # Retrieve the collection
         collection = self.ps_client.get_collection(collection_id)
+
+        # If non-standard query params are provided, call the /items endpoint manually.
+        if query_params:
+            params = query_params.copy()
+            if items_ids and "ids" not in params:
+                params["ids"] = ",".join(items_ids)
+            self.logger.info(
+                "Retrieving items from collection '%s' with query params: %s.",
+                collection_id,
+                params,
+            )
+            items_link_obj = collection.get_single_link("items")
+            if items_link_obj is None:
+                raise RuntimeError(f"Collection '{collection_id}' has no 'items' link")
+            items_link = items_link_obj.get_href()
+            if hasattr(self.ps_client, "_request"):
+                # Use protected API to call /items with custom query params (default get_items ignores filters).
+                response = self.ps_client._request(  # pylint: disable=protected-access
+                    "GET",
+                    items_link,
+                    params=params,
+                )
+                # pylint: disable=protected-access
+                item_collection = self.ps_client._parse_item_collection(  # type: ignore[attr-defined]
+                    response,
+                    collection,
+                )
+                # pylint: enable=protected-access
+                return iter(item_collection)
+            # Fallback for pystac-client versions without _request
+            stac_io = getattr(self.ps_client, "_stac_io", None)
+            if stac_io and hasattr(stac_io, "read_json"):
+                response_dict = stac_io.read_json(items_link, parameters=params)
+                return iter(ItemCollection.from_dict(response_dict).items)
+            raise RuntimeError("pystac-client API has changed: cannot perform custom /items request with params.")
+
         # Retrieve a list of items
         if items_ids:
             self.logger.info(f"Retrieving specific items from collection '{collection_id}'.")
-            return collection.get_items(*items_ids)
+
+            # Avoid pystac-client fallback through /search (EDRS has no /search); fetch items one by one.
+            # collection.get_items(*ids) internally triggers a search request, which fails on EDRS.
+            def iter_items():
+                for item_id in items_ids:
+                    try:
+                        item = collection.get_item(item_id)
+                        if item:
+                            yield item
+                    except Exception as exc:  # pylint: disable=broad-exception-caught
+                        self.logger.warning("Failed to retrieve item '%s': %s", item_id, exc)
+
+            return iter_items()
         # Retrieve all items
         self.logger.info(f"Retrieving all items from collection '{collection_id}'.")
         return collection.get_items()
