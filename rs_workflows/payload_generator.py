@@ -17,6 +17,7 @@ import csv
 import fnmatch
 import json
 import os
+import requests
 from urllib.parse import urlparse, urlunparse
 
 from prefect import get_run_logger, task
@@ -45,10 +46,10 @@ DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
 
 def build_workflow_step(unit):
     """
-    Constructs a `WorkflowStep` instance from a unit configuration dictionary.
+    Constructs a WorkflowStep instance from a unit configuration dictionary.
 
     This function parses the given processing unit definition, extracting input products,
-    auxiliary data files (ADFs), and output products. It then returns a `WorkflowStep`
+    auxiliary data files (ADFs), and output products. It then returns a WorkflowStep
     object ready to be integrated into a full processing payload schema.
 
     Args:
@@ -144,58 +145,85 @@ def wildcard_match(string, pattern):
     """
     Checks whether a given string matches a simple wildcard pattern.
 
-    The wildcard character `*` is treated as a placeholder for any substring.
+    The wildcard character '*' is treated as a placeholder for any substring.
     For example:
-    - `"abc*def"` matches `"abcdef"` and `"abcXYZdef"`.
-    - `"*xyz"` matches `"endxyz"`.
-    - `"*"` matches any string.
+    - 'abc*def' matches 'abcdef' and 'abcXYZdef'.
+    - '*xyz' matches 'endxyz'.
+    - '*' matches any string.
 
     Args:
         string (str): The string to check against the pattern.
-        pattern (str): The wildcard pattern, which may include `*`.
+        pattern (str): The wildcard pattern, which may include '*'.
 
     Returns:
         bool: True if the string matches the pattern, False otherwise.
-    """
-    # if pattern == "*":
-    #     return True
-    # parts = pattern.split("*")
-    # return all(part in string for part in parts)
+    """    
     return fnmatch.fnmatch(string, pattern or "*")
 
 
-def read_bucket_config_file(filepath: str) -> list[list[str]]:
+# def read_bucket_config_file(filepath: str) -> list[list[str]]:
+#     """
+#     Reads and validates the CSV configuration file defining S3 bucket routing rules.
+
+#     The configuration file must contain rows with exactly five fields:
+#     [owner_id, collection_name, product_type, expiration_delay, bucket_name].
+#     The expiration_delay is not used in the payload generator logic
+
+#     Args:
+#         filepath (str): Path to the CSV configmap file.
+
+#     Returns:
+#         list[list[str]]: A list of parsed rows, each containing exactly five string entries.
+
+#     Raises:
+#         RuntimeError: If the file is missing, unreadable, or any row has an incorrect format.
+#     """
+#     try:
+#         with open(filepath, newline="", encoding="utf-8") as csvfile:
+#             rows = list(csv.reader(csvfile, skipinitialspace=True))
+#     except FileNotFoundError as exc:
+#         raise RuntimeError(
+#             f"The configmap file '{filepath}' was not found while resolving S3 bucket mappings.",
+#         ) from exc
+#     except OSError as exc:
+#         raise RuntimeError(f"Error reading configmap file '{filepath}' while resolving S3 bucket mappings.") from exc
+
+#     for row_number, row in enumerate(rows, start=1):
+#         if len(row) != 5:
+#             raise RuntimeError(f"Row {row_number} from configmap must contain exactly 5 entries: {row}")
+
+#     return rows
+
+def fetch_csv_from_endpoint(endpoint: str) -> list[list[str]]:
     """
-    Reads and validates the CSV configuration file defining S3 bucket routing rules.
-
-    The configuration file must contain rows with exactly five fields:
-    [owner_id, collection_name, product_type, expiration_delay, bucket_name].
-    The expiration_delay is not used in the payload generator logic
-
-    Args:
-        filepath (str): Path to the CSV configmap file.
-
-    Returns:
-        list[list[str]]: A list of parsed rows, each containing exactly five string entries.
+    Fetches a CSV file from rs-osam endpoint and returns it
+    as a list of rows (each row is a list of strings).
 
     Raises:
-        RuntimeError: If the file is missing, unreadable, or any row has an incorrect format.
+        RuntimeError: If the endpoint cannot be reached
+        or response cannot be parsed as CSV.
     """
     try:
-        with open(filepath, newline="", encoding="utf-8") as csvfile:
-            rows = list(csv.reader(csvfile, skipinitialspace=True))
-    except FileNotFoundError as exc:
+        response = requests.get(endpoint, timeout=10)
+        response.raise_for_status()
+        data = response.json()  # already list[list[str]]        
+    except Exception as exc:
         raise RuntimeError(
-            f"The configmap file '{filepath}' was not found while resolving S3 bucket mappings.",
+            f"Failed to fetch storage configuration from rs-osam endpoint '{endpoint}': {exc}",
         ) from exc
-    except OSError as exc:
-        raise RuntimeError(f"Error reading configmap file '{filepath}' while resolving S3 bucket mappings.") from exc
 
-    for row_number, row in enumerate(rows, start=1):
-        if len(row) != 5:
-            raise RuntimeError(f"Row {row_number} from configmap must contain exactly 5 entries: {row}")
+    if not isinstance(data, list):
+        raise RuntimeError(
+            f"Invalid configuration format returned by rs-osam endpoint: expected list[list[str]], got {type(data)}",
+        )
 
-    return rows
+    for row in data:
+        if not isinstance(row, list) or not all(isinstance(x, str) for x in row) or len(row) != 5:
+            raise RuntimeError(
+                "Invalid configuration format: expected list[list[str]] containing only strings",
+            )
+
+    return data
 
 
 def find_s3_output_bucket(
@@ -210,13 +238,13 @@ def find_s3_output_bucket(
 
     The matching logic prioritizes:
         1. Exact owner and collection match.
-        2. Otherwise, the first row matching via wildcard pattern (`*`).
+        2. Otherwise, the first row matching via wildcard pattern ('*').
 
     Args:
         config_rows (list[list[str]]): Parsed configuration rows from the configmap file.
         owner_id (str): Owner identifier of the processing job.
         output_collection (str): Collection name associated with the output.
-        product_type (str): Product type identifier (e.g., `S3OLC`, `S3MWR`).
+        product_type (str): Product type identifier (e.g., 'S3OLC', 'S3MWR').
 
     Returns:
         str: The resolved S3 bucket name (from the fifth column of the configmap).
@@ -381,9 +409,9 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams, flow_e
     Builds both input and output product configurations for a given workflow step.
 
     This function integrates configuration data from:
-      - The workflow unit definition (`unit`)
-      - The DPR process input (`dpr_process_in`)
-      - The environment and S3 configuration (via `flow_env` and configmap)
+      - The workflow unit definition ('unit')
+      - The DPR process input ('dpr_process_in')
+      - The environment and S3 configuration (via 'flow_env' and configmap)
 
     Args:
         unit (dict): Workflow unit definition containing I/O product configurations.
@@ -401,9 +429,8 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams, flow_e
         RuntimeError: If the configuration file cannot be read or an input/output product cannot be resolved.
     """
     catalog_client = flow_env.rs_client.get_catalog_client()
-
-    config_file_path = os.getenv(FILEPATH_ENV_VAR, DEFAULT_FILEPATH)
-    config_rows = read_bucket_config_file(config_file_path)
+    
+    config_rows = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/storage/configuration")
 
     inputs = build_input_products(unit, dpr_process_in, store_params, catalog_client)
     outputs = build_output_products(unit, dpr_process_in, store_params, flow_env, config_rows)
@@ -474,23 +501,23 @@ def build_mockup_payload(owner_id):
     """
     Builds a mock payload schema for testing or demonstration purposes.
 
-    This function generates a simplified `PayloadSchema` structure used for validating
+    This function generates a simplified PayloadSchema structure used for validating
     data processing pipeline integration without invoking actual DPR (Data Processing Request)
     logic. It creates one mock workflow step, one input product, and two output products
     pointing to the specified S3 output location.
 
     The resulting payload emulates a minimal working configuration for a single-unit
-    processor named `"mockup_processor"`, with placeholder input and output data paths.
+    processor named mockup_processor, with placeholder input and output data paths.
 
     Args:
-        s3_output_data (str): S3 path (e.g., `s3://bucket/output/path`) representing
+        s3_output_data (str): S3 path (e.g., 's3://bucket/output/path') representing
             the output location for the mock products.
 
     Returns:
         PayloadSchema: A fully populated payload schema containing:
-            - A single workflow step (`mockup_processor`)
-            - One mock input product (`S3ACADUS`)
-            - Two mock output products (`S3MWRL0_`, `S3OLCL0_`)
+            - A single workflow step (mockup_processor)
+            - One mock input product (S3ACADUS)
+            - Two mock output products (S3MWRL0_, S3OLCL0_)
             - A default general configuration section
             - No adfs (sets it to [])
 
@@ -498,7 +525,7 @@ def build_mockup_payload(owner_id):
         - This mock payload is typically used for testing DPR endpoints or
           integration pipelines when real input data or cluster processing
           is not required.
-        - The `dask_context` section is intentionally omitted, as it is expected
+        - The 'dask_context' section is intentionally omitted, as it is expected
           to be injected later by the DPR service layer.
     """
     mockup_output_products = ["S03MWRL0_", "S03OLCL0_"]
@@ -560,7 +587,7 @@ def generate_payload(  # pylint: disable=unused-argument
 
     This Prefect task builds the payload definition dynamically based on the provided
     workflow units, auxiliary data files, and input configuration. It produces a
-    `PayloadSchema` object compatible with RS-Server DPR jobs.
+    PayloadSchema object compatible with RS-Server DPR jobs.
 
     Args:
         env (FlowEnv): Environment configuration for the Prefect flow, including
@@ -573,7 +600,7 @@ def generate_payload(  # pylint: disable=unused-argument
             product paths and parameters.
 
     Returns:
-        dict: A dictionary representation of the generated `PayloadSchema`.
+        dict: A dictionary representation of the generated PayloadSchema.
 
     Raises:
         ValueError: If a required key is missing in one of the unit definitions.
@@ -589,17 +616,17 @@ def generate_payload(  # pylint: disable=unused-argument
     # it's up to the processor to retrieve the values at the running time
     # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
     # in cluster mode, it should be mounted as volume from a predefined (?) configmap
-
-    logger.info("Loading StoreParams configuration")
+    
     if dpr_process_in.processor_name == DprProcessor.MOCKUP:
         logger.info("Generating payload for mockup processor")
         # TODO: the ouput path can be also computed, by using the following 3 lines
         # and add output_mockup_path as param to build_mockup_payload
         # config_file_path = os.getenv(FILEPATH_ENV_VAR, DEFAULT_FILEPATH)
-        # config_rows = read_bucket_config_file(config_file_path)
+        # config_rows = fetch_csv_from_endpoint(config_file_path)
         # output_mockup_path=build_output_products(unit_list[0], dpr_process_in, store_params, flow_env, config_rows)
         return build_mockup_payload(flow_env.owner_id)
-
+    
+    logger.info("Loading StoreParams configuration")
     store_params = load_store_params_from_config()
 
     workflow_steps = []

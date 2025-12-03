@@ -28,7 +28,7 @@ from rs_workflows.payload_generator import (
     get_first_asset_dir,
     get_io,
     load_store_params_from_config,
-    read_bucket_config_file,
+    fetch_csv_from_endpoint,
     resolve_stac_input_path,
     wildcard_match,
 )
@@ -44,8 +44,6 @@ from rs_workflows.payload_template import (
 )
 
 # build_workflow_step
-
-
 def test_build_workflow_step_valid(sample_unit):
     """
     Test that a valid unit dictionary is correctly transformed into a WorkflowStep.
@@ -81,6 +79,7 @@ def test_get_io_builds_input_and_output(
     mock_store_params,
     flow_env,  # contains catalog_client inside
     mocker,
+    _mock_os_env,
 ):
     """
     Test that get_io correctly builds InputProduct and OutputProduct objects.
@@ -90,12 +89,12 @@ def test_get_io_builds_input_and_output(
         "rs_workflows.payload_generator.resolve_stac_input_path",
         return_value="s3://mocked/cadip_session",
     )
-    # the read_bucket_config_file function also needs to be mocked; otherwise,
-    # it will fail to locate the file and the test will not pass.
+    # the fetch_csv_from_endpoint function also needs to be mocked; otherwise,
+    # it will fail to fetch the file and the test will not pass.
     # this function is already tested separately.
     mocker.patch(
-        "rs_workflows.payload_generator.read_bucket_config_file",
-        return_value="[]",
+        "rs_workflows.payload_generator.fetch_csv_from_endpoint",
+        return_value=[],
     )
     mocker.patch(
         "rs_workflows.payload_generator.find_s3_output_bucket",
@@ -128,12 +127,12 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
     """
     Test that malformed input_products (missing 'name' or 'origin') raise KeyError.
     """
-    # the read_bucket_config_file function also needs to be mocked; otherwise,
-    # it will fail to locate the file and the test will not pass.
+    # the fetch_csv_from_endpoint function also needs to be mocked; otherwise,
+    # it will fail to fetch the file and the test will not pass.
     # this function is already tested separately.
     mocker.patch(
-        "rs_workflows.payload_generator.read_bucket_config_file",
-        return_value="[]",
+        "rs_workflows.payload_generator.fetch_csv_from_endpoint",
+        return_value=[],
     )
     bad_unit = {
         "input_products": [{"store_type": "S3"}],  # missing name/origin
@@ -146,7 +145,6 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
 # ----------------------------------------------------------------------
 
 # load_store_params_from_config
-
 
 def test_load_store_params_from_config_valid(mock_storage_config_json):
     """
@@ -295,57 +293,88 @@ def test_wildcard_match():
     assert wildcard_match("axyz", "x*z") is False
 
 
-def test_read_bucket_config_file_valid(mock_bucket_config_with_fallback):
+def test_fetch_csv_success(_mock_get_success):
     """
-    Test reading a valid bucket routing CSV with correct 5-column format.
+    Tests that fetch_csv_from_endpoint successfully parses a valid CSV response.
+
+    This test uses a mocked successful http get request that returns a well-formed
+    csv payload encoded as JSON. The function is expected to:
+
+    - correctly parse the CSV rows,
+    - return a list of lists,
+    - preserve field order,
+    - contain the expected number of rows.
     """
-    rows = read_bucket_config_file(mock_bucket_config_with_fallback)
-    assert len(rows) == 2
-    assert rows[0] == ["*", "*", "*", "90", "s3://default-bucket"]
-    assert rows[1] == ["test-owner", "my-coll", "S1*", "30", "s3://owner-specific-bucket"]
+    result = fetch_csv_from_endpoint("https://dummy-osam")
+    assert len(result) == 4
+    assert result[0] == ["*", "*", "*", "30", "rspython-ops-catalog-all-production"]
 
 
-def test_read_bucket_config_file_missing_file(mock_bucket_config_missing_file):
+def test_fetch_csv_network_error(_mock_get_network_error):
     """
-    Test reading a file that doesn't exist
+    Tests that network-related failures are converted into RuntimeError.    
     """
-    with pytest.raises(RuntimeError, match=r".* was not found while resolving S3 bucket mappings"):
-        read_bucket_config_file(mock_bucket_config_missing_file)
+    with pytest.raises(RuntimeError):
+        fetch_csv_from_endpoint("https://dummy-osam")
 
 
-def test_read_bucket_config_file_malformed_short(mock_malformed_csv_short):
+def test_fetch_csv_invalid_json(_mock_get_invalid_json):
     """
-    Test that malformed CSV rows raise RuntimeError with row number (shorter row).
+    Tests the behavior when the get response JSON cannot be decoded.
     """
-    with pytest.raises(RuntimeError, match=r"Row 1 .* exactly 5 entries"):
-        read_bucket_config_file(mock_malformed_csv_short)
+    with pytest.raises(RuntimeError):
+        fetch_csv_from_endpoint("https://dummy-osam")
 
 
-def test_read_bucket_config_file_malformed_long(mock_malformed_csv_long):
+def test_fetch_csv_row_not_list(_mock_get_row_not_list):
     """
-    Test that malformed CSV rows raise RuntimeError with row number (longer row).
+    Tests handling of rows that are not lists inside the returned JSON payload.
     """
-    with pytest.raises(RuntimeError, match=r"Row 1 .* exactly 5 entries"):
-        read_bucket_config_file(mock_malformed_csv_long)
+    with pytest.raises(RuntimeError):
+        fetch_csv_from_endpoint("https://dummy-osam")
 
 
-def test_find_s3_output_bucket(mock_bucket_config_with_fallback):
+def test_fetch_csv_non_string(_mock_get_non_string):
+    """
+    Tests validation of non-string fields inside CSV rows.
+    """
+    with pytest.raises(RuntimeError):
+        fetch_csv_from_endpoint("https://dummy-osam")
+        
+
+def test_fetch_csv_row_wrong_length_too_short(_mock_get_row_wrong_length_too_short):
+    """
+    Tests handling of CSV rows that contain fewer than the required 5 fields.
+    """
+    with pytest.raises(RuntimeError):
+        fetch_csv_from_endpoint("https://dummy-osam")
+
+
+def test_fetch_csv_row_wrong_length_too_long(_mock_get_row_wrong_length_too_long):
+    """
+    Tests handling of CSV rows that contain more than the required 5 fields.
+    """
+    with pytest.raises(RuntimeError):
+        fetch_csv_from_endpoint("https://dummy-osam")
+
+
+def test_find_s3_output_bucket(_mock_bucket_config_with_fallback):
     """
     Test bucket resolution logic with valid CSV data.
     """
-    config_rows = read_bucket_config_file(mock_bucket_config_with_fallback)
+    config_rows = fetch_csv_from_endpoint("https://dummy-osam")
 
-    assert find_s3_output_bucket(config_rows, "test-owner", "my-coll", "S1A") == "s3://owner-specific-bucket"
+    assert find_s3_output_bucket(config_rows, "test-owner", "my-coll", "L1") == "s3://owner-specific-bucket"
 
     assert find_s3_output_bucket(config_rows, "other", "other", "L1") == "s3://default-bucket"
 
 
-def test_find_s3_output_bucket_no_fallback(mock_bucket_config_no_fallback):
+def test_find_s3_output_bucket_no_fallback(_mock_bucket_config_no_fallback):
     """
     Test find_s3_output_bucket exception in case of no owner is to be found
     in the bucket resolution logic.
     """
-    config_rows = read_bucket_config_file(mock_bucket_config_no_fallback)
+    config_rows = fetch_csv_from_endpoint("https://dummy-osam")
 
     with pytest.raises(RuntimeError, match="Unable to determine the output bucket"):
         find_s3_output_bucket(config_rows, "nobody", "none", "NONE")
