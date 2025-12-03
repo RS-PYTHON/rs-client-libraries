@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""."""
-import csv
+"""This module contains functions to generate DPR payloads for RS-Server."""
 import fnmatch
 import json
 import os
-import requests
 from urllib.parse import urlparse, urlunparse
 
+import requests
 from prefect import get_run_logger, task
 from pystac import Item
 
@@ -157,7 +156,7 @@ def wildcard_match(string, pattern):
 
     Returns:
         bool: True if the string matches the pattern, False otherwise.
-    """    
+    """
     return fnmatch.fnmatch(string, pattern or "*")
 
 
@@ -194,6 +193,7 @@ def wildcard_match(string, pattern):
 
 #     return rows
 
+
 def fetch_csv_from_endpoint(endpoint: str) -> list[list[str]]:
     """
     Fetches a CSV file from rs-osam endpoint and returns it
@@ -206,7 +206,7 @@ def fetch_csv_from_endpoint(endpoint: str) -> list[list[str]]:
     try:
         response = requests.get(endpoint, timeout=10)
         response.raise_for_status()
-        data = response.json()  # already list[list[str]]        
+        data = response.json()  # already list[list[str]]
     except Exception as exc:
         raise RuntimeError(
             f"Failed to fetch storage configuration from rs-osam endpoint '{endpoint}': {exc}",
@@ -429,7 +429,7 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams, flow_e
         RuntimeError: If the configuration file cannot be read or an input/output product cannot be resolved.
     """
     catalog_client = flow_env.rs_client.get_catalog_client()
-    
+
     config_rows = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/storage/configuration")
 
     inputs = build_input_products(unit, dpr_process_in, store_params, catalog_client)
@@ -616,7 +616,7 @@ def generate_payload(  # pylint: disable=unused-argument
     # it's up to the processor to retrieve the values at the running time
     # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
     # in cluster mode, it should be mounted as volume from a predefined (?) configmap
-    
+
     if dpr_process_in.processor_name == DprProcessor.MOCKUP:
         logger.info("Generating payload for mockup processor")
         # TODO: the ouput path can be also computed, by using the following 3 lines
@@ -625,7 +625,7 @@ def generate_payload(  # pylint: disable=unused-argument
         # config_rows = fetch_csv_from_endpoint(config_file_path)
         # output_mockup_path=build_output_products(unit_list[0], dpr_process_in, store_params, flow_env, config_rows)
         return build_mockup_payload(flow_env.owner_id)
-    
+
     logger.info("Loading StoreParams configuration")
     store_params = load_store_params_from_config()
 

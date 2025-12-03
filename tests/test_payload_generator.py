@@ -23,12 +23,12 @@ from pystac import Asset, Item
 from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_workflows.payload_generator import (
     build_workflow_step,
+    fetch_csv_from_endpoint,
     find_s3_output_bucket,
     generate_payload,
     get_first_asset_dir,
     get_io,
     load_store_params_from_config,
-    fetch_csv_from_endpoint,
     resolve_stac_input_path,
     wildcard_match,
 )
@@ -42,6 +42,7 @@ from rs_workflows.payload_template import (
     StoreParams,
     WorkflowStep,
 )
+
 
 # build_workflow_step
 def test_build_workflow_step_valid(sample_unit):
@@ -145,6 +146,7 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
 # ----------------------------------------------------------------------
 
 # load_store_params_from_config
+
 
 def test_load_store_params_from_config_valid(mock_storage_config_json):
     """
@@ -312,7 +314,7 @@ def test_fetch_csv_success(_mock_get_success):
 
 def test_fetch_csv_network_error(_mock_get_network_error):
     """
-    Tests that network-related failures are converted into RuntimeError.    
+    Tests that network-related failures are converted into RuntimeError.
     """
     with pytest.raises(RuntimeError):
         fetch_csv_from_endpoint("https://dummy-osam")
@@ -340,7 +342,7 @@ def test_fetch_csv_non_string(_mock_get_non_string):
     """
     with pytest.raises(RuntimeError):
         fetch_csv_from_endpoint("https://dummy-osam")
-        
+
 
 def test_fetch_csv_row_wrong_length_too_short(_mock_get_row_wrong_length_too_short):
     """

@@ -19,15 +19,12 @@ The conftest.py file serves as a means of providing fixtures for an entire direc
 Fixtures defined in a conftest.py can be used by any test in that package without needing to import them
 (pytest will automatically discover them).
 """
-
 # pylint: disable=unused-argument
-import os
-import json
 import logging
 from unittest.mock import MagicMock, mock_open
-import requests
 
 import pytest
+import requests
 import responses
 from prefect.testing.utilities import prefect_test_harness
 
@@ -42,7 +39,6 @@ from rs_workflows.payload_template import (  # StoreOptionsWrapper,
     StoreParams,
 )
 from tests import common
-
 
 # Use dummy values
 RSPY_UAC_CHECK_URL = "https://www.rspy-uac-manager.com"
@@ -159,12 +155,14 @@ TEST_STORAGE_CONFIG_DATA = [
     ["copernicus", "s1-aux", "*", "40", "rspython-ops-catalog-copernicus-s1-aux"],
     ["copernicus", "s1-aux", "orbsct", "7300", "rspython-ops-catalog-copernicus-s1-aux-infinite"],
 ]
-BUCKET_EXPIRATION_WITH_FALLBACK = [["*", "*", "*", "90", "s3://default-bucket"],
-                     ["test-owner", "my-coll", "L1*", "60", "s3://owner-specific-bucket"]
-                     ]
-BUCKET_EXPIRATION_WITHOUT_FALLBACK = [["test-owner", "my-coll", "S1*", "30", "s3://owner-specific-bucket"],
-                        ["other-owner", "other-coll", "L1*", "60", "s3://other-bucket"]
-                        ]
+BUCKET_EXPIRATION_WITH_FALLBACK = [
+    ["*", "*", "*", "90", "s3://default-bucket"],
+    ["test-owner", "my-coll", "L1*", "60", "s3://owner-specific-bucket"],
+]
+BUCKET_EXPIRATION_WITHOUT_FALLBACK = [
+    ["test-owner", "my-coll", "S1*", "30", "s3://owner-specific-bucket"],
+    ["other-owner", "other-coll", "L1*", "60", "s3://other-bucket"],
+]
 
 # In-memory json content for storage_configuration.json file, check story 800
 # and STEP 3 from "How to build payload.yaml"
@@ -704,6 +702,7 @@ def mock_store_params():
         ],
     )
 
+
 @pytest.fixture
 def flow_env(monkeypatch, generic_rs_client: RsClient) -> FlowEnv:
     """
@@ -750,6 +749,7 @@ def mock_storage_config_invalid_json(mocker) -> str:
     mocker.patch("builtins.open", mock_open(read_data=INVALID_JSON))
     mocker.patch("os.path.exists", return_value=True)
     return "/fake/etc/storage_configuration.json"
+
 
 # Mock Response Class for fetching CSV tests
 class MockResponse:
@@ -806,6 +806,7 @@ def _mock_os_env(monkeypatch):
 @pytest.fixture
 def _mock_get_success(monkeypatch):
     """Mock requests.get for successful CSV fetch."""
+
     def _mock_get(url, timeout):
         return MockResponse(
             json_data=TEST_STORAGE_CONFIG_DATA,
@@ -819,6 +820,7 @@ def _mock_get_success(monkeypatch):
 @pytest.fixture
 def _mock_bucket_config_with_fallback(monkeypatch):
     """Mock requests.get, with wildcard * char"""
+
     def _mock_get(url, timeout):
         return MockResponse(
             json_data=BUCKET_EXPIRATION_WITH_FALLBACK,
@@ -826,12 +828,13 @@ def _mock_bucket_config_with_fallback(monkeypatch):
         )
 
     monkeypatch.setattr(requests, "get", _mock_get)
-    return _mock_get    
+    return _mock_get
 
 
 @pytest.fixture
 def _mock_bucket_config_no_fallback(monkeypatch):
     """Mock requests.get, without wildcard * char"""
+
     def _mock_get(url, timeout):
         return MockResponse(
             json_data=BUCKET_EXPIRATION_WITHOUT_FALLBACK,
@@ -839,7 +842,8 @@ def _mock_bucket_config_no_fallback(monkeypatch):
         )
 
     monkeypatch.setattr(requests, "get", _mock_get)
-    return _mock_get  
+    return _mock_get
+
 
 @pytest.fixture
 def _mock_get_network_error(monkeypatch):
@@ -884,9 +888,11 @@ def _mock_get_non_string(monkeypatch):
     monkeypatch.setattr(requests, "get", _mock_get)
     return _mock_get
 
+
 @pytest.fixture
 def _mock_get_row_wrong_length_too_short(monkeypatch):
     """Row has fewer than 5 columns."""
+
     def _mock_get(url, timeout):
         return MockResponse(json_data=[["a", "b", "c"]])  # only 3 entries
 
@@ -897,6 +903,7 @@ def _mock_get_row_wrong_length_too_short(monkeypatch):
 @pytest.fixture
 def _mock_get_row_wrong_length_too_long(monkeypatch):
     """Row has more than 5 columns."""
+
     def _mock_get(url, timeout):
         return MockResponse(json_data=[["a", "b", "c", "d", "e", "f"]])  # 6 entries
 
