@@ -265,11 +265,13 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
 
     # Stage the selected session
     date1 = datetime.now(timezone.utc)
-    await cadip_session_stage(
+    result_staging = cadip_session_stage.submit(
         FlowEnvArgs(owner_id=owner_identifier),
         cadip_items=f"https://rspy.ops.rs-python.eu/cadip/search?ids=\
             {session_list[selection.selected.value]}",  # type: ignore
         catalog_cadip_collection=catalog_cadip_collection,
     )
+    result_staging.result()
     date2 = datetime.now(timezone.utc)
-    await create_result_artifact(session_list[selection.selected.value], date2 - date1)
+    result_artifact = create_result_artifact(session_list[selection.selected.value], date2 - date1)
+    result_artifact.result()
