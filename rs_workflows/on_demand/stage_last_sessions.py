@@ -28,11 +28,7 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
 @task(name="create result artifact")
-async def create_result_artifact(
-    cadip_items: str,
-    catalog_cadip_collection: str,
-    duration: timedelta
-) -> None:
+async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
     """
 
     """
@@ -40,16 +36,12 @@ async def create_result_artifact(
     markdown_report = f"""# Staging result
 
 | Parameter        | Value |
-|:--------------|----------------------------:|
+|:--------------|:----------------------------|
 | Session id  | {cadip_items}     |
 | Duration    | {duration_str}    |
 
 """
-    await create_markdown_artifact(
-        key="result",
-        markdown=markdown_report,
-        description="session staging output"
-    )
+    await create_markdown_artifact(key="result", markdown=markdown_report, description="session staging output")
 
 
 @task(name="Cadip session search")
@@ -280,4 +272,4 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
         catalog_cadip_collection=catalog_cadip_collection,
     )
     date2 = datetime.now(timezone.utc)
-    await create_result_artifact(session_list[selection.selected.value], catalog_cadip_collection, date2 - date1)
+    await create_result_artifact(session_list[selection.selected.value], date2 - date1)
