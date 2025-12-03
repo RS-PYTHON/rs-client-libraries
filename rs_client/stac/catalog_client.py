@@ -214,7 +214,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         **query_params,
     ) -> Iterator[Item]:
         """Get all items from a specific collection."""
-        return super().get_items(self.full_collection_id(owner_id, collection_id, ":"), items_ids)
+        return super().get_items(self.full_collection_id(owner_id, collection_id, ":"), items_ids, **query_params)
 
     def get_item(self, collection_id: str, item_id: str, owner_id: str | None = None):
         """Get an item from a specific collection."""
