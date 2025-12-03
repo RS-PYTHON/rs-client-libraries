@@ -273,5 +273,5 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
     )
     result_staging.result()
     date2 = datetime.now(timezone.utc)
-    result_artifact = create_result_artifact(session_list[selection.selected.value], date2 - date1)
+    result_artifact = create_result_artifact.submit(session_list[selection.selected.value], date2 - date1)
     result_artifact.result()
