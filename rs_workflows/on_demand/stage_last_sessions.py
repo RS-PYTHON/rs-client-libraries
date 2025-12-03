@@ -19,11 +19,37 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from prefect import flow, get_run_logger, pause_flow_run, task
+from prefect.artifacts import create_markdown_artifact
 from pydantic import BaseModel, Field
 from pystac import ItemCollection  # type: ignore
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+
+
+@task(name="create result artifact")
+async def create_result_artifact(
+    cadip_items: str,
+    catalog_cadip_collection: str,
+    duration: timedelta
+) -> None:
+    """
+
+    """
+    duration_str = str(duration)
+    markdown_report = f"""# Staging result
+
+| Parameter        | Value |
+|:--------------|----------------------------:|
+| Session id  | {cadip_items}     |
+| Duration    | {duration_str}    |
+
+"""
+    await create_markdown_artifact(
+        key="result",
+        markdown=markdown_report,
+        description="session staging output"
+    )
 
 
 @task(name="Cadip session search")
@@ -246,9 +272,12 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
     catalog_cadip_collection = f"s0{sat}-cadip-session"
 
     # Stage the selected session
+    date1 = datetime.now(timezone.utc)
     await cadip_session_stage(
         FlowEnvArgs(owner_id=owner_identifier),
         cadip_items=f"https://rspy.ops.rs-python.eu/cadip/search?ids=\
             {session_list[selection.selected.value]}",  # type: ignore
         catalog_cadip_collection=catalog_cadip_collection,
     )
+    date2 = datetime.now(timezone.utc)
+    await create_result_artifact(session_list[selection.selected.value], catalog_cadip_collection, date2 - date1)
