@@ -209,9 +209,10 @@ class StacBase(RsClient):
 
         # Retrieve the collection
         collection = self.ps_client.get_collection(collection_id)
+        is_edrs = type(self).__name__ == "EdrsClient"  # noqa: E721
 
         # If non-standard query params are provided, call the /items endpoint manually.
-        if query_params:
+        if query_params and is_edrs:
             params = query_params.copy()
             if items_ids and "ids" not in params:
                 params["ids"] = ",".join(items_ids)
@@ -249,24 +250,21 @@ class StacBase(RsClient):
         if items_ids:
             self.logger.info(f"Retrieving specific items from collection '{collection_id}'.")
 
-            try:
+            # Avoid pystac-client fallback through /search (EDRS has no /search); fetch items one by one.
+            # For other clients, keep the original direct get_items behaviour.
+            if not is_edrs:
                 return collection.get_items(*items_ids)
 
-            # Avoid pystac-client fallback through /search (EDRS has no /search); fetch items one by one.
-            # collection.get_items(*ids) internally triggers a search request, which fails on EDRS.
-            except (APIError, requests.HTTPError, STACError, ValueError, TypeError) as exc:
-                self.logger.debug("Direct retrieval failed, fallback to per-item: %s", exc)
+            def iter_items():
+                for item_id in items_ids:
+                    try:
+                        item = collection.get_item(item_id)
+                        if item:
+                            yield item
+                    except (APIError, requests.HTTPError, STACError, ValueError, TypeError) as exc:
+                        self.logger.warning("Failed to retrieve item '%s': %s", item_id, exc)
 
-                def iter_items():
-                    for item_id in items_ids:
-                        try:
-                            item = collection.get_item(item_id)
-                            if item:
-                                yield item
-                        except (APIError, requests.HTTPError, STACError, ValueError, TypeError) as new_exc:
-                            self.logger.warning("Failed to retrieve item '%s': %s", item_id, new_exc)
-
-                return iter_items()
+            return iter_items()
 
         # Retrieve all items
         self.logger.info(f"Retrieving all items from collection '{collection_id}'.")

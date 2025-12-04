@@ -354,6 +354,7 @@ class TestStacBaseExtra:
         collection = StubCollection()
         ps_client = StubPsClient(collection)
         base = StubStacBase(ps_client)
+        base.__class__.__name__ = "EdrsClient"  # trigger EDRS branch
 
         result = list(base.get_items("col1", None, limit=1, page=2))
 
@@ -385,6 +386,7 @@ class TestStacBaseExtra:
         stac_io = StubStacIO()
         ps_client = StubPsClientNoRequest(collection, stac_io)
         base = StubStacBase(ps_client)
+        base.__class__.__name__ = "EdrsClient"  # trigger EDRS branch
 
         items = list(base.get_items("col1", items_ids=["a", "b"], limit=5))
 
@@ -399,6 +401,7 @@ class TestStacBaseExtra:
         stac_io = StubStacIO()
         ps_client = StubPsClientNoRequest(collection, stac_io)
         base = StubStacBase(ps_client)
+        base.__class__.__name__ = "EdrsClient"  # trigger EDRS branch
 
         with pytest.raises(RuntimeError, match="has no 'items' link"):
             list(base.get_items("col1", limit=1))
