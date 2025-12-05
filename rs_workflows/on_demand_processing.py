@@ -166,8 +166,12 @@ async def dpr_processing(
         # md = "# Payload file\n\n```json\n" + json.dumps(generated_payload_res_as_dict, indent=2) + "\n```"
         yaml_str = yaml.dump(generated_payload_res_as_dict, default_flow_style=False, sort_keys=False)
         # Write the payload as prefect artifact
-        # await acreate_markdown_artifact(key="dpr-payload-file", markdown=md, description="")
-        await acreate_markdown_artifact(key="dpr-payload-file", markdown=yaml_str, description="")
+        pretty_markdown = f"```yaml\n{yaml_str}\n```"
+        await acreate_markdown_artifact(
+            key="dpr-payload-file",
+            markdown=pretty_markdown,
+            description="DPR Payload file",
+        )
 
         # upload the config payload file to S3
         tmp_dir = std_tempfile.gettempdir()
