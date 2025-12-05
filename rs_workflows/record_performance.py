@@ -742,11 +742,11 @@ def record_performance_indicators(
         )
         record_product_expected(flow_run_id, dpr_processor_name, payload)
 
-        record_product_realised(flow_run_id, stac_items)
+        record_product_realised(flow_run_id, stac_items)  # type: ignore[unused-coroutine]
 
         validate_products(flow_run_id)
 
-        update_timeliness_fields(flow_run_id)
+        update_timeliness_fields(flow_run_id)  # type: ignore[unused-coroutine]
         logger.info("Transaction committed successfully!")
 
     except Exception as e:
