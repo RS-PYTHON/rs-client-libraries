@@ -20,7 +20,7 @@ from functools import lru_cache, wraps
 from typing import Any, cast
 
 import requests
-from pystac import Collection, Item, ItemCollection
+from pystac import Collection, Item, ItemCollection, STACError
 from pystac_client import Client
 from pystac_client.collection_client import CollectionClient
 from pystac_client.exceptions import APIError
@@ -249,18 +249,25 @@ class StacBase(RsClient):
         if items_ids:
             self.logger.info(f"Retrieving specific items from collection '{collection_id}'.")
 
+            try:
+                return collection.get_items(*items_ids)
+
             # Avoid pystac-client fallback through /search (EDRS has no /search); fetch items one by one.
             # collection.get_items(*ids) internally triggers a search request, which fails on EDRS.
-            def iter_items():
-                for item_id in items_ids:
-                    try:
-                        item = collection.get_item(item_id)
-                        if item:
-                            yield item
-                    except Exception as exc:  # pylint: disable=broad-exception-caught
-                        self.logger.warning("Failed to retrieve item '%s': %s", item_id, exc)
+            except (APIError, requests.HTTPError, STACError, ValueError, TypeError) as exc:
+                self.logger.debug("Direct retrieval failed, fallback to per-item: %s", exc)
 
-            return iter_items()
+                def iter_items():
+                    for item_id in items_ids:
+                        try:
+                            item = collection.get_item(item_id)
+                            if item:
+                                yield item
+                        except (APIError, requests.HTTPError, STACError, ValueError, TypeError) as new_exc:
+                            self.logger.warning("Failed to retrieve item '%s': %s", item_id, new_exc)
+
+                return iter_items()
+
         # Retrieve all items
         self.logger.info(f"Retrieving all items from collection '{collection_id}'.")
         return collection.get_items()

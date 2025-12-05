@@ -265,6 +265,10 @@ class StubCollection:
         self.items_fetched.append(item_id)
         return {"id": item_id}
 
+    def get_items(self, *item_ids):
+        """Return items one by one for each requested id."""
+        return [self.get_item(item_id) for item_id in item_ids]
+
 
 class StubPsClient:  # pylint: disable=too-few-public-methods
     """Minimal ps_client stub to drive StacBase.get_items branches with _request present."""
