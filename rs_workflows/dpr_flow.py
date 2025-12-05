@@ -263,7 +263,7 @@ async def run_processor(
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "run-processor"):
-        record_performance_indicators(
+        record_performance_indicators(  # type: ignore[unused-coroutine]
             start_date=datetime.datetime.now(),
             status="OK",
             dpr_processing_input_stac_items=s3_payload_run,
@@ -282,5 +282,9 @@ async def run_processor(
         dpr_job = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
         logger.info(f"DPR processor output {dpr_job}")
         # Wait for the job to finish
-        record_performance_indicators(stop_date=datetime.datetime.now(), status="OK", stac_items=dpr_job)
+        record_performance_indicators(  # type: ignore[unused-coroutine]
+            stop_date=datetime.datetime.now(),
+            status="OK",
+            stac_items=dpr_job,
+        )
         return dpr_job
