@@ -134,7 +134,7 @@ async def init_pi_database(env: FlowEnvArgs):
         # and connection pools (thread.RLock, weakref.ReferenceType, etc.), which are not serializable.
         # That's why instead of passing the engine object, pass only the db_url, a string, which is serializable.
         # Each task can then create its own engine locally.
-        create_schema(db_url)
-        insert_pi_categories(db_url)
+        create_schema(db_url)  # type: ignore[unused-coroutine]
+        insert_pi_categories(db_url)  # type: ignore[unused-coroutine]
 
         logger.info("The initialization of the tables for the performance indicator database finished")

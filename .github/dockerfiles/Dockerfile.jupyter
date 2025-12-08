@@ -13,9 +13,18 @@
 # limitations under the License.
 
 # This docker installs the rs-client-libraries wheel
-# into the jupyter docker image that is used by rs-demo in local mode.
-# This jupyter base image already contains prefect and dask.
-FROM ghcr.io/rs-python/jupyter/minimal-notebook:latest
+# in the jupyter docker image that is used by rs-demo in local mode.
+
+#
+# Jupyter image for local mode in which we install prefect and rs-client-libraries.
+# Target Docker image name:
+# ghcr.io/rs-python/jupyter/rs-client-libraries/local
+#
+
+ARG PYTHON_VERSION=3.13.9
+ARG JUPYTER_HUB_VERSION=5.4.2
+
+FROM ghcr.io/rs-python/quay.io/jupyter/base-notebook:hub-${JUPYTER_HUB_VERSION}-py${PYTHON_VERSION}
 
 USER root
 
@@ -30,9 +39,6 @@ RUN \
     apt autoremove -y gcc && \
     layer-cleanup.sh
 
-ARG USER=jovyan
-USER $USER
-
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
 RUN mkdir -p /tmp/whl
@@ -45,16 +51,13 @@ RUN pip install --no-cache-dir /tmp/whl/rs_client_libraries-*.whl && opentelemet
 # Install other useful dependencies for rs-demo in local mode.
 RUN pip install --no-cache-dir papermill && layer-cleanup.sh
 
-# Remove apt repository list and custom scripts
-USER root
-RUN rm -f /etc/apt/sources.list /usr/local/bin/layer-cleanup.sh /usr/local/bin/restore-apt.sh
-USER $USER
+# Remove custom scripts
+RUN rm -f /usr/local/bin/layer-cleanup.sh /usr/local/bin/restore-apt.sh
+
+USER jovyan
 
 # Set labels based on the Open Containers Initiative (OCI):
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
 #
 LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
-LABEL org.opencontainers.image.ref.name="ghcr.io/rs-python/jupyter/rs-client-libraries/local"
 LABEL dockerfile.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.jupyter"
-
-LABEL org.opencontainers.image.description="jupyter image for local mode in which we installed dask, prefect and the rs-client-libraries wheel package."
