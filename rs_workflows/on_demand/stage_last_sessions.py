@@ -56,8 +56,7 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
         return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
     params = {
-        "from": to_iso_z(start_time),
-        "to": to_iso_z(end_time),
+        "from": to_iso_z(start_time), "to": to_iso_z(end_time),
     }
 
     # Construction de l’URL encodée
