@@ -17,6 +17,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from urllib.parse import urlencode
 
 from prefect import flow, get_run_logger, pause_flow_run, task
 from prefect.artifacts import create_link_artifact, create_markdown_artifact
@@ -52,10 +53,7 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
     def to_iso_z(dt: datetime) -> str:
         return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
-    params = {
-        "from": to_iso_z(start_time),
-        "to": to_iso_z(end_time)
-    }
+    params = {"from": to_iso_z(start_time), "to": to_iso_z(end_time)}
 
     # Construction de l’URL encodée
     url = f"{base_url}?{urlencode(params)}"
