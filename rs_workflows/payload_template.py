@@ -68,8 +68,11 @@ class BasePayloadModel(BaseModel):
         # follow the official Pydantic v2 recommended access pattern
         # https://docs.pydantic.dev/latest/migration/#model-fields
         # https://docs.pydantic.dev/latest/migration/#validator-and-root_validator-are-deprecated
-        fields = type(cls).model_fields
-        for name, field in fields.items():
+        # So normally this should work in Pydantic v3. But it seems it isn't working in v2
+        # NOTE when Pydantic v3 is released, we should be able to use:
+        # fields = type(cls).model_fields
+        # and then iterate over fields.items() instead of cls.model_fields.items()
+        for name, field in cls.model_fields.items():
             # Value missing → set default
             if name not in values:
                 values[name] = field.get_default(call_default_factory=True)
