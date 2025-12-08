@@ -30,7 +30,7 @@ on:
         required: false
 
 env:
-  PYTHON_VERSION: 3.11.7
+  PYTHON_VERSION: 3.13.9
   DOCKER_REGISTRY: ghcr.io
 
 jobs:
@@ -237,7 +237,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_tag: ${{ needs.set-env.outputs.docker_tag }}
           build_args: |
-            K8S_IMAGE=-kubernetes
+            K8S_IMAGE=-k8s
 
   ###########
   # TESTING #

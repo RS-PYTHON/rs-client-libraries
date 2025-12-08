@@ -13,40 +13,34 @@
 # limitations under the License.
 
 #
-# This docker installs the rs-client-libraries wheel into the prefect docker image.
+# Prefect image in which we install rs-client-libraries.
+# Target Docker image names:
+# ghcr.io/rs-python/prefect/rs-client-libraries/local
+# ghcr.io/rs-python/prefect/rs-client-libraries/k8s
 #
 
-ARG PREFECT_TAG=3.2.13
-# K8S image suffix: -kubernetes or empty
+ARG PYTHON_VERSION=3.13.9
+ARG PREFECT_TAG=3.6.4
+
+# K8S image suffix: -k8s or empty
 ARG K8S_IMAGE=xxx
-FROM prefecthq/prefect:${PREFECT_TAG}-python3.11${K8S_IMAGE}
+
+FROM ghcr.io/rs-python/prefecthq/prefect:${PREFECT_TAG}-py${PYTHON_VERSION}${K8S_IMAGE}
 
 COPY ./layer-cleanup.sh /usr/local/bin/
 RUN chmod 755 /usr/local/bin/layer-cleanup.sh
 
-ARG DASK_TAG=2024.5.2
-ARG DASK_GATEWAY_TAG=2024.1.0
-ARG PREFECT_DASK_TAG=0.3.3
-ARG PREFECT_AWS_TAG=0.5.9
+ARG PREFECT_AWS_TAG=0.7.1
 
 # Upgrande pip and install dependencies.
 # NOTES:
 #   - Install s3fs before boto3 to have a recent version
-#   - We need the same numpy version as in eopf
-#   - Use latest pydantic-settings
 RUN pip install -U pip && \
-    pip install -U pydantic-settings && \
     pip install \
-        dask[complete]=="${DASK_TAG}" \
-        dask-gateway=="${DASK_GATEWAY_TAG}" \
-        prefect-dask=="${PREFECT_DASK_TAG}" \
         prefect-aws=="${PREFECT_AWS_TAG}" \
         s3fs \
         boto3 \
-        numpy=="1.26.4" \
-        SQLAlchemy>="2.0.37" \
-        psycopg2-binary>="2.9.10" && \
-    layer-cleanup.sh
+    && layer-cleanup.sh
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
 # so the .whl files are under ./*.whl
@@ -56,14 +50,11 @@ ADD ./*.whl /tmp/whl
 # Install the rs-client-library wheel and opentelemetry instrumentation packages for dependencies
 RUN pip install /tmp/whl/rs_client_libraries-*.whl && opentelemetry-bootstrap -a install && layer-cleanup.sh
 
-# Remove apt repository list and custom scripts
-RUN rm -f /etc/apt/sources.list /usr/local/bin/layer-cleanup.sh /usr/local/bin/restore-apt.sh
+# Remove custom scripts
+RUN rm -f /usr/local/bin/layer-cleanup.sh
 
 # Set labels based on the Open Containers Initiative (OCI):
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md#pre-defined-annotation-keys
 #
 LABEL org.opencontainers.image.source="https://github.com/RS-PYTHON/rs-client-libraries"
-LABEL org.opencontainers.image.ref.name="ghcr.io/rs-python/prefect/rs-client-libraries/local;ghcr.io/rs-python/prefect/rs-client-libraries/k8s"
 LABEL dockerfile.url="https://github.com/RS-PYTHON/rs-client-libraries/tree/develop/.github/dockerfiles/Dockerfile.prefect"
-
-LABEL org.opencontainers.image.description="prefect image in which we installed dask and the rs-client-libraries wheel package."
