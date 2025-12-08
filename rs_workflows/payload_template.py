@@ -64,21 +64,20 @@ class BasePayloadModel(BaseModel):
         """
         if not isinstance(values, dict):
             return values
-
-        for name, field in cls.model_fields.items():
-            # If key is missing, fill it with the default (including default_factory)
+        # Pydantic v2/v3-safe
+        # follow the official Pydantic v2 recommended access pattern
+        # https://docs.pydantic.dev/latest/migration/#model-fields
+        # https://docs.pydantic.dev/latest/migration/#validator-and-root_validator-are-deprecated
+        fields = type(cls).model_fields
+        for name, field in fields.items():
+            # Value missing → set default
             if name not in values:
-                if field.default_factory is not None:
-                    values[name] = field.default_factory()
-                elif field.default is not None:
-                    values[name] = field.default
+                values[name] = field.get_default(call_default_factory=True)
+                continue
 
-            # If value is explicitly None, replace with default
-            elif values[name] is None:
-                if field.default_factory is not None:
-                    values[name] = field.default_factory()
-                elif field.default is not None:
-                    values[name] = field.default
+            # Value is explicitly None → also replace with default
+            if values[name] is None:
+                values[name] = field.get_default(call_default_factory=True)
 
         return values
 

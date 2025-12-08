@@ -83,8 +83,8 @@ async def publish(
     Args:
         env: Prefect flow environment
         catalog_collection_identifier: Catalog collection identifier where the items are staged
+        payload_file: Payload file configuration for the dpr processor
         items: Items to publish, as STAC dicts
-        s3_output_data: S3 bucket location of the output processed products.
     """
     logger = get_run_logger()
     flow_env = FlowEnv(env)
