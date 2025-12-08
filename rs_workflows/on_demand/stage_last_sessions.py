@@ -19,20 +19,17 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from prefect import flow, get_run_logger, pause_flow_run, task
-from prefect.artifacts import create_markdown_artifact, create_link_artifact
+from prefect.artifacts import create_link_artifact, create_markdown_artifact
 from pydantic import BaseModel, Field
 from pystac import ItemCollection  # type: ignore
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from urllib.parse import urlencode
 
 
 @task(name="create result artifact")
 async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
-    """
-
-    """
+    """ """
     duration_str = str(duration)
     markdown_report = f"""# Staging result
 
@@ -56,7 +53,8 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
         return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
     params = {
-        "from": to_iso_z(start_time), "to": to_iso_z(end_time),
+        "from": to_iso_z(start_time),
+        "to": to_iso_z(end_time)
     }
 
     # Construction de l’URL encodée
