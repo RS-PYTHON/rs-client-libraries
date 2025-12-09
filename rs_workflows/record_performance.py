@@ -25,6 +25,8 @@ from sqlalchemy import MetaData, Table, create_engine, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 
+DISABLE_PI = True
+
 
 def get_db_session():
     """Initialize and return a DB session."""
@@ -722,7 +724,8 @@ def record_performance_indicators(
     stac_items=None,
 ):
     """Main task that orchestrates DB recording for flow_run and product_realised."""
-
+    if DISABLE_PI:
+        return
     logger = get_run_logger()
     logger.info("Starting record_performance_indicators")
 

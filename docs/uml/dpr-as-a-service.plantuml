@@ -2,8 +2,8 @@
 
 actor John
 
-actor JupyterLab_Python_3.12 as Jupyter
-actor Prefect_Python_3.12 as Prefect
+actor JupyterLab_Python_3.13 as Jupyter
+actor Prefect_Python_3.13 as Prefect
 actor DPR_service_Python_3.11 as DPR
 
 activate Jupyter
