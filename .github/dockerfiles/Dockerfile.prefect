@@ -20,7 +20,7 @@
 #
 
 ARG PYTHON_VERSION=3.13.9
-ARG PREFECT_TAG=3.6.4
+ARG PREFECT_TAG=3.6.5
 
 # K8S image suffix: -k8s or empty
 ARG K8S_IMAGE=xxx
