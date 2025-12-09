@@ -160,40 +160,6 @@ def wildcard_match(string, pattern):
     return fnmatch.fnmatch(string, pattern or "*")
 
 
-# def read_bucket_config_file(filepath: str) -> list[list[str]]:
-#     """
-#     Reads and validates the CSV configuration file defining S3 bucket routing rules.
-
-#     The configuration file must contain rows with exactly five fields:
-#     [owner_id, collection_name, product_type, expiration_delay, bucket_name].
-#     The expiration_delay is not used in the payload generator logic
-
-#     Args:
-#         filepath (str): Path to the CSV configmap file.
-
-#     Returns:
-#         list[list[str]]: A list of parsed rows, each containing exactly five string entries.
-
-#     Raises:
-#         RuntimeError: If the file is missing, unreadable, or any row has an incorrect format.
-#     """
-#     try:
-#         with open(filepath, newline="", encoding="utf-8") as csvfile:
-#             rows = list(csv.reader(csvfile, skipinitialspace=True))
-#     except FileNotFoundError as exc:
-#         raise RuntimeError(
-#             f"The configmap file '{filepath}' was not found while resolving S3 bucket mappings.",
-#         ) from exc
-#     except OSError as exc:
-#         raise RuntimeError(f"Error reading configmap file '{filepath}' while resolving S3 bucket mappings.") from exc
-
-#     for row_number, row in enumerate(rows, start=1):
-#         if len(row) != 5:
-#             raise RuntimeError(f"Row {row_number} from configmap must contain exactly 5 entries: {row}")
-
-#     return rows
-
-
 def fetch_csv_from_endpoint(endpoint: str) -> list[list[str]]:
     """
     Fetches a CSV file from rs-osam endpoint and returns it
