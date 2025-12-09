@@ -165,6 +165,7 @@ class DprProcessIn:  # pylint: disable=too-many-instance-attributes
     processor_name: DprProcessor
     processor_version: str
     dask_cluster_label: str
+    s3_payload_file: str
     # 'pipeline' or 'unit' must be provided
     pipeline: str | None = None
     unit: str | None = None
@@ -172,8 +173,8 @@ class DprProcessIn:  # pylint: disable=too-many-instance-attributes
     priority: Priority = Priority.LOW
     workflow_type: WorkflowType = WorkflowType.ON_DEMAND
 
-    input_products: dict[str, str] = field(default_factory=dict)
-    generated_product_to_collection_identifier: dict[str, str] = field(default_factory=dict)
+    input_products: list[dict[str, tuple[str, str]]] = field(default_factory=list)
+    generated_product_to_collection_identifier: list[dict[str, str | tuple[str, str]]] = field(default_factory=list)
     auxiliary_product_to_collection_identifier: dict[str, str] = field(default_factory=dict)
 
     processing_mode: list[ProcessingMode] = field(default_factory=list)

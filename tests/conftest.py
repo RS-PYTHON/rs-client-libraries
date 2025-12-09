@@ -19,9 +19,12 @@ The conftest.py file serves as a means of providing fixtures for an entire direc
 Fixtures defined in a conftest.py can be used by any test in that package without needing to import them
 (pytest will automatically discover them).
 """
+# pylint: disable=unused-argument
 import logging
+from unittest.mock import MagicMock, mock_open
 
 import pytest
+import requests
 import responses
 from prefect.testing.utilities import prefect_test_harness
 
@@ -30,6 +33,11 @@ from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from rs_common.utils import env_bool
 from rs_workflows import init_pi_db_flow
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.payload_template import (  # StoreOptionsWrapper,
+    StorageOptions,
+    StoreParams,
+)
 from tests import common
 
 # Use dummy values
@@ -138,6 +146,43 @@ ITEM_RESPONSE = {
         "https://stac-extensions.github.io/file/v2.1.0/schema.json",
     ],
 }
+
+# In-memory lists of csv strings used for fetch_csv_from_endpoint and find_s3_output_bucket functions
+# from payload_generator.py
+TEST_STORAGE_CONFIG_DATA = [
+    ["*", "*", "*", "30", "rspython-ops-catalog-all-production"],
+    ["copernicus", "s1-l1", "*", "10", "rspython-ops-catalog-copernicus-s1-l1"],
+    ["copernicus", "s1-aux", "*", "40", "rspython-ops-catalog-copernicus-s1-aux"],
+    ["copernicus", "s1-aux", "orbsct", "7300", "rspython-ops-catalog-copernicus-s1-aux-infinite"],
+]
+BUCKET_EXPIRATION_WITH_FALLBACK = [
+    ["*", "*", "*", "90", "s3://default-bucket"],
+    ["test-owner", "my-coll", "L1*", "60", "s3://owner-specific-bucket"],
+]
+BUCKET_EXPIRATION_WITHOUT_FALLBACK = [
+    ["test-owner", "my-coll", "S1*", "30", "s3://owner-specific-bucket"],
+    ["other-owner", "other-coll", "L1*", "60", "s3://other-bucket"],
+]
+
+# In-memory json content for storage_configuration.json file, check story 800
+# and STEP 3 from "How to build payload.yaml"
+STORAGE_CONFIG_JSON = """
+{
+    "storage": [
+        {
+            "name": "s3",
+            "storage_options": {
+                "key": "S3_ACCESSKEY",
+                "secret": "S3_SECRETKEY",
+                "endpoint_url": "https://s3.tests.moc",
+                "region_name": "eu-west-1"
+            }
+        }
+    ]
+}
+"""
+# incomplete storage_configuration.json
+INVALID_JSON = '{"storage": [}'
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -565,7 +610,302 @@ def mocked_stac_catalog_get_item():
 @pytest.fixture(autouse=True, scope="function")
 def patch_prefect_logger(monkeypatch):
     """
-    Patch Prefect get_run_logger to avoid MissingContextError in tests.
-    Replaces Prefect’s logger with a standard Python logger.
+    Patch get_run_logger in rs_workflows.flow_utils to return a real logger.
+    Prevents MissingContextError when FlowEnv.__init__ calls get_run_logger().
     """
+    test_logger = logging.getLogger("test-flow-env")
+    test_logger.setLevel(logging.DEBUG)
+    test_logger.addHandler(logging.NullHandler())
     monkeypatch.setattr(init_pi_db_flow, "get_run_logger", lambda: logging.getLogger("test"))
+    monkeypatch.setattr(
+        "rs_workflows.flow_utils.get_run_logger",
+        lambda **kwargs: test_logger,
+    )
+    monkeypatch.setattr(
+        "rs_workflows.on_demand_processing.get_run_logger",
+        lambda **kwargs: test_logger,
+    )
+    monkeypatch.setattr(
+        "rs_workflows.payload_generator.get_run_logger",
+        lambda **kwargs: test_logger,
+    )
+
+
+@pytest.fixture
+def sample_unit():
+    """Fixture that builds a test sample unit"""
+    return {
+        "name": "unit1",
+        "module": "module1",
+        "input_products": [
+            {"name": "S1CADUS", "origin": "pipeline_input_1", "store_type": "S3"},
+            {"name": "S3CADUS", "origin": "external_proc", "store_type": "S3"},
+        ],
+        "input_adfs": [
+            {"name": "ADF1"},
+        ],
+        "output_products": [
+            {"name": "output1", "regex": "*.tif", "store_type": "S3"},
+            {"name": "output2", "store_type": "S3"},
+        ],
+    }
+
+
+@pytest.fixture
+def mock_dpr_process_in():
+    """
+    Realistic mock of DprProcessIn matching actual usage in flow_utils.py.
+    """
+    mock = MagicMock()
+
+    # input_products: list[dict[product_id, (stac_item_name_of_cadip_session, collection_id)]]
+    mock.input_products = [
+        {"S1CADUS": ("cadip_session", "COLLECTION_CADIP_TEST")},
+        {"S3CADUS": ("another_cadip_session", "COLLECTION_S3")},
+    ]
+
+    # generated_product_to_collection_identifier:
+    # list[dict[output_key, product_type | (product_type, output_collection)]]
+    mock.generated_product_to_collection_identifier = [
+        {
+            "output1": "S1A_IW_GRDH_1S",  # product type (string)
+        },
+        {
+            "output2": ("product_type", "OUTPUT_COLLECTION_GRDH"),  # (origin, collection)
+        },
+    ]
+
+    # s3_payload_file: final payload S3 path
+    mock.s3_payload_file = "s3://mocked-bucket/payloads/test-run.yaml"
+
+    # Optional: processor_name (used in payload_generator)
+    mock.processor_name = "TEST_PROCESSOR"
+
+    return mock
+
+
+@pytest.fixture
+def mock_store_params():
+    """Fixture that mocks the store params"""
+    return StoreParams(
+        storage_options=[
+            # StoreOptionsWrapper(
+            # storage_options=[
+            StorageOptions(
+                name="s3",
+                key="key",
+                secret="secret",  # nosec B106: test-only fake secret
+                client_kwargs={"endpoint_url": "http://localhost", "region_name": "test"},
+            ),
+            # ],
+            # ),
+        ],
+    )
+
+
+@pytest.fixture
+def flow_env(monkeypatch, generic_rs_client: RsClient) -> FlowEnv:
+    """
+    FlowEnv that contains a rs-client (mocked as well).
+    The environment variables that FlowEnv reads from prefect blocks are
+    patched to harmless values.
+    """
+    monkeypatch.setenv("RSPY_WEBSITE", "https://dummy-rspy")
+    monkeypatch.setenv("RSPY_APIKEY", "dummy-key")
+    # prevent FlowEnv from trying to load real Prefect blocks
+    monkeypatch.setattr(
+        "rs_common.prefect_utils.read_prefect_blocks",
+        lambda *args, **kwargs: None,
+    )
+    args = FlowEnvArgs(owner_id="test-owner")
+    env = FlowEnv(args)
+    # replace the rs_client that FlowEnv created with the mocked one
+    env.rs_client = generic_rs_client
+    return env
+
+
+@pytest.fixture
+def catalog_client(generic_rs_client):
+    """The catalog client extracted from the RsClient."""
+    return generic_rs_client.get_catalog_client()
+
+
+@pytest.fixture
+def mock_storage_config_json(mocker) -> str:
+    """
+    Fully in-memory mock of /etc/storage_configuration.json
+    Uses real json.load() and real open() so we have a realistic parsing
+    """
+    mocker.patch("builtins.open", mock_open(read_data=STORAGE_CONFIG_JSON))
+    mocker.patch("os.path.exists", return_value=True)
+    return "/fake/etc/storage_configuration.json"
+
+
+@pytest.fixture
+def mock_storage_config_invalid_json(mocker) -> str:
+    """
+    Mock a read for an invalid storage_configuration.json file
+    """
+    mocker.patch("builtins.open", mock_open(read_data=INVALID_JSON))
+    mocker.patch("os.path.exists", return_value=True)
+    return "/fake/etc/storage_configuration.json"
+
+
+# Mock Response Class for fetching CSV tests
+class MockResponse:
+    """
+    Lightweight mock implementation of a requests.Response object.
+    This class simulates the minimal behavior needed for tests that validate
+    functions interacting with http responses.
+    """
+
+    def __init__(self, json_data, status_code=200, raise_error=False):
+        """
+        Initializes a mock http response.
+
+        Args:
+            json_data (Any): The value returned by the json() method.
+            status_code (int, optional): http status code to simulate.
+                Defaults to 200.
+            raise_error (bool, optional): Forces raise_for_status() to
+                raise a requests.HTTPError regardless of status_code.
+                Defaults to False.
+        """
+        self._json_data = json_data
+        self.status_code = status_code
+        self.raise_error = raise_error
+
+    def json(self):
+        """
+        Returns the preconfigured JSON payload.
+        """
+        return self._json_data
+
+    def raise_for_status(self):
+        """
+        Simulates requests.Response.raise_for_status().
+
+        Behavior:
+            - Raises requests.HTTPError if:
+                - raise_error is True OR
+                - status_code is >= 400
+
+        Raises:
+            requests.HTTPError: When an http error condition is simulated.
+        """
+        if self.raise_error or self.status_code >= 400:
+            raise requests.HTTPError(f"HTTP {self.status_code}")
+
+
+@pytest.fixture
+def _mock_os_env(monkeypatch):
+    monkeypatch.setenv("RSPY_HOST_OSAM", "https://dummy-osam")
+    return "https://dummy-osam"
+
+
+@pytest.fixture
+def _mock_get_success(monkeypatch):
+    """Mock requests.get for successful CSV fetch."""
+
+    def _mock_get(url, timeout):
+        return MockResponse(
+            json_data=TEST_STORAGE_CONFIG_DATA,
+            status_code=200,
+        )
+
+    monkeypatch.setattr(requests, "get", _mock_get)
+    return _mock_get
+
+
+@pytest.fixture
+def _mock_bucket_config_with_fallback(monkeypatch):
+    """Mock requests.get, with wildcard * char"""
+
+    def _mock_get(url, timeout):
+        return MockResponse(
+            json_data=BUCKET_EXPIRATION_WITH_FALLBACK,
+            status_code=200,
+        )
+
+    monkeypatch.setattr(requests, "get", _mock_get)
+    return _mock_get
+
+
+@pytest.fixture
+def _mock_bucket_config_no_fallback(monkeypatch):
+    """Mock requests.get, without wildcard * char"""
+
+    def _mock_get(url, timeout):
+        return MockResponse(
+            json_data=BUCKET_EXPIRATION_WITHOUT_FALLBACK,
+            status_code=200,
+        )
+
+    monkeypatch.setattr(requests, "get", _mock_get)
+    return _mock_get
+
+
+@pytest.fixture
+def _mock_get_network_error(monkeypatch):
+    """Mock requests.get to simulate a network failure."""
+
+    def _mock_get(url, timeout):
+        raise requests.ConnectionError("network down")
+
+    monkeypatch.setattr(requests, "get", _mock_get)
+    return _mock_get
+
+
+@pytest.fixture
+def _mock_get_invalid_json(monkeypatch):
+    """Mock requests.get returning non-list JSON."""
+
+    def _mock_get(url, timeout):
+        return MockResponse(json_data={"not": "a list"})
+
+    monkeypatch.setattr(requests, "get", _mock_get)
+    return _mock_get
+
+
+@pytest.fixture
+def _mock_get_row_not_list(monkeypatch):
+    """Mock returning a list where elements are NOT lists."""
+
+    def _mock_get(url, timeout):
+        return MockResponse(json_data=["a", "b", "c"])  # invalid
+
+    monkeypatch.setattr(requests, "get", _mock_get)
+    return _mock_get
+
+
+@pytest.fixture
+def _mock_get_non_string(monkeypatch):
+    """Mock returning a list containing non-string elements inside a row."""
+
+    def _mock_get(url, timeout):
+        return MockResponse(json_data=[["a", 123, "b"]])  # 123 invalid
+
+    monkeypatch.setattr(requests, "get", _mock_get)
+    return _mock_get
+
+
+@pytest.fixture
+def _mock_get_row_wrong_length_too_short(monkeypatch):
+    """Row has fewer than 5 columns."""
+
+    def _mock_get(url, timeout):
+        return MockResponse(json_data=[["a", "b", "c"]])  # only 3 entries
+
+    monkeypatch.setattr(requests, "get", _mock_get)
+    return _mock_get
+
+
+@pytest.fixture
+def _mock_get_row_wrong_length_too_long(monkeypatch):
+    """Row has more than 5 columns."""
+
+    def _mock_get(url, timeout):
+        return MockResponse(json_data=[["a", "b", "c", "d", "e", "f"]])  # 6 entries
+
+    monkeypatch.setattr(requests, "get", _mock_get)
+    return _mock_get

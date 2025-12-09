@@ -18,20 +18,25 @@
 import datetime
 import json
 import os
+import tempfile as std_tempfile
 
-from prefect import flow, task
+import anyio
+import yaml
+from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
 
-from rs_client.ogcapi.dpr_client import ClusterInfo, DprProcessor
+from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
 from rs_common.utils import create_valcover_filter
-from rs_workflows import auxip_flow, cadip_flow, prip_flow
+from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
+from rs_workflows.dpr_flow import run_processor
 from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
     FlowEnvArgs,
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
+from rs_workflows.payload_generator import generate_payload
 from rs_workflows.staging_flow import staging_task
 
 
@@ -40,16 +45,14 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
     """
     Stage ADFS files from the tasktable.
     """
-    # Return list of auxip items
-    all_auxip_items = []
 
     try:
 
         # For each "alternative" ( get it following the "order" )
-        for idx, alternative in enumerate(input_adfs["alternatives"]):
+        for alternative in input_adfs["alternatives"]:
             # 1. Get the "query" with the "parameters" and "timeout_seconds" information
-            # 2. Get the corresponding "query.name" on the section "query" of the task table
             timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
+            # 2. Get the corresponding "query.name" on the section "query" of the task table
             name, parameters = alternative["query"]["name"], alternative["query"]["parameters"]
             # 3. Build the CQL2 JSON by replacing the parameters. Only keep the "stac" field.
             auxip_cql2 = build_cql2_json(task_table, name, parameters)["stac"]
@@ -71,14 +74,11 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
                 collection,
                 timeout if timeout else -1,
             ).result()
+            # 6. Return the first found result
+            if auxip_items[1]:  # type: ignore
+                return input_adfs["name"], auxip_items
 
-            all_auxip_items.append(auxip_items)
-
-            if idx == len(input_adfs["alternatives"]) - 1 and not auxip_items:
-                #  Last one and still nothing → raise runtime
-                raise RuntimeError("All ADFS searched, no items found.")
-
-        return all_auxip_items
+        raise RuntimeError(f"Searching for adfs input {input_adfs['name']} did not return any result")
 
     except KeyError as kerr:
         raise RuntimeError(
@@ -105,7 +105,7 @@ async def dpr_processing(
         s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
         catalog bucket.
     """
-
+    logger = get_run_logger()
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(dpr_input.env)
 
@@ -119,12 +119,6 @@ async def dpr_processing(
         )
 
         # read tasktable and construct list of processing units
-        if dpr_input.processor_name == DprProcessor.MOCKUP:
-            # pylint: disable-next=unused-variable
-            s3_payload_template = (  # noqa: F841
-                f"s3://rs-dev-cluster-temp/prefect-share/users/{flow_env.owner_id}/"
-                f"l0/config/s3/s3_l0_demo_payload_dpr_mockup_template.yaml"
-            )
         task_table = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name.value, cluster_info)
         processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
         out = build_unit_list(
@@ -136,6 +130,7 @@ async def dpr_processing(
             end_datetime=dpr_input.end_datetime,
         )
         unit_list = out["units"]
+
         md = "# List of processing units\n\n```json\n" + json.dumps(unit_list, indent=2) + "\n```"
         # Artifact key must only contain lowercase letters, numbers, and dashes.
         await acreate_markdown_artifact(key="processing-unit-list", markdown=md, description="List of processing units")
@@ -146,10 +141,74 @@ async def dpr_processing(
             for input_adfs in unit["input_adfs"]:
                 tasks.append(process_input_adfs.submit(input_adfs, dpr_input, task_table))
 
-        # pylint: disable-next=unused-variable
-        auxip_items = [item for t in tasks for item in t.result()]  # noqa: F841
+        try:
+            auxip_items = [t.result() for t in tasks]
+        except (RuntimeError, KeyError) as err:
+            raise err
 
-        # Wait for Alex part
+        adfs = []
+        for name, (status, item_collection) in auxip_items:
+            for item in item_collection.items:
+                if status:
+                    asset = next(iter(item.assets.values()))
+                    adfs.append((name, asset.href))
+                else:
+                    raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
+        # generate the dpr payload file
+        task_future = generate_payload.submit(flow_env, unit_list, adfs, dpr_input)
+        # get the payload generation result
+        generated_payload_res = task_future.result()
+        # create the generated payload as a dictionary, as it will be used for
+        # both payload file generation and dpr processor execution
+        generated_payload_res_as_dict = generated_payload_res.dump()
+        # create the YAML string first (synchronous). This will be used for writing both the artifact as well
+        # as the tmp file
+        # md = "# Payload file\n\n```json\n" + json.dumps(generated_payload_res_as_dict, indent=2) + "\n```"
+        yaml_str = yaml.dump(generated_payload_res_as_dict, default_flow_style=False, sort_keys=False)
+        # Write the payload as prefect artifact
+        pretty_markdown = f"```yaml\n{yaml_str}\n```"
+        await acreate_markdown_artifact(
+            key="dpr-payload-file",
+            markdown=pretty_markdown,
+            description="DPR Payload file",
+        )
+
+        # upload the config payload file to S3
+        tmp_dir = std_tempfile.gettempdir()
+        tmp_file_path = os.path.join(tmp_dir, f"dpr_payload_{datetime.datetime.now().timestamp()}.yaml")
+        async with await anyio.open_file(tmp_file_path, "w", encoding="utf-8") as tmp_file:
+            await tmp_file.write(yaml_str)
+            # flush to be extra-safe
+            await tmp_file.flush()
+        logger.debug(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
+        await prefect_utils.s3_upload_file(tmp_file_path, dpr_input.s3_payload_file)
+
+        # clean up the temp payload file
+        await anyio.Path(tmp_file_path).unlink()
+
+        # Run the DPR processor
+        processed_items = run_processor.submit(
+            flow_env.serialize(),
+            dpr_input.processor_name,
+            # generated_payload_res_as_dict,
+            cluster_info,
+            dpr_input.s3_payload_file,
+            wait_for=[task_future],
+        )
+        processed_items.result()
+
+        # Publish processed items to the catalog
+        published = catalog_flow.publish.submit(
+            flow_env.serialize(),
+            dpr_input.generated_product_to_collection_identifier,
+            generated_payload_res,
+            processed_items,
+        )
+
+        # Wait for last task to end.
+        # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
+        published.result()  # type: ignore[unused-coroutine]
+
         return
 
 
