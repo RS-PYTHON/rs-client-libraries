@@ -65,7 +65,8 @@ async def run_processor(
         )
         dpr_job = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
         logger.info(f"DPR processor output {dpr_job}")
-        # -> Read zattrs based on run_processor outputS
+        # TODO -> Read zattrs based on run_processor outputS and create assets from the result of reading
         # Wait for the job to finish
         # record_performance_indicators(stop_date=datetime.datetime.now(), status="OK", stac_items=dpr_job)
+        # TODO: return computed assets
         return dpr_job
