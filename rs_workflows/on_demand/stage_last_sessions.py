@@ -30,7 +30,14 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 @task(name="create result artifact")
 async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
-    """ """
+    """
+    Creates a result artifact in the form of a markdown report and a link to a Grafana dashboard.
+    Parameters:
+        cadip_items (str): A string representing the session ID or items to be included in the report.
+        duration (timedelta): The duration of the session, used to display the time span in the report.
+    Returns:
+        None: This function does not return any value. It performs asynchronous operations to create artifacts.
+    """
     duration_str = str(duration)
     markdown_report = f"""# Staging result
 
