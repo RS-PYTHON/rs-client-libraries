@@ -174,8 +174,6 @@ async def init_prefect_blocks():
     # They are optional.
     env_vars = {}
     for key in (
-        "AWS_REQUEST_CHECKSUM_CALCULATION",
-        "AWS_RESPONSE_CHECKSUM_VALIDATION",
         "OTEL_PYTHON_REQUESTS_TRACE_HEADERS",
         "OTEL_PYTHON_REQUESTS_TRACE_BODY",
         "RSPY_APIKEY",
