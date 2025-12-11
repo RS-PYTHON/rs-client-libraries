@@ -19,6 +19,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+import tempfile
+import os.path as osp
 
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanContext
@@ -207,3 +209,38 @@ class DprProcessOut:
 
     status: bool
     product_identifier: list[Item] = field(default_factory=list)
+
+async def update_eopf_assets(self, payload: dict) -> list[dict]:
+    """
+    Update the EOPF assets in the given payload.
+    Args:
+        payload: The original payload dictionary.
+    """
+    
+    outputs = []
+    for output in outputs:
+        with tempfile.NamedTemporaryFile() as temp:
+            prefect_utils.s3_download_file(
+                output['path'],
+                temp.name,
+                _sync=True,
+            ) 
+
+def get_eopf_types_from_payload(payload: dict) -> list[str]:
+    """
+    Extract EOPF types from the payload.
+
+    Args:
+        payload: The original payload dictionary.
+    """
+    logger = get_run_logger()
+    logger.debug("***" * 150)
+    logger.debug(f"Payload received for EOPF types extraction: {payload}")
+    eopf_types = set()
+    for item in payload.get("stac_items", []):
+        for asset_key in item.get("assets", {}).keys():
+            if asset_key.startswith("EOPF_"):
+                eopf_type = asset_key.split("_", 1)[1]
+                eopf_types.add(eopf_type)
+    #return list(eopf_types)
+    return ['S03MWRL0_']

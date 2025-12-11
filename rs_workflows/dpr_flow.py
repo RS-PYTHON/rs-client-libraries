@@ -21,7 +21,9 @@ from os import path as osp
 from prefect import get_run_logger, task
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, update_eopf_assets, get_eopf_types_from_payload
+from rs_workflows.record_performance import record_performance_indicators
+import datetime
 
 # from rs_workflows.record_performance import record_performance_indicators
 
@@ -30,7 +32,7 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 async def run_processor(
     env: FlowEnvArgs,
     processor: DprProcessor,
-    # payload: dict,
+    payload: dict,
     cluster_info: ClusterInfo,
     s3_payload_run: str,
 ) -> list[dict]:
@@ -47,13 +49,13 @@ async def run_processor(
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "run-processor"):
-        # record_performance_indicators(
-        #     start_date=datetime.datetime.now(),
-        #     status="OK",
-        #     dpr_processing_input_stac_items=s3_payload_run,
-        #     payload=payload,
-        #     dpr_processor_name=processor.value,
-        # )
+        record_performance_indicators(
+            start_date=datetime.datetime.now(),
+            status="OK",
+            dpr_processing_input_stac_items=s3_payload_run,
+            payload=payload,
+            dpr_processor_name=processor.value,
+        )
         # Trigger the processor run from the dpr service
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
         job_status = dpr_client.run_process(
@@ -64,9 +66,10 @@ async def run_processor(
             s3_report_dir=osp.join(osp.dirname(s3_payload_run)),
         )
         dpr_job = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
+
         logger.info(f"DPR processor output {dpr_job}")
-        # TODO -> Read zattrs based on run_processor outputS and create assets from the result of reading
+        eopf_stac_items = dpr_client.update_eopf_assets(payload)
+        eopf_types = get_eopf_types_from_payload(payload)
         # Wait for the job to finish
-        # record_performance_indicators(stop_date=datetime.datetime.now(), status="OK", stac_items=dpr_job)
-        # TODO: return computed assets
-        return dpr_job
+        record_performance_indicators(stop_date=datetime.datetime.now(), status="OK", stac_items=eopf_stac_items, payload=payload, eopf_types=eopf_types)
+        return eopf_stac_items

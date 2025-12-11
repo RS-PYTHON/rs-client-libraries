@@ -332,7 +332,7 @@ def extract_min_datetime(list_items):
 
 
 @task(name="Record Products Expected")
-def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
+def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_types=None):
     """
     Insert expected product definitions into the `product_expected` table for a given flow run.
 
@@ -373,7 +373,8 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
     metadata = MetaData()
     db, engine = get_db_session()
     product_expected = Table("product_expected", metadata, autoload_with=engine)
-
+    if not eopf_types:
+        return
     eopf_type_dict = []
 
     if dpr_processor_name in ["s3_l0", "mockup"]:
@@ -396,12 +397,11 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
 
     eopf_type_lookup = {k: (min_c, max_c) for k, min_c, max_c in eopf_type_dict}
 
-    list_eopf_types = list(payload["workflow"][0]["outputs"].values())
     list_items = list((payload["workflow"][0]["inputs"]).values())
     min_val = extract_min_datetime(list_items)
 
     try:
-        for eopf_type in list_eopf_types:
+        for eopf_type in eopf_types:
 
             try:
                 min_c, max_c = eopf_type_lookup[eopf_type]
@@ -722,6 +722,7 @@ def record_performance_indicators(
     payload: dict | None = None,
     # product_realised params
     stac_items=None,
+    eopf_types=None
 ):
     """Main task that orchestrates DB recording for flow_run and product_realised."""
     if DISABLE_PI:
@@ -743,7 +744,7 @@ def record_performance_indicators(
             dpr_processor_unit,
             dpr_processing_input_stac_items,
         )
-        record_product_expected(flow_run_id, dpr_processor_name, payload)
+        record_product_expected(flow_run_id, dpr_processor_name, payload, eopf_types)
 
         record_product_realised(flow_run_id, stac_items)  # type: ignore[unused-coroutine]
 
