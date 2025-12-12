@@ -287,7 +287,7 @@ jobs:
         id: dir_names
         run: |
           echo sources=./rs_client,./rs_common,./rs_workflows >> $GITHUB_OUTPUT
-          echo exclusions=./rs_workflows/on_demand >> $GITHUB_OUTPUT
+          echo exclusions=rs_workflows/on_demand/** >> $GITHUB_OUTPUT
           echo tests=./tests >> $GITHUB_OUTPUT
         shell: bash
 
