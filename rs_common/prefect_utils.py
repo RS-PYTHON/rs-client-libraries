@@ -138,26 +138,34 @@ async def init_prefect_blocks():
 
     # In local mode, create the block that contains the environment variables for all users.
     # In cluster mode, this block has already been created by an admin.
-    # All fields are mandatory.
     if local_mode:
-        await Secret(
-            value={  # type: ignore[arg-type]
-                "RSPY_LOCAL_MODE": "1",
-                "PREFECT_BUCKET_NAME": os.environ["PREFECT_BUCKET_NAME"],
-                "PREFECT_BUCKET_FOLDER": os.getenv("PREFECT_BUCKET_FOLDER", "prefect-share"),
-                "S3_ACCESSKEY": os.environ["S3_ACCESSKEY"],
-                "S3_SECRETKEY": os.environ["S3_SECRETKEY"],
-                "S3_REGION": os.environ["S3_REGION"],
-                "S3_ENDPOINT": os.environ["S3_ENDPOINT"],
-                "LOCAL_DASK_USERNAME": os.environ["LOCAL_DASK_USERNAME"],
-                "LOCAL_DASK_PASSWORD": os.environ["LOCAL_DASK_PASSWORD"],
-                "POSTGRES_USER": os.environ["POSTGRES_USER"],
-                "POSTGRES_PASSWORD": os.environ["POSTGRES_PASSWORD"],
-                "POSTGRES_PORT": os.environ["POSTGRES_PORT"],
-                "POSTGRES_PI_DB": os.environ["POSTGRES_PI_DB"],
-                "POSTGRES_HOST": os.environ["POSTGRES_HOST"],
-            },
-        ).save(BLOCK_NAME_ENV_GLOBAL, overwrite=True)
+
+        # Get all env var names that start with DASK_GATEWAY_
+        regex = re.compile("^DASK_GATEWAY_.*")
+        dask_gateway_vars = [v for v in os.environ if regex.match(v)]
+
+        # Copy env vars. They are all mandatory.
+        global_env_vars = {}
+        for key in [
+            "RSPY_LOCAL_MODE",
+            "PREFECT_BUCKET_NAME",
+            "PREFECT_BUCKET_FOLDER",
+            "POSTGRES_USER",
+            "POSTGRES_PASSWORD",
+            "POSTGRES_PORT",
+            "POSTGRES_PI_DB",
+            "POSTGRES_HOST",
+            "RSPY_UAC_CHECK_URL",
+            "RSPY_WEBSITE",
+            "TEMPO_ENDPOINT",
+            *dask_gateway_vars,
+            "LOCAL_DASK_USERNAME",
+            "LOCAL_DASK_PASSWORD",
+        ]:
+            global_env_vars[key] = os.environ[key]
+
+        # Save env vars in a secret block for all users
+        await Secret(value=global_env_vars).save(BLOCK_NAME_ENV_GLOBAL, overwrite=True)
 
     #
     # Env vars for current user/owner_id
@@ -166,28 +174,26 @@ async def init_prefect_blocks():
     if cluster_mode:
         await read_apikey()
 
-    # Get all env var names that start with DASK_GATEWAY_
-    regex = re.compile("^DASK_GATEWAY_.*")
-    dask_gateway_vars = [v for v in os.environ if regex.match(v)]
-
     # Read env vars that are available from the client env in both local and cluster mode.
-    # They are optional.
-    env_vars = {}
-    for key in (
+    user_env_vars = {}
+
+    # Read optional env vars
+    for key in ["RSPY_APIKEY"]:
+        if value := os.getenv(key):
+            user_env_vars[key] = value
+
+    # Call osam (object storage access manager) to get the bucket credentials for the current user
+
+    # These are False by default. Save them only if they are set to True.
+    for key in [
         "OTEL_PYTHON_REQUESTS_TRACE_HEADERS",
         "OTEL_PYTHON_REQUESTS_TRACE_BODY",
-        "RSPY_APIKEY",
-        "RSPY_OAUTH2_COOKIE",
-        "RSPY_UAC_CHECK_URL",
-        "RSPY_WEBSITE",
-        "TEMPO_ENDPOINT",
-        *dask_gateway_vars,
-    ):
-        if value := os.getenv(key):
-            env_vars[key] = value
+    ]:
+        if env_bool(key, default=False):
+            user_env_vars[key] = "1"
 
     # Save env vars in a secret block for the current user
-    await Secret(value=env_vars).save(format_env_user(BLOCK_NAME_ENV_USER, owner_id), overwrite=True)  # type: ignore
+    await Secret(value=user_env_vars).save(format_env_user(BLOCK_NAME_ENV_USER, owner_id), overwrite=True)  # type: ignore
 
     # Now read back the blocks so we are sure our env vars are up-to-date
     await read_prefect_blocks(owner_id)
