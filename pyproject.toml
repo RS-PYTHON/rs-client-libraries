@@ -160,8 +160,3 @@ min-similarity-lines=10
 
 [tool.bandit.assert_used]
 skips = ['*/test_*.py']
-
-[tool.coverage.run] # see: https://coverage.readthedocs.io/en/latest/source.html#execution
-omit = [
-    "rs_workflows/on_demand/*",
-]

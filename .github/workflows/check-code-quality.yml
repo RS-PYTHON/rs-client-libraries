@@ -287,6 +287,7 @@ jobs:
         id: dir_names
         run: |
           echo sources=./rs_client,./rs_common,./rs_workflows >> $GITHUB_OUTPUT
+          echo exclusions=./rs_workflows/on_demand/** >> $GITHUB_OUTPUT
           echo tests=./tests >> $GITHUB_OUTPUT
         shell: bash
 
@@ -310,9 +311,9 @@ jobs:
             -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
             -Dsonar.organization=rs-python
             -Dsonar.sources=${{ steps.dir_names.outputs.sources }}
+            -Dsonar.exclusions=${{ steps.dir_names.outputs.exclusions }}
             -Dsonar.tests=${{ steps.dir_names.outputs.tests }}
             -Dsonar.branch.name=${{ github.ref_name }}
-            -Dsonar.exclusions=
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.language=py
             -Dsonar.python.version=${{ env.PYTHON_VERSION }}
