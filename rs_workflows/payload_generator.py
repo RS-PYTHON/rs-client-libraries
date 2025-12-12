@@ -618,6 +618,18 @@ def generate_payload(  # pylint: disable=unused-argument
     #     address="test",
     # )
     # Build the full payload using the schema
+    # Add the logging config for l0 and s1 / s3 configurations. These configurations
+    # are hardcoded in l0 dask images. The path where these files are stored is given
+    # by the env var PAYLOAD_CONFIG_FILES
+    logging = None
+    config = None
+    if dpr_process_in.processor_name in (DprProcessor.S1L0, DprProcessor.S3L0):
+        logging = "/opt/dask-l0/logging_config.yaml"
+        match dpr_process_in.processor_name:
+            case DprProcessor.S1L0:
+                config = ["/opt/dask-l0/s1_default_configuration.yaml"]
+            case DprProcessor.S3L0:
+                config = ["/opt/dask-l0/s3_default_configuration.yaml"]
     logger.info("Building the payload")
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (story 800)
@@ -626,6 +638,8 @@ def generate_payload(  # pylint: disable=unused-argument
         io=io_config,  # type: ignore
         # The dask_context section is updated in dpr_service
         # dask_context=dask_context,
+        logging=logging,
+        config=config,
     )
     logger.info(f"Generated payload: \n {payload}")
     return payload

@@ -106,6 +106,7 @@ async def dpr_processing(
         catalog bucket.
     """
     logger = get_run_logger()
+    logger.info(f"Starting DPR processing flow with processor: {dpr_input.processor_name.value}")
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(dpr_input.env)
 
