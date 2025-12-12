@@ -14,12 +14,14 @@
 
 """Utility module for the Prefect flows."""
 
+import json
 import os
 import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from opentelemetry import trace
@@ -248,10 +250,6 @@ def extract_products_and_zattrs(files: list[str], base_path: str):
     return list(products), zattrs
 
 
-import json
-import tempfile
-
-
 def read_zattrs_sync(zattrs_paths: list[str]):
     """
     Download `.zattrs` files synchronously using prefect_utils.s3_download_file
@@ -265,9 +263,6 @@ def read_zattrs_sync(zattrs_paths: list[str]):
                 data = json.load(f)
         results.append({"path": path, "data": data})
     return results
-
-
-from pathlib import Path
 
 
 def s3_download_file_sync(
@@ -335,25 +330,57 @@ def create_stac_items(payload, eopf_features):
 @task(name="Update eopf assets")
 def update_eopf_assets(payload: dict) -> list[dict]:
     """
-    Update the EOPF assets in the given payload.
+    Extract EOPF metadata from S3 paths found in the payload, read all `.zattrs`
+    files associated with the products, and generate corresponding STAC items.
+
+    Steps performed:
+    1. Determine the unique S3 path from the output products in the payload.
+    2. List all files under that path and extract product files and `.zattrs` files.
+    3. Read `.zattrs` metadata synchronously.
+    4. Collect EOPF item metadata and product types.
+    5. Build and return STAC items together with extracted EOPF product types.
+
     Args:
-        payload: The original payload dictionary.
+        payload: A dictionary containing the workflow input/output structure,
+                 specifically under `payload["I/O"]["output_products"]`.
+
+    Returns:
+        A tuple (stac_items, eopf_types):
+            - stac_items: A list of STAC items constructed from the EOPF metadata.
+            - eopf_types: A list of extracted product types (strings).
     """
     logger = get_run_logger()
+
+    logger.info("Starting EOPF asset update.")
+    logger.debug(f"Payload received: {payload}")
+
+    # Determine path
     paths = {prod["path"] for prod in payload["I/O"]["output_products"]}
     path = next(iter(paths))
+    logger.info(f"Using S3 path: {path}")
 
+    # List & extract
     all_files = s3_list(path)
+    logger.info(f"Found {len(all_files)} files under path.")
     products, zattrs = extract_products_and_zattrs(all_files, path)
+    logger.info(f"Extracted {len(products)} product files and {len(zattrs)} .zattrs files.")
 
-    logger.info(f"Products: {products}")
-    logger.info(f"Zattrs: {zattrs}")
-    logger.info("*" * 150)
+    # Read metadata
     zattrs_data = read_zattrs_sync(zattrs)
+    logger.info(f"Loaded metadata from {len(zattrs_data)} .zattrs files.")
+
+    # Extract EOPF info
     eopf_types = [attrs["data"]["stac_discovery"]["product:type"] for attrs in zattrs_data]
+    logger.info(f"Extracted EOPF product types: {eopf_types}")
 
     eopf_items = [attrs["data"]["stac_discovery"] for attrs in zattrs_data]
-    return create_stac_items(payload, eopf_items), eopf_types
+    logger.debug(f"EOPF discovery metadata extracted: {eopf_items}")
+
+    # Build STAC items
+    stac_items = create_stac_items(payload, eopf_items)
+    logger.info(f"Created {len(stac_items)} STAC items.")
+
+    return stac_items, eopf_types
 
 
 def get_eopf_types_from_payload(payload: dict) -> list[str]:
