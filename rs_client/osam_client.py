@@ -16,8 +16,19 @@
 
 import logging
 
+from pydantic import BaseModel
+
 from rs_client.rs_client import TIMEOUT, RsClient
 from rs_common.utils import get_href_service
+
+
+class BucketCredentials(BaseModel):
+    """Bucket credentials, with the same field names as those returned by the osam service."""
+
+    access_key_: str
+    secret_key: str
+    endpoint: str
+    region: str
 
 
 class OsamClient(RsClient):
@@ -57,14 +68,8 @@ class OsamClient(RsClient):
         """
         return get_href_service(self.rs_server_href, "RSPY_HOST_OSAM")
 
-    async def get_credentials(self, timeout: int = TIMEOUT) -> dict:
-        """
-        Get user credentials from cloud provider.
-
-        Returns:
-            dict: A dictionary containing 'access_key', 'secret_key', 'endpoint_url', 'region_name'
-            for the user's S3 storage.
-        """
+    async def get_credentials(self, timeout: int = TIMEOUT) -> BucketCredentials:
+        """Get user credentials from cloud provider."""
         response = self.http_session.get(f"{self.href_service}/storage/account/credentials", timeout=timeout)
         response.raise_for_status()
-        return response.json()
+        return BucketCredentials.model_validate(response.json())

@@ -26,6 +26,7 @@ import socket
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from fastapi.concurrency import run_in_threadpool
@@ -35,6 +36,7 @@ from prefect.exceptions import ObjectNotFound
 from prefect.utilities.asyncutils import sync_compatible
 from prefect_aws import AwsCredentials, S3Bucket
 
+from rs_client.osam_client import BucketCredentials, OsamClient
 from rs_common.logging import Logging
 from rs_common.utils import env_bool
 
@@ -49,12 +51,14 @@ owner_id: str | None = ""
 
 # Prefect block names
 BLOCK_NAME_ENV_GLOBAL: str = "env-vars"
-BLOCK_NAME_ENV_USER: str = "env-vars-{0}"  # env variables for the user/owner_id
+BLOCK_NAME_ENV_USER: str = "env-vars-{0}"  # env variables for the current user/owner_id
 BLOCK_NAME_SHARE_BUCKET_GLOBAL: str = "share-bucket"
 BLOCK_NAME_SHARE_BUCKET_USER: str = "share-bucket-{0}"  # share bucket for the user/owner_id
 
 # S3 bucket object for each bucket name.
 S3_BUCKETS: dict[str, S3Bucket] = {}
+
+lock = Lock()
 
 logger = Logging.default(__name__)
 
@@ -130,9 +134,37 @@ async def read_apikey(optional: bool = False, save_to_env: bool = True) -> None:
 
 
 @sync_compatible
+async def update_prefect_block(block_name: str, add_values: dict = {}, remove_keys: list = []):
+    """
+    Write a prefect secret block with values, or update it if it already exists.
+
+    Args:
+        block_name: Prefect secret block name
+        add_values: Key/values to add from the block
+        remove_keys: Key/values to remove from the block
+    """
+    with lock:
+        # Try to read the block, if it exists
+        try:
+            old_values = (await Secret.load(block_name)).get()
+        except ValueError:
+            old_values = {}
+
+        # Add new values
+        updated_values = old_values | add_values
+
+        # Remove values
+        for key in remove_keys:
+            updated_values.pop(key, None)
+
+        # Write the block if it didn't exist or if values have changed
+        if (not old_values) or (old_values != updated_values):
+            await Secret(value=updated_values).save(block_name, overwrite=True)
+
+
+@sync_compatible
 async def init_prefect_blocks():
     """Init prefect blocks from the client environment (= from jupyter)"""
-
     #
     # Env vars for all users
 
@@ -155,8 +187,6 @@ async def init_prefect_blocks():
             "POSTGRES_PORT",
             "POSTGRES_PI_DB",
             "POSTGRES_HOST",
-            "RSPY_UAC_CHECK_URL",
-            "RSPY_WEBSITE",
             "TEMPO_ENDPOINT",
             *dask_gateway_vars,
             "LOCAL_DASK_USERNAME",
@@ -165,7 +195,7 @@ async def init_prefect_blocks():
             global_env_vars[key] = os.environ[key]
 
         # Save env vars in a secret block for all users
-        await Secret(value=global_env_vars).save(BLOCK_NAME_ENV_GLOBAL, overwrite=True)
+        await update_prefect_block(BLOCK_NAME_ENV_GLOBAL, global_env_vars)
 
     #
     # Env vars for current user/owner_id
@@ -193,10 +223,74 @@ async def init_prefect_blocks():
             user_env_vars[key] = "1"
 
     # Save env vars in a secret block for the current user
-    await Secret(value=user_env_vars).save(format_env_user(BLOCK_NAME_ENV_USER, owner_id), overwrite=True)  # type: ignore
+    await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), user_env_vars)
 
     # Now read back the blocks so we are sure our env vars are up-to-date
     await read_prefect_blocks(owner_id)
+
+
+@sync_compatible
+async def save_bucket_credentials(
+    osam_client: OsamClient | None = None,
+    obs_credentials: dict[str, BucketCredentials] = {},
+):
+    """
+    Save bucket credentials in the prefect secret block that contains
+    the env variables for the current user/owner_id.
+
+    Args:
+        osam_client: Used to read the user's credentials from the OSAM service. They are saved in the env vars:
+        osam_client, S3_SECRETKEY, S3_ENDPOINT, S3_REGION
+        obs_credentials: Used to save custom bucket credentials. For each dict key "<OBS_ID>", the credentials are
+        saved in the env vars: S3_<OBS_ID>_ACCESSKEY, S3_<OBS_ID>_SECRETKEY, S3_<OBS_ID>_ENDPOINT, S3_<OBS_ID>_REGION
+    """
+    env_vars = {}
+
+    # Read the user's credentials from osam
+    if osam_client:
+        credentials = osam_client.get_credentials()
+        env_vars.update(
+            {
+                "S3_ACCESSKEY": credentials.access_key,
+                "S3_SECRETKEY": credentials.secret_key,
+                "S3_ENDPOINT": credentials.endpoint,
+                "S3_REGION": credentials.region,
+            },
+        )
+
+    # Add custom credentials
+    for key, credentials in obs_credentials.items():
+        key = key.upper()
+        env_vars.update(
+            {
+                f"S3_{key}_ACCESSKEY": credentials.access_key,
+                f"S3_{key}_SECRETKEY": credentials.secret_key,
+                f"S3_{key}_ENDPOINT": credentials.endpoint,
+                f"S3_{key}_REGION": credentials.region,
+            },
+        )
+
+    # Update the prefect block
+    await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), env_vars)
+
+
+@sync_compatible
+async def remove_bucket_credentials(obs_ids: list[str]):
+    """
+    Remove bucket credentials from the prefect secret block that contains
+    the env variables for the current user/owner_id.
+
+    Args:
+        obs_ids: "<OBS_ID>" keys to remove from the env vars:
+        S3_<OBS_ID>_ACCESSKEY, S3_<OBS_ID>_SECRETKEY, S3_<OBS_ID>_ENDPOINT, S3_<OBS_ID>_REGION
+    """
+    env_vars = []
+    for key in obs_ids:
+        key = key.upper()
+        env_vars += [f"S3_{key}_ACCESSKEY", f"S3_{key}_SECRETKEY", f"S3_{key}_ENDPOINT", f"S3_{key}_REGION"]
+
+    # Update the prefect block
+    await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), remove_values=env_vars)
 
 
 @sync_compatible
