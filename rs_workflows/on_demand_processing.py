@@ -194,7 +194,7 @@ async def dpr_processing(
             cluster_info,
             dpr_input.s3_payload_file,
             wait_for=[task_future],
-        )        
+        )
         processed_items.result()
         # TODO: get stac Items with assets created in run_processor !
         # TODO: use them to publish to catalog in the next step !

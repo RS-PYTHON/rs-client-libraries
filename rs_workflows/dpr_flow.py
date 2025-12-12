@@ -15,15 +15,21 @@
 """DPR flow implementation"""
 
 
+import datetime
+
 # import datetime
 from os import path as osp
 
 from prefect import get_run_logger, task
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, update_eopf_assets, get_eopf_types_from_payload
+from rs_workflows.flow_utils import (
+    FlowEnv,
+    FlowEnvArgs,
+    get_eopf_types_from_payload,
+    update_eopf_assets,
+)
 from rs_workflows.record_performance import record_performance_indicators
-import datetime
 
 # from rs_workflows.record_performance import record_performance_indicators
 
@@ -68,8 +74,13 @@ async def run_processor(
         dpr_job = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
 
         logger.info(f"DPR processor output {dpr_job}")
-        eopf_stac_items = dpr_client.update_eopf_assets(payload)
-        eopf_types = get_eopf_types_from_payload(payload)
+        eopf_stac_items, eopf_types = update_eopf_assets(payload)
         # Wait for the job to finish
-        record_performance_indicators(stop_date=datetime.datetime.now(), status="OK", stac_items=eopf_stac_items, payload=payload, eopf_types=eopf_types)
+        record_performance_indicators(
+            stop_date=datetime.datetime.now(),
+            status="OK",
+            stac_items=eopf_stac_items,
+            payload=payload,
+            eopf_types=eopf_types,
+        )
         return eopf_stac_items

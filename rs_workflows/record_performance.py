@@ -25,8 +25,6 @@ from sqlalchemy import MetaData, Table, create_engine, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 
-DISABLE_PI = True
-
 
 def get_db_session():
     """Initialize and return a DB session."""
@@ -175,7 +173,7 @@ def record_flow_run(
             "mission": resolve_param(mission, "mission", "sentinel-1"),
             "prefect_flow_id": prefect_flow_id,
             "prefect_flow_parent_id": runtime.flow_run.parent_flow_run_id,
-            "dask_version": version("dask"),
+            "dask_version": "1.0",  # version("dask"), # TODO: Test why: PackageNotFoundError: No package metadata was found for dask
             "python_version": sys.version.split()[0],
             "dpr_processor_name": resolve_param(dpr_processor_name, "dpr_processor_name", "dpr_processor"),
             "dpr_processor_version": resolve_param(
@@ -373,6 +371,7 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
     metadata = MetaData()
     db, engine = get_db_session()
     product_expected = Table("product_expected", metadata, autoload_with=engine)
+    logger.info(f"PEXP {eopf_types}, {payload}")
     if not eopf_types:
         return
     eopf_type_dict = []
@@ -722,11 +721,9 @@ def record_performance_indicators(
     payload: dict | None = None,
     # product_realised params
     stac_items=None,
-    eopf_types=None
+    eopf_types=None,
 ):
     """Main task that orchestrates DB recording for flow_run and product_realised."""
-    if DISABLE_PI:
-        return
     logger = get_run_logger()
     logger.info("Starting record_performance_indicators")
 

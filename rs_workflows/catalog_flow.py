@@ -76,6 +76,7 @@ async def publish(
     catalog_collection_identifier: list[dict],
     payload_file: PayloadSchema,
     items: list[dict],
+    item_collection,
 ):
     """
     Publish items to the catalog
@@ -129,32 +130,37 @@ async def publish(
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
 
     with flow_env.start_span(__name__, "publish-to-catalog"):
-        for feature_dict in items:
+        for item in item_collection:
             try:
-                sd_props = feature_dict["stac_discovery"]["properties"]
-                feature_product_type = sd_props["product:type"].upper()
-
-                for cci in catalog_collection_identifier:
-                    product_type, collection = extract_product_type_and_collection(cci)
-
-                    if feature_product_type != product_type.upper():
-                        continue
-
-                    output_dir = next(iter(cci))
-                    output_ps = find_matching_output_product(output_dir)
-                    if not output_ps:
-                        continue
-
-                    item = build_item(feature_dict)
-
-                    title = f"{item.id}.zarr"
-                    output_path = os.path.join(output_ps.path, title)
-
-                    item.assets = {title: build_asset(output_path, title)}
-                    catalog_client.add_item(collection, item)
-
+                catalog_client.add_item(collection, item)
             except Exception as e:
-                raise RuntimeError(f"Exception while publishing: {json.dumps(feature_dict, indent=2)}") from e
+                raise RuntimeError(f"Exception while publishing: {json.dumps(item, indent=2)}") from e
+        # for feature_dict in items:
+        #     try:
+        #         sd_props = feature_dict["stac_discovery"]["properties"]
+        #         feature_product_type = sd_props["product:type"].upper()
+
+        #         for cci in catalog_collection_identifier:
+        #             product_type, collection = extract_product_type_and_collection(cci)
+
+        #             if feature_product_type != product_type.upper():
+        #                 continue
+
+        #             output_dir = next(iter(cci))
+        #             output_ps = find_matching_output_product(output_dir)
+        #             if not output_ps:
+        #                 continue
+
+        #             item = build_item(feature_dict)
+
+        #             title = f"{item.id}.zarr"
+        #             output_path = os.path.join(output_ps.path, title)
+
+        #             item.assets = {title: build_asset(output_path, title)}
+        #             catalog_client.add_item(collection, item)
+
+        #     except Exception as e:
+        #         raise RuntimeError(f"Exception while publishing: {json.dumps(feature_dict, indent=2)}") from e
 
     # list collections for logging
     collections = catalog_client.get_collections()
