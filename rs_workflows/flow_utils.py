@@ -15,7 +15,6 @@
 """Utility module for the Prefect flows."""
 
 import os
-import os.path as osp
 import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -27,8 +26,7 @@ from opentelemetry import trace
 from opentelemetry.trace import Span, SpanContext
 from opentelemetry.util._decorator import _agnosticcontextmanager
 from prefect import get_run_logger, task
-from prefect.utilities.asyncutils import run_sync_in_worker_thread
-from pystac import Item
+from pystac import Asset, Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_client.rs_client import RsClient
@@ -285,31 +283,25 @@ def s3_download_file_sync(
     return to_path
 
 
-def create_stac_items(payload_file, feature_dict):
-    from pystac import Asset, Item, ItemCollection
-
-    def extract_product_type_and_collection(cci: dict):
-        cci_tuple = next(iter(cci.values()))
-        if isinstance(cci_tuple, tuple):
-            return cci_tuple[0], cci_tuple[1]
-        return cci_tuple, cci_tuple
-
-    def find_matching_output_product(output_dir: str):
-        if not payload_file.io:
-            return None
-
-        for output_ps in payload_file.io.output_products:
-            if output_dir == output_ps.id:
-                return output_ps
-        return None
-
+def create_stac_items(payload, eopf_features):
     def build_item(feature_dict: dict) -> Item:
+        feature_dict["properties"]["eopf:origin_datetime"] = eopf_origin_datetimes
+        # C1.2 Ensure that all EOPF items have stac_version property set to "1.1.0"
+        feature_dict["properties"]["stac_version"] = "1.1.0"
+        # C1.3 Add stac_extensions following the list from the PRIP ICD §3.3.4
+        default_stac_extensions = [
+            "https://stac-extensions.github.io/item-assets/v1.0.0/schema.json",
+            "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
+            "https://stac-extensions.github.io/projection/v1.1.0/schema.json",
+            "https://stac-extensions.github.io/product/v0.1.0/schema.json",
+        ]
         return Item(
             id=feature_dict["id"],
             geometry=feature_dict["geometry"],
             bbox=feature_dict["bbox"],
             datetime=datetime.fromisoformat(feature_dict["properties"]["datetime"]),
             properties=feature_dict["properties"],
+            stac_extensions=default_stac_extensions,
         )
 
     def build_asset(path: str, title: str) -> Asset:
@@ -324,23 +316,19 @@ def create_stac_items(payload_file, feature_dict):
             },
         )
 
+    # ??
+    paths = {prod["path"] for prod in payload["I/O"]["output_products"]}
+    path = next(iter(paths))
+    # ??
+    # C1.1 Add the property eopf:origin_datetime with value equal to max(eopf:origin_datetime) among all input_products. ADFS input are not considered.
+    # eopf_origin_datetimes = compute_eopf_origin_datetimes(payload)  # TODO
+    eopf_origin_datetimes = "datetimelateraddedhere"  # TODO
     items = []
-    for feature_dict in feature_dict:
-        sd_props = feature_dict["properties"]
-        feature_product_type = sd_props["product:type"].upper()
-
-        for cci in catalog_collection_identifier:
-            output_dir = next(iter(cci))
-            output_ps = find_matching_output_product(output_dir)
-            if not output_ps:
-                continue
-            item = build_item(feature_dict)
-
-            title = f"{item.id}.zarr"
-            output_path = os.path.join(output_ps.path, title)
-
-            item.assets = {title: build_asset(output_path, title)}
-            items.append(item)
+    for feature_dict in eopf_features:
+        item = build_item(feature_dict, eopf_origin_datetimes)
+        title = f"{item.id}.zarr"
+        item.assets = {title: build_asset(path, title)}
+        items.append(item)
     return items
 
 
@@ -362,12 +350,10 @@ def update_eopf_assets(payload: dict) -> list[dict]:
     logger.info(f"Zattrs: {zattrs}")
     logger.info("*" * 150)
     zattrs_data = read_zattrs_sync(zattrs)
-    eopf_types = []
-    for attrs in zattrs_data:
-        logger.info("ALOHA")
-        logger.info(attrs["data"]["stac_discovery"])
-        eopf_types.append(attrs["data"]["stac_discovery"]["product:type"])
-    return create_stac_items(payload, zattrs_data), eopf_types
+    eopf_types = [attrs["data"]["stac_discovery"]["product:type"] for attrs in zattrs_data]
+
+    eopf_items = [attrs["data"]["stac_discovery"] for attrs in zattrs_data]
+    return create_stac_items(payload, eopf_items), eopf_types
 
 
 def get_eopf_types_from_payload(payload: dict) -> list[str]:
