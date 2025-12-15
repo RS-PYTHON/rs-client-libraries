@@ -619,7 +619,7 @@ def generate_payload(  # pylint: disable=unused-argument
     # )
     # Build the full payload using the schema
     # Add the logging config for l0 and s1 / s3 configurations. These configurations
-    # are hardcoded in l0 dask images. The path where these files are stored is given
+    # are hardcoded in the l0 eopf dask worker image. The path where these files are stored is given
     # by the env var PAYLOAD_CONFIG_FILES
     logging = None
     config = None

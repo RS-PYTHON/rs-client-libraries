@@ -189,11 +189,21 @@ def test_load_store_params_from_config_invalid_json(mock_storage_config_invalid_
 # generate_payload (task wrapper)
 
 
+@pytest.mark.parametrize(
+    "processor_name, expected_logging, expected_config",
+    [
+        (DprProcessor.S1L0, "/opt/dask-l0/logging_config.yaml", ["/opt/dask-l0/s1_default_configuration.yaml"]),
+        (DprProcessor.S3L0, "/opt/dask-l0/logging_config.yaml", ["/opt/dask-l0/s3_default_configuration.yaml"]),
+    ],
+)
 def test_generate_payload_success(
     mocker,
     sample_unit,
     mock_dpr_process_in,
     flow_env,
+    processor_name,
+    expected_logging,
+    expected_config,
 ):
     """
     Test successful end-to-end payload generation for a normal processor.
@@ -224,8 +234,22 @@ def test_generate_payload_success(
     assert isinstance(payload.general_configuration, GeneralConfiguration)
     assert len(payload.workflow or []) == 1
     assert payload.io.adfs[0].id == "ADF1"
+    assert payload.logging is None
+    assert payload.config is None
     mock_logger.info.assert_any_call("Geting workflow and I/O sections")
     mock_logger.info.assert_any_call("Building the payload")
+
+    # test the s1 l0 specific logging and config paths
+    mock_dpr_process_in.processor_name = processor_name
+
+    payload = generate_payload.fn(
+        flow_env=flow_env,
+        unit_list=[sample_unit],
+        adfs=[("ADF1", "s3://bucket/adf1")],
+        dpr_process_in=mock_dpr_process_in,
+    )
+    assert payload.logging == expected_logging
+    assert payload.config == expected_config
 
 
 def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_env):
