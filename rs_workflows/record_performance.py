@@ -173,7 +173,8 @@ def record_flow_run(
             "mission": resolve_param(mission, "mission", "sentinel-1"),
             "prefect_flow_id": prefect_flow_id,
             "prefect_flow_parent_id": runtime.flow_run.parent_flow_run_id,
-            "dask_version": "1.0",  # version("dask"), # TODO: Test why: PackageNotFoundError: No package metadata was found for dask
+            "dask_version": "1.0",  # version("dask"),
+            # TODO: Test why: PackageNotFoundError: No package metadata was found for dask
             "python_version": sys.version.split()[0],
             "dpr_processor_name": resolve_param(dpr_processor_name, "dpr_processor_name", "dpr_processor"),
             "dpr_processor_version": resolve_param(
@@ -266,18 +267,19 @@ def record_product_realised(flow_run_id, stac_items):
         return
 
     try:
-        for dpr_product in stac_items:
-            stac_discovery = dpr_product["stac_discovery"]
-            eopf_type = stac_discovery["properties"]["product:type"]
+        for item in stac_items:
+            if not isinstance(item, dict):
+                item = item.to_dict()
+            eopf_type = item["properties"]["product:type"]
 
             values = {
                 "flow_run_id": flow_run_id,
                 "pi_category_id": get_pi_category_id(eopf_type),
                 "eopf_type": eopf_type,
-                "stac_item": stac_discovery,
+                "stac_item": item,
                 # get it from properties instead of product name, now() if missing
-                "sensing_start_datetime": stac_discovery["properties"].get("start_datetime", datetime.now()),
-                "origin_date": stac_discovery["properties"].get("datetime", datetime.now()),
+                "sensing_start_datetime": item["properties"].get("start_datetime", datetime.now()),
+                "origin_date": item["properties"].get("datetime", datetime.now()),
                 "catalog_stored_datetime": datetime.now(),
                 # default to false, will be updated by validate
                 "unexpected": False,
@@ -371,7 +373,7 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
     metadata = MetaData()
     db, engine = get_db_session()
     product_expected = Table("product_expected", metadata, autoload_with=engine)
-    logger.info(f"PEXP {eopf_types}, {payload}")
+
     if not eopf_types:
         return
     eopf_type_dict = []

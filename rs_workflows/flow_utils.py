@@ -222,6 +222,24 @@ def s3_list(s3_prefix: str):
 
 
 def extract_products_and_zattrs(files: list[str], base_path: str):
+    """
+    Extract product names and associated .zattrs files from a list of file paths.
+
+    This function scans a list of file paths and identifies Zarr products by
+    detecting valid `.zattrs` files under the given base path. It supports both
+    common Zarr layouts:
+    1. base_path/<product>/.zattrs
+    2. base_path/<product>/<product>/.zattrs
+
+    Args:
+        files (list[str]): List of file paths to scan.
+        base_path (str): Base directory under which products are located.
+
+    Returns:
+        tuple[list[str], list[str]]:
+            - A list of unique product names discovered.
+            - A list of full paths to detected `.zattrs` files.
+    """
     products = set()
     zattrs = []
 
@@ -279,17 +297,50 @@ def s3_download_file_sync(
 
 
 def create_stac_items(payload, eopf_features):
-    def build_item(feature_dict: dict) -> Item:
+    """
+    Create a list of STAC Items from EOPF features and processing payload metadata.
+
+    This function builds STAC Items compliant with EOPF constraints by:
+    - Injecting EOPF-specific properties into each feature
+    - Attaching output product assets
+    - Propagating origin datetimes from input products
+
+    Args:
+        payload (dict): Processing payload containing input and output product metadata.
+        eopf_features (list[dict]): List of GeoJSON-like feature dictionaries.
+
+    Returns:
+        list[Item]: List of constructed STAC Item objects.
+    """
+
+    def build_item(feature_dict: dict, eopf_origin_datetimes) -> Item:
+        """
+        Build a STAC Item from a feature dictionary.
+
+        This function mutates the feature dictionary by injecting mandatory
+        EOPF and STAC properties before constructing the Item.
+
+        Args:
+            feature_dict (dict): GeoJSON-like feature dictionary.
+            eopf_origin_datetimes (str | list[str]): Origin datetime(s) derived
+                from input EOPF products.
+
+        Returns:
+            Item: A STAC Item populated with geometry, properties, and extensions.
+        """
         feature_dict["properties"]["eopf:origin_datetime"] = eopf_origin_datetimes
+
         # C1.2 Ensure that all EOPF items have stac_version property set to "1.1.0"
         feature_dict["properties"]["stac_version"] = "1.1.0"
+
         # C1.3 Add stac_extensions following the list from the PRIP ICD §3.3.4
         default_stac_extensions = [
-            "https://stac-extensions.github.io/item-assets/v1.0.0/schema.json",
-            "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
-            "https://stac-extensions.github.io/projection/v1.1.0/schema.json",
-            "https://stac-extensions.github.io/product/v0.1.0/schema.json",
+            # "https://stac-extensions.github.io/item-assets/v1.0.0/schema.json",
+            # "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
+            # "https://stac-extensions.github.io/projection/v1.1.0/schema.json",
+            # "https://stac-extensions.github.io/product/v0.1.0/schema.json",
         ]
+
         return Item(
             id=feature_dict["id"],
             geometry=feature_dict["geometry"],
@@ -300,6 +351,16 @@ def create_stac_items(payload, eopf_features):
         )
 
     def build_asset(path: str, title: str) -> Asset:
+        """
+        Build a STAC Asset representing a Zarr output product.
+
+        Args:
+            path (str): Full path or URL to the asset.
+            title (str): Human-readable asset title.
+
+        Returns:
+            Asset: A STAC Asset configured for EOPF output products.
+        """
         return Asset(
             href=path,
             title=title,
@@ -311,19 +372,22 @@ def create_stac_items(payload, eopf_features):
             },
         )
 
-    # ??
+    # Collect output product paths
     paths = {prod["path"] for prod in payload["I/O"]["output_products"]}
     path = next(iter(paths))
-    # ??
-    # C1.1 Add the property eopf:origin_datetime with value equal to max(eopf:origin_datetime) among all input_products. ADFS input are not considered.
+
+    # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
+    # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # eopf_origin_datetimes = compute_eopf_origin_datetimes(payload)  # TODO
     eopf_origin_datetimes = "datetimelateraddedhere"  # TODO
+
     items = []
     for feature_dict in eopf_features:
         item = build_item(feature_dict, eopf_origin_datetimes)
         title = f"{item.id}.zarr"
-        item.assets = {title: build_asset(path, title)}
+        item.assets = {title: build_asset(f"{path}{title}", title)}
         items.append(item)
+
     return items
 
 
@@ -370,7 +434,7 @@ def update_eopf_assets(payload: dict) -> list[dict]:
     logger.info(f"Loaded metadata from {len(zattrs_data)} .zattrs files.")
 
     # Extract EOPF info
-    eopf_types = [attrs["data"]["stac_discovery"]["product:type"] for attrs in zattrs_data]
+    eopf_types = [attrs["data"]["stac_discovery"]["properties"]["product:type"] for attrs in zattrs_data]
     logger.info(f"Extracted EOPF product types: {eopf_types}")
 
     eopf_items = [attrs["data"]["stac_discovery"] for attrs in zattrs_data]
@@ -381,21 +445,3 @@ def update_eopf_assets(payload: dict) -> list[dict]:
     logger.info(f"Created {len(stac_items)} STAC items.")
 
     return stac_items, eopf_types
-
-
-def get_eopf_types_from_payload(payload: dict) -> list[str]:
-    """
-    Extract EOPF types from the payload.
-
-    Args:
-        payload: The original payload dictionary.
-    """
-
-    eopf_types = set()
-    for item in payload.get("stac_items", []):
-        for asset_key in item.get("assets", {}).keys():
-            if asset_key.startswith("EOPF_"):
-                eopf_type = asset_key.split("_", 1)[1]
-                eopf_types.add(eopf_type)
-    # return list(eopf_types)
-    return ["S03MWRL0_"]

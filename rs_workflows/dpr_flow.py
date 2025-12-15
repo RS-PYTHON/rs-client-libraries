@@ -26,7 +26,6 @@ from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_workflows.flow_utils import (
     FlowEnv,
     FlowEnvArgs,
-    get_eopf_types_from_payload,
     update_eopf_assets,
 )
 from rs_workflows.record_performance import record_performance_indicators

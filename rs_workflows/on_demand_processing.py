@@ -196,13 +196,10 @@ async def dpr_processing(
             wait_for=[task_future],
         )
         processed_items.result()
-        # TODO: get stac Items with assets created in run_processor !
-        # TODO: use them to publish to catalog in the next step !
         # Publish processed items to the catalog
         published = catalog_flow.publish.submit(
             flow_env.serialize(),
             dpr_input.generated_product_to_collection_identifier,
-            generated_payload_res,
             processed_items,
         )
 
