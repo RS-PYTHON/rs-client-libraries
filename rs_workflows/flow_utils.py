@@ -286,8 +286,8 @@ def read_zattrs_sync(zattrs_paths: list[str]):
 def s3_download_file_sync(
     s3_path: str,
     to_path: str | Path,
-    **download_kwargs: dict[str, Any],
-) -> Path:
+    **download_kwargs: Any,
+) -> str | Path:
     """
     Download a file from S3 synchronously.
     """
@@ -334,7 +334,7 @@ def create_stac_items(payload, eopf_features):
         feature_dict["properties"]["stac_version"] = "1.1.0"
 
         # C1.3 Add stac_extensions following the list from the PRIP ICD §3.3.4
-        default_stac_extensions = [
+        default_stac_extensions: list[str] = [
             # "https://stac-extensions.github.io/item-assets/v1.0.0/schema.json",
             # "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
             # "https://stac-extensions.github.io/projection/v1.1.0/schema.json",
@@ -392,7 +392,7 @@ def create_stac_items(payload, eopf_features):
 
 
 @task(name="Update eopf assets")
-def update_eopf_assets(payload: dict) -> list[dict]:
+def update_eopf_assets(payload: dict) -> tuple[Any, Any]:
     """
     Extract EOPF metadata from S3 paths found in the payload, read all `.zattrs`
     files associated with the products, and generate corresponding STAC items.

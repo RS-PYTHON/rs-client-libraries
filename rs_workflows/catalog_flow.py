@@ -70,7 +70,7 @@ async def catalog_search(
 @task(name="Publish to catalog")
 async def publish(
     env: FlowEnvArgs,
-    target_collections: dict,
+    target_collections,
     items,
 ):
     """
@@ -84,16 +84,38 @@ async def publish(
     logger = get_run_logger()
     flow_env = FlowEnv(env)
 
+    # Normalize target_collections into a single dict
+    collections = (
+        target_collections
+        if isinstance(target_collections, dict)
+        else {k: v for d in target_collections for k, v in d.items()}
+    )
+
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
 
     with flow_env.start_span(__name__, "publish-to-catalog"):
         for item in items:
             try:
-                logger.info(item.to_dict())
-                collection = "TEST_FLOW_OUTPUTS"
-                catalog_client.add_item(collection, item)
+                # Extract product type from STAC item
+                product_type = item.properties["product:type"]
+
+                # Resolve destination collection
+                target_collection = resolve_collection(product_type, collections)
+
+                logger.info(
+                    "Writing product %s to %s",
+                    item.id,
+                    target_collection,
+                )
+
+                # Publish item to catalog
+                catalog_client.add_item(target_collection, item)
+
             except Exception as e:
-                raise RuntimeError(f"Exception while publishing: {json.dumps(item.to_dict(), indent=2)}") from e
+                # Re-raise with full item context for easier debugging
+                raise RuntimeError(
+                    f"Exception while publishing item:\n" f"{json.dumps(item.to_dict(), indent=2)}",
+                ) from e
 
     # list collections for logging
     collections = catalog_client.get_collections()
@@ -108,3 +130,33 @@ async def publish(
 async def catalog_search_task(*args, **kwargs) -> ItemCollection | None:
     """See: search"""
     return await catalog_search.fn(*args, **kwargs)
+
+
+def resolve_collection(product_type: str, collections: dict) -> str:
+    """
+    Resolve the target catalog collection for a given product type.
+
+    Lookup order:
+    1. Exact match on product_type
+    2. Wildcard fallback ("*"), if defined
+
+    The function also validates that the resolved collection_id matches
+    the product_type (case-insensitive), to catch invalid LUT definitions.
+
+    :param product_type: STAC product type (e.g. "S03MWRL0_")
+    :param collections: Mapping of product_type -> (collection_id, target_collection)
+    :return: Target collection name where the item should be published
+    :raises ValueError: If the product type cannot be resolved or LUT is inconsistent
+    """
+    # Try exact match first, then fallback to wildcard
+    collection_id, target_collection = collections.get(product_type, collections.get("*", (None, None)))
+
+    # No match found (neither exact nor wildcard)
+    if not collection_id:
+        raise ValueError(f"Product type unknown: {product_type}")
+
+    # Sanity check: product type must match collection_id
+    if product_type.casefold() != collection_id.casefold():
+        raise ValueError(f"Product type unknown: {product_type}")
+
+    return target_collection
