@@ -192,8 +192,16 @@ def test_load_store_params_from_config_invalid_json(mock_storage_config_invalid_
 @pytest.mark.parametrize(
     "processor_name, expected_logging, expected_config",
     [
-        (DprProcessor.S1L0, "/opt/dask-l0/logging_config.yaml", ["/opt/dask-l0/s1_default_configuration.yaml"]),
-        (DprProcessor.S3L0, "/opt/dask-l0/logging_config.yaml", ["/opt/dask-l0/s3_default_configuration.yaml"]),
+        (
+            DprProcessor.S1L0,
+            "/opt/dask-l0/logging_config.yaml",
+            ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"],
+        ),
+        (
+            DprProcessor.S3L0,
+            "/opt/dask-l0/logging_config.yaml",
+            ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"],
+        ),
     ],
 )
 def test_generate_payload_success(

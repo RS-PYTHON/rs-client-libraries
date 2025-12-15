@@ -627,9 +627,9 @@ def generate_payload(  # pylint: disable=unused-argument
         logging = "/opt/dask-l0/logging_config.yaml"
         match dpr_process_in.processor_name:
             case DprProcessor.S1L0:
-                config = ["/opt/dask-l0/s1_default_configuration.yaml"]
+                config = ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
             case DprProcessor.S3L0:
-                config = ["/opt/dask-l0/s3_default_configuration.yaml"]
+                config = ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
     logger.info("Building the payload")
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (story 800)
