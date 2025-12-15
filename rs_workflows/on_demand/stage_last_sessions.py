@@ -20,12 +20,13 @@ from enum import Enum
 from urllib.parse import urlencode
 
 from prefect import flow, get_run_logger, pause_flow_run, task
-from prefect.artifacts import create_link_artifact, create_markdown_artifact
+from prefect.artifacts import acreate_link_artifact, acreate_markdown_artifact
 from pydantic import BaseModel, Field
 from pystac import ItemCollection  # type: ignore
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from typing import Any
 
 
 @task(name="create result artifact")
@@ -47,7 +48,7 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
 | Duration    | {duration_str}    |
 
 """
-    await create_markdown_artifact(key="result", markdown=markdown_report, description="session staging output")
+    await acreate_markdown_artifact(key="result", markdown=markdown_report, description="session staging output")
 
     # Base Grafana URL
     base_url = "https://monitoring.ops.rs-python.eu/d/1a2758bd-a984-4dc8-9a6a-ee7694526850/2-stac-requests"
@@ -64,7 +65,7 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
 
     # Construction de l’URL encodée
     url = f"{base_url}?{urlencode(params)}"
-    await create_link_artifact(key="grafana-dashboard", link=url, description="# see session item from the catalog")
+    await acreate_link_artifact(key="grafana-dashboard", link=url, description="# see session item from the catalog")
 
 
 @task(name="Cadip session search")
@@ -167,11 +168,14 @@ async def cadip_session_stage(
         staging_client = flow_env.rs_client.get_staging_client()
 
         # Convert ItemCollection into dictionary for staging
+        cadip_dict: dict[str, Any]
         if isinstance(cadip_items, ItemCollection):
-            cadip_items = cadip_items.to_dict()
+            cadip_dict = cadip_items.to_dict()
+        else:
+            cadip_dict = {"items": cadip_items}
 
         # Trigger staging and wait for jobs to finish
-        job_all_status = staging_client.run_staging(cadip_items, catalog_cadip_collection)
+        job_all_status = staging_client.run_staging(cadip_dict, catalog_cadip_collection)
         staging_client.wait_for_jobs(
             job_all_status,
             logger,
@@ -260,7 +264,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
 
     # Build dictionary of sessions with descriptive keys
     session_list: dict[str, str] = {}
-    for item_ in session_found.items:
+    for item_ in session_found.items:  # type: ignore[attr-defined]
         key = f"📡 {item_.id} 🕒 {item_.properties['published']} 🌍 {item_.properties['sat:absolute_orbit']}"
         session_list[key] = item_.id
 
@@ -294,7 +298,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
             {session_list[selection.selected.value]}",  # type: ignore
         catalog_cadip_collection=catalog_cadip_collection,
     )
-    result_staging.result()
+    result_staging.result()  # type: ignore[unused-coroutine]
     date2 = datetime.now(timezone.utc)
-    result_artifact = create_result_artifact.submit(session_list[selection.selected.value], date2 - date1)
-    result_artifact.result()
+    result_artifact = create_result_artifact.submit(session_list[selection.selected.value], date2 - date1)  # type: ignore[attr-defined]
+    result_artifact.result()  # type: ignore[unused-coroutine]
