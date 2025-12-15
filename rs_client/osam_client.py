@@ -25,7 +25,7 @@ from rs_common.utils import get_href_service
 class BucketCredentials(BaseModel):
     """Bucket credentials, with the same field names as those returned by the osam service."""
 
-    access_key_: str
+    access_key: str
     secret_key: str
     endpoint: str
     region: str

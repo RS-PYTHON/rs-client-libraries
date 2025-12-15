@@ -47,7 +47,7 @@ local_mode: bool = False
 cluster_mode: bool = not local_mode
 
 # Current user
-owner_id: str | None = ""
+owner_id: str = ""
 
 # Prefect block names
 BLOCK_NAME_ENV_GLOBAL: str = "env-vars"
@@ -80,7 +80,7 @@ def init_global_env(new_owner_id: str | None = None):
     if new_owner_id:
         owner_id = new_owner_id
     else:
-        owner_id = os.getenv("JUPYTERHUB_USER") if cluster_mode else os.getenv("RSPY_HOST_USER")
+        owner_id = os.getenv("JUPYTERHUB_USER", "") if cluster_mode else os.getenv("RSPY_HOST_USER", "")
 
 
 # Init the global variables
@@ -134,7 +134,7 @@ async def read_apikey(optional: bool = False, save_to_env: bool = True) -> None:
 
 
 @sync_compatible
-async def update_prefect_block(block_name: str, add_values: dict = {}, remove_keys: list = []):
+async def update_prefect_block(block_name: str, add_values: dict | None = None, remove_keys: list | None = None):
     """
     Write a prefect secret block with values, or update it if it already exists.
 
@@ -143,6 +143,11 @@ async def update_prefect_block(block_name: str, add_values: dict = {}, remove_ke
         add_values: Key/values to add from the block
         remove_keys: Key/values to remove from the block
     """
+    if add_values is None:
+        add_values = {}
+    if remove_keys is None:
+        remove_keys = []
+
     with lock:
         # Try to read the block, if it exists
         try:
@@ -212,8 +217,6 @@ async def init_prefect_blocks():
         if value := os.getenv(key):
             user_env_vars[key] = value
 
-    # Call osam (object storage access manager) to get the bucket credentials for the current user
-
     # These are False by default. Save them only if they are set to True.
     for key in [
         "OTEL_PYTHON_REQUESTS_TRACE_HEADERS",
@@ -232,7 +235,7 @@ async def init_prefect_blocks():
 @sync_compatible
 async def save_bucket_credentials(
     osam_client: OsamClient | None = None,
-    obs_credentials: dict[str, BucketCredentials] = {},
+    obs_credentials: dict[str, BucketCredentials] | None = None,
 ):
     """
     Save bucket credentials in the prefect secret block that contains
@@ -245,10 +248,12 @@ async def save_bucket_credentials(
         saved in the env vars: S3_<OBS_ID>_ACCESSKEY, S3_<OBS_ID>_SECRETKEY, S3_<OBS_ID>_ENDPOINT, S3_<OBS_ID>_REGION
     """
     env_vars = {}
+    if obs_credentials is None:
+        obs_credentials = {}
 
     # Read the user's credentials from osam
     if osam_client:
-        credentials = osam_client.get_credentials()
+        credentials = await osam_client.get_credentials()
         env_vars.update(
             {
                 "S3_ACCESSKEY": credentials.access_key,
@@ -273,9 +278,12 @@ async def save_bucket_credentials(
     # Update the prefect block
     await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), env_vars)
 
+    # Save the env vars
+    os.environ.update(env_vars)
+
 
 @sync_compatible
-async def remove_bucket_credentials(obs_ids: list[str]):
+async def remove_bucket_credentials(obs_ids: list[str] | str):
     """
     Remove bucket credentials from the prefect secret block that contains
     the env variables for the current user/owner_id.
@@ -284,13 +292,20 @@ async def remove_bucket_credentials(obs_ids: list[str]):
         obs_ids: "<OBS_ID>" keys to remove from the env vars:
         S3_<OBS_ID>_ACCESSKEY, S3_<OBS_ID>_SECRETKEY, S3_<OBS_ID>_ENDPOINT, S3_<OBS_ID>_REGION
     """
+    # Convert string to list
+    if isinstance(obs_ids, str):
+        obs_ids = [obs_ids]
+
     env_vars = []
     for key in obs_ids:
         key = key.upper()
         env_vars += [f"S3_{key}_ACCESSKEY", f"S3_{key}_SECRETKEY", f"S3_{key}_ENDPOINT", f"S3_{key}_REGION"]
 
     # Update the prefect block
-    await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), remove_values=env_vars)
+    await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), remove_keys=env_vars)
+
+    # NOTE: I'm not sure we should remove the env vars from os.environ, it's risky because if the env vars
+    # are also defined in other blocks, then maybe we don't want to remove them from os.environ.
 
 
 @sync_compatible
