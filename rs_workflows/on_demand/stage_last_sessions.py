@@ -17,6 +17,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from enum import Enum
+from typing import Any
 from urllib.parse import urlencode
 
 from prefect import flow, get_run_logger, pause_flow_run, task
@@ -26,7 +27,6 @@ from pystac import ItemCollection  # type: ignore
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from typing import Any
 
 
 @task(name="create result artifact")
@@ -300,5 +300,8 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
     )
     result_staging.result()  # type: ignore[unused-coroutine]
     date2 = datetime.now(timezone.utc)
-    result_artifact = create_result_artifact.submit(session_list[selection.selected.value], date2 - date1)  # type: ignore[attr-defined]
+    result_artifact = create_result_artifact.submit(
+        session_list[selection.selected.value],
+        date2 - date1,
+    )  # type: ignore[attr-defined]
     result_artifact.result()  # type: ignore[unused-coroutine]
