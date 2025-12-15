@@ -313,12 +313,12 @@ class StubStacIO:  # pylint: disable=too-few-public-methods
         self.last_params = parameters or {}
         return {
             "type": "FeatureCollection",
-            "stac_version": "1.0.0",
+            "stac_version": "1.1.0",
             "features": [
                 {
                     "type": "Feature",
                     "id": "x",
-                    "stac_version": "1.0.0",
+                    "stac_version": "1.1.0",
                     "stac_extensions": [],
                     "properties": {"datetime": "2020-01-01T00:00:00Z"},
                     "geometry": None,

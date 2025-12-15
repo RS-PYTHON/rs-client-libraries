@@ -94,7 +94,7 @@ COLLECTION_RESPONSE = {
     },
     "license": "public-domain",
     "description": "Some description",
-    "stac_version": "1.0.0",
+    "stac_version": "1.1.0",
 }
 
 ITEM_RESPONSE = {
@@ -400,7 +400,7 @@ def mocked_stac_catalog_search_inside_collection():
                         "published": "2024-07-09T07:12:45.662515Z",
                         "orientation": "nadir",
                     },
-                    "stac_version": "1.0.0",
+                    "stac_version": "1.1.0",
                     "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
                 },
                 {
@@ -451,7 +451,7 @@ def mocked_stac_catalog_search_inside_collection():
                         "published": "2024-07-09T07:12:39.570534Z",
                         "orientation": "nadir",
                     },
-                    "stac_version": "1.0.0",
+                    "stac_version": "1.1.0",
                     "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
                 },
             ],
