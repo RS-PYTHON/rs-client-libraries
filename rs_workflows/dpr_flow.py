@@ -73,7 +73,7 @@ async def run_processor(
         dpr_job = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
 
         logger.info(f"DPR processor output {dpr_job}")
-        eopf_stac_items, eopf_types = update_eopf_assets(payload)
+        eopf_stac_items, eopf_types = update_eopf_assets(processor.value, payload)
         # Wait for the job to finish
         record_performance_indicators(
             stop_date=datetime.datetime.now(),

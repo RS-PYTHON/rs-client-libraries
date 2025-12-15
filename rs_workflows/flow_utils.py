@@ -296,7 +296,7 @@ def s3_download_file_sync(
     return to_path
 
 
-def create_stac_items(payload, eopf_features):
+def create_stac_items(processor, payload, eopf_features):
     """
     Create a list of STAC Items from EOPF features and processing payload metadata.
 
@@ -378,8 +378,7 @@ def create_stac_items(payload, eopf_features):
 
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
-    # eopf_origin_datetimes = compute_eopf_origin_datetimes(payload)  # TODO
-    eopf_origin_datetimes = "datetimelateraddedhere"  # TODO
+    eopf_origin_datetimes = compute_eopf_origin_datetimes(processor, payload)  # TODO
 
     items = []
     for feature_dict in eopf_features:
@@ -392,7 +391,7 @@ def create_stac_items(payload, eopf_features):
 
 
 @task(name="Update eopf assets")
-def update_eopf_assets(payload: dict) -> tuple[Any, Any]:
+def update_eopf_assets(processor: str, payload: dict) -> tuple[Any, Any]:
     """
     Extract EOPF metadata from S3 paths found in the payload, read all `.zattrs`
     files associated with the products, and generate corresponding STAC items.
@@ -441,7 +440,15 @@ def update_eopf_assets(payload: dict) -> tuple[Any, Any]:
     logger.debug(f"EOPF discovery metadata extracted: {eopf_items}")
 
     # Build STAC items
-    stac_items = create_stac_items(payload, eopf_items)
+    stac_items = create_stac_items(processor, payload, eopf_items)
     logger.info(f"Created {len(stac_items)} STAC items.")
 
     return stac_items, eopf_types
+
+
+def compute_eopf_origin_datetimes(processor, payload):
+    """get the eopf:origin_datetime value(s) from the input products in the payload."""
+    if processor == "mockup":
+        return "2023-01-01T00:00:00Z"
+    _ = payload
+    raise NotImplementedError(f"Processor {processor} not supported for EOPF origin datetime computation.")
