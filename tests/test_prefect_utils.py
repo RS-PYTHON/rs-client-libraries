@@ -25,6 +25,7 @@ from prefect.blocks.system import Secret
 from prefect.exceptions import ObjectNotFound
 from prefect_aws import S3Bucket
 
+from rs_client.osam_client import BucketCredentials
 from rs_common import prefect_utils
 
 OWNER_ID = "OWNER_ID"
@@ -82,17 +83,15 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
         "RSPY_LOCAL_MODE": "1" if local_mode else "0",
         "PREFECT_BUCKET_NAME": "PREFECT_BUCKET_NAME",
         "PREFECT_BUCKET_FOLDER": "PREFECT_BUCKET_FOLDER",
-        "S3_ACCESSKEY": "S3_ACCESSKEY",
-        "S3_SECRETKEY": "S3_SECRETKEY",
-        "S3_REGION": "S3_REGION",
-        "S3_ENDPOINT": "S3_ENDPOINT",
-        "LOCAL_DASK_USERNAME": "LOCAL_DASK_USERNAME",
-        "LOCAL_DASK_PASSWORD": "LOCAL_DASK_PASSWORD",
         "POSTGRES_USER": "test_user",
         "POSTGRES_PASSWORD": "test_pass",
         "POSTGRES_HOST": "test_host",
         "POSTGRES_PORT": "5432",
         "POSTGRES_PI_DB": "test_db",
+        "TEMPO_ENDPOINT": "TEMPO_ENDPOINT",
+        "DASK_GATEWAY_ADDRESS": "DASK_GATEWAY_ADDRESS",
+        "LOCAL_DASK_USERNAME": "LOCAL_DASK_USERNAME",
+        "LOCAL_DASK_PASSWORD": "LOCAL_DASK_PASSWORD",
     }
 
     # In local mode, they must be set in the env
@@ -100,7 +99,7 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
         for key, value in env_global.items():
             monkeypatch.setenv(key, value)
 
-    # In global mode, they must be set in a prefect block
+    # In cluster mode, they must be set in a prefect block
     else:
         await Secret(value=env_global).save(  # type: ignore[arg-type]
             prefect_utils.BLOCK_NAME_ENV_GLOBAL,
@@ -108,22 +107,71 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
         )
 
     # Any other env var for the current user
-    env_user = {"TEMPO_ENDPOINT": "TEMPO_ENDPOINT", "RSPY_APIKEY": "RSPY_APIKEY"}
+    env_user = {
+        "RSPY_APIKEY": "RSPY_APIKEY",
+    }
     for key, value in env_user.items():
         monkeypatch.setenv(key, value)
+
+    env_user.update(
+        {
+            # Default bucket credentials
+            "S3_ACCESSKEY": "ak0",
+            "S3_SECRETKEY": "sk0",
+            "S3_ENDPOINT": "endpoint0",
+            "S3_REGION": "region0",
+            # Add extra bucket credentials
+            "S3_OBS1_ACCESSKEY": "ak1",
+            "S3_OBS1_SECRETKEY": "sk1",
+            "S3_OBS1_ENDPOINT": "endpoint1",
+            "S3_OBS1_REGION": "region1",
+            # Add extra bucket credentials
+            "S3_OBS2_ACCESSKEY": "ak2",
+            "S3_OBS2_SECRETKEY": "sk2",
+            "S3_OBS2_ENDPOINT": "endpoint2",
+            "S3_OBS2_REGION": "region2",
+        },
+    )
 
     # Call the function
     await prefect_utils.init_prefect_blocks()
 
+    async def mock_get_credentials() -> BucketCredentials:
+        """Mock the osam get_credenitals() method"""
+        return BucketCredentials(access_key="ak0", secret_key="sk0", endpoint="endpoint0", region="region0")
+
+    osam_client = Mock()
+    osam_client.get_credentials = mock_get_credentials
+
+    # Add user's credentials
+    await prefect_utils.save_bucket_credentials(
+        osam_client,
+        {
+            "obs1": BucketCredentials(access_key="ak1", secret_key="sk1", endpoint="endpoint1", region="region1"),
+            "obs2": BucketCredentials(access_key="ak2", secret_key="sk2", endpoint="endpoint2", region="region2"),
+        },
+    )
+
     # Check that the blocks were written with the right values
-    env_global2 = (await Secret.load(prefect_utils.BLOCK_NAME_ENV_GLOBAL)).get()
-    env_user2 = (await Secret.load(prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID))).get()
-    assert env_global == env_global2
-    assert env_user == env_user2
+    user_block_name = prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID)
+    assert env_global == (await Secret.load(prefect_utils.BLOCK_NAME_ENV_GLOBAL)).get()
+    assert env_user == (await Secret.load(user_block_name)).get()
 
     # Check that the values were save as env vars
     for key, value in {**env_global, **env_user}.items():
         assert os.environ[key] == value
+
+    # If we call the block init a second time, nothing changes
+    await prefect_utils.init_prefect_blocks()
+    assert env_global == (await Secret.load(prefect_utils.BLOCK_NAME_ENV_GLOBAL)).get()
+    assert env_user == (await Secret.load(user_block_name)).get()
+
+    # Remove credentials and check that they are missing from the user block
+    await prefect_utils.remove_bucket_credentials("obs2")
+    for key in list(env_user.keys()):
+        if "OBS2" in key:
+            env_user.pop(key)
+    assert env_user == (await Secret.load(user_block_name)).get()
 
 
 @pytest.mark.asyncio
