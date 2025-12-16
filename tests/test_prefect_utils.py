@@ -130,11 +130,6 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
             "S3_OBS2_SECRETKEY": "sk2",
             "S3_OBS2_ENDPOINT": "endpoint2",
             "S3_OBS2_REGION": "region2",
-            # Add extra bucket credentials
-            "S3_OBS3_ACCESSKEY": "ak3",
-            "S3_OBS3_SECRETKEY": "sk3",
-            "S3_OBS3_ENDPOINT": "endpoint3",
-            "S3_OBS3_REGION": "region3",
         },
     )
 
@@ -154,7 +149,6 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
         {
             "obs1": BucketCredentials(access_key="ak1", secret_key="sk1", endpoint="endpoint1", region="region1"),
             "obs2": BucketCredentials(access_key="ak2", secret_key="sk2", endpoint="endpoint2", region="region2"),
-            "obs3": BucketCredentials(access_key="ak3", secret_key="sk3", endpoint="endpoint3", region="region3"),
         },
     )
 
@@ -173,9 +167,9 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
     assert env_user == (await Secret.load(user_block_name)).get()
 
     # Remove credentials and check that they are missing from the user block
-    await prefect_utils.remove_bucket_credentials(["obs2", "obs3"])
+    await prefect_utils.remove_bucket_credentials("obs2")
     for key in list(env_user.keys()):
-        if ("OBS2" in key) or ("OBS3" in key):
+        if "OBS2" in key:
             env_user.pop(key)
     assert env_user == (await Secret.load(user_block_name)).get()
 
