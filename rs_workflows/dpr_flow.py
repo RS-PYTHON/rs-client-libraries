@@ -40,6 +40,7 @@ async def run_processor(
     payload: dict,
     cluster_info: ClusterInfo,
     s3_payload_run: str,
+    input_products: list[dict],
 ) -> list[dict]:
     """
     Run the DPR processor.
@@ -73,7 +74,7 @@ async def run_processor(
         dpr_job = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
 
         logger.info(f"DPR processor output {dpr_job}")
-        eopf_stac_items, eopf_types = update_eopf_assets(processor.value, payload)
+        eopf_stac_items, eopf_types = update_eopf_assets(processor.value, input_products, payload)
         # Wait for the job to finish
         record_performance_indicators(
             stop_date=datetime.datetime.now(),

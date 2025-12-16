@@ -193,6 +193,7 @@ async def dpr_processing(
             generated_payload_res_as_dict,
             cluster_info,
             dpr_input.s3_payload_file,
+            dpr_input.input_products,
             wait_for=[task_future],
         )
         processed_items.result()

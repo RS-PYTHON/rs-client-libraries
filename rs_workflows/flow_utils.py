@@ -296,7 +296,7 @@ def s3_download_file_sync(
     return to_path
 
 
-def create_stac_items(processor, payload, eopf_features):
+def create_stac_items(processor, payload, input_products, eopf_features):
     """
     Create a list of STAC Items from EOPF features and processing payload metadata.
 
@@ -378,7 +378,7 @@ def create_stac_items(processor, payload, eopf_features):
 
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
-    eopf_origin_datetimes = compute_eopf_origin_datetimes(processor, payload)  # TODO
+    eopf_origin_datetimes = compute_eopf_origin_datetimes(processor, input_products, payload)  # TODO
 
     items = []
     for feature_dict in eopf_features:
@@ -391,7 +391,7 @@ def create_stac_items(processor, payload, eopf_features):
 
 
 @task(name="Update eopf assets")
-def update_eopf_assets(processor: str, payload: dict) -> tuple[Any, Any]:
+def update_eopf_assets(processor: str, input_products: list[dict], payload: dict) -> tuple[Any, Any]:
     """
     Extract EOPF metadata from S3 paths found in the payload, read all `.zattrs`
     files associated with the products, and generate corresponding STAC items.
@@ -413,10 +413,9 @@ def update_eopf_assets(processor: str, payload: dict) -> tuple[Any, Any]:
             - eopf_types: A list of extracted product types (strings).
     """
     logger = get_run_logger()
-
     logger.info("Starting EOPF asset update.")
     logger.debug(f"Payload received: {payload}")
-
+    logger.info("Input products: %s", input_products)
     # Determine path
     paths = {prod["path"] for prod in payload["I/O"]["output_products"]}
     path = next(iter(paths))
@@ -440,13 +439,13 @@ def update_eopf_assets(processor: str, payload: dict) -> tuple[Any, Any]:
     logger.debug(f"EOPF discovery metadata extracted: {eopf_items}")
 
     # Build STAC items
-    stac_items = create_stac_items(processor, payload, eopf_items)
+    stac_items = create_stac_items(processor, payload, input_products, eopf_items)
     logger.info(f"Created {len(stac_items)} STAC items.")
 
     return stac_items, eopf_types
 
 
-def compute_eopf_origin_datetimes(processor, payload):
+def compute_eopf_origin_datetimes(processor, input_products, payload):
     """get the eopf:origin_datetime value(s) from the input products in the payload."""
     if processor == "mockup":
         return "2023-01-01T00:00:00Z"
