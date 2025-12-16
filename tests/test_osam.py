@@ -16,15 +16,11 @@
 
 
 import getpass
-import tempfile
-from unittest.mock import AsyncMock
 
-import anyio
 import pytest
 import responses
 from starlette import status
 
-from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_client.osam_client import OsamClient
 from rs_client.rs_client import RsClient
 
@@ -33,7 +29,7 @@ OWNER_ID = getpass.getuser()
 
 
 @pytest.fixture(name="osam_client")
-def get_osam_client() -> DprClient:
+def get_osam_client() -> OsamClient:
     """Create an oam client"""
     client = RsClient(
         rs_server_href=DUMMY_HREF,
