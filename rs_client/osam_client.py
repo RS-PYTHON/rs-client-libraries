@@ -14,6 +14,7 @@
 
 """OsamClient class implementation."""
 
+import asyncio
 import logging
 
 from pydantic import BaseModel
@@ -70,6 +71,10 @@ class OsamClient(RsClient):
 
     async def get_credentials(self, timeout: int = TIMEOUT) -> BucketCredentials:
         """Get user credentials from cloud provider."""
-        response = self.http_session.get(f"{self.href_service}/storage/account/credentials", timeout=timeout)
+        response = await asyncio.to_thread(
+            self.http_session.get,
+            f"{self.href_service}/storage/account/credentials",
+            timeout=timeout,
+        )
         response.raise_for_status()
         return BucketCredentials.model_validate(response.json())
