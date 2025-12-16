@@ -688,18 +688,13 @@ def mock_dpr_process_in():
 def mock_store_params():
     """Fixture that mocks the store params"""
     return StoreParams(
-        storage_options=[
-            # StoreOptionsWrapper(
-            # storage_options=[
+        storage_options=
             StorageOptions(
                 name="s3",
                 key="key",
                 secret="secret",  # nosec B106: test-only fake secret
                 client_kwargs={"endpoint_url": "http://localhost", "region_name": "test"},
-            ),
-            # ],
-            # ),
-        ],
+            )
     )
 
 

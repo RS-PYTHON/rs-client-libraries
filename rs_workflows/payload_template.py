@@ -118,7 +118,7 @@ class StoreParams(BasePayloadModel):
     s3_secret_alias: str | None = None
     # Or a list of storage options
     # options: list[StoreOptionsWrapper] | None = None
-    storage_options: list[StorageOptions] | None = None
+    storage_options: StorageOptions | None = None
     # Or a regex + multiplicity
     regex: str | None = None
     multiplicity: str | int | None = None

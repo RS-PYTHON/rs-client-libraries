@@ -157,15 +157,13 @@ def test_load_store_params_from_config_valid(mock_storage_config_json):
 
     assert isinstance(result, StoreParams)
     assert result.storage_options is not None
-    assert len(result.storage_options) == 1
     # Note: we had to add the pylint disable because it seems the pylint is not
-    # smart enough to detect the appropiate types for pydantic 2
-    s3_opt = result.storage_options[0]  # pylint: disable=unsubscriptable-object
-    assert isinstance(s3_opt, StorageOptions)
-    assert s3_opt.name == "s3"
+    # smart enough to detect the appropiate types for pydantic 2    
+    assert isinstance(result.storage_options, StorageOptions)
+    assert result.storage_options.name == "s3"
     # Tell mypy: client_kwargs is not None
-    assert s3_opt.client_kwargs is not None
-    assert s3_opt.client_kwargs["endpoint_url"] == "https://s3.tests.moc"
+    assert result.storage_options.client_kwargs is not None
+    assert result.storage_options.client_kwargs["endpoint_url"] == "https://s3.tests.moc"
 
 
 def test_load_store_params_from_config_missing_file():
@@ -199,7 +197,7 @@ def test_generate_payload_success(
     Test successful end-to-end payload generation for a normal processor.
     Mocks store params and get_io; verifies structure and logging.
     """
-    mock_store_params = StoreParams(storage_options=[])
+    mock_store_params = StoreParams(storage_options=None)
     mocker.patch(
         "rs_workflows.payload_generator.load_store_params_from_config",
         return_value=mock_store_params,
@@ -232,7 +230,7 @@ def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_e
     """
     Test that a unit missing 'name' raises ValueError during payload generation.
     """
-    mock_store_params = StoreParams(storage_options=[])
+    mock_store_params = StoreParams(storage_options=None)
     mocker.patch(
         "rs_workflows.payload_generator.load_store_params_from_config",
         return_value=mock_store_params,
