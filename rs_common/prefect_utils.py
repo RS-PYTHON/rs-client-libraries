@@ -51,7 +51,7 @@ owner_id: str = ""
 
 # Prefect block names
 BLOCK_NAME_ENV_GLOBAL: str = "env-vars"
-BLOCK_NAME_ENV_USER: str = "env-vars-{0}"  # env variables for the current user/owner_id
+BLOCK_NAME_ENV_USER: str = "env-vars-{0}"  # env variables for the user/owner_id
 BLOCK_NAME_SHARE_BUCKET_GLOBAL: str = "share-bucket"
 BLOCK_NAME_SHARE_BUCKET_USER: str = "share-bucket-{0}"  # share bucket for the user/owner_id
 
