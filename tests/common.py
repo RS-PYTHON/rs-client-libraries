@@ -51,7 +51,7 @@ def json_landing_page(href: str, user_collection: str, conforms_to=True):
         "id": "stac-fastapi",
         "title": "stac-fastapi",
         "description": "stac-fastapi",
-        "stac_version": "1.0.0",
+        "stac_version": "1.1.0",
         **conforms_to_dict,
         "links": [
             {"rel": "self", "type": "application/json", "href": f"{href}/catalog/"},

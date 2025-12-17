@@ -302,3 +302,13 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         )
 
         return DprClient(self.rs_server_href, self.rs_server_api_key, None, self.logger)
+
+    def get_osam_client(self) -> "OsamClient":  # type: ignore # noqa: F821
+        """
+        Return an instance of the child class OsamClient, with the same attributes as this "self" instance.
+        """
+        from rs_client.osam_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            OsamClient,
+        )
+
+        return OsamClient(self.rs_server_href, self.rs_server_api_key, self.logger)
