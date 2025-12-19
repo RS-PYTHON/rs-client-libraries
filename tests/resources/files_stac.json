@@ -6,7 +6,7 @@
         "numberReturned": 2,
         "features": [
             {
-                "stac_version": "1.0.0",
+                "stac_version": "1.1.0",
                 "stac_extensions": [
                 "https://stac-extensions.github.io/file/v2.1.0/schema.json"
                 ],
@@ -28,7 +28,7 @@
                 }
             },
             {
-                "stac_version": "1.0.0",
+                "stac_version": "1.1.0",
                 "stac_extensions": [
                 "https://stac-extensions.github.io/file/v2.1.0/schema.json"
                 ],
@@ -59,7 +59,7 @@
         "numberReturned": 2,
         "features": [
             {
-                "stac_version": "1.0.0",
+                "stac_version": "1.1.0",
                 "stac_extensions": [
                   "https://stac-extensions.github.io/file/v2.1.0/schema.json"
                 ],
@@ -85,7 +85,7 @@
                 }
             },
             {
-                "stac_version": "1.0.0",
+                "stac_version": "1.1.0",
                 "stac_extensions": [
                   "https://stac-extensions.github.io/file/v2.1.0/schema.json"
                 ],

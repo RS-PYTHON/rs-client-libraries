@@ -54,7 +54,7 @@
                 "end_datetime": "2021-07-16T00:00:00.000Z",
                 "start_datetime": "2021-07-16T00:00:00.000Z"
             },
-            "stac_version": "1.0.0",
+            "stac_version": "1.1.0",
             "stac_extensions": [
                 "https://stac-extensions.github.io/file/v2.1.0/schema.json",
                 "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
@@ -113,7 +113,7 @@
                 "end_datetime": "2020-04-16T00:00:00.000Z",
                 "start_datetime": "2020-04-16T00:00:00.000Z"
             },
-            "stac_version": "1.0.0",
+            "stac_version": "1.1.0",
             "stac_extensions": [
                 "https://stac-extensions.github.io/file/v2.1.0/schema.json",
                 "https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json",
