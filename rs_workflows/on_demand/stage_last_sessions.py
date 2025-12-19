@@ -52,17 +52,17 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
     # Base Grafana URL
     base_url = "https://monitoring.ops.rs-python.eu/d/1a2758bd-a984-4dc8-9a6a-ee7694526850/2-stac-requests"
 
-    # Calcul des bornes temporelles
+    # Calculate start and end datetimes
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(hours=3)
 
-    # Format ISO 8601 avec millisecondes et suffixe Z
+    # ISO 8601 formatting with milliseconds and Z suffix
     def to_iso_z(dt: datetime) -> str:
         return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
     params = {"from": to_iso_z(start_time), "to": to_iso_z(end_time)}
 
-    # Construction de l’URL encodée
+    # Build the encoded URL
     url = f"{base_url}?{urlencode(params)}"
     await acreate_link_artifact(key="grafana-dashboard", link=url, description="# see session item from the catalog")
 
