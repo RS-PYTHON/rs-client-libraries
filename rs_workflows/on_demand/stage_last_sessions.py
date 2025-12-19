@@ -17,13 +17,12 @@
 import json
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any
 from urllib.parse import urlencode
 
 from prefect import flow, get_run_logger, pause_flow_run, task
 from prefect.artifacts import acreate_link_artifact, acreate_markdown_artifact
 from pydantic import BaseModel, Field
-from pystac import ItemCollection  # type: ignore
+from pystac import ItemCollection
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
@@ -53,17 +52,17 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
     # Base Grafana URL
     base_url = "https://monitoring.ops.rs-python.eu/d/1a2758bd-a984-4dc8-9a6a-ee7694526850/2-stac-requests"
 
-    # Calcul des bornes temporelles
+    # Calculate start and end datetimes
     end_time = datetime.now(timezone.utc)
     start_time = end_time - timedelta(hours=3)
 
-    # Format ISO 8601 avec millisecondes et suffixe Z
+    # ISO 8601 formatting with milliseconds and Z suffix
     def to_iso_z(dt: datetime) -> str:
         return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
     params = {"from": to_iso_z(start_time), "to": to_iso_z(end_time)}
 
-    # Construction de l’URL encodée
+    # Build the encoded URL
     url = f"{base_url}?{urlencode(params)}"
     await acreate_link_artifact(key="grafana-dashboard", link=url, description="# see session item from the catalog")
 
@@ -140,7 +139,7 @@ async def cadip_session_search(
 @task(name="Cadip session stage")
 async def cadip_session_stage(
     env: FlowEnvArgs,
-    cadip_items: ItemCollection | str,
+    cadip_search_url: str,
     catalog_cadip_collection: str,
 ) -> None:
     """
@@ -167,15 +166,8 @@ async def cadip_session_stage(
         # Get staging client from environment
         staging_client = flow_env.rs_client.get_staging_client()
 
-        # Convert ItemCollection into dictionary for staging
-        cadip_dict: dict[str, Any]
-        if isinstance(cadip_items, ItemCollection):
-            cadip_dict = cadip_items.to_dict()
-        else:
-            cadip_dict = {"items": cadip_items}
-
         # Trigger staging and wait for jobs to finish
-        job_all_status = staging_client.run_staging(cadip_dict, catalog_cadip_collection)
+        job_all_status = staging_client.run_staging(cadip_search_url, catalog_cadip_collection)
         staging_client.wait_for_jobs(
             job_all_status,
             logger,
@@ -201,7 +193,7 @@ def make_session_enum(values: dict[str, str]) -> Enum:
         input dictionary keys.
 
     """
-    return Enum("session_enum", {v: k for k, v in values.items()})  # type: ignore
+    return Enum("session_enum", {v: k for k, v in values.items()})
 
 
 class CadipCollections(str, Enum):
@@ -237,71 +229,78 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
     Returns:
         None
     """
-    logger = get_run_logger()
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
+    with flow_env.start_span(__name__, "stage_selected_session"):
+        logger = get_run_logger()
 
-    # Current time in UTC
-    end_datetime: datetime = datetime.now(timezone.utc)
+        # Current time in UTC
+        end_datetime: datetime = datetime.now(timezone.utc)
 
-    # Go back 10 hours
-    start_datetime: datetime = end_datetime - timedelta(hours=10)
+        # Go back 10 hours
+        start_datetime: datetime = end_datetime - timedelta(hours=10)
 
-    # Format timestamps in ISO 8601 with Z suffix
-    start_str = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    end_str = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        # Format timestamps in ISO 8601 with Z suffix
+        start_str = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        end_str = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
-    # Search for CADIP sessions in the given time window
-    session_found = await cadip_session_search(
-        FlowEnvArgs(owner_id=owner_identifier),
-        cadip_collection_identifier=cadip_collection,
-        start_datetime=start_str,
-        end_datetime=end_str,
-    )
+        # Search for CADIP sessions in the given time window
+        session_found = cadip_session_search.submit(
+            flow_env.serialize(),
+            cadip_collection_identifier=cadip_collection,
+            start_datetime=start_str,
+            end_datetime=end_str,
+        ).result()
 
-    if not session_found:
-        raise ValueError(
-            f"No Cadip session found for start_datetime={start_datetime!r} and end_datetime={end_datetime!r}",
+        if not session_found:
+            raise ValueError(
+                f"No Cadip session found for start_datetime={start_datetime!r} and end_datetime={end_datetime!r}",
+            )
+
+        # Build dictionary of sessions with descriptive keys
+        session_list: dict[str, str] = {}
+        for item_ in session_found.items:  # type: ignore[attr-defined]
+            key = f"📡 {item_.id} 🕒 {item_.properties['published']} 🌍 {item_.properties['sat:absolute_orbit']}"
+            session_list[key] = item_.id
+
+        # Generate Enum dynamically from session list
+        session_enum = make_session_enum(session_list)
+
+        # Pydantic model for Prefect pause input
+        class SessionSelection(BaseModel):
+            """
+
+            Args:
+                BaseModel (_type_): _description_
+            """
+
+            selected: session_enum = Field(title="Session to stage")  # type: ignore
+
+        # Pause Prefect flow to let user select a session
+        selection = await pause_flow_run(wait_for_input=SessionSelection)
+
+        selected_session: str = session_list[selection.selected.value]  # type: ignore
+        logger.info(f"Internal identifier: {selected_session}")
+
+        # Build catalog collection name based on CADIP collection
+        sat = cadip_collection[1]
+        catalog_cadip_collection = f"s0{sat}-cadip-session"
+
+        # URL to search the STAC ItemCollection
+        cadip_client = flow_env.rs_client.get_cadip_client()
+        cadip_search_url = f"{cadip_client.href_service}/search?ids={selected_session}"
+
+        # Stage the selected session
+        date1 = datetime.now(timezone.utc)
+        result_staging = cadip_session_stage.submit(
+            flow_env.serialize(),
+            cadip_search_url=cadip_search_url,
+            catalog_cadip_collection=catalog_cadip_collection,
         )
-
-    # Build dictionary of sessions with descriptive keys
-    session_list: dict[str, str] = {}
-    for item_ in session_found.items:  # type: ignore[attr-defined]
-        key = f"📡 {item_.id} 🕒 {item_.properties['published']} 🌍 {item_.properties['sat:absolute_orbit']}"
-        session_list[key] = item_.id
-
-    # Generate Enum dynamically from session list
-    session_enum = make_session_enum(session_list)
-
-    # Pydantic model for Prefect pause input
-    class SessionSelection(BaseModel):
-        """
-
-        Args:
-            BaseModel (_type_): _description_
-        """
-
-        selected: session_enum = Field(title="Session to stage")  # type: ignore
-
-    # Pause Prefect flow to let user select a session
-    selection = await pause_flow_run(wait_for_input=SessionSelection)
-
-    logger.info(f"Internal identifier: {session_list[selection.selected.value]}")  # type: ignore
-
-    # Build catalog collection name based on CADIP collection
-    sat = cadip_collection[1]
-    catalog_cadip_collection = f"s0{sat}-cadip-session"
-
-    # Stage the selected session
-    date1 = datetime.now(timezone.utc)
-    result_staging = cadip_session_stage.submit(
-        FlowEnvArgs(owner_id=owner_identifier),
-        cadip_items=f"https://rspy.ops.rs-python.eu/cadip/search?ids=\
-            {session_list[selection.selected.value]}",  # type: ignore
-        catalog_cadip_collection=catalog_cadip_collection,
-    )
-    result_staging.result()  # type: ignore[unused-coroutine]
-    date2 = datetime.now(timezone.utc)
-    result_artifact = create_result_artifact.submit(
-        session_list[selection.selected.value],  # type: ignore[attr-defined]
-        date2 - date1,
-    )
-    result_artifact.result()  # type: ignore[unused-coroutine]
+        result_staging.result()  # type: ignore[unused-coroutine]
+        date2 = datetime.now(timezone.utc)
+        result_artifact = create_result_artifact.submit(
+            selected_session,
+            date2 - date1,
+        )
+        result_artifact.result()  # type: ignore[unused-coroutine]
