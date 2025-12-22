@@ -161,7 +161,7 @@ async def dpr_processing(
         generated_payload_res = task_future.result()
         # create the generated payload as a dictionary, as it will be used for
         # both payload file generation and dpr processor execution
-        generated_payload_res_as_dict = generated_payload_res.dump()
+        generated_payload_res_as_dict = generated_payload_res.dump(False)
         # create the YAML string first (synchronous). This will be used for writing both the artifact as well
         # as the tmp file
         # md = "# Payload file\n\n```json\n" + json.dumps(generated_payload_res_as_dict, indent=2) + "\n```"
@@ -173,7 +173,10 @@ async def dpr_processing(
             markdown=pretty_markdown,
             description="DPR Payload file",
         )
-
+        
+        
+        generated_payload_res_as_dict = generated_payload_res.dump(True)
+        yaml_str = yaml.dump(generated_payload_res_as_dict, default_flow_style=False, sort_keys=False)
         # upload the config payload file to S3
         tmp_dir = std_tempfile.gettempdir()
         tmp_file_path = os.path.join(tmp_dir, f"dpr_payload_{datetime.datetime.now().timestamp()}.yaml")

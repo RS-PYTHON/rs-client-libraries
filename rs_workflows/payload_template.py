@@ -22,6 +22,7 @@ from typing import cast
 
 from pydantic import (  # , Configdict
     BaseModel,
+    SecretStr,
     ConfigDict,
     Field,
     field_validator,
@@ -84,13 +85,17 @@ class BasePayloadModel(BaseModel):
 
         return values
 
-    def dump(self, **kwargs):
+    def dump(self, reveal_secrets, **kwargs):
         """Custom dump that:
         - skips None fields by default.
         - skips all unset
         - use the alias for fields by default
         """
-        return self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True, **kwargs)
+        return self.model_dump(by_alias=True, 
+                               exclude_none=True, 
+                               exclude_unset=True, 
+                               serialize_as_any=reveal_secrets,
+                               **kwargs)
 
 
 # Utility / Common classes
@@ -105,10 +110,12 @@ class StorageOptions(BasePayloadModel):
     client_kwargs: dict[str, str] | None = None
 
 
-# class StoreOptionsWrapper(BasePayloadModel):
-#     """Wrapper for a list of storage options"""
+class StoragePath(BasePayloadModel):
+    """Wrapper for a list of storage options"""
 
-#     storage_options: list[StorageOptions]
+    name: str
+    opening_mode: str | None = Field(default="CREATE_OVERWRITE")
+    relative_path: str
 
 
 class StoreParams(BasePayloadModel):
@@ -116,9 +123,10 @@ class StoreParams(BasePayloadModel):
 
     # Either a simple S3 secret alias
     s3_secret_alias: str | None = None
-    # Or a list of storage options
-    # options: list[StoreOptionsWrapper] | None = None
+    # Or a storage options used for s3
     storage_options: StorageOptions | None = None
+    # Or a disk path
+    storage_path: StoragePath | None = None
     # Or a regex + multiplicity
     regex: str | None = None
     multiplicity: str | int | None = None
