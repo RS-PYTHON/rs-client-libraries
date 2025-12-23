@@ -74,7 +74,7 @@ def test_apikey_security(mocker):
 
     # Check the apikey_security result
     assert rs_client.apikey_iam_roles == initial_response["iam_roles"]
-    assert rs_client.apikey_config == initial_response["config"]
+    assert rs_client.attributes == initial_response["config"]
     assert rs_client.apikey_user_login == initial_response["user_login"]
 
     # Check that the owner id is taken from the apikey user login
@@ -92,13 +92,13 @@ def test_apikey_security(mocker):
     # Still the initial response !
     for _ in range(100):
         assert rs_client.apikey_iam_roles == initial_response["iam_roles"]
-        assert rs_client.apikey_config == initial_response["config"]
+        assert rs_client.attributes == initial_response["config"]
         assert rs_client.apikey_user_login == initial_response["user_login"]
 
     # We have to clear the cache to obtain the modified response
     RsClient.apikey_security_cache.clear()
     assert rs_client.apikey_iam_roles == modified_response["iam_roles"]
-    assert rs_client.apikey_config == modified_response["config"]
+    assert rs_client.attributes == modified_response["config"]
     assert rs_client.apikey_user_login == modified_response["user_login"]
 
 
