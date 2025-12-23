@@ -215,8 +215,13 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         return self.apikey_security().iam_roles
 
     @property
-    def attributes(self) -> dict:
-        """Return the Oauth2 attributes and/or custom `config` associated to the API key"""
+    def oauth2_attributes(self) -> dict:
+        """Return the user attributes from the keycloak account, associated to the authentication cookie."""
+        return self.oauth2_security().attributes
+
+    @property
+    def apikey_attributes(self) -> dict:
+        """Return the user attributes from the keycloak account and/or custom `config` associated to the api key"""
         return self.apikey_security().attributes
 
     @property
