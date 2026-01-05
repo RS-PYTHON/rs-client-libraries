@@ -326,7 +326,11 @@ def test_owner_id(mode, mocker, monkeypatch):  # pylint: disable=too-many-locals
 
     # Try setting owner_id from lowest to hight priority ways. It can be deduced from the oauth2.
     monkeypatch.setenv("RSPY_OAUTH2_COOKIE", "RSPY_OAUTH2_COOKIE")
-    responses.get(url=f"{dummy_href}/auth/me", status=200, json={"user_login": by_oauth2, "iam_roles": []})
+    responses.get(
+        url=f"{dummy_href}/auth/me",
+        status=200,
+        json={"user_login": by_oauth2, "iam_roles": [], "attributes": {}},
+    )
     # In local mode we don't use neither apikey or oauth2
     if local:
         assert RsClient(rs_server_href).get_catalog_client().owner_id == getpass.getuser()
