@@ -300,15 +300,16 @@ class TestOgcApi:
 
         # Check that an exception is raised if the endpoints returns an unvalid response
         # e.g. we remove the mandatory attribute "jobID"
+        list(json_response["jobs"])[0].pop("jobID")
         responses.add(
             method=responses.GET,
             url=f"{dummy_href}/{client.endpoint_prefix}jobs",
-            json=json_response["jobs"][0].pop("jobID"),  # type: ignore
+            json=json_response,
             status=status.HTTP_200_OK,
         )
         with pytest.raises(OgcValidationException) as exc_info:
             client.get_jobs()
-        assert "Failed to cast value to object type" in str(exc_info.value)
+        assert """<ValidationError: "'jobID' is a required property">""" in str(exc_info.value)
 
     @pytest.mark.unit
     @responses.activate
