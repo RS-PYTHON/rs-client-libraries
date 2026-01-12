@@ -66,7 +66,7 @@ openapi-core = "^0.19.5"
 click = "8.3.1"
 prefect = { version = "3.6.5", extras = ["aws"] }
 requests = "^2.32.4"
-urllib3 = ">=2.6.1"
+urllib3 = ">=2.6.3"
 SQLAlchemy = "^2.0.37"
 uv = ">=0.9.7"
 psycopg2-binary = ">=2.9.10"
