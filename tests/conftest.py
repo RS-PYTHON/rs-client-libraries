@@ -851,14 +851,15 @@ def secrets():
 
 
 @pytest.fixture
-def config_file(tmp_path, sample_config_data):
+def config_file(mocker, sample_config_data):
     """
-    Creates a temporary JSON file containing the sample configuration data.
-    Returns the path to this file.
+    Mocks the storage configuration file using the sample configuration data.
+    Avoids creating a physical file on disk.
+    Returns a dummy path.
     """
-    p = tmp_path / "config.json"
-    p.write_text(json.dumps(sample_config_data), encoding="utf-8")
-    return str(p)
+    content = json.dumps(sample_config_data)
+    mocker.patch("builtins.open", mock_open(read_data=content))
+    return "/dummy/path/config.json"
 
 
 @pytest.fixture
