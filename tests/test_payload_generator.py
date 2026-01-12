@@ -21,6 +21,7 @@ from pystac import Asset, Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
+    build_input_products,
     build_workflow_step,
     fetch_csv_from_endpoint,
     find_s3_output_bucket,
@@ -450,3 +451,120 @@ def test_resolve_stac_input_path(mocker, catalog_client):
     result = resolve_stac_input_path(catalog_client, "my-collection", "item123")
 
     assert result == "s3://catalog-bucket/items/item123"
+
+# ----------------------------------------------------------------------
+
+# build_input_products
+
+
+def test_build_input_products_success(sample_unit, mock_store_params, mocker):
+    """
+    Test successful build of input products with specific storage configuration.
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value="s3://path/to/item",
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "s3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    assert len(inputs) == 1
+    assert inputs[0].id == "S1CADUS"
+    assert inputs[0].path == "s3://path/to/item"
+    assert inputs[0].store_params == mock_store_params
+
+
+def test_build_input_products_missing_mapping(sample_unit, mocker):
+    """
+    Test that RuntimeError is raised when input product is not found in unit definition.
+    """
+    mock_dpr = MagicMock()
+    # "UNKNOWN" is not in sample_unit's input_products
+    mock_dpr.input_products = [{"UNKNOWN": ("item_id", "coll_id")}]
+
+    with pytest.raises(RuntimeError, match="Couldn't find any input"):
+        build_input_products(sample_unit, mock_dpr, MagicMock(), MagicMock())
+
+
+def test_build_input_products_missing_storage(sample_unit, mocker):
+    """
+    Test that RuntimeError is raised when storage configuration cannot be resolved.
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value="s3://path/to/item",
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
+    # clear flags to avoid fallbacks triggering if checked before specific storage
+    mock_dpr.unit = False
+    mock_dpr.pipeline = False
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = None
+    # Ensure fallbacks also return None if called (though we disabled flags)
+    mock_storage.get_storage_for_unit_section.return_value = None
+    mock_storage.get_storage_for_pipeline_section.return_value = None
+
+    with pytest.raises(RuntimeError, match="Couldn't find any storage configuration"):
+        build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+
+def test_build_input_products_fallback_storage_unit(sample_unit, mock_store_params, mocker):
+    """
+    Test fallback to unit section storage if specific product storage is missing.
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value="s3://path/to/item",
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
+    mock_dpr.unit = True  # Enable unit fallback
+    mock_dpr.pipeline = False
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = None
+    mock_storage.get_storage_for_unit_section.return_value = "fallback_s3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    assert len(inputs) == 1
+    mock_storage.get_storage_for_unit_section.assert_called_with("input_products")
+    mock_storage.get_store_params.assert_called_with("fallback_s3")
+
+
+def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_params, mocker):
+    """
+    Test fallback to pipeline section storage if specific product storage and unit fallback are missing.
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value="s3://path/to/item",
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
+    mock_dpr.unit = False
+    mock_dpr.pipeline = True  # Enable pipeline fallback
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = None
+    mock_storage.get_storage_for_pipeline_section.return_value = "pipeline_s3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    assert len(inputs) == 1
+    mock_storage.get_storage_for_pipeline_section.assert_called_with("pipeline_input")
+    mock_storage.get_store_params.assert_called_with("pipeline_s3")
