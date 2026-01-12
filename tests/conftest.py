@@ -679,7 +679,10 @@ def mock_dpr_process_in():
     mock.s3_payload_file = "s3://mocked-bucket/payloads/test-run.yaml"
 
     # Optional: processor_name (used in payload_generator)
-    mock.processor_name = "TEST_PROCESSOR"
+    # We use a MagicMock so that .value attribute exists (accessed in logging)
+    msg = MagicMock()
+    msg.value = "TEST_PROCESSOR"
+    mock.processor_name = msg
 
     return mock
 
@@ -688,13 +691,12 @@ def mock_dpr_process_in():
 def mock_store_params():
     """Fixture that mocks the store params"""
     return StoreParams(
-        storage_options=
-            StorageOptions(
-                name="s3",
-                key="key",
-                secret="secret",  # nosec B106: test-only fake secret
-                client_kwargs={"endpoint_url": "http://localhost", "region_name": "test"},
-            )
+        storage_options=StorageOptions(
+            name="s3",
+            key="key",
+            secret="secret",  # nosec B106: test-only fake secret
+            client_kwargs={"endpoint_url": "http://localhost", "region_name": "test"},
+        ),
     )
 
 

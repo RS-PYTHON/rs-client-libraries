@@ -28,7 +28,7 @@ from rs_workflows.payload_generator import (
     generate_payload,
     get_first_asset_dir,
     get_io,
-    load_store_params_from_config,
+    #load_store_params_from_config,
     resolve_stac_input_path,
     wildcard_match,
 )
@@ -55,10 +55,9 @@ def test_build_workflow_step_valid(sample_unit):
     assert isinstance(step, WorkflowStep)
     assert step.name == "unit1"
     assert step.module == "module1"
-    assert {"S1CADUS": "S1CADUS"} in (step.inputs or [])
-    assert {"S3CADUS": "external_proc"} in (step.inputs or [])
-    assert {"adf1": "ADF1"} in (step.adfs or [])
-    assert {"*.tif": "output1"} in (step.outputs or [])
+    assert step.inputs == {"S1CADUS": "S1CADUS", "S3CADUS": "external_proc"}
+    assert step.adfs == {"adf1": "ADF1"}
+    assert step.outputs == {"*.tif": "output1", "output2": "output2"}
 
 
 def test_build_workflow_step_missing_key_raises():
@@ -102,11 +101,16 @@ def test_get_io_builds_input_and_output(
         return_value="mocked-output-bucket",
     )
 
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.get_storage_for_specific_product.return_value = "s3"
+
     inputs, outputs = get_io(
         sample_unit,
         mock_dpr_process_in,
-        mock_store_params,
         flow_env,
+        mock_storage_config,
+        [],
     )
 
     assert len(inputs) == 2
@@ -139,47 +143,11 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
         "input_products": [{"store_type": "S3"}],  # missing name/origin
         "output_products": [],
     }
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    
     with pytest.raises(KeyError):
-        get_io(bad_unit, mock_dpr_process_in, mock_store_params, flow_env)
-
-
-# ----------------------------------------------------------------------
-
-# load_store_params_from_config
-
-
-def test_load_store_params_from_config_valid(mock_storage_config_json):
-    """
-    Test loading a valid storage_configuration.json file.
-    Verifies that S3 StorageOptions are correctly parsed.
-    """
-    result = load_store_params_from_config(mock_storage_config_json)
-
-    assert isinstance(result, StoreParams)
-    assert result.storage_options is not None
-    # Note: we had to add the pylint disable because it seems the pylint is not
-    # smart enough to detect the appropiate types for pydantic 2    
-    assert isinstance(result.storage_options, StorageOptions)
-    assert result.storage_options.name == "s3"
-    # Tell mypy: client_kwargs is not None
-    assert result.storage_options.client_kwargs is not None
-    assert result.storage_options.client_kwargs["endpoint_url"] == "https://s3.tests.moc"
-
-
-def test_load_store_params_from_config_missing_file():
-    """
-    Test that a missing configuration file raises FileNotFoundError.
-    """
-    with pytest.raises(FileNotFoundError):
-        load_store_params_from_config("/non/existing/file.json")
-
-
-def test_load_store_params_from_config_invalid_json(mock_storage_config_invalid_json):
-    """
-    Test that an invalid configuration file is raising JSONDecodeError.
-    """
-    with pytest.raises(json.JSONDecodeError):
-        load_store_params_from_config(mock_storage_config_invalid_json)
+        get_io(bad_unit, mock_dpr_process_in, flow_env, mock_storage_config, [])
 
 
 # ----------------------------------------------------------------------
@@ -210,23 +178,36 @@ def test_generate_payload_success(
     processor_name,
     expected_logging,
     expected_config,
+    _mock_os_env,
 ):
     """
     Test successful end-to-end payload generation for a normal processor.
     Mocks store params and get_io; verifies structure and logging.
     """
     mock_store_params = StoreParams(storage_options=None)
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
     mocker.patch(
-        "rs_workflows.payload_generator.load_store_params_from_config",
-        return_value=mock_store_params,
+        "rs_workflows.payload_generator.load_storage_configuration",
+        return_value=mock_storage_config,
     )
     mocker.patch(
         "rs_workflows.payload_generator.get_io",
         return_value=([], []),
     )
+    mocker.patch(
+        "rs_workflows.payload_generator.fetch_csv_from_endpoint",
+        return_value=[],
+    )
 
     mock_logger = MagicMock()
     mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=mock_logger)
+    
+    mock_secret = MagicMock()
+    mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
+    mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
 
     payload = generate_payload.fn(
         flow_env=flow_env,
@@ -242,7 +223,7 @@ def test_generate_payload_success(
     assert payload.io.adfs[0].id == "ADF1"
     assert payload.logging is None
     assert payload.config is None
-    mock_logger.info.assert_any_call("Geting workflow and I/O sections")
+    mock_logger.info.assert_any_call("Building workflow and I/O sections")
     mock_logger.info.assert_any_call("Building the payload")
 
     # test the s1 l0 specific logging and config paths
@@ -258,15 +239,27 @@ def test_generate_payload_success(
     assert payload.config == expected_config
 
 
-def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_env):
+def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_env, _mock_os_env):
     """
     Test that a unit missing 'name' raises ValueError during payload generation.
     """
     mock_store_params = StoreParams(storage_options=None)
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    
     mocker.patch(
-        "rs_workflows.payload_generator.load_store_params_from_config",
-        return_value=mock_store_params,
+        "rs_workflows.payload_generator.load_storage_configuration",
+        return_value=mock_storage_config,
     )
+    mocker.patch(
+        "rs_workflows.payload_generator.fetch_csv_from_endpoint",
+        return_value=[],
+    )
+    
+    mock_secret = MagicMock()
+    mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
+    mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
+
     bad_unit = {"module": "no_name", "input_products": [], "output_products": []}
     with pytest.raises(ValueError, match="Key 'name' not found"):
         generate_payload.fn(

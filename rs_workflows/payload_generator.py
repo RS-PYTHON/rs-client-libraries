@@ -14,14 +14,14 @@
 
 """This module contains functions to generate DPR payloads for RS-Server."""
 import fnmatch
-from prefect.blocks.system import Secret
-
-from pathlib import Path
+import json
 import os
+from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 import requests
 from prefect import get_run_logger, task
+from prefect.blocks.system import Secret
 from pystac import Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
@@ -37,8 +37,8 @@ from rs_workflows.payload_template import (  # DaskContext,
     IOConfig,
     OutputProduct,
     PayloadSchema,
-    StorageOptions,
-    StoreParams,
+    #StorageOptions,
+    #StoreParams,
     WorkflowStep,
 )
 from rs_workflows.storage_configuration import StorageConfig
@@ -47,6 +47,7 @@ FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
 DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
 
 CONFIG_DIR = Path(__file__).parent.parent / "config"
+
 
 def build_workflow_step(unit):
     """
@@ -72,30 +73,27 @@ def build_workflow_step(unit):
         ValueError: If a required key is missing from the provided unit dictionary.
     """
     # get inputs
-    input_products = []
-    if "input_products" in unit:
-        for input_product in unit["input_products"]:
-            if isinstance(input_product, dict) and "origin" in input_product and "name" in input_product:
-                if "pipeline_input" in input_product["origin"]:
-                    input_products.append({input_product["name"]: input_product["name"]})
-                else:
-                    input_products.append({input_product["name"]: input_product["origin"]})
+    inputs: dict[str, str] = {}
+    for input_product in unit.get("input_products", []):
+        if isinstance(input_product, dict) and "origin" in input_product and "name" in input_product:
+            if "pipeline_input" in input_product["origin"]:
+                inputs[input_product["name"]] = input_product["name"]
+            else:
+                inputs[input_product["name"]] = input_product["origin"]
     # get adfs
-    adfs = []
-    if "input_adfs" in unit:
-        for input_adf in unit["input_adfs"]:
-            if isinstance(input_adf, dict) and "name" in input_adf:
-                adfs.append({input_adf["name"].lower(): input_adf["name"]})
+    adfs: dict[str, str] = {}
+    for input_adf in unit.get("input_adfs", []):
+        if isinstance(input_adf, dict) and "name" in input_adf:
+            adfs[input_adf["name"].lower()] = input_adf["name"]
     # get outputs
-    output_products = []
-    if "output_products" in unit:
-        for output_product in unit["output_products"]:
-            if isinstance(output_product, dict) and "name" in output_product:
-                left_part = output_product["regex"] if "regex" in output_product else output_product["name"]
-                right_part = output_product["name"]  # ==> "*pdf" : "name"
-                # if "origin" in output_product and "pipeline_output" not in output_product["origin"]:
-                #     right_part = output_product["origin"]
-                output_products.append({left_part: right_part})
+    outputs: dict[str, str] = {}
+    for output_product in unit.get("output_products", []):
+        if isinstance(output_product, dict) and "name" in output_product:
+            left_part = output_product["regex"] if "regex" in output_product else output_product["name"]
+            right_part = output_product["name"]  # ==> "*pdf" : "name"
+            # if "origin" in output_product and "pipeline_output" not in output_product["origin"]:
+            #     right_part = output_product["origin"]
+            outputs[left_part] = right_part
     try:
         return WorkflowStep(  # type: ignore
             name=unit["name"],
@@ -103,9 +101,9 @@ def build_workflow_step(unit):
             validate_output=False,
             module=unit["module"],
             processing_unit=unit["name"],
-            inputs=input_products if input_products else None,
-            adfs=adfs if adfs else None,
-            outputs=output_products,
+            inputs=inputs or None,
+            adfs=adfs or None,
+            outputs=outputs or None,
             parameters=None,
         )
     except KeyError as ke:
@@ -274,11 +272,9 @@ def resolve_stac_input_path(catalog_client, collection: str, stac_item_id: str) 
     return stac_item_path
 
 
-def build_input_products(unit, 
-                         dpr_process_in: DprProcessIn, 
-                         storage_configuration: StorageConfig, 
-                         catalog_client,
-                         secrets: Secret) -> list[InputProduct]:
+def build_input_products(
+    unit, dpr_process_in: DprProcessIn, storage_configuration: StorageConfig, catalog_client,
+) -> list[InputProduct]:
     """
     Builds the list of input product configurations for a workflow step.
 
@@ -309,7 +305,7 @@ def build_input_products(unit,
 
         stac_item_identifier, collection = input_product[product_name]
         stac_item_path = resolve_stac_input_path(catalog_client, collection, stac_item_identifier)
-        
+
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
         if not store_name:
@@ -319,7 +315,7 @@ def build_input_products(unit,
                 # TODO: distinguish pipeline input from other !!!
                 store_name = storage_configuration.get_storage_for_pipeline_section("pipeline_input")
         if not store_name:
-            raise RuntimeError(f"Couldn't find any storage configuration for input product '{product_name}'")    
+            raise RuntimeError(f"Couldn't find any storage configuration for input product '{product_name}'")
         inputs.append(
             InputProduct(
                 id=mapping["name"],
@@ -332,12 +328,13 @@ def build_input_products(unit,
     return inputs
 
 
-def build_output_products(unit, 
-                          dpr_process_in: DprProcessIn,                           
-                          storage_configuration: StorageConfig,
-                          owner_id: str,
-                          bucket_configuration: list[list[str]],
-                          secrets: Secret) -> list[OutputProduct]:
+def build_output_products(
+    unit,
+    dpr_process_in: DprProcessIn,
+    storage_configuration: StorageConfig,
+    owner_id: str,
+    bucket_configuration: list[list[str]],
+) -> list[OutputProduct]:
     """
     Builds the list of output product configurations for a workflow step.
 
@@ -361,7 +358,7 @@ def build_output_products(unit,
     """
 
     outputs = []
-    
+
     for output_product in dpr_process_in.generated_product_to_collection_identifier:
         product_name = next(iter(output_product))
         mapping = next((outp for outp in unit.get("output_products", []) if outp["name"] == product_name), None)
@@ -389,14 +386,6 @@ def build_output_products(unit,
                 store_name = storage_configuration.get_storage_for_pipeline_section("pipeline_output")
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
-        store_params = storage_configuration.get_store_params(store_name)
-        if not store_params:
-            raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
-        if store_params.storage_options:
-            # inject secret from Prefect Secret block
-            #TODO ! as written in the comment from story 800
-            store_params.storage_options.secret = secrets.get_secret_value()
-            store_params.storage_options.key = secrets.get_secret_key()
         outputs.append(
             OutputProduct(
                 id=mapping["name"],
@@ -411,11 +400,13 @@ def build_output_products(unit,
     return outputs
 
 
-def get_io(unit, 
-           dpr_process_in: DprProcessIn, 
-           flow_env: FlowEnv,
-           storage_configuration: StorageConfig,
-           bucket_configuration: list[list[str]]) -> tuple[list, list]:
+def get_io(
+    unit,
+    dpr_process_in: DprProcessIn,
+    flow_env: FlowEnv,
+    storage_configuration: StorageConfig,
+    bucket_configuration: list[list[str]],
+) -> tuple[list, list]:
     """
     Builds both input and output product configurations for a given workflow step.
 
@@ -441,61 +432,58 @@ def get_io(unit,
     """
     catalog_client = flow_env.rs_client.get_catalog_client()
     owner_id = flow_env.owner_id
-    secrets = Secret.load(prefect_utils.format_env_user(
-            prefect_utils.BLOCK_NAME_ENV_USER,     
-            owner_id
-            ))
-    inputs = build_input_products(unit, dpr_process_in, storage_configuration, catalog_client, secrets)
-    outputs = build_output_products(unit, dpr_process_in, storage_configuration, owner_id, bucket_configuration, secrets)
+    inputs = build_input_products(unit, dpr_process_in, storage_configuration, catalog_client)
+    outputs = build_output_products(unit, dpr_process_in, storage_configuration, owner_id, bucket_configuration)
 
     return inputs, outputs
 
-def load_storage_configuration(config_path: str = CONFIG_DIR / "storage_configuration.json") -> StorageConfig:
+
+def load_storage_configuration(
+    secrets: dict, config_path: str = CONFIG_DIR / "storage_configuration.json", logger=None,
+) -> StorageConfig:
     """
     Loads storage configuration from a JSON file and constructs a StorageConfig object.
     """
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Storage configuration file not found: {config_path}")
 
-    return StorageConfig(config_path)
+    return StorageConfig(secrets, config_path, logger)
 
 
-def load_store_params_from_config(storage_configuration: StorageConfig, 
-                                  storage_name: str) -> StoreParams:
-    """
-    Loads storage configuration from a JSON file and constructs a StoreParams object.
+# def load_store_params_from_config(storage_configuration: StorageConfig, storage_name: str) -> StoreParams:
+#     """
+#     Loads storage configuration from a JSON file and constructs a StoreParams object.
 
-    Args:
-        config_path (str): Path to the storage configuration JSON file.
-            Defaults to '/etc/storage_configuration.json'.
+#     Args:
+#         config_path (str): Path to the storage configuration JSON file.
+#             Defaults to '/etc/storage_configuration.json'.
 
-    Returns:
-        StoreParams: The StoreParams object built from the configuration file.
+#     Returns:
+#         StoreParams: The StoreParams object built from the configuration file.
 
-    Raises:
-        FileNotFoundError: If the JSON file does not exist.
-        ValueError: If the JSON structure is invalid or missing required fields.
-    """
-    
-    storage_options = None
-    try:
-        storage_config_options = storage_configuration.get_storage_details(storage_name)
-    except KeyError:
-        return None
-    
-    # S3 configuration
-    storage_options = StorageOptions(
-        name="s3",
-        key=storage_config_options["storage_options"]["key"],
-        secret=storage_config_options["storage_options"]["secret"],
-        client_kwargs={
-            "endpoint_url": storage_config_options["storage_options"]["endpoint_url"],
-            "region_name": storage_config_options["storage_options"]["region_name"],
-        },
-    )
-     
+#     Raises:
+#         FileNotFoundError: If the JSON file does not exist.
+#         ValueError: If the JSON structure is invalid or missing required fields.
+#     """
 
-    return StoreParams(storage_options=storage_options)
+#     storage_options = None
+#     try:
+#         storage_config_options = storage_configuration.get_storage_details(storage_name)
+#     except KeyError:
+#         return None
+
+#     # S3 configuration
+#     storage_options = StorageOptions(
+#         name="s3",
+#         key=storage_config_options["storage_options"]["key"],
+#         secret=storage_config_options["storage_options"]["secret"],
+#         client_kwargs={
+#             "endpoint_url": storage_config_options["storage_options"]["endpoint_url"],
+#             "region_name": storage_config_options["storage_options"]["region_name"],
+#         },
+#     )
+
+#     return StoreParams(storage_options=storage_options)
 
 
 def build_mockup_payload(owner_id):
@@ -537,9 +525,9 @@ def build_mockup_payload(owner_id):
             validate=False,
             module="lm.sm.mockup_processor",
             processing_unit="single_unit",
-            inputs=[{"S3ACADUS": "S3ACADUS"}],
+            inputs={"S3ACADUS": "S3ACADUS"},
             adfs=None,
-            outputs=[{"out1": mockup_output_products[0]}, {"out2": mockup_output_products[1]}],
+            outputs={"out1": mockup_output_products[0], "out2": mockup_output_products[1]},
             parameters=None,
         ),
     ]
@@ -629,10 +617,11 @@ def generate_payload(  # pylint: disable=unused-argument
 
     logger.info(f"Starting payload generation for DPR processor '{dpr_process_in.processor_name.value}'")
     logger.info("Loading storage configuration template from file")
-    storage_configuration = load_storage_configuration()
+    secrets = Secret.load(prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, flow_env.owner_id)).get()
+    storage_configuration = load_storage_configuration(secrets, logger=logger)
     logger.info("Loading bucket configuration from rs-osam endpoint")
     bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/storage/configuration")
-    
+
     logger.info("Building workflow and I/O sections")
     workflow_steps = []
     io_config = IOConfig()
@@ -641,7 +630,7 @@ def generate_payload(  # pylint: disable=unused-argument
             workflow_steps.append(build_workflow_step(unit))
             input_products, output_products = get_io(
                 unit,
-                dpr_process_in,                
+                dpr_process_in,
                 flow_env,
                 storage_configuration,
                 bucket_configuration,
@@ -650,11 +639,11 @@ def generate_payload(  # pylint: disable=unused-argument
             io_config.output_products += output_products
         except KeyError as ke:
             raise ValueError(f"Key {ke} not found in unit list") from ke
-        
+
     logger.info("Building ADFs section")
     store_params = storage_configuration.get_store_params(storage_configuration.default_adfs_storage)
-    io_config.adfs = [AdfConfig(id=adf[0], path=adf[1], store_params=store_params) for adf in adfs]    
-    
+    io_config.adfs = [AdfConfig(id=adf[0], path=adf[1], store_params=store_params) for adf in adfs]
+
     # Add the logging config for l0 and s1 / s3 configurations. These configurations
     # are hardcoded in the l0 eopf dask worker image. The path where these files are stored is given
     # by the env var PAYLOAD_CONFIG_FILES
@@ -667,7 +656,7 @@ def generate_payload(  # pylint: disable=unused-argument
                 config = ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
             case DprProcessor.S3L0:
                 config = ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
-                
+
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
     logger.info("Building the payload")
