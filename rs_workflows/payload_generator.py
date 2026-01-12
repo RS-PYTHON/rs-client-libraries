@@ -14,7 +14,6 @@
 
 """This module contains functions to generate DPR payloads for RS-Server."""
 import fnmatch
-import json
 import os
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
@@ -30,15 +29,13 @@ from rs_workflows.flow_utils import (  # FlowEnvArgs,
     DprProcessIn,
     FlowEnv,
 )
-from rs_workflows.payload_template import (  # DaskContext,
+from rs_workflows.payload_template import (  # DaskContext,; StorageOptions,; StoreParams,
     AdfConfig,
     GeneralConfiguration,
     InputProduct,
     IOConfig,
     OutputProduct,
     PayloadSchema,
-    #StorageOptions,
-    #StoreParams,
     WorkflowStep,
 )
 from rs_workflows.storage_configuration import StorageConfig
@@ -273,7 +270,10 @@ def resolve_stac_input_path(catalog_client, collection: str, stac_item_id: str) 
 
 
 def build_input_products(
-    unit, dpr_process_in: DprProcessIn, storage_configuration: StorageConfig, catalog_client,
+    unit,
+    dpr_process_in: DprProcessIn,
+    storage_configuration: StorageConfig,
+    catalog_client,
 ) -> list[InputProduct]:
     """
     Builds the list of input product configurations for a workflow step.
@@ -439,7 +439,9 @@ def get_io(
 
 
 def load_storage_configuration(
-    secrets: dict, config_path: str = CONFIG_DIR / "storage_configuration.json", logger=None,
+    secrets: dict,
+    config_path: str = str(CONFIG_DIR / "storage_configuration.json"),
+    logger=None,
 ) -> StorageConfig:
     """
     Loads storage configuration from a JSON file and constructs a StorageConfig object.
@@ -617,7 +619,9 @@ def generate_payload(  # pylint: disable=unused-argument
 
     logger.info(f"Starting payload generation for DPR processor '{dpr_process_in.processor_name.value}'")
     logger.info("Loading storage configuration template from file")
-    secrets = Secret.load(prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, flow_env.owner_id)).get()
+    secrets = Secret.load(
+        prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, flow_env.owner_id),
+    ).get()  # type: ignore[union-attr]
     storage_configuration = load_storage_configuration(secrets, logger=logger)
     logger.info("Loading bucket configuration from rs-osam endpoint")
     bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/storage/configuration")

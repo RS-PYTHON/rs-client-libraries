@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Test the payload_generator module"""
-import json
 from datetime import datetime
 from unittest.mock import MagicMock
 
@@ -21,14 +20,13 @@ import pytest
 from pystac import Asset, Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
-from rs_workflows.payload_generator import (
+from rs_workflows.payload_generator import (  # load_store_params_from_config,
     build_workflow_step,
     fetch_csv_from_endpoint,
     find_s3_output_bucket,
     generate_payload,
     get_first_asset_dir,
     get_io,
-    #load_store_params_from_config,
     resolve_stac_input_path,
     wildcard_match,
 )
@@ -38,7 +36,6 @@ from rs_workflows.payload_template import (
     IOConfig,
     OutputProduct,
     PayloadSchema,
-    StorageOptions,
     StoreParams,
     WorkflowStep,
 )
@@ -145,7 +142,7 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
     }
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
-    
+
     with pytest.raises(KeyError):
         get_io(bad_unit, mock_dpr_process_in, flow_env, mock_storage_config, [])
 
@@ -204,7 +201,7 @@ def test_generate_payload_success(
 
     mock_logger = MagicMock()
     mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=mock_logger)
-    
+
     mock_secret = MagicMock()
     mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
     mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
@@ -246,7 +243,7 @@ def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_e
     mock_store_params = StoreParams(storage_options=None)
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
-    
+
     mocker.patch(
         "rs_workflows.payload_generator.load_storage_configuration",
         return_value=mock_storage_config,
@@ -255,7 +252,7 @@ def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_e
         "rs_workflows.payload_generator.fetch_csv_from_endpoint",
         return_value=[],
     )
-    
+
     mock_secret = MagicMock()
     mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
     mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)

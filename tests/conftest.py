@@ -19,6 +19,8 @@ The conftest.py file serves as a means of providing fixtures for an entire direc
 Fixtures defined in a conftest.py can be used by any test in that package without needing to import them
 (pytest will automatically discover them).
 """
+import json
+
 # pylint: disable=unused-argument
 import logging
 from unittest.mock import MagicMock, mock_open
@@ -27,6 +29,7 @@ import pytest
 import requests
 import responses
 from prefect.testing.utilities import prefect_test_harness
+from pydantic import SecretStr
 
 from rs_client.rs_client import RsClient
 from rs_client.stac.stac_base import StacBase
@@ -693,9 +696,9 @@ def mock_store_params():
     return StoreParams(
         storage_options=StorageOptions(
             name="s3",
-            key="key",
-            secret="secret",  # nosec B106: test-only fake secret
-            client_kwargs={"endpoint_url": "http://localhost", "region_name": "test"},
+            key=SecretStr("key"),
+            secret=SecretStr("secret"),  # nosec B106: test-only fake secret
+            client_kwargs={"endpoint_url": SecretStr("http://localhost"), "region_name": SecretStr("test")},
         ),
     )
 
@@ -792,6 +795,70 @@ class MockResponse:
         """
         if self.raise_error or self.status_code >= 400:
             raise requests.HTTPError(f"HTTP {self.status_code}")
+
+
+@pytest.fixture
+def sample_config_data():
+    """
+    Returns a dictionary representing a sample configuration for testing StorageConfig.
+    Includes product-specific, default unit/pipeline storage, and definitions for S3, local, and shared disk storage.
+    """
+    return {
+        "product": {
+            "specific": [
+                {"product_name": "PROD_A", "storage": "s3_prod_a"},
+                {"product_name": "PROD_B", "storage": "local_disk"},
+            ],
+            "default": {
+                "unit": [
+                    {"section": "input_products", "storage": "s3_default_in"},
+                    {"section": "output_products", "storage": "s3_default_out"},
+                ],
+                "pipeline": [
+                    {"section": "pipeline_input", "storage": "s3_pipeline_in"},
+                    {"section": "pipeline_output", "storage": "s3_pipeline_out"},
+                ],
+                "adfs": {"storage": "s3_adfs"},
+            },
+        },
+        "storage_configuration": [
+            {
+                "name": "s3_prod_a",
+                "storage_options": {
+                    "key": "${S3_KEY}",
+                    "secret": "${S3_SECRET}",
+                    "endpoint_url": "${S3_ENDPOINT}",
+                    "region_name": "${S3_REGION}",
+                },
+            },
+            {"name": "local_disk", "opening_mode": "rw", "relative_path": "/data"},
+            {"name": "shared_disk", "opening_mode": "r", "relative_path": "/mnt/shared"},
+        ],
+    }
+
+
+@pytest.fixture
+def secrets():
+    """
+    Returns a dictionary of mock secrets corresponding to the placeholders in sample_config_data.
+    """
+    return {
+        "S3_KEY": "my_key",
+        "S3_SECRET": "my_secret",
+        "S3_ENDPOINT": "http://minio",
+        "S3_REGION": "us-east-1",
+    }
+
+
+@pytest.fixture
+def config_file(tmp_path, sample_config_data):
+    """
+    Creates a temporary JSON file containing the sample configuration data.
+    Returns the path to this file.
+    """
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps(sample_config_data), encoding="utf-8")
+    return str(p)
 
 
 @pytest.fixture

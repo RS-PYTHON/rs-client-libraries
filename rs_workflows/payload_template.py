@@ -135,6 +135,7 @@ class BasePayloadModel(BaseModel):
 
 class StorageOptions(BasePayloadModel):
     """Options to access a storage backend"""
+
     # The field name is excluded to avoid including it in the payload
     # Otherwise, the processor yelds an error when trying to parse the store_params
     name: str = Field(exclude=True)
@@ -145,6 +146,7 @@ class StorageOptions(BasePayloadModel):
 
 class StoragePath(BasePayloadModel):
     """Wrapper for a list of storage options"""
+
     # TODO: check if we need to exclude name here as well as for StorageOptions
     name: str = Field(exclude=True)
     opening_mode: str | None = Field(default="CREATE_OVERWRITE")
