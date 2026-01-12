@@ -17,6 +17,7 @@
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 
 @dataclass
@@ -29,8 +30,8 @@ class AuthInfo:
     # IAM roles
     iam_roles: list[str]
 
-    # Configuration associated to the API key (not implemented for now)
-    apikey_config: dict
+    # Oauth2 attributes and/or custom `config` associated to the API key
+    attributes: dict[str, Any]
 
 
 def read_response_error(response) -> str:
