@@ -806,7 +806,7 @@ def sample_config_data():
     return {
         "product": {
             "specific": [
-                {"product_name": "PROD_A", "storage": "s3_prod_a"},
+                {"product_name": "PROD_A", "storage": "s3"},
                 {"product_name": "PROD_B", "storage": "local_disk"},
             ],
             "default": {
@@ -823,7 +823,7 @@ def sample_config_data():
         },
         "storage_configuration": [
             {
-                "name": "s3_prod_a",
+                "name": "s3",
                 "storage_options": {
                     "key": "${S3_KEY}",
                     "secret": "${S3_SECRET}",
@@ -851,7 +851,7 @@ def secrets():
 
 
 @pytest.fixture
-def config_file(mocker, sample_config_data):
+def config_file(mocker, sample_config_data):  # pylint: disable=redefined-outer-name
     """
     Mocks the storage configuration file using the sample configuration data.
     Avoids creating a physical file on disk.
