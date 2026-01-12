@@ -140,7 +140,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         # In local mode, we have no authentication, so return empty results
         if self.local_mode:
-            return AuthInfo(user_login="", iam_roles=[], apikey_config={})
+            return AuthInfo(user_login="", iam_roles=[], attributes={})
 
         # Call the endpoint to retrieve the user information
         response = self.http_session.get(f"{self.rs_server_href}/auth/me")
@@ -152,7 +152,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         return AuthInfo(
             user_login=contents["user_login"],
             iam_roles=contents["iam_roles"],
-            apikey_config={},  # no API key config here
+            attributes=contents["attributes"],
         )
 
     # The following variable is needed for the tests to pass
@@ -169,7 +169,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         # In local mode, we have no API key, so return empty results
         if self.local_mode:
-            return AuthInfo(user_login="", iam_roles=[], apikey_config={})
+            return AuthInfo(user_login="", iam_roles=[], attributes={})
 
         # Request the API key manager, pass user-defined api key in http header
         self.logger.debug("Call the API key manager")
@@ -185,7 +185,7 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         return AuthInfo(
             user_login=contents["user_login"],
             iam_roles=contents["iam_roles"],
-            apikey_config=contents["config"],
+            attributes=contents["config"],
         )
 
     @property
@@ -215,9 +215,14 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         return self.apikey_security().iam_roles
 
     @property
-    def apikey_config(self) -> dict:
-        """Return the config from the keycloak account, associated to the api key."""
-        return self.apikey_security().apikey_config
+    def oauth2_attributes(self) -> dict:
+        """Return the user attributes from the keycloak account, associated to the authentication cookie."""
+        return self.oauth2_security().attributes
+
+    @property
+    def apikey_attributes(self) -> dict:
+        """Return the user attributes from the keycloak account and/or custom `config` associated to the api key"""
+        return self.apikey_security().attributes
 
     @property
     def href_service(self):
