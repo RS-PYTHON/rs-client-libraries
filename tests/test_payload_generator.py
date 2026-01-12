@@ -452,6 +452,7 @@ def test_resolve_stac_input_path(mocker, catalog_client):
 
     assert result == "s3://catalog-bucket/items/item123"
 
+
 # ----------------------------------------------------------------------
 
 # build_input_products
@@ -481,7 +482,7 @@ def test_build_input_products_success(sample_unit, mock_store_params, mocker):
     assert inputs[0].store_params == mock_store_params
 
 
-def test_build_input_products_missing_mapping(sample_unit, mocker):
+def test_build_input_products_missing_mapping(sample_unit):
     """
     Test that RuntimeError is raised when input product is not found in unit definition.
     """
