@@ -16,7 +16,7 @@
 import json
 
 from prefect import flow, get_run_logger, task
-from pystac import ItemCollection
+from pystac import Item, ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
@@ -97,24 +97,25 @@ async def publish(
         for item in items:
             try:
                 # Extract product type from STAC item
-                product_type = item.properties["product:type"]
-
+                product_type = (
+                    item.properties["product:type"] if isinstance(item, Item) else item["properties"]["product:type"]
+                )
                 # Resolve destination collection
                 target_collection = resolve_collection(product_type, collections)
 
                 logger.info(
                     "Writing product %s to %s",
-                    item.id,
+                    item.id if isinstance(item, Item) else item["id"],
                     target_collection,
                 )
-
                 # Publish item to catalog
                 catalog_client.add_item(target_collection, item)
 
             except Exception as e:
                 # Re-raise with full item context for easier debugging
+                item = item.to_dict() if hasattr(item, "to_dict") else item
                 raise RuntimeError(
-                    f"Exception while publishing item:\n" f"{json.dumps(item.to_dict(), indent=2)}",
+                    f"Exception while publishing item:\n" f"{json.dumps(item, indent=2)}",
                 ) from e
 
     # list collections for logging
