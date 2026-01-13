@@ -347,8 +347,8 @@ def build_output_products(
         storage_configuration (StorageConfig): Storage configuration parameters (S3 credentials, etc.). TODO ! as
         written in the comment from story 800, point 3: About the storage_configuration.json : for the time being,
         just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
-        flow_env (FlowEnv): Flow execution context, providing environment details like owner ID.
-        config_rows (list[list[str]]): Parsed S3 bucket configuration entries.
+        owner_id (str): The owner ID for the workflow.
+        bucket_configuration (list[list[str]]): Parsed S3 bucket configuration entries.
 
     Returns:
         list[OutputProduct]: A list of output product configuration objects.

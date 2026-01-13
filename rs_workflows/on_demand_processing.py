@@ -200,7 +200,11 @@ async def dpr_processing(
             dpr_input.s3_payload_file,
             wait_for=[task_future],
         )
-        processed_items.result()
+        try:
+            processed_items.result()
+        finally:
+            await prefect_utils.s3_delete(dpr_input.s3_payload_file)
+
         logger.debug(processed_items.result())
 
         # Publish processed items to the catalog
