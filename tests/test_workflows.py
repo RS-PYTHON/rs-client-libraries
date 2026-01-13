@@ -273,6 +273,7 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 @patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(prefect_utils, "s3_delete", Mock())
 @patch.object(RsClient, "get_auxip_client", MockRsClient)
 @patch.object(RsClient, "get_cadip_client", MockRsClient)
 @patch.object(RsClient, "get_catalog_client", MockRsClient)
@@ -387,6 +388,13 @@ async def test_dpr_processing(
     assert isinstance(args[0], (str, Path))  # temp file path
     assert args[1] == dpr_input.s3_payload_file  # destination S3 path
 
+    # --- verify s3_delete was called with the payload file ---
+    delete_mock = cast(Mock, prefect_utils.s3_delete)
+    delete_calls = delete_mock.call_args_list  # pylint: disable=no-member
+    assert len(delete_calls) == 1
+    args = delete_calls[0].args
+    assert args[0] == dpr_input.s3_payload_file  # destination S3 path for payload file
+
     # Verify the two artifact calls use the correct keys
     keys = [c.kwargs.get("key") for c in artifact_mock.await_args_list]
     assert artifact_mock.await_count == 4
@@ -396,6 +404,7 @@ async def test_dpr_processing(
 @patch.dict(os.environ, {}, clear=False)
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(prefect_utils, "s3_delete", Mock())
 @patch.object(RsClient, "get_auxip_client", MockRsClient)
 @patch.object(RsClient, "get_cadip_client", MockRsClient)
 @patch.object(RsClient, "get_catalog_client", MockRsClient)
@@ -434,6 +443,7 @@ async def test_dpr_processing_raises_on_unstaged_adf(
 @patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(prefect_utils, "s3_delete", Mock())
 @patch.object(RsClient, "get_cadip_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(catalog_flow, "datetime", Mock())
@@ -469,6 +479,7 @@ async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable
 @patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(prefect_utils, "s3_delete", Mock())
 @patch.object(RsClient, "get_auxip_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_catalog_client", MockRsClient)
@@ -507,6 +518,7 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
 @patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(prefect_utils, "s3_delete", Mock())
 @patch.object(RsClient, "get_prip_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 async def test_on_demand_prip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
