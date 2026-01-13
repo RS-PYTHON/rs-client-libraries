@@ -497,4 +497,77 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         )
         return self.process_response(response, raise_for_status)
 
+    def patch_item(
+        self,
+        collection_id: str,
+        item_id: str,
+        owner_id: str,
+        patch_values: dict,
+        timeout: int = TIMEOUT,
+        raise_for_status: bool = True,
+    ) -> Response:
+        """
+        Patch an existing Item.
+
+        Args:
+            collection_id (str): ID of the Collection containing the item.
+            item_id (str): ID of the item to patch.
+            owner_id (str): Name of the item's owner.
+            patch_values (dict): Dictionary of values to patch in the STAC description of the item.
+            timeout (int): Timeout value for the HTTP request (optional, defaults to 30s).
+            raise_for_status (bool): If True, raise HTTPError in case of server error (optional, defaults to True).
+
+        Returns:
+            raise_for_status (bool): If True, raise HTTPError in case of server error.
+
+        Raises:
+            HTTPError in case of server error.
+        """
+        full_collection_id = self.full_collection_id(owner_id, collection_id)
+
+        response = self.http_session.patch(
+            f"{self.href_service}/catalog/collections/{full_collection_id}/items/{item_id}",
+            json=patch_values,
+            **self.apikey_headers,
+            timeout=timeout,
+        )
+
+        return self.process_response(response, raise_for_status)
+
+    def patch_collection(
+        self,
+        collection_id: str,
+        owner_id: str,
+        patch_values: dict,
+        timeout: int = TIMEOUT,
+        raise_for_status: bool = True,
+    ) -> Response:
+        """
+        Patch an existing Collection.
+
+        Args:
+            collection_id (str): ID of the Collection to patch.
+            owner_id (str): Name of the collection's owner.
+            patch_values (dict): Dictionary of values to patch in the STAC description of the collection.
+            timeout (int): Timeout value for the HTTP request (optional, defaults to 30s).
+            raise_for_status (bool): If True, raise HTTPError in case of server error (optional, defaults to True).
+
+        Returns:
+            raise_for_status (bool): If True, raise HTTPError in case of server error.
+
+        Raises:
+            HTTPError in case of server error.
+        """
+
+        full_collection_id = self.full_collection_id(owner_id, collection_id)
+
+        response = self.http_session.patch(
+            f"{self.href_service}/catalog/collections/{full_collection_id}",
+            json=patch_values,
+            **self.apikey_headers,
+            timeout=timeout,
+        )
+
+        return self.process_response(response, raise_for_status)
+
     # end of STAC write opperations
