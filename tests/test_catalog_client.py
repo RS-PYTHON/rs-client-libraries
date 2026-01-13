@@ -139,6 +139,31 @@ def test_add_update_collection_catalog_client(
     catalog.update_collection(new_collection)
 
 
+def test_add_patch_collection_catalog_client(mocked_stac_catalog_add_patch_collection):
+    """Test 'add_collection' and 'patch_collection'"""
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_add_patch_collection,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
+
+    spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
+    date_strings = ["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]
+    date_objects: list[datetime | None] = [  # mypy complains without this | None
+        datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ") for date_str in date_strings
+    ]
+    temporal = TemporalExtent(intervals=date_objects)
+    extent = Extent(spatial=spatial, temporal=temporal)
+    new_collection = Collection(id="S2_L2", description="S2_L2 collection.", extent=extent)
+
+    # Publish a new collections in the catalog
+    catalog.add_collection(new_collection)
+
+    # Update a collection
+    patch_values = {"description": "new description"}
+    catalog.patch_collection(collection_id="S2_L2", owner_id="toto", patch_values=patch_values)
+
+
 def test_add_collection_catalog_client_error(
     mocked_stac_catalog_add_collection_error,
 ):  # pylint: disable=missing-function-docstring
@@ -217,6 +242,56 @@ def test_add_update_item_catalog_client(
     item.collection_id = "S1_L1"
     item.properties["new_property"] = "any_value"
     catalog.update_item(item)
+
+
+def test_add_patch_item_catalog_client(mocked_stac_catalog_add_patch_item):
+    """Test 'add_item' and 'patch_item'"""
+    catalog: CatalogClient = RsClient(
+        mocked_stac_catalog_add_patch_item,
+        RS_SERVER_API_KEY,
+        OWNER_ID,
+    ).get_catalog_client()
+
+    # Add a new item from toto:S1_L1 collection
+    geometry = {
+        "type": "Polygon",
+        "coordinates": [
+            [
+                [-94.6334839, 37.0595608],
+                [-94.6334839, 37.0332547],
+                [-94.6005249, 37.0332547],
+                [-94.6005249, 37.0595608],
+                [-94.6334839, 37.0595608],
+            ],
+        ],
+    }
+    properties = {
+        "gsd": 0.5971642834779395,
+        "owner": "toto",
+        "width": 2500,
+        "height": 2500,
+        "datetime": "2000-02-02T00:00:00Z",
+        "proj:epsg": 3857,
+        "orientation": "nadir",
+    }
+    item = Item(
+        id="item_0",
+        geometry=geometry,
+        bbox=[-180.0, -90.0, 180.0, 90.0],
+        datetime=datetime.now(),
+        properties=properties,
+    )
+    catalog.add_item(collection_id="S1_L1", item=item, owner_id="toto")
+
+    # The collection is needed to update an item. In real use-case, it is set by rs-server.
+    # Also add a random property.
+    patch_values = {"properties": {"width": 3000}}
+    catalog.patch_item(
+        collection_id="S1_L1",
+        item_id=item.id,
+        owner_id=item.properties["owner"],
+        patch_values=patch_values,
+    )
 
 
 def test_remove_item_catalog_client(mocked_stac_catalog_delete_item):  # pylint: disable=missing-function-docstring
