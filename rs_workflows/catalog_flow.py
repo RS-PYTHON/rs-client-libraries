@@ -133,6 +133,20 @@ async def catalog_search_task(*args, **kwargs) -> ItemCollection | None:
     return await catalog_search.fn(*args, **kwargs)
 
 
+@task(name="Get catalog item")
+async def get_item(
+    env: FlowEnvArgs,
+    target_collection,
+    item,
+):
+    """
+    Get a catalog item by its ID.
+    """
+    flow_env = FlowEnv(env)
+    catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+    return catalog_client.get_item(target_collection, item)
+
+
 def resolve_collection(product_type: str, collections: dict) -> str:
     """
     Resolve the target catalog collection for a given product type.
