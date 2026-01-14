@@ -68,7 +68,7 @@ def extract_products_and_zattrs(files: list[str], base_path: str):
         if not f.startswith(base_path):
             continue
 
-        rest = f[len(base_path) :].lstrip("/")
+        rest = f[len(base_path) :].lstrip("/")  # noqa: E203
         parts = rest.split("/")
 
         if len(parts) < 2:
@@ -336,7 +336,9 @@ def compute_eopf_origin_datetimes(env, input_products):
         return "2023-01-01T00:00:00Z"
 
     max_eopf_datetime = max(
-        datetime.datetime.fromisoformat(item.to_dict()["properties"]["eopf:origin_datetime"].replace("Z", "+00:00"))
+        datetime.datetime.fromisoformat(
+            item.to_dict()["properties"]["eopf:origin_datetime"].replace("Z", "+00:00"),  # type: ignore
+        )
         for item in cadu_items
     ).isoformat()
 
@@ -366,7 +368,7 @@ async def run_processor(
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "run-processor"):
-        record_performance_indicators(
+        record_performance_indicators(  # type: ignore
             start_date=datetime.datetime.now(),
             status="OK",
             dpr_processing_input_stac_items=s3_payload_run,
@@ -387,7 +389,7 @@ async def run_processor(
         logger.info(f"DPR processor output {dpr_job}")
         eopf_stac_items, eopf_types = update_eopf_assets(flow_env, input_products, payload)
         # Wait for the job to finish
-        record_performance_indicators(
+        record_performance_indicators(  # type: ignore
             stop_date=datetime.datetime.now(),
             status="OK",
             stac_items=eopf_stac_items,

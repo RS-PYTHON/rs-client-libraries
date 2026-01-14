@@ -18,7 +18,7 @@ import os
 import re
 import sys
 from datetime import datetime
-from importlib.metadata import version  # pylint: disable = unused-import
+from importlib.metadata import version  # pylint: disable = unused-import # noqa: F401
 
 from prefect import get_run_logger, runtime, task
 from sqlalchemy import MetaData, Table, create_engine, func, select, update
