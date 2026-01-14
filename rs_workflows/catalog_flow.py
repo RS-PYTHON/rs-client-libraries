@@ -115,7 +115,7 @@ async def publish(
                 # Re-raise with full item context for easier debugging
                 item = item.to_dict() if hasattr(item, "to_dict") else item
                 raise RuntimeError(
-                    f"Exception while publishing item:\n" f"{json.dumps(item, indent=2)}",
+                    f"Exception while publishing item: {json.dumps(item, indent=2)}",
                 ) from e
 
     # list collections for logging

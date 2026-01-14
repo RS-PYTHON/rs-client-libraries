@@ -82,7 +82,7 @@ def extract_products_and_zattrs(files: list[str], base_path: str):
             zattrs.append(f)
 
         # 2: base_path/product/product/.zattrs
-        elif len(parts) == 3 and parts[1] == product_name and parts[2] == ".zattrs":
+        elif len(parts) == 3 and parts[1] == product_name and parts[2] == ".zattrs":  # noqa: SIM114
             products.add(product_name)
             zattrs.append(f)
 
