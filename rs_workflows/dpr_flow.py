@@ -117,7 +117,7 @@ def s3_download_file_sync(
     return to_path
 
 
-def create_stac_items(env, processor, payload, input_products, eopf_features):
+def create_stac_items(env, payload, input_products, eopf_features):
     """
     Create a list of STAC Items from EOPF features and processing payload metadata.
 
@@ -200,7 +200,7 @@ def create_stac_items(env, processor, payload, input_products, eopf_features):
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
-    eopf_origin_datetimes = compute_eopf_origin_datetimes(env, processor, input_products)  # TODO
+    eopf_origin_datetimes = compute_eopf_origin_datetimes(env, input_products)
 
     items = []
     for feature_dict in eopf_features:
@@ -213,26 +213,44 @@ def create_stac_items(env, processor, payload, input_products, eopf_features):
 
 
 @task(name="Update eopf assets")
-def update_eopf_assets(env, processor: str, input_products: list[dict], payload: dict) -> tuple[Any, Any]:
+def update_eopf_assets(env, input_products: list[dict], payload: dict) -> tuple[Any, Any]:
     """
-    Extract EOPF metadata from S3 paths found in the payload, read all `.zattrs`
-    files associated with the products, and generate corresponding STAC items.
+    Update EOPF-related STAC assets by discovering products in S3 and
+    generating corresponding STAC items from `.zattrs` metadata.
+
+    This task inspects the workflow output products defined in the payload,
+    identifies the unique S3 base path, and discovers all product files and
+    associated `.zattrs` metadata files under that path. The `.zattrs`
+    metadata is read synchronously and used to extract EOPF discovery
+    information and product types, which are then converted into STAC items.
 
     Steps performed:
-    1. Determine the unique S3 path from the output products in the payload.
-    2. List all files under that path and extract product files and `.zattrs` files.
-    3. Read `.zattrs` metadata synchronously.
-    4. Collect EOPF item metadata and product types.
-    5. Build and return STAC items together with extracted EOPF product types.
+    1. Extract the unique S3 base path from ``payload["I/O"]["output_products"]``.
+    2. List all files under the resolved S3 path.
+    3. Separate product files from `.zattrs` metadata files.
+    4. Read and parse `.zattrs` metadata synchronously.
+    5. Extract EOPF discovery metadata and EOPF product types.
+    6. Build STAC items using the extracted metadata and input products.
 
-    Args:
-        payload: A dictionary containing the workflow input/output structure,
-                 specifically under `payload["I/O"]["output_products"]`.
+    Parameters
+    ----------
+    env : object
+        Execution environment used to provide context when creating STAC items.
+    input_products : list[dict]
+        List of input product mappings used to relate generated STAC items
+        to their upstream products.
+    payload : dict
+        Workflow payload containing input/output definitions. The S3 discovery
+        path is read from ``payload["I/O"]["output_products"]``.
 
-    Returns:
-        A tuple (stac_items, eopf_types):
-            - stac_items: A list of STAC items constructed from the EOPF metadata.
-            - eopf_types: A list of extracted product types (strings).
+    Returns
+    -------
+    tuple
+        A tuple ``(stac_items, eopf_types)`` where:
+        - stac_items : list
+            List of STAC items generated from EOPF `.zattrs` discovery metadata.
+        - eopf_types : list[str]
+            List of extracted EOPF product type identifiers.
     """
     logger = get_run_logger()
     logger.info("Starting EOPF asset update.")
@@ -261,35 +279,69 @@ def update_eopf_assets(env, processor: str, input_products: list[dict], payload:
     logger.debug(f"EOPF discovery metadata extracted: {eopf_items}")
 
     # Build STAC items
-    stac_items = create_stac_items(env, processor, payload, input_products, eopf_items)
+    stac_items = create_stac_items(env, payload, input_products, eopf_items)
     logger.info(f"Created {len(stac_items)} STAC items.")
 
     return stac_items, eopf_types
 
 
-def compute_eopf_origin_datetimes(env, processor, input_products):
-    """get the eopf:origin_datetime value(s) from the input products in the catalog."""
+def compute_eopf_origin_datetimes(env, input_products):
+    """
+    Compute the maximum ``eopf:origin_datetime`` across all input CADU products.
+
+    For each input product, this function retrieves the corresponding item
+    from the catalog using its CADU ID and collection ID, extracts the
+    ``eopf:origin_datetime`` property, and returns the latest (maximum)
+    datetime value found.
+
+    If an item cannot be retrieved from the catalog, the error is logged
+    and processing continues with the remaining products.
+
+    Parameters
+    ----------
+    env : object
+        Execution environment object used to serialize and pass context
+        to the catalog flow.
+    input_products : Iterable[dict]
+        Iterable of input product mappings. Each mapping is expected to
+        contain values of the form ``(cadu_id, collection_id)``.
+
+    Returns
+    -------
+    str
+        ISO 8601 string representing the maximum ``eopf:origin_datetime``
+        found among all retrieved items. If no valid items are found,
+        returns the fallback value ``"2023-01-01T00:00:00Z"``.
+    """
     logger = get_run_logger()
-    cadu_results = []
+    cadu_items = []
 
     for input_product in input_products:
         for _, (cadu_id, collection_id) in input_product.items():
             try:
                 future = catalog_flow.get_item.submit(
                     env.serialize(),
-                    cadu_id,
                     collection_id,
+                    cadu_id,
                 )
-                logger.info(future.result())
-                cadu_results.append(future)
-            except RuntimeError as exc:
-                logger.exception(f"Failed to get cadu item {cadu_id} from collection {collection_id}: {exc}")
+                cadu_items.append(future.result())
+            except RuntimeError:
+                logger.exception(f"Failed to get CADU item '{cadu_id}' from collection '{collection_id}'")
 
-    if processor == "mockup":
+    logger.info(f"Items matching input found in catalog: {len(cadu_items)}")
+
+    if not cadu_items:
+        # error maybe?
+        logger.warning("No valid CADU items found, returning fallback datetime")
         return "2023-01-01T00:00:00Z"
 
-    # iterate ang get the min value of origin_datetime from cadu items
-    raise NotImplementedError(f"Processor {processor} not supported for EOPF origin datetime computation.")
+    max_eopf_datetime = max(
+        datetime.datetime.fromisoformat(item.to_dict()["properties"]["eopf:origin_datetime"].replace("Z", "+00:00"))
+        for item in cadu_items
+    ).isoformat()
+
+    logger.info(f"Maximum eopf datetime computed from all items is {max_eopf_datetime}")
+    return max_eopf_datetime
 
 
 @task(name="Run DPR processor")
@@ -333,7 +385,7 @@ async def run_processor(
         dpr_job = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
 
         logger.info(f"DPR processor output {dpr_job}")
-        eopf_stac_items, eopf_types = update_eopf_assets(flow_env, processor.value, input_products, payload)
+        eopf_stac_items, eopf_types = update_eopf_assets(flow_env, input_products, payload)
         # Wait for the job to finish
         record_performance_indicators(
             stop_date=datetime.datetime.now(),
