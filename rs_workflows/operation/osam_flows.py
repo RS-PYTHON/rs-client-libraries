@@ -14,27 +14,39 @@
 
 import json
 import os
+
 import requests
 from prefect import flow, task
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from prefect.context import TaskRunContext
 from prefect.artifacts import acreate_markdown_artifact
+from prefect.context import TaskRunContext
+
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
 class OSAMUserNotFoundError(Exception):
     """Raised when the OSAM user does not exist."""
-    pass
 
 
 class OSAMRequestError(Exception):
     """Raised when OSAM returns an unexpected HTTP status."""
-    pass
 
 
-@flow(name="OSAM synchronise accounts",
-      description="Synchronise keycloak and object storage accounts.",
-      log_prints=True, validate_parameters=True)
-async def osam_synchronise_accounts(env: FlowEnvArgs):
+@flow(
+    name="OSAM synchronise accounts",
+    description="Synchronise keycloak and object storage accounts.",
+    log_prints=True,
+    validate_parameters=True,
+)
+async def osam_synchronise_accounts(env: FlowEnvArgs) -> None:
+    """
+    Synchronise keycloak and object storage accounts.
+
+    Args:
+        env (FlowEnvArgs): user account that call the flow
+
+    Raises:
+        OSAMRequestError: _description_
+    """
     print("Synchronize keycloak and object storage accounts.")
 
     flow_env = FlowEnv(env)
@@ -42,17 +54,24 @@ async def osam_synchronise_accounts(env: FlowEnvArgs):
         rs_server_href = os.getenv("RSPY_WEBSITE")
         request_url = f"{rs_server_href}/storage/accounts/update"
         print(f"Call request: {request_url}")
-        response = requests.post(request_url)
+        response = requests.post(request_url, timeout=30)
         if response.status_code != 200:
-            raise OSAMRequestError(
-                f"❌ Unexpected HTTP status {response.status_code} while synchronising accounts."
-            )
+            raise OSAMRequestError(f"❌ Unexpected HTTP status {response.status_code} while synchronising accounts.")
         print("✔️ The synchronization process is now running. Allow a few minutes before reviewing the changes.")
 
 
-@task(name="OSAM update object storage ",
-      description="Update Object Storage access rights for a specific user defined in keycloak.")
+@task(
+    name="OSAM update object storage ",
+    description="Update Object Storage access rights for a specific user defined in keycloak.",
+)
 async def osam_update_single_user(rs_server_href: str, user_name: str) -> None:
+    """
+    Update Object Storage access rights for a specific user defined in keycloak.
+
+    Raises:
+        OSAMUserNotFoundError
+        OSAMRequestError
+    """
     task_run_ctx = TaskRunContext.get()
     if task_run_ctx is not None:
         task_run_ctx.task_run.name = f"📦Update Object Storage rights for user '{user_name}'"
@@ -60,34 +79,35 @@ async def osam_update_single_user(rs_server_href: str, user_name: str) -> None:
     print("Start the update...")
     request_url = f"{rs_server_href}/storage/account/{user_name}/update"
     print(f"Call request: {request_url}")
-    response = requests.get(request_url)
+    response = requests.get(request_url, timeout=30)
     if response.status_code == 404:
-        raise OSAMUserNotFoundError(
-            f"❌ User '{user_name}' does not exist in OSAM (HTTP 404)."
-        )
+        raise OSAMUserNotFoundError(f"❌ User '{user_name}' does not exist in OSAM (HTTP 404).")
 
     if response.status_code != 200:
-        raise OSAMRequestError(
-            f"❌ Unexpected HTTP status {response.status_code} while updating user '{user_name}'."
-        )
+        raise OSAMRequestError(f"❌ Unexpected HTTP status {response.status_code} while updating user '{user_name}'.")
     print(f"✔️ Rights for user '{user_name}' successfully applied.")
 
     print("Show the rights...")
     # Make the request for user's access rights
     request_url = f"{rs_server_href}/storage/account/pcuq/rights"
     print(f"Call request: {request_url}")
-    response = requests.get(request_url)
+    response = requests.get(request_url, timeout=30)
 
     if response.status_code != 200:
-        raise OSAMRequestError(
-            f"❌ Failed to retrieve rights for '{user_name}' (HTTP {response.status_code})."
-        )
+        raise OSAMRequestError(f"❌ Failed to retrieve rights for '{user_name}' (HTTP {response.status_code}).")
     rights = response.json()
     create_rights_artifact.submit(rights, user_name)
 
 
 @task(name="create artifact with JSON OBS rights")
 async def create_rights_artifact(rights: dict, username: str) -> None:
+    """
+    Register the JSON with OBS rights.
+
+    Args:
+        rights (dict)
+        username (str)
+    """
     pretty_json = json.dumps(rights, indent=2, ensure_ascii=False)
     markdown_report = f"""
 ## Object Storage rights for **{username}**
@@ -96,15 +116,18 @@ async def create_rights_artifact(rights: dict, username: str) -> None:
 {pretty_json}
 """
 
-    await acreate_markdown_artifact(
-        key="rights",
-        markdown=markdown_report,
-        description="session staging output"
-    )
+    await acreate_markdown_artifact(key="rights", markdown=markdown_report, description="session staging output")
 
 
 @flow(name="OSAM update account", log_prints=True, validate_parameters=True)
 async def osam_update_user(env: FlowEnvArgs, user_name: str):
+    """
+    Flow that update a single OBS accounts.
+
+    Args:
+        env (FlowEnvArgs):
+        user_name (str):
+    """
     print("Start update OSAM user rights.")
 
     # Initialize flow environment and telemetry span
