@@ -18,7 +18,7 @@ import requests
 from prefect import flow, task
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from prefect.context import TaskRunContext
-from prefect.artifacts import create_markdown_artifact
+from prefect.artifacts import acreate_markdown_artifact
 
 
 class OSAMUserNotFoundError(Exception):
@@ -52,7 +52,7 @@ async def osam_synchronise_accounts(env: FlowEnvArgs):
 
 @task(name="OSAM update object storage ",
       description="Update Object Storage access rights for a specific user defined in keycloak.")
-def osam_update_single_user(rs_server_href: str, user_name: str):
+async def osam_update_single_user(rs_server_href: str, user_name: str) -> None:
     task_run_ctx = TaskRunContext.get()
     if task_run_ctx is not None:
         task_run_ctx.task_run.name = f"📦Update Object Storage rights for user '{user_name}'"
@@ -96,7 +96,7 @@ async def create_rights_artifact(rights: dict, username: str) -> None:
 {pretty_json}
 """
 
-    await create_markdown_artifact(
+    await acreate_markdown_artifact(
         key="rights",
         markdown=markdown_report,
         description="session staging output"
@@ -116,4 +116,4 @@ async def osam_update_user(env: FlowEnvArgs, user_name: str):
 
         # Update a specific account
         if rs_server_href is not None:
-            osam_update_single_user(rs_server_href, user_name)
+            osam_update_single_user.submit(rs_server_href, user_name)
