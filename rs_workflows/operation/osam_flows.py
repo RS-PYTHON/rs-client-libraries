@@ -127,7 +127,7 @@ def osam_update_user(env: FlowEnvArgs, user_name: str):
     Flow that update a single OBS accounts.
 
     Args:
-        env (FlowEnvArgs):
+        env (FlowEnvArgs): account that call the flow
         user_name (str):
     """
     print("Start update OSAM user rights.")
