@@ -396,7 +396,7 @@ def get_io(unit, dpr_process_in: DprProcessIn, store_params: StoreParams, flow_e
     """
     catalog_client = flow_env.rs_client.get_catalog_client()
 
-    config_rows = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/storage/configuration")
+    config_rows = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
 
     inputs = build_input_products(unit, dpr_process_in, store_params, catalog_client)
     outputs = build_output_products(unit, dpr_process_in, store_params, flow_env, config_rows)
