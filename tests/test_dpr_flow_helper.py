@@ -12,26 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """test of helper functions for dpr_flow.py"""
+import datetime
 import json
 from pathlib import Path
-import datetime
 
 from rs_workflows.dpr_flow import (
-    s3_list,
+    compute_eopf_origin_datetimes,
+    create_stac_items,
     extract_products_and_zattrs,
     read_zattrs_sync,
     s3_download_file_sync,
-    create_stac_items,
+    s3_list,
     update_eopf_assets,
-    compute_eopf_origin_datetimes,
 )
 
 
 def test_s3_list_returns_full_s3_paths(mocker):
     """
-        Verify that s3_list returns fully-qualified S3 paths for all objects
-        found under a given prefix and that the S3 filter is called with the
-        correctly normalized prefix.
+    Verify that s3_list returns fully-qualified S3 paths for all objects
+    found under a given prefix and that the S3 filter is called with the
+    correctly normalized prefix.
     """
     s3_prefix = "s3://my-bucket/some/prefix"
 
@@ -42,7 +42,7 @@ def test_s3_list_returns_full_s3_paths(mocker):
     mock_objects = mocker.Mock()
 
     mock_bucket_resource.objects = mock_objects
-    mock_s3_bucket._get_bucket_resource.return_value = mock_bucket_resource # pylint: disable=protected-access
+    mock_s3_bucket._get_bucket_resource.return_value = mock_bucket_resource  # pylint: disable=protected-access
 
     mock_obj_1 = mocker.Mock()
     mock_obj_1.key = "some/prefix/file1.txt"
@@ -64,9 +64,8 @@ def test_s3_list_returns_full_s3_paths(mocker):
         "s3://my-bucket/some/prefix/file2.txt",
     ]
 
-    mock_objects.filter.assert_called_once_with(
-        Prefix="some/prefix/"
-    )
+    mock_objects.filter.assert_called_once_with(Prefix="some/prefix/")
+
 
 def test_extract_products_and_zattrs_detects_valid_products_and_zattrs():
     """
@@ -79,22 +78,16 @@ def test_extract_products_and_zattrs_detects_valid_products_and_zattrs():
     files = [
         # Valid layout 1
         "/data/zarr/product_a/.zattrs",
-
         # Valid layout 2
         "/data/zarr/product_b/product_b/.zattrs",
-
         # Invalid: wrong nested folder name
         "/data/zarr/product_c/other/.zattrs",
-
         # Invalid: missing .zattrs
         "/data/zarr/product_d/product_d/data.json",
-
         # Invalid: too shallow
         "/data/zarr/product_e",
-
         # Invalid: outside base_path
         "/other/path/product_f/.zattrs",
-
         # Valid layout 1 again (duplicate product)
         "/data/zarr/product_a/.zattrs",
     ]
@@ -126,7 +119,7 @@ def test_read_zattrs_sync_downloads_and_parses_json(mocker):
         "answer": 42,
     }
 
-    def fake_s3_download(src, dest, _sync): # pylint: disable=unused-argument
+    def fake_s3_download(src, dest, _sync):  # pylint: disable=unused-argument
         with open(dest, "w", encoding="utf-8") as f:
             json.dump(fake_json_data, f)
 
@@ -143,12 +136,9 @@ def test_read_zattrs_sync_downloads_and_parses_json(mocker):
     ]
 
     assert mock_download.call_count == 2
-    mock_download.assert_any_call(
-        zattrs_paths[0], mocker.ANY, _sync=True
-    )
-    mock_download.assert_any_call(
-        zattrs_paths[1], mocker.ANY, _sync=True
-    )
+    mock_download.assert_any_call(zattrs_paths[0], mocker.ANY, _sync=True)
+    mock_download.assert_any_call(zattrs_paths[1], mocker.ANY, _sync=True)
+
 
 def test_s3_download_file_sync_downloads_and_returns_path(mocker):
     """
@@ -183,12 +173,13 @@ def test_s3_download_file_sync_downloads_and_returns_path(mocker):
 
     assert result == to_path
 
+
 def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
     """
     Verify that create_stac_items constructs STAC Items correctly from
     EOPF feature dictionaries, injects mandatory properties, and attaches
     assets corresponding to output products.
-    
+
     This test mocks Item and Asset constructors and ensures:
     - compute_eopf_origin_datetimes is called to populate eopf:origin_datetime
     - Each feature results in one Item being created
@@ -202,8 +193,8 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
         "I/O": {
             "output_products": [
                 {"path": "s3://my-bucket/output/"},
-            ]
-        }
+            ],
+        },
     }
 
     input_products = [
@@ -253,9 +244,7 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
     assert len(items) == 2
 
     # compute_eopf_origin_datetimes called correctly
-    compute_call = mocker.patch(
-        "rs_workflows.dpr_flow.compute_eopf_origin_datetimes"
-    )
+    compute_call = mocker.patch("rs_workflows.dpr_flow.compute_eopf_origin_datetimes")
     compute_call.assert_not_called()  # sanity: patched above
 
     # Item constructor called for each feature
@@ -279,11 +268,12 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
     # Assets attached to item
     assert "feature_1.zarr" in items[0].assets
 
+
 def test_update_eopf_assets_happy_path(mocker):
     """
     Verify that the update_eopf_assets Prefect task correctly orchestrates
     discovery and processing of EOPF products:
-    
+
     - Lists all files under the output S3 path
     - Extracts product names and associated .zattrs metadata
     - Reads and parses the .zattrs metadata
@@ -301,8 +291,8 @@ def test_update_eopf_assets_happy_path(mocker):
         "I/O": {
             "output_products": [
                 {"path": "s3://my-bucket/output/"},
-            ]
-        }
+            ],
+        },
     }
 
     all_files = [
@@ -324,12 +314,12 @@ def test_update_eopf_assets_happy_path(mocker):
                         "datetime": "2024-01-01T00:00:00",
                         "product:type": "EOPF_TYPE_A",
                     },
-                }
+                },
             },
-        }
+        },
     ]
 
-    eopf_items = [zattrs_data[0]["data"]["stac_discovery"]] # type: ignore
+    eopf_items = [zattrs_data[0]["data"]["stac_discovery"]]  # type: ignore
     eopf_types = ["EOPF_TYPE_A"]
 
     mock_stac_items = [mocker.Mock()]
@@ -381,15 +371,17 @@ def test_update_eopf_assets_happy_path(mocker):
         eopf_items,
     )
 
+
 def make_mock_item(origin_datetime: str, mocker):
     """Return a random product with eopf datetieme set"""
     mock_item = mocker.Mock()
     mock_item.to_dict.return_value = {
         "properties": {
             "eopf:origin_datetime": origin_datetime,
-        }
+        },
     }
     return mock_item
+
 
 def test_compute_eopf_origin_datetimes_single_item(mocker):
     """
@@ -421,6 +413,7 @@ def test_compute_eopf_origin_datetimes_single_item(mocker):
     result = compute_eopf_origin_datetimes(env, input_products)
 
     assert result == "2024-01-10T12:00:00+00:00"
+
 
 def test_compute_eopf_origin_datetimes_multiple_items_returns_max(mocker):
     """
@@ -458,6 +451,7 @@ def test_compute_eopf_origin_datetimes_multiple_items_returns_max(mocker):
     result = compute_eopf_origin_datetimes(env, input_products)
 
     assert result == "2024-02-01T00:00:00+00:00"
+
 
 def test_compute_eopf_origin_datetimes_returns_fallback_on_errors(mocker):
     """
