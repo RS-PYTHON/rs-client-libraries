@@ -156,10 +156,14 @@ def create_stac_items(env, payload, input_products, eopf_features):
 
         # C1.3 Add stac_extensions following the list from the PRIP ICD §3.3.4
         default_stac_extensions: list[str] = [
-            # "https://stac-extensions.github.io/item-assets/v1.0.0/schema.json",
-            # "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
-            # "https://stac-extensions.github.io/projection/v1.1.0/schema.json",
-            # "https://stac-extensions.github.io/product/v0.1.0/schema.json",
+            # "https://github.com/stac-extensions/sat",
+            # "https://github.com/stac-extensions/product",
+            # "https://github.com/stac-extensions/grid",
+            # "https://github.com/stac-extensions/processing",
+            # "https://github.com/stac-extensions/eo",
+            # "https://github.com/stac-extensions/view",
+            # "https://github.com/stac-extensions/timestamps",
+            # "https://github.com/CS-SI/eopf-stac-extension"
         ]
 
         return Item(
