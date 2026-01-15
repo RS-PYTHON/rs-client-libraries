@@ -122,7 +122,7 @@ async def create_rights_artifact(rights: dict, username: str) -> None:
 
 
 @flow(name="OSAM update account", log_prints=True, validate_parameters=True)
-async def osam_update_user(env: FlowEnvArgs, user_name: str):
+def osam_update_user(env: FlowEnvArgs, user_name: str):
     """
     Flow that update a single OBS accounts.
 
