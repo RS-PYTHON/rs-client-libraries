@@ -975,7 +975,7 @@ def _mock_get_row_not_list(monkeypatch):
     """Mock returning a list where elements are NOT lists."""
 
     def _mock_get(url, timeout):
-        return MockResponse(json_data=["a", "b", "c"])  # invalid
+        return MockResponse(json_data=["a", "b", "c"])
 
     monkeypatch.setattr(requests, "get", _mock_get)
     return _mock_get
@@ -986,7 +986,7 @@ def _mock_get_non_string(monkeypatch):
     """Mock returning a list containing non-string elements inside a row."""
 
     def _mock_get(url, timeout):
-        return MockResponse(json_data=[["a", 123, "b"]])  # 123 invalid
+        return MockResponse(json_data=[["a", 123, "b"]])
 
     monkeypatch.setattr(requests, "get", _mock_get)
     return _mock_get
@@ -997,7 +997,7 @@ def _mock_get_row_wrong_length_too_short(monkeypatch):
     """Row has fewer than 5 columns."""
 
     def _mock_get(url, timeout):
-        return MockResponse(json_data=[["a", "b", "c"]])  # only 3 entries
+        return MockResponse(json_data=[["a", "b", "c"]])
 
     monkeypatch.setattr(requests, "get", _mock_get)
     return _mock_get
@@ -1008,7 +1008,7 @@ def _mock_get_row_wrong_length_too_long(monkeypatch):
     """Row has more than 5 columns."""
 
     def _mock_get(url, timeout):
-        return MockResponse(json_data=[["a", "b", "c", "d", "e", "f"]])  # 6 entries
+        return MockResponse(json_data=[["a", "b", "c", "d", "e", "f"]])
 
     monkeypatch.setattr(requests, "get", _mock_get)
     return _mock_get
