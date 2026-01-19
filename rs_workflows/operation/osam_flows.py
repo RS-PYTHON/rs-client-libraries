@@ -39,7 +39,7 @@ class OSAMRequestError(Exception):
     log_prints=True,
     validate_parameters=True,
 )
-def osam_synchronise_accounts(env: FlowEnvArgs) -> None:
+async def osam_synchronise_accounts(env: FlowEnvArgs) -> None:
     """
     Synchronise keycloak and object storage accounts.
 
@@ -66,7 +66,7 @@ def osam_synchronise_accounts(env: FlowEnvArgs) -> None:
     name="OSAM update object storage ",
     description="Update Object Storage access rights for a specific user defined in keycloak.",
 )
-def osam_update_single_user(rs_server_href: str, user_name: str, apikey: str) -> None:
+def osam_update_single_user(rs_server_href: str, user_name: str, apikey: dict) -> None:
     """
     Update Object Storage access rights for a specific user defined in keycloak.
 
@@ -141,4 +141,4 @@ async def osam_update_user(env: FlowEnvArgs, user_name: str):
 
         # Update a specific account
         if rs_server_href is not None:
-            osam_update_single_user.submit(rs_server_href, user_name, **flow_env.rs_client.apikey_headers)
+            osam_update_single_user.submit(rs_server_href, user_name, flow_env.rs_client.apikey_headers)
