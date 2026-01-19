@@ -125,4 +125,4 @@ async def osam_update_user(env: FlowEnvArgs, user_name: str):
         if response.status_code != 200:
             raise OSAMRequestError(f"❌ Failed to retrieve rights for '{user_name}' (HTTP {response.status_code}).")
         rights = response.json()
-        await create_rights_artifact(rights, user_name)
+        await create_rights_artifact(rights, user_name)  # type: ignore
