@@ -56,7 +56,7 @@ def osam_synchronise_accounts(env: FlowEnvArgs) -> None:
         rs_server_href = os.getenv("RSPY_WEBSITE")
         request_url = f"{rs_server_href}/storage/accounts/update"
         print(f"Call request: {request_url}")
-        response = requests.post(request_url, timeout=30)
+        response = requests.post(request_url, **flow_env.rs_client.apikey_headers, timeout=30)
         if response.status_code != 200:
             raise OSAMRequestError(f"❌ Unexpected HTTP status {response.status_code} while synchronising accounts.")
         print("✔️ The synchronization process is now running. Allow a few minutes before reviewing the changes.")
@@ -66,7 +66,7 @@ def osam_synchronise_accounts(env: FlowEnvArgs) -> None:
     name="OSAM update object storage ",
     description="Update Object Storage access rights for a specific user defined in keycloak.",
 )
-def osam_update_single_user(rs_server_href: str, user_name: str) -> None:
+def osam_update_single_user(rs_server_href: str, user_name: str, apikey: str) -> None:
     """
     Update Object Storage access rights for a specific user defined in keycloak.
 
@@ -81,7 +81,7 @@ def osam_update_single_user(rs_server_href: str, user_name: str) -> None:
     print("Start the update...")
     request_url = f"{rs_server_href}/storage/account/{user_name}/update"
     print(f"Call request: {request_url}")
-    response = requests.get(request_url, timeout=30)
+    response = requests.get(request_url, apikey, timeout=30)
     if response.status_code == 404:
         raise OSAMUserNotFoundError(f"❌ User '{user_name}' does not exist in OSAM (HTTP 404).")
 
@@ -93,7 +93,7 @@ def osam_update_single_user(rs_server_href: str, user_name: str) -> None:
     # Make the request for user's access rights
     request_url = f"{rs_server_href}/storage/account/pcuq/rights"
     print(f"Call request: {request_url}")
-    response = requests.get(request_url, timeout=30)
+    response = requests.get(request_url, apikey, timeout=30)
 
     if response.status_code != 200:
         raise OSAMRequestError(f"❌ Failed to retrieve rights for '{user_name}' (HTTP {response.status_code}).")
@@ -141,4 +141,4 @@ async def osam_update_user(env: FlowEnvArgs, user_name: str):
 
         # Update a specific account
         if rs_server_href is not None:
-            osam_update_single_user.submit(rs_server_href, user_name)
+            osam_update_single_user.submit(rs_server_href, user_name, **flow_env.rs_client.apikey_headers)
