@@ -312,8 +312,9 @@ def build_input_products(
             if dpr_process_in.unit:
                 store_name = storage_configuration.get_storage_for_unit_section("input_products")
             elif dpr_process_in.pipeline:
-                # TODO: distinguish pipeline input from other !!!
-                store_name = storage_configuration.get_storage_for_pipeline_section("pipeline_input")
+                store_name = storage_configuration.get_storage_for_pipeline_section(
+                    mapping.get("origin", ""),
+                ) or storage_configuration.get_storage_for_pipeline_section("other")
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for input product '{product_name}'")
         inputs.append(
@@ -382,8 +383,9 @@ def build_output_products(
             if dpr_process_in.unit:
                 store_name = storage_configuration.get_storage_for_unit_section("output_products")
             elif dpr_process_in.pipeline:
-                # TODO: distinguish pipeline output from other !!!
-                store_name = storage_configuration.get_storage_for_pipeline_section("pipeline_output")
+                store_name = storage_configuration.get_storage_for_pipeline_section(
+                    mapping.get("origin", ""),
+                ) or storage_configuration.get_storage_for_pipeline_section("other")
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
         outputs.append(

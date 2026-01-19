@@ -563,13 +563,17 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
 
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = None
-    mock_storage.get_storage_for_pipeline_section.return_value = "pipeline_s3"
+    mock_storage.get_storage_for_pipeline_section.side_effect = lambda section: {
+        "pipeline_input_1": None,
+        "other": "pipeline_s3",
+    }[section]
     mock_storage.get_store_params.return_value = mock_store_params
 
     inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
 
     assert len(inputs) == 1
-    mock_storage.get_storage_for_pipeline_section.assert_called_with("pipeline_input")
+    mock_storage.get_storage_for_pipeline_section.assert_any_call("pipeline_input_1")
+    mock_storage.get_storage_for_pipeline_section.assert_any_call("other")
     mock_storage.get_store_params.assert_called_with("pipeline_s3")
 
 
