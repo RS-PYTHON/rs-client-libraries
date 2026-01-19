@@ -51,10 +51,10 @@ include = [
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.15"
-opentelemetry-distro = "^0.59b0" # then run 'poetry run opentelemetry-bootstrap -a install'
-opentelemetry-instrumentation-aws-lambda = "^0.59b0"
-opentelemetry-test-utils = "^0.59b0"
-opentelemetry-exporter-otlp = "^1.38.0"
+opentelemetry-distro = "^0.60b1" # then run 'poetry run opentelemetry-bootstrap -a install'
+opentelemetry-instrumentation-aws-lambda = "^0.60b1"
+opentelemetry-test-utils = "^0.60b1"
+opentelemetry-exporter-otlp = "^1.39.1"
 protobuf = ">=5.29.5"
 python-logging-loki = "^0.3.1" # to avoid otl error: No module named 'logging_loki'
 cachetools = ">=5.5.2"

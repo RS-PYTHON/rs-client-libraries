@@ -75,6 +75,7 @@ class OsamClient(RsClient):
             self.http_session.get,
             f"{self.href_service}/storage/account/credentials",
             timeout=timeout,
+            **self.apikey_headers,
         )
         response.raise_for_status()
         return BucketCredentials.model_validate(response.json())
