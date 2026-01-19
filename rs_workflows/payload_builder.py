@@ -120,6 +120,9 @@ def _build_entries(
             raise TaskTableError(f'Missing "mandatory" for item "{name}" in unit "{unit_name}".')
         out["mandatory"] = bool(e["mandatory"])
 
+        if "regex" in e and e["regex"] is not None:
+            out["regex"] = e["regex"]
+
         # Merge IO config
         io_cfg = io_index.get(name, {}) or {}
         merged_cfg: dict[str, Any] = {}

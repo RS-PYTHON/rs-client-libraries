@@ -472,3 +472,96 @@ def test_case_8_exact_output():
     }
 
     assert out == expected
+
+
+def test_case_s1_l0_exact_output_with_regex():
+    """Test build_unit_list output includes regex for output products."""
+    tt_path = Path(__file__).parent / "resources" / "TaskTable_S1_L0_generated_by_rs_python_v1.json"
+    tt = json.loads(tt_path.read_text(encoding="utf-8"))
+    start_datetime = datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc)
+    end_datetime = datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc)
+
+    out = build_unit_list(
+        tasktable=tt,
+        pipeline="s1_l0_full",
+        processing_mode=None,
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
+    )
+
+    expected = {
+        "units": [
+            {
+                "name": "single_unit",
+                "module": "l0.s1.s1_l0_processor",
+                "input_products": [
+                    {
+                        "name": "S1CADUS",
+                        "origin": "pipeline_input",
+                        "mandatory": True,
+                        "type": "folder",
+                        "store_type": "cadu",
+                    },
+                ],
+                "input_adfs": [
+                    {
+                        "name": "OSF",
+                        "mandatory": False,
+                        "type": "filename",
+                        "store_type": "safe",
+                        "alternatives": [
+                            {
+                                "order": 1,
+                                "timeout_seconds": 0,
+                                "query": {
+                                    "name": "LatestValCover",
+                                    "parameters": {
+                                        "product_type": "MPL_ORBSCT",
+                                        "start_datetime": "2023-10-03T11:00:00.000Z",
+                                        "end_datetime": "2025-10-03T11:00:00.000Z",
+                                        "dTa": 0,
+                                        "dTb": 0,
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                    {
+                        "name": "FRO",
+                        "mandatory": False,
+                        "type": "filename",
+                        "store_type": "safe",
+                        "alternatives": [
+                            {
+                                "order": 1,
+                                "timeout_seconds": 0,
+                                "query": {
+                                    "name": "LatestValCover",
+                                    "parameters": {
+                                        "product_type": "MPL_ORBPRE",
+                                        "start_datetime": "2023-10-03T11:00:00.000Z",
+                                        "end_datetime": "2025-10-03T11:00:00.000Z",
+                                        "dTa": 7200,
+                                        "dTb": 0,
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                ],
+                "output_products": [
+                    {
+                        "name": "output_folder",
+                        "origin": "pipeline_output",
+                        "mandatory": True,
+                        "regex": ".*",
+                        "type": "folder",
+                        "store_type": "zarr",
+                        "opening_mode": "CREATE_OVERWRITE",
+                    },
+                ],
+            },
+        ],
+    }
+
+    assert out == expected
