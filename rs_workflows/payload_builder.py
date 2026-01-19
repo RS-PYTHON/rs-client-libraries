@@ -120,9 +120,6 @@ def _build_entries(
             raise TaskTableError(f'Missing "mandatory" for item "{name}" in unit "{unit_name}".')
         out["mandatory"] = bool(e["mandatory"])
 
-        if "regex" in e and e["regex"] is not None:
-            out["regex"] = e["regex"]
-
         # Merge IO config
         io_cfg = io_index.get(name, {}) or {}
         merged_cfg: dict[str, Any] = {}
@@ -134,6 +131,19 @@ def _build_entries(
         if merged_cfg:
             merged_cfg = _replace_external_variables(merged_cfg, start_datetime, end_datetime)
             out.update(merged_cfg)
+
+        # Pass through extra input/output fields without overriding IO-derived values.
+        if with_origin:
+            extra_cfg: dict[str, Any] = {}
+            for k, v in e.items():
+                if k in ("name", "mode", "mandatory", "origin"):
+                    continue
+                if v is None or k in out:
+                    continue
+                extra_cfg[k] = v
+            if extra_cfg:
+                extra_cfg = _replace_external_variables(extra_cfg, start_datetime, end_datetime)
+                out.update(extra_cfg)
 
         kept.append(out)
 
