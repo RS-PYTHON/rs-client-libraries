@@ -47,7 +47,7 @@ async def osam_synchronise_accounts(env: FlowEnvArgs) -> None:
         env (FlowEnvArgs): user account that call the flow
 
     Raises:
-        OSAMRequestError: _description_
+        OSAMRequestError: error HTTP status error
     """
     print("Synchronize keycloak and object storage accounts.")
 
@@ -85,11 +85,11 @@ async def create_rights_artifact(rights: dict, username: str) -> None:
 @flow(name="OSAM update account", log_prints=True, validate_parameters=True)
 async def osam_update_user(env: FlowEnvArgs, user_name: str):
     """
-    Flow that update a single OBS accounts.
+    Flow that update a single OBS account.
 
     Args:
         env (FlowEnvArgs): account that call the flow
-        user_name (str):
+        user_name (str): account to be updated
     """
     task_run_ctx = TaskRunContext.get()
     if task_run_ctx is not None:
@@ -102,9 +102,8 @@ async def osam_update_user(env: FlowEnvArgs, user_name: str):
 
         # Retrieve the RS server URL from the environment variable
         rs_server_href = os.getenv("RSPY_WEBSITE")
-
         request_url = f"{rs_server_href}/storage/account/{user_name}/update"
-        print(f"2 Call request: {request_url}")
+        print(f"Call request: {request_url}")
         response = requests.post(request_url, **flow_env.rs_client.apikey_headers, timeout=30)
 
         if response.status_code == 404:
