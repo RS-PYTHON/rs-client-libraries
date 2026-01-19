@@ -321,7 +321,10 @@ def build_input_products(
             InputProduct(
                 id=mapping["name"],
                 path=stac_item_path,
-                type=mapping.get("type", "filename"),
+                # TODO: The value for this filed in the tasktable (from where the unit is built) should be filename
+                # in case of s1 l0 processor, otherwise the s1 l0 processor is failing in starting.
+                # To be fixed in future iterations !
+                type="filename",  # mapping.get("type", "filename"),
                 store_type=mapping["store_type"],
                 store_params=storage_configuration.get_store_params(store_name),
             ),
