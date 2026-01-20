@@ -59,7 +59,9 @@ async def osam_synchronize_accounts(env: FlowEnvArgs) -> None:
         print(f"Call request: {request_url} with {test} ")
         response = requests.post(request_url, **flow_env.rs_client.apikey_headers, timeout=30)
         if response.status_code != 200:
-            raise OSAMRequestError(f"❌ Unexpected HTTP status {response.status_code} while synchronising accounts ({response.text}).")
+            raise OSAMRequestError(
+                f"❌ Unexpected HTTP status {response.status_code} while synchronising accounts ({response.text}).",
+            )
         print("✔️ The synchronization process is now running. Allow a few minutes before reviewing the changes.")
 
 
@@ -122,6 +124,8 @@ async def osam_update_user(env: FlowEnvArgs, user_name: str):
         response = requests.get(request_url, **flow_env.rs_client.apikey_headers, timeout=30)
 
         if response.status_code != 200:
-            raise OSAMRequestError(f"❌ Failed to retrieve rights for '{user_name}' (HTTP {response.status_code} {response.text}).")
+            raise OSAMRequestError(
+                f"❌ Failed to retrieve rights for '{user_name}' (HTTP {response.status_code} {response.text}).",
+            )
         rights = response.json()
         await create_rights_artifact(rights, user_name)  # type: ignore
