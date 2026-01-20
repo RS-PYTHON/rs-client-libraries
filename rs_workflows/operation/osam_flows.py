@@ -34,14 +34,14 @@ class OSAMRequestError(Exception):
 
 
 @flow(
-    name="OSAM synchronise accounts",
-    description="Synchronise keycloak and object storage accounts.",
+    name="OSAM synchronize accounts",
+    description="Synchronize keycloak and object storage accounts.",
     log_prints=True,
     validate_parameters=True,
 )
-async def osam_synchronize_accounts(env: FlowEnvArgs) -> None:
+async def osam_synchronize_accounts(env: FlowEnvArgs = FlowEnvArgs(owner_id="operator-osam")) -> None:
     """
-    Synchronise keycloak and object storage accounts.
+    Synchronize keycloak and object storage accounts.
 
     Args:
         env (FlowEnvArgs): user account that call the flow
@@ -85,7 +85,7 @@ async def create_rights_artifact(rights: dict, username: str) -> None:
 
 
 @flow(name="OSAM update account", log_prints=True, validate_parameters=True)
-async def osam_update_user(env: FlowEnvArgs, user_name: str):
+async def osam_update_user(user_name: str, env: FlowEnvArgs = FlowEnvArgs(owner_id="operator-osam")):
     """
     Flow that update a single OBS account.
 
@@ -119,7 +119,7 @@ async def osam_update_user(env: FlowEnvArgs, user_name: str):
 
         print("Regiser the new rights...")
         # Make the request for user's access rights
-        request_url = f"{rs_server_href}/storage/account/pcuq/rights"
+        request_url = f"{rs_server_href}/storage/account/{user_name}/rights"
         print(f"Call request: {request_url}")
         response = requests.get(request_url, **flow_env.rs_client.apikey_headers, timeout=30)
 
