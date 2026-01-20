@@ -629,7 +629,7 @@ def generate_payload(  # pylint: disable=unused-argument
     ).get()  # type: ignore[union-attr]
     storage_configuration = load_storage_configuration(secrets, logger=logger)
     logger.info("Loading bucket configuration from rs-osam endpoint")
-    bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/storage/configuration")
+    bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
 
     logger.info("Building workflow and I/O sections")
     workflow_steps = []
