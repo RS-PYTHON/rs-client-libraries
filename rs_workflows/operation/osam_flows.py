@@ -39,7 +39,7 @@ class OSAMRequestError(Exception):
     log_prints=True,
     validate_parameters=True,
 )
-async def osam_synchronise_accounts(env: FlowEnvArgs) -> None:
+async def osam_synchronize_accounts(env: FlowEnvArgs) -> None:
     """
     Synchronise keycloak and object storage accounts.
 
@@ -52,14 +52,14 @@ async def osam_synchronise_accounts(env: FlowEnvArgs) -> None:
     print("Synchronize keycloak and object storage accounts.")
 
     flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "OSAM-update-user"):
+    with flow_env.start_span(__name__, "OSAM-synchronize-accounts"):
         rs_server_href = os.getenv("RSPY_WEBSITE")
         request_url = f"{rs_server_href}/storage/accounts/update"
         test = flow_env.rs_client.apikey_headers
         print(f"Call request: {request_url} with {test} ")
         response = requests.post(request_url, **flow_env.rs_client.apikey_headers, timeout=30)
         if response.status_code != 200:
-            raise OSAMRequestError(f"❌ Unexpected HTTP status {response.status_code} while synchronising accounts.")
+            raise OSAMRequestError(f"❌ Unexpected HTTP status {response.status_code} while synchronising accounts ({response.text}).")
         print("✔️ The synchronization process is now running. Allow a few minutes before reviewing the changes.")
 
 
@@ -107,7 +107,7 @@ async def osam_update_user(env: FlowEnvArgs, user_name: str):
         response = requests.post(request_url, **flow_env.rs_client.apikey_headers, timeout=30)
 
         if response.status_code == 404:
-            raise OSAMUserNotFoundError(f"❌ User '{user_name}' does not exist in OSAM (HTTP 404).")
+            raise OSAMUserNotFoundError(f"❌ User '{user_name}' does not exist in OSAM (HTTP 404): {response.text} .")
 
         if response.status_code != 200:
             raise OSAMRequestError(
@@ -122,6 +122,6 @@ async def osam_update_user(env: FlowEnvArgs, user_name: str):
         response = requests.get(request_url, **flow_env.rs_client.apikey_headers, timeout=30)
 
         if response.status_code != 200:
-            raise OSAMRequestError(f"❌ Failed to retrieve rights for '{user_name}' (HTTP {response.status_code}).")
+            raise OSAMRequestError(f"❌ Failed to retrieve rights for '{user_name}' (HTTP {response.status_code} {response.text}).")
         rights = response.json()
         await create_rights_artifact(rights, user_name)  # type: ignore
