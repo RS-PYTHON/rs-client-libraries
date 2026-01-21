@@ -670,10 +670,6 @@ def generate_payload(  # pylint: disable=unused-argument
                         "temporary_path": "./output_params/tmp",
                         "acquisition_report_output_path": "./output_params/s1",
                     }
-                    # TODO ! : this is a hack to set the .* key in outputs to the value of output_folder
-                    # IMPORTANT: check how to set this in the future, when the processor will be more stable
-                    if "output_folder" in workflow_step.outputs:
-                        workflow_step.outputs[".*"] = workflow_step.outputs["output_folder"]
             case DprProcessor.S3L0:
                 config = ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
 
