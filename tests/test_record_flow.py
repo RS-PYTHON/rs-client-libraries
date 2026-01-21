@@ -307,9 +307,7 @@ def test_record_product_realised_insert(mock_db_env):
 
     stac_items = [
         {
-            "stac_discovery": {
-                "properties": {"product:type": "S1_GRD", "datetime": "2025-01-01T00:00:00Z"},
-            },
+            "properties": {"product:type": "S1_GRD", "datetime": "2025-01-01T00:00:00Z"},
         },
     ]
 
@@ -336,7 +334,7 @@ def test_record_product_realised_keyerror_triggers_rollback(mock_db_env):
     """
     mock_session, _ = mock_db_env
     # stac_discovery not in "properties"
-    stac_items = [{"stac_discovery": {}}]  # type: ignore
+    stac_items = [{}]  # type: ignore
 
     with pytest.raises(KeyError):
         record_flow_module.record_product_realised.fn("flow-1", stac_items)
@@ -478,7 +476,7 @@ def test_record_product_expected_insert_data(mock_db_env, mocker):
     mocker.patch.object(record_flow_module, "get_pi_category_id", return_value=99)
 
     # Call the function
-    record_flow_module.record_product_expected.fn(flow_run_id, dpr_processor_name, payload)
+    record_flow_module.record_product_expected.fn(flow_run_id, dpr_processor_name, payload, ["S03DORDOP", "S03MWRL0_"])
 
     # Grab all insert calls
     execute_calls = mock_session.execute.call_args_list
@@ -513,7 +511,7 @@ def test_record_product_expected_rollback_on_keyerror(mocker, mock_db_env):
     }
 
     with pytest.raises(KeyError):
-        record_flow_module.record_product_expected.fn("flow-error", "s3_l0", payload)
+        record_flow_module.record_product_expected.fn("flow-error", "s3_l0", payload, ["UNKNOWN_EOPF_TYPE"])
 
     mock_session.rollback.assert_called_once()
 

@@ -62,7 +62,7 @@ pystac = "^1.13.0"
 pystac-client = "^0.9.0"
 python-dateutil = "^2.9.0.post0"
 stac-pydantic = "^3.4.0"
-openapi-core = ">=0.22.0"
+openapi-core = "0.22.0"
 click = "8.3.1"
 prefect = { version = "3.6.5", extras = ["aws"] }
 requests = "^2.32.4"
