@@ -84,13 +84,6 @@ async def publish(
     logger = get_run_logger()
     flow_env = FlowEnv(env)
 
-    # Normalize target_collections into a single dict
-    collections = (
-        target_collections
-        if isinstance(target_collections, dict)
-        else {k: v for d in target_collections for k, v in d.items()}
-    )
-
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
 
     with flow_env.start_span(__name__, "publish-to-catalog"):
@@ -101,7 +94,7 @@ async def publish(
                     item.properties["product:type"] if isinstance(item, Item) else item["properties"]["product:type"]
                 )
                 # Resolve destination collection
-                target_collection = resolve_collection(product_type, collections)
+                target_collection = resolve_collection(product_type, target_collections)
 
                 logger.info(
                     "Writing product %s to %s",
@@ -147,31 +140,45 @@ async def get_item(
     return catalog_client.get_item(target_collection, item)
 
 
-def resolve_collection(product_type: str, collections: dict) -> str:
+def resolve_collection(product_type: str, target_collections) -> str:
+    """Resolve the target collection for a given product type.
+
+    Supports input values as strings or tuples (product_type, collection),
+    and input as dict or list of dicts.
+
+    Args:
+        product_type: STAC product type.
+        target_collections: Dict or list of dicts with target collections.
+
+    Returns:
+        The resolved target collection.
+
+    Raises:
+        ValueError: If the product type cannot be resolved.
     """
-    Resolve the target catalog collection for a given product type.
+    collections = {}
 
-    Lookup order:
-    1. Exact match on product_type
-    2. Wildcard fallback ("*"), if defined
+    if isinstance(target_collections, dict):
+        # normalize dict input
+        for value in target_collections.values():
+            if isinstance(value, tuple):
+                key, collection = value
+                collections[key] = collection
+            else:  # string case
+                collections[value] = value
+    else:
+        # normalize list of dicts input
+        for d in target_collections:
+            for value in d.values():
+                if isinstance(value, tuple):
+                    key, collection = value
+                    collections[key] = collection
+                else:  # string case
+                    collections[value] = value
 
-    The function also validates that the resolved collection_id matches
-    the product_type (case-insensitive), to catch invalid LUT definitions.
-
-    :param product_type: STAC product type (e.g. "S03MWRL0_")
-    :param collections: Mapping of product_type -> (collection_id, target_collection)
-    :return: Target collection name where the item should be published
-    :raises ValueError: If the product type cannot be resolved or LUT is inconsistent
-    """
-    # Try exact match first, then fallback to wildcard
-    collection_id, target_collection = collections.get(product_type, collections.get("*", (None, None)))
-
-    # No match found (neither exact nor wildcard)
-    if not collection_id:
-        raise ValueError(f"Product type unknown: {product_type}")
-
-    # Sanity check: product type must match collection_id
-    if product_type.casefold() != collection_id.casefold():
+    # lookup product_type
+    target_collection = collections.get(product_type, collections.get("*"))
+    if not target_collection:
         raise ValueError(f"Product type unknown: {product_type}")
 
     return target_collection
