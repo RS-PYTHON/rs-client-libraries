@@ -90,7 +90,7 @@ async def publish(
         if isinstance(target_collections, dict)
         else {k: v for d in target_collections for k, v in d.items()}
     )
-
+    logger.info("Normalized target collections: %s", collections)
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
 
     with flow_env.start_span(__name__, "publish-to-catalog"):
