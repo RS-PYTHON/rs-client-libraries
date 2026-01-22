@@ -273,6 +273,10 @@ def update_eopf_assets(env, input_products: list[dict], payload: dict) -> tuple[
 
     # Read metadata
     zattrs_data = read_zattrs_sync(zattrs)
+    if not zattrs_data:
+        logger.error("No .zattrs files found or could be read. Exiting.")
+        raise RuntimeError("No .zattrs files found or could be read.")
+    logger.info(f"DPR processor output {zattrs_data}")
     logger.info(f"Loaded metadata from {len(zattrs_data)} .zattrs files.")
 
     # Extract EOPF info
@@ -329,15 +333,16 @@ def compute_eopf_origin_datetimes(env, input_products):
                     cadu_id,
                 )
                 cadu_items.append(future.result())
-            except RuntimeError:
+            except RuntimeError as rte:
                 logger.exception(f"Failed to get CADU item '{cadu_id}' from collection '{collection_id}'")
+                raise RuntimeError("No valid CADU items found to compute eopf:origin_datetime") from rte
 
     logger.info(f"Items matching input found in catalog: {len(cadu_items)}")
 
     if not cadu_items:
         # error maybe?
-        logger.warning("No valid CADU items found, returning fallback datetime")
-        return "2023-01-01T00:00:00Z"
+        logger.error("No valid CADU items found to compute eopf:origin_datetime. Exit")
+        raise RuntimeError("No valid CADU items found to compute eopf:origin_datetime")
 
     max_eopf_datetime = max(
         datetime.datetime.fromisoformat(
@@ -388,9 +393,8 @@ async def run_processor(
             payload_subpath=osp.basename(s3_payload_run),
             s3_report_dir=osp.join(osp.dirname(s3_payload_run)),
         )
-        dpr_job = dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
+        dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
 
-        logger.info(f"DPR processor output {dpr_job}")
         eopf_stac_items, eopf_types = update_eopf_assets(flow_env, input_products, payload)
         # Wait for the job to finish
         record_performance_indicators(  # type: ignore
