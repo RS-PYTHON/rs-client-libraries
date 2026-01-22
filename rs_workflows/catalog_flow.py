@@ -84,16 +84,6 @@ async def publish(
     logger = get_run_logger()
     flow_env = FlowEnv(env)
 
-<<<<<<< HEAD
-    # Normalize target_collections into a single dict
-    collections = (
-        target_collections
-        if isinstance(target_collections, dict)
-        else {k: v for d in target_collections for k, v in d.items()}
-    )
-    logger.info("Normalized target collections: %s", collections)
-=======
->>>>>>> origin/feat-rspy821/read-zattrs-and-create-output-stac-items
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
 
     with flow_env.start_span(__name__, "publish-to-catalog"):
