@@ -210,7 +210,7 @@ def create_stac_items(env, payload, input_products, eopf_features):
     for feature_dict in eopf_features:
         item = build_item(feature_dict, eopf_origin_datetimes)
         title = f"{item.id}.zarr"
-        item.assets = {title: build_asset(f"{path}{title}", title)}
+        item.assets = {title: build_asset(f"{path.rstrip('\\')}\\{title}", title)}
         items.append(item)
 
     return items
