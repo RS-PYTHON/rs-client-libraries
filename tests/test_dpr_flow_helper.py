@@ -24,6 +24,7 @@ from rs_workflows.dpr_flow import (
     s3_download_file_sync,
     s3_list,
     update_eopf_assets,
+    zarr_root_from_s3,
 )
 
 
@@ -478,3 +479,33 @@ def test_compute_eopf_origin_datetimes_returns_fallback_on_errors(mocker):
     result = compute_eopf_origin_datetimes(env, input_products)
 
     assert result == "2023-01-01T00:00:00Z"
+
+
+def test_basic_zarr_root():
+    base = "s3://my-bucket/project/output"
+    internal = "my-bucket/project/output/run1234_dataset.zarr/.zattrs"
+
+    result = zarr_root_from_s3(base, internal)
+    expected = "s3://my-bucket/project/output/run1234_dataset.zarr"
+
+    assert result == expected
+
+
+def test_zarr_root_with_zgroup():
+    base = "s3://data-bucket/experiments"
+    internal = "data-bucket/experiments/test42_result.zarr/.zgroup"
+
+    result = zarr_root_from_s3(base, internal)
+    expected = "s3://data-bucket/experiments/test42_result.zarr"
+
+    assert result == expected
+
+
+def test_nested_zarr_root():
+    base = "s3://analytics-bucket/raw"
+    internal = "analytics-bucket/raw/2026/01/23/exp_xyz.zarr/.zattrs"
+
+    result = zarr_root_from_s3(base, internal)
+    expected = "s3://analytics-bucket/raw/2026/01/23/exp_xyz.zarr"
+
+    assert result == expected

@@ -21,8 +21,9 @@ import tempfile
 
 # import datetime
 from os import path as osp
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import urlparse
 
 from prefect import get_run_logger, task
 from pystac import Asset, Item
@@ -117,7 +118,7 @@ def s3_download_file_sync(
     return to_path
 
 
-def create_stac_items(env, payload, input_products, eopf_features):
+def create_stac_items(env, input_products, eopf_features, s3_data_location):
     """
     Create a list of STAC Items from EOPF features and processing payload metadata.
 
@@ -127,8 +128,8 @@ def create_stac_items(env, payload, input_products, eopf_features):
     - Propagating origin datetimes from input products
 
     Args:
-        payload (dict): Processing payload containing input and output product metadata.
         eopf_features (list[dict]): List of GeoJSON-like feature dictionaries.
+        s3_data_location (str): Base S3 path where output products are stored.
 
     Returns:
         list[Item]: List of constructed STAC Item objects.
@@ -197,10 +198,6 @@ def create_stac_items(env, payload, input_products, eopf_features):
             },
         )
 
-    # Collect output product paths
-    paths = {prod["path"] for prod in payload["I/O"]["output_products"]}
-    path = next(iter(paths))
-
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
@@ -210,10 +207,23 @@ def create_stac_items(env, payload, input_products, eopf_features):
     for feature_dict in eopf_features:
         item = build_item(feature_dict, eopf_origin_datetimes)
         title = f"{item.id}.zarr"
-        item.assets = {title: build_asset(f"{path}{title}", title)}
+        item.assets = {title: build_asset(s3_data_location, title)}
         items.append(item)
 
     return items
+
+
+def zarr_root_from_s3(base_s3_uri: str, internal_s3_path: str) -> str:
+    """Extract the Zarr root path from an internal S3 path."""
+    parsed = urlparse(base_s3_uri)
+
+    base_path = PurePosixPath(parsed.path.lstrip("/"))
+    internal_path = PurePosixPath(internal_s3_path)
+    # !
+    relative = internal_path.relative_to(base_path)
+    zarr_root = next(p for p in relative.parents if p.name.endswith(".zarr"))
+
+    return f"{parsed.scheme}://{parsed.netloc}/{base_path / zarr_root}"
 
 
 @task(name="Update eopf assets")
@@ -274,7 +284,7 @@ def update_eopf_assets(env, input_products: list[dict], payload: dict) -> tuple[
     # Read metadata
     zattrs_data = read_zattrs_sync(zattrs)
     logger.info(f"Loaded metadata from {len(zattrs_data)} .zattrs files.")
-
+    s3_data_location = zarr_root_from_s3(path, zattrs)
     # Extract EOPF info
     eopf_types = [attrs["data"]["stac_discovery"]["properties"]["product:type"] for attrs in zattrs_data]
     logger.info(f"Extracted EOPF product types: {eopf_types}")
@@ -283,7 +293,7 @@ def update_eopf_assets(env, input_products: list[dict], payload: dict) -> tuple[
     logger.debug(f"EOPF discovery metadata extracted: {eopf_items}")
 
     # Build STAC items
-    stac_items = create_stac_items(env, payload, input_products, eopf_items)
+    stac_items = create_stac_items(env, input_products, eopf_items, s3_data_location)
     logger.info(f"Created {len(stac_items)} STAC items.")
 
     return stac_items, eopf_types
