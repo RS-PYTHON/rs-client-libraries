@@ -192,7 +192,6 @@ async def init_prefect_blocks():
             "POSTGRES_PORT",
             "POSTGRES_PI_DB",
             "POSTGRES_HOST",
-            "TEMPO_ENDPOINT",
             *dask_gateway_vars,
             "LOCAL_DASK_USERNAME",
             "LOCAL_DASK_PASSWORD",

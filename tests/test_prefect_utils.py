@@ -88,7 +88,6 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
         "POSTGRES_HOST": "test_host",
         "POSTGRES_PORT": "5432",
         "POSTGRES_PI_DB": "test_db",
-        "TEMPO_ENDPOINT": "TEMPO_ENDPOINT",
         "DASK_GATEWAY_ADDRESS": "DASK_GATEWAY_ADDRESS",
         "LOCAL_DASK_USERNAME": "LOCAL_DASK_USERNAME",
         "LOCAL_DASK_PASSWORD": "LOCAL_DASK_PASSWORD",
@@ -101,6 +100,7 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
 
     # In cluster mode, they must be set in a prefect block
     else:
+        env_global["TEMPO_ENDPOINT"] = "TEMPO_ENDPOINT"
         await Secret(value=env_global).save(  # type: ignore[arg-type]
             prefect_utils.BLOCK_NAME_ENV_GLOBAL,
             overwrite=True,
