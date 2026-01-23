@@ -16,10 +16,11 @@ import datetime
 import json
 from pathlib import Path
 
+import pytest
+
 from rs_workflows.dpr_flow import (
     compute_eopf_origin_datetimes,
     create_stac_items,
-    extract_products_and_zattrs,
     read_zattrs_sync,
     s3_download_file_sync,
     s3_list,
@@ -66,42 +67,6 @@ def test_s3_list_returns_full_s3_paths(mocker):
     ]
 
     mock_objects.filter.assert_called_once_with(Prefix="some/prefix/")
-
-
-def test_extract_products_and_zattrs_detects_valid_products_and_zattrs():
-    """
-    Verify that extract_products_and_zattrs correctly identifies valid Zarr
-    product layouts under a base path, ignores invalid or unrelated files,
-    and returns unique product names together with all detected .zattrs paths.
-    """
-    base_path = "/data/zarr"
-
-    files = [
-        # Valid layout 1
-        "/data/zarr/product_a/.zattrs",
-        # Valid layout 2
-        "/data/zarr/product_b/product_b/.zattrs",
-        # Invalid: wrong nested folder name
-        "/data/zarr/product_c/other/.zattrs",
-        # Invalid: missing .zattrs
-        "/data/zarr/product_d/product_d/data.json",
-        # Invalid: too shallow
-        "/data/zarr/product_e",
-        # Invalid: outside base_path
-        "/other/path/product_f/.zattrs",
-        # Valid layout 1 again (duplicate product)
-        "/data/zarr/product_a/.zattrs",
-    ]
-
-    products, zattrs = extract_products_and_zattrs(files, base_path)
-
-    assert set(products) == {"product_a", "product_b"}
-
-    assert zattrs == [
-        "/data/zarr/product_a/.zattrs",
-        "/data/zarr/product_b/product_b/.zattrs",
-        "/data/zarr/product_a/.zattrs",
-    ]
 
 
 def test_read_zattrs_sync_downloads_and_parses_json(mocker):
@@ -189,15 +154,6 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
     - Assets are attached to the corresponding Item
     """
     env = mocker.Mock()
-
-    payload = {
-        "I/O": {
-            "output_products": [
-                {"path": "s3://my-bucket/output/"},
-            ],
-        },
-    }
-
     input_products = [
         {"dummy": "input"},
     ]
@@ -237,9 +193,9 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
 
     items = create_stac_items(
         env=env,
-        payload=payload,
         input_products=input_products,
         eopf_features=eopf_features,
+        s3_data_location="s3://my-bucket/output/feature_1.zarr",
     )
 
     assert len(items) == 2
@@ -331,7 +287,10 @@ def test_update_eopf_assets_happy_path(mocker):
         "rs_workflows.dpr_flow.s3_list",
         return_value=all_files,
     )
-
+    mock_zarr_root = mocker.patch(
+        "rs_workflows.dpr_flow.zarr_root_from_s3",
+        return_value="s3://my-bucket/output/product_a/",
+    )
     mock_extract = mocker.patch(
         "rs_workflows.dpr_flow.extract_products_and_zattrs",
         return_value=(products, zattrs),
@@ -365,11 +324,10 @@ def test_update_eopf_assets_happy_path(mocker):
 
     mock_read.assert_called_once_with(zattrs)
 
-    mock_create.assert_called_once_with(
-        env,
-        payload,
-        input_products,
-        eopf_items,
+    mock_create.assert_called_once_with(env, input_products, eopf_items, "s3://my-bucket/output/product_a/")
+    mock_zarr_root.assert_called_once_with(
+        "s3://my-bucket/output/",
+        zattrs,
     )
 
 
@@ -454,15 +412,10 @@ def test_compute_eopf_origin_datetimes_multiple_items_returns_max(mocker):
     assert result == "2024-02-01T00:00:00+00:00"
 
 
-def test_compute_eopf_origin_datetimes_returns_fallback_on_errors(mocker):
+def test_compute_eopf_origin_datetimes_raises_on_catalog_error(mocker):
     """
-    Verify that compute_eopf_origin_datetimes returns the fallback datetime
-    when retrieving CADU items from the catalog fails (raises RuntimeError).
-
-    This test mocks:
-    - catalog_flow.get_item.submit to raise an exception
-    - Ensures the function handles the error gracefully and returns
-      the hardcoded fallback "2023-01-01T00:00:00Z"
+    Verify that compute_eopf_origin_datetimes raises RuntimeError
+    when retrieving CADU items from the catalog fails.
     """
     env = mocker.Mock()
     env.serialize.return_value = {"env": "data"}
@@ -471,19 +424,27 @@ def test_compute_eopf_origin_datetimes_returns_fallback_on_errors(mocker):
         {"input": ("CADU_FAIL", "COLLECTION_FAIL")},
     ]
 
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch(
+        "rs_workflows.dpr_flow.get_run_logger",
+        return_value=mocker.Mock(),
+    )
+
     mocker.patch(
         "rs_workflows.dpr_flow.catalog_flow.get_item.submit",
         side_effect=RuntimeError("Catalog unavailable"),
     )
-    result = compute_eopf_origin_datetimes(env, input_products)
 
-    assert result == "2023-01-01T00:00:00Z"
+    with pytest.raises(
+        RuntimeError,
+        match="No valid CADU items found to compute eopf:origin_datetime",
+    ):
+        compute_eopf_origin_datetimes(env, input_products)
 
 
 def test_basic_zarr_root():
+    """Extract Zarr root from a simple S3 path."""
     base = "s3://my-bucket/project/output"
-    internal = "my-bucket/project/output/run1234_dataset.zarr/.zattrs"
+    internal = "project/output/run1234_dataset.zarr/.zattrs"
 
     result = zarr_root_from_s3(base, internal)
     expected = "s3://my-bucket/project/output/run1234_dataset.zarr"
@@ -492,8 +453,9 @@ def test_basic_zarr_root():
 
 
 def test_zarr_root_with_zgroup():
+    """Handle Zarr root ending with .zgroup."""
     base = "s3://data-bucket/experiments"
-    internal = "data-bucket/experiments/test42_result.zarr/.zgroup"
+    internal = "experiments/test42_result.zarr/.zgroup"
 
     result = zarr_root_from_s3(base, internal)
     expected = "s3://data-bucket/experiments/test42_result.zarr"
@@ -502,8 +464,9 @@ def test_zarr_root_with_zgroup():
 
 
 def test_nested_zarr_root():
+    """Extract Zarr root from a nested S3 path."""
     base = "s3://analytics-bucket/raw"
-    internal = "analytics-bucket/raw/2026/01/23/exp_xyz.zarr/.zattrs"
+    internal = "raw/2026/01/23/exp_xyz.zarr/.zattrs"
 
     result = zarr_root_from_s3(base, internal)
     expected = "s3://analytics-bucket/raw/2026/01/23/exp_xyz.zarr"
