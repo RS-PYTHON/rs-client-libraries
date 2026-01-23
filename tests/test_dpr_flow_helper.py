@@ -20,6 +20,7 @@ from pathlib import Path
 from rs_workflows.dpr_flow import (
     compute_eopf_origin_datetimes,
     create_stac_items,
+    extract_products_and_zattrs,
     read_zattrs_sync,
     s3_download_file_sync,
     s3_list,
@@ -371,6 +372,41 @@ def test_compute_eopf_origin_datetimes_single_item(mocker):
     result = compute_eopf_origin_datetimes(env, input_products)
 
     assert result == "2024-01-10T12:00:00+00:00"
+
+
+def test_extract_products_and_zattrs_standard_layout():
+    """
+    Verify that extract_products_and_zattrs correctly extracts:
+    - product names from .zarr directories
+    - .zattrs files located under product roots
+
+    This test intentionally ignores the legacy
+    base_path/product/product/.zattrs layout, which is deprecated.
+    """
+    base_path = "s3://my-bucket/project/output"
+
+    all_files = [
+        # Valid Zarr product
+        "s3://my-bucket/project/output/product_a.zarr/.zattrs",
+        "s3://my-bucket/project/output/product_a.zarr/.zgroup",
+        # Another valid product
+        "s3://my-bucket/project/output/product_b.zarr/.zattrs",
+        # INvalid
+        "s3://my-bucket/project/output/readme.txt",
+        "s3://my-bucket/project/output/tmp/file.tmp",
+    ]
+
+    products, zattrs = extract_products_and_zattrs(all_files, base_path)
+
+    assert set(products) == {
+        "product_a.zarr",
+        "product_b.zarr",
+    }
+
+    assert set(zattrs) == {
+        "s3://my-bucket/project/output/product_a.zarr/.zattrs",
+        "s3://my-bucket/project/output/product_b.zarr/.zattrs",
+    }
 
 
 def test_compute_eopf_origin_datetimes_multiple_items_returns_max(mocker):
