@@ -15,6 +15,7 @@
 """This module contains functions to generate DPR payloads for RS-Server."""
 import fnmatch
 import os
+import uuid
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
@@ -221,6 +222,7 @@ def find_s3_output_bucket(
     fallback_bucket = None
     for row in config_rows:
         # the expiration_delay (the fourth field) is not used
+        print(f"Configuration bucket: Checking row {row}")
         owner_pat, coll_pat, prod_type_pat, _, bucket = row
 
         if (
@@ -230,11 +232,14 @@ def find_s3_output_bucket(
         ):
             # highest priority: exact match on owner and collection
             if owner_pat == owner_id and coll_pat == output_collection:
+                print(f"Configuration bucket: Return bucket: {bucket}")
                 return bucket
             if fallback_bucket is None:
                 fallback_bucket = bucket
+                print(f"Configuration bucket: fallback_bucket: {fallback_bucket}")
 
     if fallback_bucket:
+        print(f"Configuration bucket: Return fallback_bucket: {fallback_bucket}")
         return fallback_bucket
 
     raise RuntimeError(
@@ -379,7 +384,7 @@ def build_output_products(
             raise RuntimeError(f"Invalid output_products definition for '{product_name}'")
 
         bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
-        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection)
+        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid.uuid4()))
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
         if not store_name:

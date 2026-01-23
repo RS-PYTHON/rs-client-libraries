@@ -99,6 +99,10 @@ def test_get_io_builds_input_and_output(
         "rs_workflows.payload_generator.find_s3_output_bucket",
         return_value="mocked-output-bucket",
     )
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid.uuid4",
+        return_value="00000000-0000-0000-0000-000000000000",
+    )
 
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
@@ -122,9 +126,12 @@ def test_get_io_builds_input_and_output(
     assert len(outputs) == 2
     assert isinstance(outputs[0], OutputProduct)
     assert outputs[0].id == "output1"
-    assert outputs[0].path == "s3://mocked-output-bucket/test-owner/S1A_IW_GRDH_1S"
+    assert outputs[0].path == "s3://mocked-output-bucket/test-owner/S1A_IW_GRDH_1S/00000000-0000-0000-0000-000000000000"
     assert outputs[1].id == "output2"
-    assert outputs[1].path == "s3://mocked-output-bucket/test-owner/OUTPUT_COLLECTION_GRDH"
+    assert (
+        outputs[1].path
+        == "s3://mocked-output-bucket/test-owner/OUTPUT_COLLECTION_GRDH/00000000-0000-0000-0000-000000000000"
+    )
 
 
 def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flow_env, mocker):
@@ -602,17 +609,21 @@ def test_build_output_products_specific_storage(
     ]
 
     mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid.uuid4",
+        return_value="00000000-0000-0000-0000-000000000000",
+    )
 
     outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
     assert len(outputs) == 2
     assert outputs[0].id == "output1"
     assert outputs[0].store_type == "S3"
-    assert outputs[0].path == "s3://out-bucket/test-owner/OUT_COLL"
+    assert outputs[0].path == "s3://out-bucket/test-owner/OUT_COLL/00000000-0000-0000-0000-000000000000"
 
     assert outputs[1].id == "output2"
     assert outputs[1].store_type == "S3"
-    assert outputs[1].path == "s3://out-bucket/test-owner/OUT_COLL"
+    assert outputs[1].path == "s3://out-bucket/test-owner/OUT_COLL/00000000-0000-0000-0000-000000000000"
 
     mock_storage.get_storage_for_specific_product.assert_called_with("output2")  # last call
 
