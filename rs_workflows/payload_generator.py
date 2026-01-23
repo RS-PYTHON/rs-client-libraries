@@ -220,9 +220,10 @@ def find_s3_output_bucket(
         RuntimeError: If no matching bucket is found in the configuration.
     """
     fallback_bucket = None
+    logger = get_run_logger()
     for row in config_rows:
         # the expiration_delay (the fourth field) is not used
-        print(f"Configuration bucket: Checking row {row}")
+        logger.debug(f"Configuration bucket: Checking row {row}")
         owner_pat, coll_pat, prod_type_pat, _, bucket = row
 
         if (
@@ -232,14 +233,14 @@ def find_s3_output_bucket(
         ):
             # highest priority: exact match on owner and collection
             if owner_pat == owner_id and coll_pat == output_collection:
-                print(f"Configuration bucket: Return bucket: {bucket}")
+                logger.debug(f"Configuration bucket: Return bucket: {bucket}")
                 return bucket
             if fallback_bucket is None:
                 fallback_bucket = bucket
-                print(f"Configuration bucket: fallback_bucket: {fallback_bucket}")
+                logger.debug(f"Configuration bucket: fallback_bucket: {fallback_bucket}")
 
     if fallback_bucket:
-        print(f"Configuration bucket: Return fallback_bucket: {fallback_bucket}")
+        logger.debug(f"Configuration bucket: Return fallback_bucket: {fallback_bucket}")
         return fallback_bucket
 
     raise RuntimeError(
