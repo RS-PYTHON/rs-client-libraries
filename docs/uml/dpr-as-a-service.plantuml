@@ -14,22 +14,38 @@ John -> Jupyter: Edit/Run flow in notebook
 
 Jupyter -> Prefect: Run flow
 
-Prefect -> DPR: GET /processes/{processor}
-DPR -> DPR: eopf trigger tasktable
+Prefect -> DPR: GET /dpr/processes/{processor}
+DPR -> DPR: dask submit:\neopf trigger tasktable
 DPR --> Prefect: tasktable
 
 Prefect -> Prefect: generate EOPF payload
 
-Prefect -> DPR: POST /processes/{processor}/execution(payload)
+Prefect -> DPR: POST /dpr/processes/{processor}/execution(payload)
 DPR --> Prefect: acknowledge (job_id)
-DPR -> DPR: async processing
+DPR -> DPR: dask async processing
 
 loop until_complete
-  Prefect -> DPR: GET /jobs/{job_id}
+  Prefect -> DPR: GET /dpr/jobs/{job_id}
   DPR --> Prefect: progress (%)
 end
 
 Prefect --> Jupyter: flow result
 Jupyter --> John: flow result
+
+newpage manual_dismiss
+
+John -> Jupyter: Edit/Run test in notebook
+
+Jupyter -> Jupyter: generate EOPF payload
+
+Jupyter -> DPR: POST /dpr/processes/{processor}/execution(payload)
+DPR --> Jupyter: acknowledge (job_id)
+DPR -> DPR: dask async processing
+
+Jupyter -> DPR: DELETE /dpr/jobs/{job_id}
+DPR -> DPR: retrieve dask client
+DPR -> DPR: retrieve dask future
+DPR -> DPR: cancel dask future
+DPR --> Jupyter: acknowledge (job_id, status=dismissed)
 
 @enduml
