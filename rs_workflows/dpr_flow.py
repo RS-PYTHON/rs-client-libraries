@@ -62,47 +62,33 @@ def extract_products_and_zattrs(files: list[str], base_path: str):
             - A list of unique product names discovered.
             - A list of full paths to detected `.zattrs` files.
     """
-    products = set()
-    zattrs = []
+    dirs_and_attrs = []
 
-    for f in files:
-        if not f.startswith(base_path):
-            continue
-
-        rest = f[len(base_path) :].lstrip("/")  # noqa: E203
+    for file in files:
+        rest = file[len(base_path) :].lstrip("/")  # noqa: E203
         parts = rest.split("/")
 
-        if len(parts) < 2:
+        if len(parts) != 2:
             continue
 
         product_name = parts[0]
 
         # 1: base_path/product/.zattrs
-        if len(parts) == 2 and parts[1] == ".zattrs":
-            products.add(product_name)
-            zattrs.append(f)
+        if parts[1] == ".zattrs":
+            dirs_and_attrs.append((product_name, file))
 
-        # # 2: base_path/product/product/.zattrs
-        # elif len(parts) == 3 and parts[1] == product_name and parts[2] == ".zattrs":  # noqa: SIM114
-        #     products.add(product_name)
-        #     zattrs.append(f)
-
-    return list(products), zattrs
+    return dirs_and_attrs
 
 
-def read_zattrs_sync(zattrs_paths: list[str]):
+def read_zattrs_sync(path: str):
     """
-    Download `.zattrs` files synchronously using prefect_utils.s3_download_file
+    Download `.zattrs` file synchronously using prefect_utils.s3_download_file
     and return parsed JSON dicts in memory.
     """
-    results = []
-    for path in zattrs_paths:
-        with tempfile.NamedTemporaryFile() as temp:
-            s3_download_file_sync(path, str(temp.name), _sync=True)
-            with open(temp.name, encoding="utf-8") as f:
-                data = json.load(f)
-        results.append({"path": path, "data": data})
-    return results
+    with tempfile.NamedTemporaryFile() as temp:
+        s3_download_file_sync(path, str(temp.name), _sync=True)
+        with open(temp.name, encoding="utf-8") as f:
+            return json.load(f)
 
 
 def s3_download_file_sync(
@@ -118,7 +104,7 @@ def s3_download_file_sync(
     return to_path
 
 
-def create_stac_items(env, input_products, eopf_features, s3_data_location):
+def create_stac_item(env, input_products, eopf_feature, s3_data_location):
     """
     Create a list of STAC Items from EOPF features and processing payload metadata.
 
@@ -203,17 +189,14 @@ def create_stac_items(env, input_products, eopf_features, s3_data_location):
     # Note: input_products != input_adfs
     eopf_origin_datetimes = compute_eopf_origin_datetimes(env, input_products)
 
-    items = []
-    for feature_dict in eopf_features:
-        item = build_item(feature_dict, eopf_origin_datetimes)
-        title = f"{item.id}.zarr"
-        item.assets = {title: build_asset(s3_data_location, title)}
-        items.append(item)
+    item = build_item(eopf_feature, eopf_origin_datetimes)
+    title = f"{item.id}.zarr"
+    item.assets = {title: build_asset(s3_data_location, title)}
 
-    return items
+    return item
 
 
-def zarr_root_from_s3(base_s3_uri: str, internal_s3_path: str) -> str:
+def zarr_root_from_s3(base_s3_uri: str, internal_s3_path: list[(str, str)]) -> str:
     """Extract the Zarr root path from an internal S3 path."""
     parsed = urlparse(base_s3_uri)
 
@@ -278,29 +261,34 @@ def update_eopf_assets(env, input_products: list[dict], payload: dict) -> tuple[
     # List & extract
     all_files = s3_list(path)
     logger.info(f"Found {len(all_files)} files under path.")
-    products, zattrs = extract_products_and_zattrs(all_files, path)
-    logger.info(f"Extracted {len(products)} product files and {len(zattrs)} .zattrs files.")
+    zattrs_list = extract_products_and_zattrs(all_files, path)
+    stac_items = []
+    eopf_types = []
+    for _, zattrs_s3_location in zattrs_list:
+        logger.debug(f"Discovered .zattrs file: {zattrs_s3_location}")
+        # Read metadata
+        zattrs_data = read_zattrs_sync(zattrs_s3_location)
+        if not zattrs_data:
+            logger.error(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
+            raise RuntimeError(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
+        logger.info(f"DPR processor output {zattrs_data}")
+        logger.info(f"Path = {path} | zattrs = {zattrs_s3_location}")
 
-    # Read metadata
-    zattrs_data = read_zattrs_sync(zattrs)
-    if not zattrs_data:
-        logger.error("No .zattrs files found or could be read. Exiting.")
-        raise RuntimeError("No .zattrs files found or could be read.")
-    logger.info(f"DPR processor output {zattrs_data}")
-    logger.info(f"Loaded metadata from {len(zattrs_data)} .zattrs files.")
-    s3_data_location = zarr_root_from_s3(path, zattrs)
-    logger.debug(f"Path = {path} | Zattrs = {zattrs} | S3 data location = {s3_data_location}")
+        # Extract EOPF info
+        if "stac_discovery" not in zattrs_data or "properties" not in zattrs_data["stac_discovery"]:
+            logger.error(f".zattrs file {zattrs_s3_location} does not contain EOPF discovery metadata. Exiting.")
+            raise RuntimeError(f".zattrs file {zattrs_s3_location} does not contain EOPF discovery metadata. Exiting.")
 
-    # Extract EOPF info
-    eopf_types = [attrs["data"]["stac_discovery"]["properties"]["product:type"] for attrs in zattrs_data]
-    logger.info(f"Extracted EOPF product types: {eopf_types}")
+        eopf_type = zattrs_data["stac_discovery"]["properties"].get("product:type", None)
+        logger.info(f"Extracted EOPF product type: {eopf_type}")
+        eopf_types.append(eopf_type)
 
-    eopf_items = [attrs["data"]["stac_discovery"] for attrs in zattrs_data]
-    logger.debug(f"EOPF discovery metadata extracted: {eopf_items}")
+        eopf_item = zattrs_data["stac_discovery"]
+        logger.debug(f"EOPF discovery metadata extracted: {eopf_item}")
 
-    # Build STAC items
-    stac_items = create_stac_items(env, input_products, eopf_items, s3_data_location)
-    logger.info(f"Created {len(stac_items)} STAC items.")
+        # Build STAC items
+        stac_items.append(create_stac_item(env, input_products, eopf_item, zattrs_s3_location))
+        logger.info(f"Added one stac item to the already existing list. Length: {len(stac_items)}.")
 
     return stac_items, eopf_types
 
