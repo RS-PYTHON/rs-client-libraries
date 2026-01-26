@@ -35,6 +35,8 @@ from prefect.client.orchestration import get_client
 from prefect.exceptions import ObjectNotFound
 from prefect.utilities.asyncutils import sync_compatible
 from prefect_aws import AwsCredentials, S3Bucket
+from prefect_aws.client_parameters import AwsClientParameters
+from pydantic import SecretStr
 
 from rs_client.osam_client import BucketCredentials, OsamClient
 from rs_common.logging import Logging
@@ -382,9 +384,9 @@ def get_s3_bucket(s3_path: str) -> tuple[S3Bucket, str]:
     except KeyError:
         aws_credentials = AwsCredentials(
             aws_access_key_id=os.environ["S3_ACCESSKEY"],
-            aws_secret_access_key=os.environ["S3_SECRETKEY"],
+            aws_secret_access_key=SecretStr(os.environ["S3_SECRETKEY"]),
             region_name=os.environ["S3_REGION"],
-            aws_client_parameters={"endpoint_url": os.environ["S3_ENDPOINT"]},
+            aws_client_parameters=AwsClientParameters(endpoint_url=os.environ["S3_ENDPOINT"]),
         )
         s3_bucket = S3Bucket(
             bucket_name=bucket_name,
@@ -455,7 +457,7 @@ async def s3_upload_file(
 ) -> str:
     """See: S3Bucket.upload_from_path"""
     s3_bucket, to_path = get_s3_bucket(s3_path)
-    return await s3_bucket.upload_from_path(from_path, to_path, **upload_kwargs)
+    return await s3_bucket.aupload_from_path(from_path, to_path, **upload_kwargs)
 
 
 @sync_compatible
@@ -488,7 +490,7 @@ async def s3_upload_dir(
     Uploads files *within* a folder (excluding the folder itself) to the object storage service folder.
     """
     s3_bucket, to_path = get_s3_bucket(s3_path)
-    return await s3_bucket.upload_from_folder(from_folder, to_path, **upload_kwargs)
+    return await s3_bucket.aupload_from_folder(from_folder, to_path, **upload_kwargs)
 
 
 @sync_compatible
@@ -499,7 +501,7 @@ async def s3_download_file(
 ) -> Path:
     """See: S3Bucket.download_object_to_path"""
     s3_bucket, from_path = get_s3_bucket(s3_path)
-    return await s3_bucket.download_object_to_path(from_path, to_path, **download_kwargs)
+    return await s3_bucket.adownload_object_to_path(from_path, to_path, **download_kwargs)
 
 
 @sync_compatible
@@ -509,7 +511,7 @@ async def s3_download_dir(
 ) -> None:
     """See: S3Bucket.get_directory"""
     s3_bucket, from_path = get_s3_bucket(s3_path)
-    await s3_bucket.get_directory(from_path, local_path)
+    await s3_bucket.aget_directory(from_path, local_path)
 
 
 def s3_delete(s3_prefix: str, log: bool = False):
