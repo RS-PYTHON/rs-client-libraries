@@ -21,9 +21,8 @@ import tempfile
 
 # import datetime
 from os import path as osp
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from prefect import get_run_logger, task
 from pystac import Asset, Item
@@ -104,7 +103,13 @@ def s3_download_file_sync(
     return to_path
 
 
-def create_stac_item(env, input_products, eopf_feature, s3_data_location):
+def create_stac_item(
+    env,
+    input_products,
+    eopf_feature,
+    s3_data_location,
+    dpr_processor: DprProcessor,
+) -> Item:
     """
     Create a list of STAC Items from EOPF features and processing payload metadata.
 
@@ -174,7 +179,7 @@ def create_stac_item(env, input_products, eopf_feature, s3_data_location):
             Asset: A STAC Asset configured for EOPF output products.
         """
         return Asset(
-            href=path,
+            href=path.replace("/.zattrs", ""),
             title=title,
             media_type="application/vnd+zarr",
             roles=["data", "metadata"],
@@ -187,7 +192,7 @@ def create_stac_item(env, input_products, eopf_feature, s3_data_location):
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
-    eopf_origin_datetimes = compute_eopf_origin_datetimes(env, input_products)
+    eopf_origin_datetimes = compute_eopf_origin_datetimes(env, input_products, dpr_processor)
 
     item = build_item(eopf_feature, eopf_origin_datetimes)
     title = f"{item.id}.zarr"
@@ -196,21 +201,13 @@ def create_stac_item(env, input_products, eopf_feature, s3_data_location):
     return item
 
 
-def zarr_root_from_s3(base_s3_uri: str, internal_s3_path: list[(str, str)]) -> str:
-    """Extract the Zarr root path from an internal S3 path."""
-    parsed = urlparse(base_s3_uri)
-
-    base_path = PurePosixPath(parsed.path.lstrip("/"))
-    internal_path = PurePosixPath(internal_s3_path)
-    # !
-    relative = internal_path.relative_to(base_path)
-    zarr_root = next(p for p in relative.parents if p.name.endswith(".zarr"))
-
-    return osp.join("s3://", parsed.netloc, base_path, zarr_root)
-
-
 @task(name="Update eopf assets")
-def update_eopf_assets(env, input_products: list[dict], payload: dict) -> tuple[Any, Any]:
+def update_eopf_assets(
+    env,
+    input_products: list[dict],
+    payload: dict,
+    dpr_processor: DprProcessor,
+) -> tuple[Any, Any]:
     """
     Update EOPF-related STAC assets by discovering products in S3 and
     generating corresponding STAC items from `.zattrs` metadata.
@@ -287,13 +284,13 @@ def update_eopf_assets(env, input_products: list[dict], payload: dict) -> tuple[
         logger.debug(f"EOPF discovery metadata extracted: {eopf_item}")
 
         # Build STAC items
-        stac_items.append(create_stac_item(env, input_products, eopf_item, zattrs_s3_location))
+        stac_items.append(create_stac_item(env, input_products, eopf_item, zattrs_s3_location, dpr_processor))
         logger.info(f"Added one stac item to the already existing list. Length: {len(stac_items)}.")
 
     return stac_items, eopf_types
 
 
-def compute_eopf_origin_datetimes(env, input_products):
+def compute_eopf_origin_datetimes(env, input_products, dpr_processor: DprProcessor) -> str:
     """
     Compute the maximum ``eopf:origin_datetime`` across all input CADU products.
 
@@ -323,6 +320,9 @@ def compute_eopf_origin_datetimes(env, input_products):
     """
     logger = get_run_logger()
     cadu_items = []
+    if dpr_processor == DprProcessor.MOCKUP:
+        logger.info("Mockup processor detected, using fixed eopf:origin_datetime value.")
+        return "2023-01-01T00:00:00Z"
 
     for input_product in input_products:
         for _, (cadu_id, collection_id) in input_product.items():
@@ -395,7 +395,7 @@ async def run_processor(
         )
         dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
 
-        eopf_stac_items, eopf_types = update_eopf_assets(flow_env, input_products, payload)
+        eopf_stac_items, eopf_types = update_eopf_assets(flow_env, input_products, payload, processor)
         # Wait for the job to finish
         record_performance_indicators(  # type: ignore
             stop_date=datetime.datetime.now(),
