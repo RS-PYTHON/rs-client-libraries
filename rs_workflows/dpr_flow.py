@@ -108,6 +108,7 @@ def create_stac_item(
     input_products,
     eopf_feature,
     s3_data_location,
+    product_name: str,
     dpr_processor: DprProcessor,
 ) -> Item:
     """
@@ -126,7 +127,7 @@ def create_stac_item(
         list[Item]: List of constructed STAC Item objects.
     """
 
-    def build_item(feature_dict: dict, eopf_origin_datetimes) -> Item:
+    def build_item(feature_dict: dict, eopf_origin_datetimes, product_name) -> Item:
         """
         Build a STAC Item from a feature dictionary.
 
@@ -159,7 +160,7 @@ def create_stac_item(
         ]
 
         return Item(
-            id=feature_dict["id"],
+            id=product_name,
             geometry=feature_dict["geometry"],
             bbox=feature_dict["bbox"],
             datetime=datetime.datetime.fromisoformat(feature_dict["properties"]["datetime"]),
@@ -167,7 +168,7 @@ def create_stac_item(
             stac_extensions=default_stac_extensions,
         )
 
-    def build_asset(path: str, title: str) -> Asset:
+    def build_asset(path: str, product_name: str) -> Asset:
         """
         Build a STAC Asset representing a Zarr output product.
 
@@ -180,7 +181,7 @@ def create_stac_item(
         """
         return Asset(
             href=path.replace("/.zattrs", ""),
-            title=title,
+            title=product_name,
             media_type="application/vnd+zarr",
             roles=["data", "metadata"],
             extra_fields={
@@ -192,11 +193,11 @@ def create_stac_item(
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
-    eopf_origin_datetimes = compute_eopf_origin_datetimes(env, input_products, dpr_processor)
+    eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products, dpr_processor)
 
-    item = build_item(eopf_feature, eopf_origin_datetimes)
+    item = build_item(eopf_feature, eopf_origin_datetime, product_name)
     title = f"{item.id}.zarr"
-    item.assets = {title: build_asset(s3_data_location, title)}
+    item.assets = {title: build_asset(s3_data_location, product_name)}
 
     return item
 
@@ -261,7 +262,7 @@ def update_eopf_assets(
     zattrs_list = extract_products_and_zattrs(all_files, path)
     stac_items = []
     eopf_types = []
-    for _, zattrs_s3_location in zattrs_list:
+    for product_name, zattrs_s3_location in zattrs_list:
         logger.debug(f"Discovered .zattrs file: {zattrs_s3_location}")
         # Read metadata
         zattrs_data = read_zattrs_sync(zattrs_s3_location)
@@ -284,13 +285,15 @@ def update_eopf_assets(
         logger.debug(f"EOPF discovery metadata extracted: {eopf_item}")
 
         # Build STAC items
-        stac_items.append(create_stac_item(env, input_products, eopf_item, zattrs_s3_location, dpr_processor))
+        stac_items.append(
+            create_stac_item(env, input_products, eopf_item, zattrs_s3_location, product_name, dpr_processor),
+        )
         logger.info(f"Added one stac item to the already existing list. Length: {len(stac_items)}.")
 
     return stac_items, eopf_types
 
 
-def compute_eopf_origin_datetimes(env, input_products, dpr_processor: DprProcessor) -> str:
+def compute_eopf_origin_datetime(env, input_products, dpr_processor: DprProcessor) -> str:
     """
     Compute the maximum ``eopf:origin_datetime`` across all input CADU products.
 
