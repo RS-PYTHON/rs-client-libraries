@@ -298,7 +298,12 @@ def test_update_eopf_assets_happy_path(mocker):
     mock_read.assert_called_once_with(zattrs)
 
     mock_create.assert_called_once_with(
-        env, input_products, eopf_items[0], "s3://my-bucket/output/product_a/.zattrs", "product_a", DprProcessor.S1L0,
+        env,
+        input_products,
+        eopf_items[0],
+        "s3://my-bucket/output/product_a/.zattrs",
+        "product_a",
+        DprProcessor.S1L0,
     )
 
 
