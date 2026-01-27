@@ -196,8 +196,7 @@ def create_stac_item(
     eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products, dpr_processor)
 
     item = build_item(eopf_feature, eopf_origin_datetime, product_name)
-    title = f"{item.id}.zarr"
-    item.assets = {title: build_asset(s3_data_location, product_name)}
+    item.assets = {product_name: build_asset(s3_data_location, product_name)}
 
     return item
 
