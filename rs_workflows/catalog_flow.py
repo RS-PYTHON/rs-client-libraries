@@ -107,12 +107,13 @@ async def publish(
 
                 # TEMPFIX END
                 logger.info(
-                    "Writing product %s to %s",
+                    "Writing product %s to %s. This may take a while...",
                     item.id if isinstance(item, Item) else item["id"],
                     target_collection,
                 )
                 # Publish item to catalog
-                catalog_client.add_item(target_collection, item)
+                # TODO: adjust timeout as needed. Current value is 24 hours.
+                catalog_client.add_item(target_collection, item, timeout=86400)
 
             except Exception as e:
                 # Re-raise with full item context for easier debugging
