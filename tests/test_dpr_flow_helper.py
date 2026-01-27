@@ -18,14 +18,14 @@ from pathlib import Path
 
 import pytest
 
+from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_workflows.dpr_flow import (
-    compute_eopf_origin_datetimes,
-    create_stac_items,
+    compute_eopf_origin_datetime,
+    create_stac_item,
     read_zattrs_sync,
     s3_download_file_sync,
     s3_list,
     update_eopf_assets,
-    zarr_root_from_s3,
 )
 
 
@@ -75,10 +75,7 @@ def test_read_zattrs_sync_downloads_and_parses_json(mocker):
     reads its JSON content, and returns a list of dictionaries containing both
     the original path and the parsed data.
     """
-    zattrs_paths = [
-        "s3://my-bucket/product_a/.zattrs",
-        "s3://my-bucket/product_b/.zattrs",
-    ]
+    zattrs_path = "s3://my-bucket/product_a/.zattrs"
 
     fake_json_data = {
         "foo": "bar",
@@ -94,16 +91,12 @@ def test_read_zattrs_sync_downloads_and_parses_json(mocker):
         side_effect=fake_s3_download,
     )
 
-    result = read_zattrs_sync(zattrs_paths)
+    result = read_zattrs_sync(zattrs_path)
 
-    assert result == [
-        {"path": zattrs_paths[0], "data": fake_json_data},
-        {"path": zattrs_paths[1], "data": fake_json_data},
-    ]
+    assert result == fake_json_data
 
-    assert mock_download.call_count == 2
-    mock_download.assert_any_call(zattrs_paths[0], mocker.ANY, _sync=True)
-    mock_download.assert_any_call(zattrs_paths[1], mocker.ANY, _sync=True)
+    assert mock_download.call_count == 1
+    mock_download.assert_any_call(zattrs_path, mocker.ANY, _sync=True)
 
 
 def test_s3_download_file_sync_downloads_and_returns_path(mocker):
@@ -142,12 +135,12 @@ def test_s3_download_file_sync_downloads_and_returns_path(mocker):
 
 def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
     """
-    Verify that create_stac_items constructs STAC Items correctly from
+    Verify that create_stac_item constructs STAC Items correctly from
     EOPF feature dictionaries, injects mandatory properties, and attaches
     assets corresponding to output products.
 
     This test mocks Item and Asset constructors and ensures:
-    - compute_eopf_origin_datetimes is called to populate eopf:origin_datetime
+    - compute_eopf_origin_datetime is called to populate eopf:origin_datetime
     - Each feature results in one Item being created
     - STAC properties like stac_version are correctly set
     - Assets are built with correct href, title, media_type, and extra_fields
@@ -158,27 +151,17 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
         {"dummy": "input"},
     ]
 
-    eopf_features = [
-        {
-            "id": "feature_1",
-            "geometry": {"type": "Point", "coordinates": [0, 0]},
-            "bbox": [0, 0, 0, 0],
-            "properties": {
-                "datetime": "2024-01-01T00:00:00",
-            },
+    eopf_feature = {
+        "id": "feature_1",
+        "geometry": {"type": "Point", "coordinates": [0, 0]},
+        "bbox": [0, 0, 0, 0],
+        "properties": {
+            "datetime": "2024-01-01T00:00:00",
         },
-        {
-            "id": "feature_2",
-            "geometry": {"type": "Point", "coordinates": [1, 1]},
-            "bbox": [1, 1, 1, 1],
-            "properties": {
-                "datetime": "2024-01-02T00:00:00",
-            },
-        },
-    ]
+    }
 
     mocker.patch(
-        "rs_workflows.dpr_flow.compute_eopf_origin_datetimes",
+        "rs_workflows.dpr_flow.compute_eopf_origin_datetime",
         return_value="2024-01-10T12:00:00",
     )
 
@@ -191,24 +174,21 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
 
     mock_item_cls.return_value = mock_item
 
-    items = create_stac_items(
+    item = create_stac_item(
         env=env,
         input_products=input_products,
-        eopf_features=eopf_features,
+        eopf_feature=eopf_feature,
         s3_data_location="s3://my-bucket/output/feature_1.zarr",
+        product_name="feature_1.zarr",
+        dpr_processor=DprProcessor.S1L0,
     )
 
-    assert len(items) == 2
-
-    # compute_eopf_origin_datetimes called correctly
-    compute_call = mocker.patch("rs_workflows.dpr_flow.compute_eopf_origin_datetimes")
+    # compute_eopf_origin_datetime called correctly
+    compute_call = mocker.patch("rs_workflows.dpr_flow.compute_eopf_origin_datetime")
     compute_call.assert_not_called()  # sanity: patched above
 
-    # Item constructor called for each feature
-    assert mock_item_cls.call_count == 2
-
     first_call_kwargs = mock_item_cls.call_args_list[0].kwargs
-    assert first_call_kwargs["id"] == "feature_1"
+    assert first_call_kwargs["id"] == "feature_1.zarr"
     assert isinstance(first_call_kwargs["datetime"], datetime.datetime)
     assert first_call_kwargs["properties"]["eopf:origin_datetime"] == "2024-01-10T12:00:00"
     assert first_call_kwargs["properties"]["stac_version"] == "1.1.0"
@@ -223,7 +203,7 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
     )
 
     # Assets attached to item
-    assert "feature_1.zarr" in items[0].assets
+    assert "feature_1.zarr" in item.assets
 
 
 def test_update_eopf_assets_happy_path(mocker):
@@ -256,27 +236,22 @@ def test_update_eopf_assets_happy_path(mocker):
         "s3://my-bucket/output/product_a/.zattrs",
     ]
 
-    products = ["product_a"]
-    zattrs = ["s3://my-bucket/output/product_a/.zattrs"]
+    product = "product_a"
+    zattrs = "s3://my-bucket/output/product_a/.zattrs"
 
-    zattrs_data = [
-        {
-            "path": zattrs[0],
-            "data": {
-                "stac_discovery": {
-                    "id": "feature_1",
-                    "geometry": {"type": "Point", "coordinates": [0, 0]},
-                    "bbox": [0, 0, 0, 0],
-                    "properties": {
-                        "datetime": "2024-01-01T00:00:00",
-                        "product:type": "EOPF_TYPE_A",
-                    },
-                },
+    zattrs_data = {
+        "stac_discovery": {
+            "id": "feature_1",
+            "geometry": {"type": "Point", "coordinates": [0, 0]},
+            "bbox": [0, 0, 0, 0],
+            "properties": {
+                "datetime": "2024-01-01T00:00:00",
+                "product:type": "EOPF_TYPE_A",
             },
         },
-    ]
+    }
 
-    eopf_items = [zattrs_data[0]["data"]["stac_discovery"]]  # type: ignore
+    eopf_items = [zattrs_data["stac_discovery"]]  # type: ignore
     eopf_types = ["EOPF_TYPE_A"]
 
     mock_stac_items = [mocker.Mock()]
@@ -287,13 +262,10 @@ def test_update_eopf_assets_happy_path(mocker):
         "rs_workflows.dpr_flow.s3_list",
         return_value=all_files,
     )
-    mock_zarr_root = mocker.patch(
-        "rs_workflows.dpr_flow.zarr_root_from_s3",
-        return_value="s3://my-bucket/output/product_a/",
-    )
+
     mock_extract = mocker.patch(
         "rs_workflows.dpr_flow.extract_products_and_zattrs",
-        return_value=(products, zattrs),
+        return_value=[(product, zattrs)],
     )
 
     mock_read = mocker.patch(
@@ -302,7 +274,7 @@ def test_update_eopf_assets_happy_path(mocker):
     )
 
     mock_create = mocker.patch(
-        "rs_workflows.dpr_flow.create_stac_items",
+        "rs_workflows.dpr_flow.create_stac_item",
         return_value=mock_stac_items,
     )
 
@@ -310,9 +282,10 @@ def test_update_eopf_assets_happy_path(mocker):
         env=env,
         input_products=input_products,
         payload=payload,
+        dpr_processor=DprProcessor.S1L0,
     )
 
-    assert stac_items == mock_stac_items
+    assert stac_items[0] == mock_stac_items
     assert result_eopf_types == eopf_types
 
     mock_s3_list.assert_called_once_with("s3://my-bucket/output/")
@@ -324,10 +297,8 @@ def test_update_eopf_assets_happy_path(mocker):
 
     mock_read.assert_called_once_with(zattrs)
 
-    mock_create.assert_called_once_with(env, input_products, eopf_items, "s3://my-bucket/output/product_a/")
-    mock_zarr_root.assert_called_once_with(
-        "s3://my-bucket/output/",
-        zattrs,
+    mock_create.assert_called_once_with(
+        env, input_products, eopf_items[0], "s3://my-bucket/output/product_a/.zattrs", "product_a", DprProcessor.S1L0,
     )
 
 
@@ -342,9 +313,9 @@ def make_mock_item(origin_datetime: str, mocker):
     return mock_item
 
 
-def test_compute_eopf_origin_datetimes_single_item(mocker):
+def test_compute_eopf_origin_datetime_single_item(mocker):
     """
-    Verify that compute_eopf_origin_datetimes returns the correct maximum
+    Verify that compute_eopf_origin_datetime returns the correct maximum
     eopf:origin_datetime when a single CADU item is retrieved from the catalog.
 
     This test mocks:
@@ -369,14 +340,14 @@ def test_compute_eopf_origin_datetimes_single_item(mocker):
         return_value=mock_future,
     )
 
-    result = compute_eopf_origin_datetimes(env, input_products)
+    result = compute_eopf_origin_datetime(env, input_products, DprProcessor.S1L0)
 
     assert result == "2024-01-10T12:00:00+00:00"
 
 
-def test_compute_eopf_origin_datetimes_multiple_items_returns_max(mocker):
+def test_compute_eopf_origin_datetime_multiple_items_returns_max(mocker):
     """
-    Verify that compute_eopf_origin_datetimes returns the maximum eopf:origin_datetime
+    Verify that compute_eopf_origin_datetime returns the maximum eopf:origin_datetime
     when multiple CADU items are retrieved from the catalog.
 
     This test mocks:
@@ -407,14 +378,14 @@ def test_compute_eopf_origin_datetimes_multiple_items_returns_max(mocker):
         side_effect=[future_1, future_2],
     )
 
-    result = compute_eopf_origin_datetimes(env, input_products)
+    result = compute_eopf_origin_datetime(env, input_products, DprProcessor.S1L0)
 
     assert result == "2024-02-01T00:00:00+00:00"
 
 
-def test_compute_eopf_origin_datetimes_raises_on_catalog_error(mocker):
+def test_compute_eopf_origin_datetime_raises_on_catalog_error(mocker):
     """
-    Verify that compute_eopf_origin_datetimes raises RuntimeError
+    Verify that compute_eopf_origin_datetime raises RuntimeError
     when retrieving CADU items from the catalog fails.
     """
     env = mocker.Mock()
@@ -438,37 +409,4 @@ def test_compute_eopf_origin_datetimes_raises_on_catalog_error(mocker):
         RuntimeError,
         match="No valid CADU items found to compute eopf:origin_datetime",
     ):
-        compute_eopf_origin_datetimes(env, input_products)
-
-
-def test_basic_zarr_root():
-    """Extract Zarr root from a simple S3 path."""
-    base = "s3://my-bucket/project/output"
-    internal = "project/output/run1234_dataset.zarr/.zattrs"
-
-    result = zarr_root_from_s3(base, internal)
-    expected = "s3://my-bucket/project/output/run1234_dataset.zarr"
-
-    assert result == expected
-
-
-def test_zarr_root_with_zgroup():
-    """Handle Zarr root ending with .zgroup."""
-    base = "s3://data-bucket/experiments"
-    internal = "experiments/test42_result.zarr/.zgroup"
-
-    result = zarr_root_from_s3(base, internal)
-    expected = "s3://data-bucket/experiments/test42_result.zarr"
-
-    assert result == expected
-
-
-def test_nested_zarr_root():
-    """Extract Zarr root from a nested S3 path."""
-    base = "s3://analytics-bucket/raw"
-    internal = "raw/2026/01/23/exp_xyz.zarr/.zattrs"
-
-    result = zarr_root_from_s3(base, internal)
-    expected = "s3://analytics-bucket/raw/2026/01/23/exp_xyz.zarr"
-
-    assert result == expected
+        compute_eopf_origin_datetime(env, input_products, DprProcessor.S1L0)
