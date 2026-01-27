@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from urllib.parse import urlencode
 
-from prefect import flow, get_run_logger, pause_flow_run, task
+from prefect import apause_flow_run, flow, get_run_logger, task
 from prefect.artifacts import acreate_link_artifact, acreate_markdown_artifact
 from pydantic import BaseModel, Field
 from pystac import ItemCollection
@@ -277,7 +277,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
             selected: session_enum = Field(title="Session to stage")  # type: ignore
 
         # Pause Prefect flow to let user select a session
-        selection = await pause_flow_run(wait_for_input=SessionSelection)
+        selection = await apause_flow_run(wait_for_input=SessionSelection)
 
         selected_session: str = session_list[selection.selected.value]  # type: ignore
         logger.info(f"Internal identifier: {selected_session}")

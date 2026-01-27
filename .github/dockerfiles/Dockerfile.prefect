@@ -30,9 +30,9 @@ FROM ghcr.io/rs-python/prefecthq/prefect:${PREFECT_TAG}-py${PYTHON_VERSION}${K8S
 COPY ./layer-cleanup.sh /usr/local/bin/
 RUN chmod 755 /usr/local/bin/layer-cleanup.sh
 
-ARG PREFECT_AWS_TAG=0.7.1
+ARG PREFECT_AWS_TAG=0.7.4
 
-# Upgrande pip and install dependencies.
+# Upgrade pip and install dependencies.
 # NOTES:
 #   - Install s3fs before boto3 to have a recent version
 RUN pip install -U pip && \

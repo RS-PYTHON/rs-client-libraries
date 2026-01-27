@@ -88,7 +88,6 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
         "POSTGRES_HOST": "test_host",
         "POSTGRES_PORT": "5432",
         "POSTGRES_PI_DB": "test_db",
-        "TEMPO_ENDPOINT": "TEMPO_ENDPOINT",
         "DASK_GATEWAY_ADDRESS": "DASK_GATEWAY_ADDRESS",
         "LOCAL_DASK_USERNAME": "LOCAL_DASK_USERNAME",
         "LOCAL_DASK_PASSWORD": "LOCAL_DASK_PASSWORD",
@@ -101,6 +100,7 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
 
     # In cluster mode, they must be set in a prefect block
     else:
+        env_global["TEMPO_ENDPOINT"] = "TEMPO_ENDPOINT"
         await Secret(value=env_global).save(  # type: ignore[arg-type]
             prefect_utils.BLOCK_NAME_ENV_GLOBAL,
             overwrite=True,
@@ -206,8 +206,8 @@ async def test_bucket_functions(monkeypatch, mocker):
         "PREFECT_BUCKET_FOLDER": "PREFECT_BUCKET_FOLDER",
         "S3_ACCESSKEY": "S3_ACCESSKEY",
         "S3_SECRETKEY": "S3_SECRETKEY",
-        "S3_REGION": "S3_REGION",
-        "S3_ENDPOINT": "S3_ENDPOINT",
+        "S3_REGION": "region3",
+        "S3_ENDPOINT": "https://endpoint3",
     }.items():
         monkeypatch.setenv(key, value)
 
@@ -227,7 +227,7 @@ async def test_bucket_functions(monkeypatch, mocker):
     #
     # Test bucket operations, just call the functions, don't check the underlying s3 functions
 
-    mocker.patch.object(S3Bucket, "upload_from_path", my_spy := AsyncMock())
+    mocker.patch.object(S3Bucket, "aupload_from_path", my_spy := AsyncMock())
     await prefect_utils.s3_upload_file("from_path", "s3_path")
     my_spy.assert_called_once()
 
@@ -235,15 +235,15 @@ async def test_bucket_functions(monkeypatch, mocker):
     await prefect_utils.s3_upload_empty_file("s3_path")
     my_spy.assert_called_once()
 
-    mocker.patch.object(S3Bucket, "upload_from_folder", my_spy := AsyncMock())
+    mocker.patch.object(S3Bucket, "aupload_from_folder", my_spy := AsyncMock())
     await prefect_utils.s3_upload_dir("from_folder", "s3_path")
     my_spy.assert_called_once()
 
-    mocker.patch.object(S3Bucket, "download_object_to_path", my_spy := AsyncMock())
+    mocker.patch.object(S3Bucket, "adownload_object_to_path", my_spy := AsyncMock())
     await prefect_utils.s3_download_file("s3_path", "to_path")
     my_spy.assert_called_once()
 
-    mocker.patch.object(S3Bucket, "get_directory", my_spy := AsyncMock())
+    mocker.patch.object(S3Bucket, "aget_directory", my_spy := AsyncMock())
     await prefect_utils.s3_download_dir("s3_path", "local_path")
     my_spy.assert_called_once()
 
