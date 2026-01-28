@@ -127,7 +127,7 @@ def create_stac_item(
         list[Item]: List of constructed STAC Item objects.
     """
 
-    def build_item(feature_dict: dict, eopf_origin_datetimes, product_name) -> Item:
+    def build_item(feature_dict: dict, eopf_origin_datetimes, product_name, dpr_processor: DprProcessor) -> Item:
         """
         Build a STAC Item from a feature dictionary.
 
@@ -148,16 +148,25 @@ def create_stac_item(
         feature_dict["properties"]["stac_version"] = "1.1.0"
 
         # C1.3 Add stac_extensions following the list from the PRIP ICD §3.3.4
-        default_stac_extensions: list[str] = [
-            # "https://github.com/stac-extensions/sat",
-            # "https://github.com/stac-extensions/product",
-            # "https://github.com/stac-extensions/grid",
-            # "https://github.com/stac-extensions/processing",
-            # "https://github.com/stac-extensions/eo",
-            # "https://github.com/stac-extensions/view",
-            # "https://github.com/stac-extensions/timestamps",
-            # "https://github.com/CS-SI/eopf-stac-extension",
-        ]
+        # TODO: According to the 821 story, we have to:
+        # - do not set stac_extension SAR for Sentinel-2 products "with instrument different from SRAL"
+        # - do not set stac_extension SAR for Sentinel-3 products "with instrument different from SRAL"
+        # Get in line with the story once clarified !
+        stac_extensions: list[str] = []
+        if dpr_processor == DprProcessor.S1L0:
+            stac_extensions = [
+                "https://stac-extensions.github.io/sat/v1.1.0/schema.json",
+                "https://stac-extensions.github.io/processing/v1.2.0/schema.json",
+                "https://stac-extensions.github.io/product/v1.0.0/schema.json",
+                "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+                "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+                "https://stac-extensions.github.io/grid/v1.1.0/schema.json",
+                "https://stac-extensions.github.io/view/v1.1.0/schema.json",
+                "https://stac-extensions.github.io/sar/v1.3.0/schema.json",
+                "https://cs-si.github.io/eopf-stac-extension/v1.2.0/schema.json",
+                "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json",
+                "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
+            ]
 
         return Item(
             id=product_name,
@@ -165,7 +174,7 @@ def create_stac_item(
             bbox=feature_dict["bbox"],
             datetime=datetime.datetime.fromisoformat(feature_dict["properties"]["datetime"]),
             properties=feature_dict["properties"],
-            stac_extensions=default_stac_extensions,
+            stac_extensions=stac_extensions,
         )
 
     def build_asset(path: str, product_name: str) -> Asset:
@@ -195,7 +204,7 @@ def create_stac_item(
     # Note: input_products != input_adfs
     eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products, dpr_processor)
 
-    item = build_item(eopf_feature, eopf_origin_datetime, product_name)
+    item = build_item(eopf_feature, eopf_origin_datetime, product_name, dpr_processor)
     item.assets = {product_name: build_asset(s3_data_location, product_name)}
 
     return item
