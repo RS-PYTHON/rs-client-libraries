@@ -149,14 +149,14 @@ def create_stac_item(
 
         # C1.3 Add stac_extensions following the list from the PRIP ICD §3.3.4
         default_stac_extensions: list[str] = [
-            # "https://github.com/stac-extensions/sat",
-            # "https://github.com/stac-extensions/product",
-            # "https://github.com/stac-extensions/grid",
-            # "https://github.com/stac-extensions/processing",
-            # "https://github.com/stac-extensions/eo",
-            # "https://github.com/stac-extensions/view",
-            # "https://github.com/stac-extensions/timestamps",
-            # "https://github.com/CS-SI/eopf-stac-extension"
+            "https://github.com/stac-extensions/sat",
+            "https://github.com/stac-extensions/product",
+            "https://github.com/stac-extensions/grid",
+            "https://github.com/stac-extensions/processing",
+            "https://github.com/stac-extensions/eo",
+            "https://github.com/stac-extensions/view",
+            "https://github.com/stac-extensions/timestamps",
+            "https://github.com/CS-SI/eopf-stac-extension",
         ]
 
         return Item(
