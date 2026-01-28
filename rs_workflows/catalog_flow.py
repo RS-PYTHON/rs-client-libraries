@@ -114,7 +114,7 @@ async def publish(
                 # Publish item to catalog
                 # TODO: adjust timeout as needed. Current value is 24 hours.
                 logger.info(
-                    "Using timeout of 86400 seconds for catalog item publishing",                    
+                    "Using timeout of 86400 seconds for catalog item publishing",
                 )
                 catalog_client.add_item(target_collection, item, timeout=86400)
 
