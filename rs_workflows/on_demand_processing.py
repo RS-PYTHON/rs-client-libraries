@@ -160,7 +160,7 @@ async def dpr_processing(
         # get the payload generation result
         generated_payload_res = task_future.result()
         # create the generated payload as a dictionary, as it will be used for
-        # both payload file generation and dpr processor execution
+        # the prefect artifact. the SecretStr will be masked here
         generated_payload_res_as_dict = generated_payload_res.dump()
         # create the YAML string first (synchronous). This will be used for writing both the artifact as well
         # as the tmp file
@@ -174,6 +174,10 @@ async def dpr_processing(
             description="DPR Payload file",
         )
 
+        # re-create the generated payload as a dictionary, as it will be used for
+        # the payload file to upload to S3. here, the secrets are revealed
+        generated_payload_res_as_dict = generated_payload_res.dump(True)
+        yaml_str = yaml.dump(generated_payload_res_as_dict, default_flow_style=False, sort_keys=False)
         # upload the config payload file to S3
         tmp_dir = std_tempfile.gettempdir()
         tmp_file_path = os.path.join(tmp_dir, f"dpr_payload_{datetime.datetime.now().timestamp()}.yaml")
@@ -191,19 +195,23 @@ async def dpr_processing(
         processed_items = run_processor.submit(
             flow_env.serialize(),
             dpr_input.processor_name,
-            # generated_payload_res_as_dict,
+            generated_payload_res_as_dict,
             cluster_info,
             dpr_input.s3_payload_file,
+            dpr_input.input_products,
             wait_for=[task_future],
         )
-        processed_items.result()
+        try:
+            processed_items.result()
+        finally:
+            prefect_utils.s3_delete(dpr_input.s3_payload_file)
+
         logger.debug(processed_items.result())
 
         # Publish processed items to the catalog
         published = catalog_flow.publish.submit(
             flow_env.serialize(),
             dpr_input.generated_product_to_collection_identifier,
-            generated_payload_res,
             processed_items,
         )
 

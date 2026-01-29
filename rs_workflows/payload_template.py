@@ -18,12 +18,13 @@ https://cpm.pages.eopf.copernicus.eu/eopf-cpm/main/processor-orchestration-guide
 The schema is based on Pydantic (standard for schema + validation + autocompletion).
 """
 
-from typing import cast
+from typing import Any, cast
 
 from pydantic import (  # , Configdict
     BaseModel,
     ConfigDict,
     Field,
+    SecretStr,
     field_validator,
     model_validator,
 )
@@ -84,13 +85,49 @@ class BasePayloadModel(BaseModel):
 
         return values
 
-    def dump(self, **kwargs):
+    @classmethod
+    def _mask_secrets(cls, obj: Any) -> Any:
+        if isinstance(obj, SecretStr):
+            return "********"
+
+        if isinstance(obj, dict):
+            return {k: cls._mask_secrets(v) for k, v in obj.items()}
+
+        if isinstance(obj, list):
+            return [cls._mask_secrets(v) for v in obj]
+
+        return obj
+
+    @classmethod
+    def _unwrap_secrets(cls, obj: Any) -> Any:
+        if isinstance(obj, SecretStr):
+            return obj.get_secret_value()
+
+        if isinstance(obj, dict):
+            return {k: cls._unwrap_secrets(v) for k, v in obj.items()}
+
+        if isinstance(obj, list):
+            return [cls._unwrap_secrets(v) for v in obj]
+
+        return obj
+
+    def dump(self, reveal_secrets: bool = False, **kwargs):
         """Custom dump that:
         - skips None fields by default.
         - skips all unset
         - use the alias for fields by default
         """
-        return self.model_dump(by_alias=True, exclude_none=True, exclude_unset=True, **kwargs)
+        data = self.model_dump(
+            by_alias=True,
+            exclude_none=True,
+            exclude_unset=True,
+            serialize_as_any=True,
+            **kwargs,
+        )
+        if reveal_secrets:
+            return self._unwrap_secrets(data)
+
+        return self._mask_secrets(data)
 
 
 # Utility / Common classes
@@ -99,16 +136,21 @@ class BasePayloadModel(BaseModel):
 class StorageOptions(BasePayloadModel):
     """Options to access a storage backend"""
 
-    name: str
-    key: str | None = None
-    secret: str | None = None
-    client_kwargs: dict[str, str] | None = None
+    # The field name is excluded to avoid including it in the payload
+    # Otherwise, the processor yelds an error when trying to parse the store_params
+    name: str = Field(exclude=True)
+    key: SecretStr
+    secret: SecretStr
+    client_kwargs: dict[str, SecretStr]
 
 
-# class StoreOptionsWrapper(BasePayloadModel):
-#     """Wrapper for a list of storage options"""
+class StoragePath(BasePayloadModel):
+    """Wrapper for a list of storage options"""
 
-#     storage_options: list[StorageOptions]
+    # TODO: check if we need to exclude name here as well as for StorageOptions
+    name: str = Field(exclude=True)
+    opening_mode: str | None = Field(default="CREATE_OVERWRITE")
+    relative_path: str
 
 
 class StoreParams(BasePayloadModel):
@@ -116,9 +158,10 @@ class StoreParams(BasePayloadModel):
 
     # Either a simple S3 secret alias
     s3_secret_alias: str | None = None
-    # Or a list of storage options
-    # options: list[StoreOptionsWrapper] | None = None
-    storage_options: list[StorageOptions] | None = None
+    # Or a storage options used for s3
+    storage_options: StorageOptions | None = None
+    # Or a disk path
+    storage_path: StoragePath | None = None
     # Or a regex + multiplicity
     regex: str | None = None
     multiplicity: str | int | None = None
@@ -206,9 +249,9 @@ class WorkflowStep(BasePayloadModel):
     step: int | None = None
     module: str | None = None
     processing_unit: str | None = None
-    inputs: list[dict[str, str]] | None = None
-    outputs: list[dict[str, str]] | None = None
-    adfs: list[dict[str, str]] | None = None
+    inputs: dict[str, str] | None = None
+    outputs: dict[str, str] | None = None
+    adfs: dict[str, str] | None = None
     parameters: None | (
         dict[
             str,

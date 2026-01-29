@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 # Copyright 2024 CS Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +20,8 @@ The conftest.py file serves as a means of providing fixtures for an entire direc
 Fixtures defined in a conftest.py can be used by any test in that package without needing to import them
 (pytest will automatically discover them).
 """
+import json
+
 # pylint: disable=unused-argument
 import logging
 from unittest.mock import MagicMock, mock_open
@@ -27,6 +30,7 @@ import pytest
 import requests
 import responses
 from prefect.testing.utilities import prefect_test_harness
+from pydantic import SecretStr
 
 from rs_client.rs_client import RsClient
 from rs_client.stac.stac_base import StacBase
@@ -717,7 +721,10 @@ def mock_dpr_process_in():
     mock.s3_payload_file = "s3://mocked-bucket/payloads/test-run.yaml"
 
     # Optional: processor_name (used in payload_generator)
-    mock.processor_name = "TEST_PROCESSOR"
+    # We use a MagicMock so that .value attribute exists (accessed in logging)
+    msg = MagicMock()
+    msg.value = "TEST_PROCESSOR"
+    mock.processor_name = msg
 
     return mock
 
@@ -726,18 +733,12 @@ def mock_dpr_process_in():
 def mock_store_params():
     """Fixture that mocks the store params"""
     return StoreParams(
-        storage_options=[
-            # StoreOptionsWrapper(
-            # storage_options=[
-            StorageOptions(
-                name="s3",
-                key="key",
-                secret="secret",  # nosec B106: test-only fake secret
-                client_kwargs={"endpoint_url": "http://localhost", "region_name": "test"},
-            ),
-            # ],
-            # ),
-        ],
+        storage_options=StorageOptions(
+            name="s3",
+            key=SecretStr("key"),
+            secret=SecretStr("secret"),  # nosec B106: test-only fake secret
+            client_kwargs={"endpoint_url": SecretStr("http://localhost"), "region_name": SecretStr("test")},
+        ),
     )
 
 
@@ -836,6 +837,71 @@ class MockResponse:
 
 
 @pytest.fixture
+def sample_config_data():
+    """
+    Returns a dictionary representing a sample configuration for testing StorageConfig.
+    Includes product-specific, default unit/pipeline storage, and definitions for S3, local, and shared disk storage.
+    """
+    return {
+        "product": {
+            "specific": [
+                {"product_name": "PROD_A", "storage": "s3"},
+                {"product_name": "PROD_B", "storage": "local_disk"},
+            ],
+            "default": {
+                "unit": [
+                    {"section": "input_products", "storage": "s3_default_in"},
+                    {"section": "output_products", "storage": "s3_default_out"},
+                ],
+                "pipeline": [
+                    {"section": "pipeline_input", "storage": "s3_pipeline_in"},
+                    {"section": "pipeline_output", "storage": "s3_pipeline_out"},
+                ],
+                "adfs": {"storage": "s3_adfs"},
+            },
+        },
+        "storage_configuration": [
+            {
+                "name": "s3",
+                "storage_options": {
+                    "key": "${S3_KEY}",
+                    "secret": "${S3_SECRET}",
+                    "endpoint_url": "${S3_ENDPOINT}",
+                    "region_name": "${S3_REGION}",
+                },
+            },
+            {"name": "local_disk", "opening_mode": "rw", "relative_path": "/data"},
+            {"name": "shared_disk", "opening_mode": "r", "relative_path": "/mnt/shared"},
+        ],
+    }
+
+
+@pytest.fixture
+def secrets():
+    """
+    Returns a dictionary of mock secrets corresponding to the placeholders in sample_config_data.
+    """
+    return {
+        "S3_KEY": "my_key",
+        "S3_SECRET": "my_secret",
+        "S3_ENDPOINT": "http://minio",
+        "S3_REGION": "us-east-1",
+    }
+
+
+@pytest.fixture
+def config_file(mocker, sample_config_data):  # pylint: disable=redefined-outer-name
+    """
+    Mocks the storage configuration file using the sample configuration data.
+    Avoids creating a physical file on disk.
+    Returns a dummy path.
+    """
+    content = json.dumps(sample_config_data)
+    mocker.patch("builtins.open", mock_open(read_data=content))
+    return "/dummy/path/config.json"
+
+
+@pytest.fixture
 def _mock_os_env(monkeypatch):
     monkeypatch.setenv("RSPY_HOST_OSAM", "https://dummy-osam")
     return "https://dummy-osam"
@@ -910,7 +976,7 @@ def _mock_get_row_not_list(monkeypatch):
     """Mock returning a list where elements are NOT lists."""
 
     def _mock_get(url, timeout):
-        return MockResponse(json_data=["a", "b", "c"])  # invalid
+        return MockResponse(json_data=["a", "b", "c"])
 
     monkeypatch.setattr(requests, "get", _mock_get)
     return _mock_get
@@ -921,7 +987,7 @@ def _mock_get_non_string(monkeypatch):
     """Mock returning a list containing non-string elements inside a row."""
 
     def _mock_get(url, timeout):
-        return MockResponse(json_data=[["a", 123, "b"]])  # 123 invalid
+        return MockResponse(json_data=[["a", 123, "b"]])
 
     monkeypatch.setattr(requests, "get", _mock_get)
     return _mock_get
@@ -932,7 +998,7 @@ def _mock_get_row_wrong_length_too_short(monkeypatch):
     """Row has fewer than 5 columns."""
 
     def _mock_get(url, timeout):
-        return MockResponse(json_data=[["a", "b", "c"]])  # only 3 entries
+        return MockResponse(json_data=[["a", "b", "c"]])
 
     monkeypatch.setattr(requests, "get", _mock_get)
     return _mock_get
@@ -943,7 +1009,7 @@ def _mock_get_row_wrong_length_too_long(monkeypatch):
     """Row has more than 5 columns."""
 
     def _mock_get(url, timeout):
-        return MockResponse(json_data=[["a", "b", "c", "d", "e", "f"]])  # 6 entries
+        return MockResponse(json_data=[["a", "b", "c", "d", "e", "f"]])
 
     monkeypatch.setattr(requests, "get", _mock_get)
     return _mock_get

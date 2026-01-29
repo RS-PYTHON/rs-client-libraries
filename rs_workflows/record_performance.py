@@ -18,14 +18,12 @@ import os
 import re
 import sys
 from datetime import datetime
-from importlib.metadata import version
+from importlib.metadata import version  # pylint: disable = unused-import # noqa: F401
 
 from prefect import get_run_logger, runtime, task
 from sqlalchemy import MetaData, Table, create_engine, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
-
-DISABLE_PI = True
 
 
 def get_db_session():
@@ -175,7 +173,8 @@ def record_flow_run(
             "mission": resolve_param(mission, "mission", "sentinel-1"),
             "prefect_flow_id": prefect_flow_id,
             "prefect_flow_parent_id": runtime.flow_run.parent_flow_run_id,
-            "dask_version": version("dask"),
+            "dask_version": "1.0",  # version("dask"),
+            # TODO: Test why: PackageNotFoundError: No package metadata was found for dask
             "python_version": sys.version.split()[0],
             "dpr_processor_name": resolve_param(dpr_processor_name, "dpr_processor_name", "dpr_processor"),
             "dpr_processor_version": resolve_param(
@@ -268,18 +267,19 @@ def record_product_realised(flow_run_id, stac_items):
         return
 
     try:
-        for dpr_product in stac_items:
-            stac_discovery = dpr_product["stac_discovery"]
-            eopf_type = stac_discovery["properties"]["product:type"]
+        for item in stac_items:
+            if not isinstance(item, dict):
+                item = item.to_dict()
+            eopf_type = item["properties"]["product:type"]
 
             values = {
                 "flow_run_id": flow_run_id,
                 "pi_category_id": get_pi_category_id(eopf_type),
                 "eopf_type": eopf_type,
-                "stac_item": stac_discovery,
+                "stac_item": item,
                 # get it from properties instead of product name, now() if missing
-                "sensing_start_datetime": stac_discovery["properties"].get("start_datetime", datetime.now()),
-                "origin_date": stac_discovery["properties"].get("datetime", datetime.now()),
+                "sensing_start_datetime": item["properties"].get("start_datetime", datetime.now()),
+                "origin_date": item["properties"].get("datetime", datetime.now()),
                 "catalog_stored_datetime": datetime.now(),
                 # default to false, will be updated by validate
                 "unexpected": False,
@@ -332,7 +332,7 @@ def extract_min_datetime(list_items):
 
 
 @task(name="Record Products Expected")
-def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
+def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_types=None):
     """
     Insert expected product definitions into the `product_expected` table for a given flow run.
 
@@ -374,6 +374,8 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
     db, engine = get_db_session()
     product_expected = Table("product_expected", metadata, autoload_with=engine)
 
+    if not eopf_types:
+        return
     eopf_type_dict = []
 
     if dpr_processor_name in ["s3_l0", "mockup"]:
@@ -396,12 +398,11 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload):
 
     eopf_type_lookup = {k: (min_c, max_c) for k, min_c, max_c in eopf_type_dict}
 
-    list_eopf_types = list(payload["workflow"][0]["outputs"].values())
     list_items = list((payload["workflow"][0]["inputs"]).values())
     min_val = extract_min_datetime(list_items)
 
     try:
-        for eopf_type in list_eopf_types:
+        for eopf_type in eopf_types:
 
             try:
                 min_c, max_c = eopf_type_lookup[eopf_type]
@@ -722,10 +723,9 @@ def record_performance_indicators(
     payload: dict | None = None,
     # product_realised params
     stac_items=None,
+    eopf_types=None,
 ):
     """Main task that orchestrates DB recording for flow_run and product_realised."""
-    if DISABLE_PI:
-        return
     logger = get_run_logger()
     logger.info("Starting record_performance_indicators")
 
@@ -743,7 +743,7 @@ def record_performance_indicators(
             dpr_processor_unit,
             dpr_processing_input_stac_items,
         )
-        record_product_expected(flow_run_id, dpr_processor_name, payload)
+        record_product_expected(flow_run_id, dpr_processor_name, payload, eopf_types)
 
         record_product_realised(flow_run_id, stac_items)  # type: ignore[unused-coroutine]
 

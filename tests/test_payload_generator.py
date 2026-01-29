@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Test the payload_generator module"""
-import json
 from datetime import datetime
 from unittest.mock import MagicMock
 
@@ -21,14 +20,15 @@ import pytest
 from pystac import Asset, Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
-from rs_workflows.payload_generator import (
+from rs_workflows.payload_generator import (  # load_store_params_from_config,
+    build_input_products,
+    build_output_products,
     build_workflow_step,
     fetch_csv_from_endpoint,
     find_s3_output_bucket,
     generate_payload,
     get_first_asset_dir,
     get_io,
-    load_store_params_from_config,
     resolve_stac_input_path,
     wildcard_match,
 )
@@ -38,7 +38,6 @@ from rs_workflows.payload_template import (
     IOConfig,
     OutputProduct,
     PayloadSchema,
-    StorageOptions,
     StoreParams,
     WorkflowStep,
 )
@@ -55,10 +54,9 @@ def test_build_workflow_step_valid(sample_unit):
     assert isinstance(step, WorkflowStep)
     assert step.name == "unit1"
     assert step.module == "module1"
-    assert {"S1CADUS": "S1CADUS"} in (step.inputs or [])
-    assert {"S3CADUS": "external_proc"} in (step.inputs or [])
-    assert {"adf1": "ADF1"} in (step.adfs or [])
-    assert {"*.tif": "output1"} in (step.outputs or [])
+    assert step.inputs == {"S1CADUS": "S1CADUS", "S3CADUS": "external_proc"}
+    assert step.adfs == {"adf1": "ADF1"}
+    assert step.outputs == {"*.tif": "output1", "output2": "output2"}
 
 
 def test_build_workflow_step_missing_key_raises():
@@ -101,12 +99,21 @@ def test_get_io_builds_input_and_output(
         "rs_workflows.payload_generator.find_s3_output_bucket",
         return_value="mocked-output-bucket",
     )
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid.uuid4",
+        return_value="00000000-0000-0000-0000-000000000000",
+    )
+
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.get_storage_for_specific_product.return_value = "s3"
 
     inputs, outputs = get_io(
         sample_unit,
         mock_dpr_process_in,
-        mock_store_params,
         flow_env,
+        mock_storage_config,
+        [],
     )
 
     assert len(inputs) == 2
@@ -119,9 +126,12 @@ def test_get_io_builds_input_and_output(
     assert len(outputs) == 2
     assert isinstance(outputs[0], OutputProduct)
     assert outputs[0].id == "output1"
-    assert outputs[0].path == "s3://mocked-output-bucket/test-owner/S1A_IW_GRDH_1S"
+    assert outputs[0].path == "s3://mocked-output-bucket/test-owner/S1A_IW_GRDH_1S/00000000-0000-0000-0000-000000000000"
     assert outputs[1].id == "output2"
-    assert outputs[1].path == "s3://mocked-output-bucket/test-owner/OUTPUT_COLLECTION_GRDH"
+    assert (
+        outputs[1].path
+        == "s3://mocked-output-bucket/test-owner/OUTPUT_COLLECTION_GRDH/00000000-0000-0000-0000-000000000000"
+    )
 
 
 def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flow_env, mocker):
@@ -139,49 +149,11 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
         "input_products": [{"store_type": "S3"}],  # missing name/origin
         "output_products": [],
     }
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+
     with pytest.raises(KeyError):
-        get_io(bad_unit, mock_dpr_process_in, mock_store_params, flow_env)
-
-
-# ----------------------------------------------------------------------
-
-# load_store_params_from_config
-
-
-def test_load_store_params_from_config_valid(mock_storage_config_json):
-    """
-    Test loading a valid storage_configuration.json file.
-    Verifies that S3 StorageOptions are correctly parsed.
-    """
-    result = load_store_params_from_config(mock_storage_config_json)
-
-    assert isinstance(result, StoreParams)
-    assert result.storage_options is not None
-    assert len(result.storage_options) == 1
-    # Note: we had to add the pylint disable because it seems the pylint is not
-    # smart enough to detect the appropiate types for pydantic 2
-    s3_opt = result.storage_options[0]  # pylint: disable=unsubscriptable-object
-    assert isinstance(s3_opt, StorageOptions)
-    assert s3_opt.name == "s3"
-    # Tell mypy: client_kwargs is not None
-    assert s3_opt.client_kwargs is not None
-    assert s3_opt.client_kwargs["endpoint_url"] == "https://s3.tests.moc"
-
-
-def test_load_store_params_from_config_missing_file():
-    """
-    Test that a missing configuration file raises FileNotFoundError.
-    """
-    with pytest.raises(FileNotFoundError):
-        load_store_params_from_config("/non/existing/file.json")
-
-
-def test_load_store_params_from_config_invalid_json(mock_storage_config_invalid_json):
-    """
-    Test that an invalid configuration file is raising JSONDecodeError.
-    """
-    with pytest.raises(json.JSONDecodeError):
-        load_store_params_from_config(mock_storage_config_invalid_json)
+        get_io(bad_unit, mock_dpr_process_in, flow_env, mock_storage_config, [])
 
 
 # ----------------------------------------------------------------------
@@ -212,23 +184,36 @@ def test_generate_payload_success(
     processor_name,
     expected_logging,
     expected_config,
+    _mock_os_env,
 ):
     """
     Test successful end-to-end payload generation for a normal processor.
     Mocks store params and get_io; verifies structure and logging.
     """
-    mock_store_params = StoreParams(storage_options=[])
+    mock_store_params = StoreParams(storage_options=None)
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
     mocker.patch(
-        "rs_workflows.payload_generator.load_store_params_from_config",
-        return_value=mock_store_params,
+        "rs_workflows.payload_generator.load_storage_configuration",
+        return_value=mock_storage_config,
     )
     mocker.patch(
         "rs_workflows.payload_generator.get_io",
         return_value=([], []),
     )
+    mocker.patch(
+        "rs_workflows.payload_generator.fetch_csv_from_endpoint",
+        return_value=[],
+    )
 
     mock_logger = MagicMock()
     mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=mock_logger)
+
+    mock_secret = MagicMock()
+    mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
+    mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
 
     payload = generate_payload.fn(
         flow_env=flow_env,
@@ -244,7 +229,7 @@ def test_generate_payload_success(
     assert payload.io.adfs[0].id == "ADF1"
     assert payload.logging is None
     assert payload.config is None
-    mock_logger.info.assert_any_call("Geting workflow and I/O sections")
+    mock_logger.info.assert_any_call("Building workflow and I/O sections")
     mock_logger.info.assert_any_call("Building the payload")
 
     # test the s1 l0 specific logging and config paths
@@ -260,15 +245,27 @@ def test_generate_payload_success(
     assert payload.config == expected_config
 
 
-def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_env):
+def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_env, _mock_os_env):
     """
     Test that a unit missing 'name' raises ValueError during payload generation.
     """
-    mock_store_params = StoreParams(storage_options=[])
+    mock_store_params = StoreParams(storage_options=None)
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+
     mocker.patch(
-        "rs_workflows.payload_generator.load_store_params_from_config",
-        return_value=mock_store_params,
+        "rs_workflows.payload_generator.load_storage_configuration",
+        return_value=mock_storage_config,
     )
+    mocker.patch(
+        "rs_workflows.payload_generator.fetch_csv_from_endpoint",
+        return_value=[],
+    )
+
+    mock_secret = MagicMock()
+    mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
+    mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
+
     bad_unit = {"module": "no_name", "input_products": [], "output_products": []}
     with pytest.raises(ValueError, match="Key 'name' not found"):
         generate_payload.fn(
@@ -462,3 +459,254 @@ def test_resolve_stac_input_path(mocker, catalog_client):
     result = resolve_stac_input_path(catalog_client, "my-collection", "item123")
 
     assert result == "s3://catalog-bucket/items/item123"
+
+
+# ----------------------------------------------------------------------
+
+# build_input_products
+
+
+def test_build_input_products_success(sample_unit, mock_store_params, mocker):
+    """
+    Test successful build of input products with specific storage configuration.
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value="s3://path/to/item",
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    assert len(inputs) == 1
+    assert inputs[0].id == "S1CADUS"
+    assert inputs[0].store_type == "S3"
+    assert inputs[0].path == "s3://path/to/item"
+    assert inputs[0].store_params == mock_store_params
+
+
+def test_build_input_products_missing_mapping(sample_unit):
+    """
+    Test that RuntimeError is raised when input product is not found in unit definition.
+    """
+    mock_dpr = MagicMock()
+    # "UNKNOWN" is not in sample_unit's input_products
+    mock_dpr.input_products = [{"UNKNOWN": ("item_id", "coll_id")}]
+
+    with pytest.raises(RuntimeError, match="Couldn't find any input"):
+        build_input_products(sample_unit, mock_dpr, MagicMock(), MagicMock())
+
+
+def test_build_input_products_missing_storage(sample_unit, mocker):
+    """
+    Test that RuntimeError is raised when storage configuration cannot be resolved.
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value="s3://path/to/item",
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
+    # clear flags to avoid fallbacks triggering if checked before specific storage
+    mock_dpr.unit = False
+    mock_dpr.pipeline = False
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = None
+    # Ensure fallbacks also return None if called (though we disabled flags)
+    mock_storage.get_storage_for_unit_section.return_value = None
+    mock_storage.get_storage_for_pipeline_section.return_value = None
+
+    with pytest.raises(RuntimeError, match="Couldn't find any storage configuration"):
+        build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+
+def test_build_input_products_fallback_storage_unit(sample_unit, mock_store_params, mocker):
+    """
+    Test fallback to unit section storage if specific product storage is missing.
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value="s3://path/to/item",
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
+    mock_dpr.unit = True  # Enable unit fallback
+    mock_dpr.pipeline = False
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = None
+    mock_storage.get_storage_for_unit_section.return_value = "fallback_s3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    assert len(inputs) == 1
+    mock_storage.get_storage_for_unit_section.assert_called_with("input_products")
+    mock_storage.get_store_params.assert_called_with("fallback_s3")
+
+
+def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_params, mocker):
+    """
+    Test fallback to pipeline section storage if specific product storage and unit fallback are missing.
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value="s3://path/to/item",
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
+    mock_dpr.unit = False
+    mock_dpr.pipeline = True  # Enable pipeline fallback
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = None
+    mock_storage.get_storage_for_pipeline_section.side_effect = lambda section: {
+        "pipeline_input_1": None,
+        "other": "pipeline_s3",
+    }[section]
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    assert len(inputs) == 1
+    mock_storage.get_storage_for_pipeline_section.assert_any_call("pipeline_input_1")
+    mock_storage.get_storage_for_pipeline_section.assert_any_call("other")
+    mock_storage.get_store_params.assert_called_with("pipeline_s3")
+
+
+# ----------------------------------------------------------------------
+
+# build_output_products
+
+
+def test_build_output_products_specific_storage(
+    sample_unit,
+    mock_dpr_process_in,
+    mock_store_params,
+    mocker,
+):
+    """
+    Test output products with specific storage configuration in unit.
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    # Provide mappings for BOTH output1 and output2
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        {"output1": "OUT_COLL"},
+        {"output2": "OUT_COLL"},
+    ]
+
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid.uuid4",
+        return_value="00000000-0000-0000-0000-000000000000",
+    )
+
+    outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert len(outputs) == 2
+    assert outputs[0].id == "output1"
+    assert outputs[0].store_type == "S3"
+    assert outputs[0].path == "s3://out-bucket/test-owner/OUT_COLL/00000000-0000-0000-0000-000000000000"
+
+    assert outputs[1].id == "output2"
+    assert outputs[1].store_type == "S3"
+    assert outputs[1].path == "s3://out-bucket/test-owner/OUT_COLL/00000000-0000-0000-0000-000000000000"
+
+    mock_storage.get_storage_for_specific_product.assert_called_with("output2")  # last call
+
+
+def test_build_output_products_fallback_unit(
+    sample_unit,
+    mock_dpr_process_in,
+    mock_store_params,
+    mocker,
+):
+    """
+    Test output products with fallback on unit.
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = None
+    mock_storage.get_storage_for_unit_section.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        {"output1": "OUT_COLL"},
+        {"output2": "OUT_COLL"},
+    ]
+    mock_dpr_process_in.unit = True
+    mock_dpr_process_in.pipeline = False
+
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="s3://out/bucket")
+
+    outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert len(outputs) == 2
+    assert outputs[0].store_type == "S3"
+    assert outputs[1].store_type == "S3"
+
+
+def test_build_output_products_fallback_pipeline(
+    sample_unit,
+    mock_dpr_process_in,
+    mock_store_params,
+    mocker,
+):
+    """
+    Test output products with fallback on pipeline.
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = None
+    mock_storage.get_storage_for_pipeline_section.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        {"output1": "OUT_COLL"},
+        {"output2": "OUT_COLL"},
+    ]
+    mock_dpr_process_in.unit = False
+    mock_dpr_process_in.pipeline = True
+
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="s3://out/bucket")
+
+    outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert len(outputs) == 2
+    assert outputs[0].store_type == "S3"
+    assert outputs[1].store_type == "S3"
+
+
+def test_build_output_products_error_no_storage(
+    sample_unit,
+    mock_dpr_process_in,
+):
+    """
+    Test RuntimeError when no storage configuration is found for output products.
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = None
+    mock_storage.get_storage_for_unit_section.return_value = None
+    mock_storage.get_storage_for_pipeline_section.return_value = None
+
+    # Even with two mappings, error is raised if no storage config
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        {"output1": "OUT_COLL"},
+        {"output2": "OUT_COLL"},
+    ]
+    mock_dpr_process_in.unit = False
+    mock_dpr_process_in.pipeline = False
+
+    with pytest.raises(RuntimeError, match="Unable to determine the output bucket"):
+        build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])

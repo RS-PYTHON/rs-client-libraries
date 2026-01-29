@@ -273,12 +273,12 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 @patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(prefect_utils, "s3_delete", Mock())
 @patch.object(RsClient, "get_auxip_client", MockRsClient)
 @patch.object(RsClient, "get_cadip_client", MockRsClient)
 @patch.object(RsClient, "get_catalog_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_dpr_client", MockRsClient)
-@patch.object(catalog_flow, "datetime", Mock())
 async def test_dpr_processing(
     mocker,
     mock_prefect,
@@ -387,6 +387,13 @@ async def test_dpr_processing(
     assert isinstance(args[0], (str, Path))  # temp file path
     assert args[1] == dpr_input.s3_payload_file  # destination S3 path
 
+    # --- verify s3_delete was called with the payload file ---
+    delete_mock = cast(Mock, prefect_utils.s3_delete)
+    delete_calls = delete_mock.call_args_list  # pylint: disable=no-member
+    assert len(delete_calls) == 1
+    args = delete_calls[0].args
+    assert args[0] == dpr_input.s3_payload_file  # destination S3 path for payload file
+
     # Verify the two artifact calls use the correct keys
     keys = [c.kwargs.get("key") for c in artifact_mock.await_args_list]
     assert artifact_mock.await_count == 4
@@ -396,13 +403,13 @@ async def test_dpr_processing(
 @patch.dict(os.environ, {}, clear=False)
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(prefect_utils, "s3_delete", Mock())
 @patch.object(RsClient, "get_auxip_client", MockRsClient)
 @patch.object(RsClient, "get_cadip_client", MockRsClient)
 @patch.object(RsClient, "get_catalog_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_dpr_client", MockRsClient)
 @patch.object(on_demand_processing, "process_input_adfs", ProcessInputAdfsTaskFailMock())
-@patch.object(catalog_flow, "datetime", Mock())
 async def test_dpr_processing_raises_on_unstaged_adf(
     mocker,
     mock_prefect,
@@ -434,9 +441,9 @@ async def test_dpr_processing_raises_on_unstaged_adf(
 @patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(prefect_utils, "s3_delete", Mock())
 @patch.object(RsClient, "get_cadip_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
-@patch.object(catalog_flow, "datetime", Mock())
 async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
     """Test the on_demand_cadip_staging flow"""
 
@@ -469,10 +476,10 @@ async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable
 @patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(prefect_utils, "s3_delete", Mock())
 @patch.object(RsClient, "get_auxip_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_catalog_client", MockRsClient)
-@patch.object(catalog_flow, "datetime", Mock())
 async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
     """Test the on_demand_auxip_staging flow"""
 
@@ -507,6 +514,7 @@ async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable
 @patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
+@patch.object(prefect_utils, "s3_delete", Mock())
 @patch.object(RsClient, "get_prip_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 async def test_on_demand_prip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
@@ -720,8 +728,8 @@ async def test_publish_task_success(mocker):
     env = FlowEnvArgs(owner_id="test-owner")
 
     catalog_collection_identifier = [
-        {"GRD": ("S1_GRD", "OUTPUT_GRD_COLLECTION")},  # ← will match
-        {"NTC": ("S2_NTC", "OUTPUT_NTC_COLLECTION")},
+        {"S1_GRD": ("S1_GRD", "OUTPUT_GRD_COLLECTION")},  # ← will match
+        {"S2_NTC": ("S2_NTC", "OUTPUT_NTC_COLLECTION")},
     ]
 
     payload_file = MagicMock()
@@ -731,20 +739,18 @@ async def test_publish_task_success(mocker):
 
     items = [
         {
-            "stac_discovery": {
-                "id": "S1A_20240101_GRD",
-                "geometry": {"type": "Polygon", "coordinates": [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]]},
-                "bbox": [-10, 40, 10, 60],
-                "properties": {
-                    "datetime": "2024-01-01T12:00:00Z",
-                    "product:type": "S1_GRD",
-                },
+            "id": "S1A_20240101_GRD",
+            "geometry": {"type": "Polygon", "coordinates": [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]]},
+            "bbox": [-10, 40, 10, 60],
+            "properties": {
+                "datetime": "2024-01-01T12:00:00Z",
+                "product:type": "S1_GRD",
             },
         },
     ]
 
     # run the async task
-    await catalog_flow.publish.fn(env, catalog_collection_identifier, payload_file, items)
+    await catalog_flow.publish.fn(env, catalog_collection_identifier, items)
 
     # assertions
     mock_catalog_client.add_item.assert_called_once()
@@ -752,16 +758,17 @@ async def test_publish_task_success(mocker):
     # verify correct collection and item
     collection_id, item = mock_catalog_client.add_item.call_args[0]
     assert collection_id == "OUTPUT_GRD_COLLECTION"
-    assert item.id == "S1A_20240101_GRD"
-    assert item.datetime == datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    assert item["id"] == "S1A_20240101_GRD"
+    expected_datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert item["properties"]["datetime"] == expected_datetime
 
-    # verify asset
-    asset_key = "S1A_20240101_GRD.zarr"
-    asset = item.assets[asset_key]
-    assert asset.href == "s3://output-bucket/grd-output/S1A_20240101_GRD.zarr"
-    assert asset.title == asset_key
-    assert asset.media_type == "application/vnd+zarr"
-    assert asset.roles == ["data", "metadata"]
+    # verify asset, temporarily commented out until asset creation is re-enabled
+    # asset_key = "S1A_20240101_GRD.zarr"
+    # asset = item.assets[asset_key]
+    # assert asset.href == "s3://output-bucket/grd-output/S1A_20240101_GRD.zarr"
+    # assert asset.title == asset_key
+    # assert asset.media_type == "application/vnd+zarr"
+    # assert asset.roles == ["data", "metadata"]
 
 
 @pytest.mark.asyncio
@@ -782,30 +789,26 @@ async def test_publish_multiple_items(mocker):
     ]
 
     catalog_collection_identifier = [
-        {"GRD": ("S1_GRD", "COLL_GRD")},
-        {"NTC": ("S2_NTC", "COLL_NTC")},
+        {"S1_GRD": ("S1_GRD", "COLL_GRD")},
+        {"S2_NTC": ("S2_NTC", "COLL_NTC")},
     ]
 
     items = [
         {
-            "stac_discovery": {
-                "id": "item1",
-                "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
-                "geometry": None,
-                "bbox": None,
-            },
+            "id": "item1",
+            "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
+            "geometry": None,
+            "bbox": None,
         },
         {
-            "stac_discovery": {
-                "id": "item2",
-                "properties": {"product:type": "S2_NTC", "datetime": "2024-01-02T00:00:00Z"},
-                "geometry": None,
-                "bbox": None,
-            },
+            "id": "item2",
+            "properties": {"product:type": "S2_NTC", "datetime": "2024-01-02T00:00:00Z"},
+            "geometry": None,
+            "bbox": None,
         },
     ]
 
-    await catalog_flow.publish.fn(FlowEnvArgs(owner_id="test"), catalog_collection_identifier, payload_file, items)
+    await catalog_flow.publish.fn(FlowEnvArgs(owner_id="test"), catalog_collection_identifier, items)
 
     assert mock_catalog_client.add_item.call_count == 2
     calls = mock_catalog_client.add_item.mock_calls
@@ -814,7 +817,7 @@ async def test_publish_multiple_items(mocker):
 
 
 @pytest.mark.asyncio
-async def test_publish_skips_when_no_matching_output_product(mocker):
+async def test_publish_skips_when_no_matching_output_collection(mocker):
     """Test: no matching output product -> item skipped (no error)"""
     mock_catalog_client = MagicMock()
     mock_flow_env = MagicMock(rs_client=MagicMock(get_catalog_client=lambda: mock_catalog_client))
@@ -824,22 +827,17 @@ async def test_publish_skips_when_no_matching_output_product(mocker):
     mocker.patch("rs_workflows.catalog_flow.get_run_logger")
     mocker.patch("os.path.join", side_effect=lambda *parts: "/".join(parts))
 
-    payload_file = MagicMock()
-    payload_file.io.output_products = []  # ← no output products!
-
-    catalog_collection_identifier = [{"GRD": ("S1_GRD", "COLL_GRD")}]
+    catalog_collection_identifier = [{"INVALID": ("INVALID", "COLL_GRD")}]
 
     items = [
         {
-            "stac_discovery": {
-                "id": "item1",
-                "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
-                "geometry": None,
-                "bbox": None,
-            },
+            "id": "item1",
+            "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
+            "geometry": None,
+            "bbox": None,
         },
     ]
+    with pytest.raises(RuntimeError):
+        await catalog_flow.publish.fn(FlowEnvArgs(owner_id="test"), catalog_collection_identifier, items)
 
-    await catalog_flow.publish.fn(FlowEnvArgs(owner_id="test"), catalog_collection_identifier, payload_file, items)
-
-    mock_catalog_client.add_item.assert_not_called()  # ← silently skipped
+        mock_catalog_client.add_item.assert_not_called()

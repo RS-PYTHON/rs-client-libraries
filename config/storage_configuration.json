@@ -1,0 +1,73 @@
+{
+  "product": {
+    "default": {
+      "adfs": {
+        "storage": "s3"
+      },
+      "unit": [
+        {
+          "section": "input_products",
+          "storage": "s3"
+        },
+        {
+          "section": "output_products",
+          "storage": "s3"
+        }
+      ],
+      "pipeline": [
+        {
+          "section": "pipeline_input",
+          "storage": "s3"
+        },
+        {
+          "section": "pipeline_output",
+          "storage": "s3"
+        },
+        {
+          "section": "other",
+          "storage": "shared_disk"
+        }
+      ]
+    },
+    "specific": [
+      {
+        "product_name": "DEM-SENTINEL-1",
+        "storage": "s3-dem-s1"
+      },
+      {
+        "product_name": "Orbit",
+        "storage": "shared_disk"
+      }
+    ]
+  },
+  "storage_configuration": [
+    {
+      "name": "s3",
+      "storage_options": {
+        "key": "${S3_ACCESSKEY}",
+        "secret": "${S3_SECRETKEY}",
+        "endpoint_url": "${S3_ENDPOINT}",
+        "region_name": "${S3_REGION}"
+      }
+    },
+    {
+      "name": "s3-dem-s1",
+      "storage_options": {
+        "key": "${S3_DEMS1_ACCESSKEY}",
+        "secret": "${S3_DEMS1_SECRETKEY}",
+        "endpoint_url": "${S3_DEMS1_ENDPOINT}",
+        "region_name": "${S3_DEMS1_REGION}"
+      }
+    },
+    {
+      "name": "shared_disk",
+      "opening_mode": "CREATE_OVERWRITE",
+      "relative_path": "/my_share_directory/here/${JOB_IDENTIFIER}"
+    },
+    {
+      "name": "local_disk",
+      "opening_mode": "CREATE_OVERWRITE",
+      "relative_path": "/my_local_path/here/${JOB_IDENTIFIER}"
+    }
+  ]
+}
