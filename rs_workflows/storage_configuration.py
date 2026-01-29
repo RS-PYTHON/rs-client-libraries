@@ -64,7 +64,7 @@ class StorageConfig:
                     except KeyError as ke:
                         logger.warning(
                             f"Secret value for key {ke} not found in the prefect "
-                            f"block secrets for {conf['name']}. This section from template will not be usable.",
+                            f"block secrets. This section from template will not be usable.",
                         )
                         continue
                 elif conf["name"] in ("shared_disk", "local_disk"):
