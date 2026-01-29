@@ -155,17 +155,17 @@ def create_stac_item(
         stac_extensions: list[str] = []
         if dpr_processor == DprProcessor.S1L0:
             stac_extensions = [
-                "https://stac-extensions.github.io/sat/v1.1.0/schema.json",
-                "https://stac-extensions.github.io/processing/v1.2.0/schema.json",
-                "https://stac-extensions.github.io/product/v1.0.0/schema.json",
-                "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
-                "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
-                "https://stac-extensions.github.io/grid/v1.1.0/schema.json",
-                "https://stac-extensions.github.io/view/v1.1.0/schema.json",
-                "https://stac-extensions.github.io/sar/v1.3.0/schema.json",
-                "https://cs-si.github.io/eopf-stac-extension/v1.2.0/schema.json",
-                "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json",
-                "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
+                # "https://stac-extensions.github.io/sat/v1.1.0/schema.json",
+                # "https://stac-extensions.github.io/processing/v1.2.0/schema.json",
+                # "https://stac-extensions.github.io/product/v1.0.0/schema.json",
+                # "https://stac-extensions.github.io/scientific/v1.0.0/schema.json",
+                # "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+                # "https://stac-extensions.github.io/grid/v1.1.0/schema.json",
+                # "https://stac-extensions.github.io/view/v1.1.0/schema.json",
+                # "https://stac-extensions.github.io/sar/v1.3.0/schema.json",
+                # "https://cs-si.github.io/eopf-stac-extension/v1.2.0/schema.json",
+                # "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json",
+                # "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
             ]
 
         return Item(
