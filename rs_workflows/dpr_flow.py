@@ -194,7 +194,6 @@ def create_stac_item(
             media_type="application/vnd+zarr",
             roles=["data", "metadata"],
             extra_fields={
-                "file:local_path": path,
                 "auth:ref": "should be filled thanks to story RSPY-280",
             },
         )
