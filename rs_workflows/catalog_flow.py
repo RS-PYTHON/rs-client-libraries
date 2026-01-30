@@ -109,14 +109,14 @@ async def publish(
                     # Remove fields not compliant with catalog ingestion when using the stac_extensions
                     # For https://stac-extensions.github.io/sat/v1.1.0/schema.json
                     if "sat:absolute_orbit" in item.properties:
-                        item.properties["sat:absolute_orbit"] = None
+                        del item.properties["sat:absolute_orbit"]
                     if "sat:anx_datetime" in item.properties:
-                        item.properties["sat:anx_datetime"] = None
+                        del item.properties["sat:anx_datetime"]
                     if "sat:orbit_state" in item.properties:
-                        item.properties["sat:orbit_state"] = None
+                        del item.properties["sat:orbit_state"]
                     # For https://stac-extensions.github.io/processing/v1.2.0/schema.json
                     if "processing:software" in item.properties:
-                        item.properties["processing:software"] = None
+                        del item.properties["processing:software"]
                 # TEMPFIX END
                 logger.info(
                     "Writing product %s to %s. This may take a while...",
