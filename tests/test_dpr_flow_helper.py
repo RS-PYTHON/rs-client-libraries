@@ -199,7 +199,9 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
         title="feature_1.zarr",
         media_type="application/vnd+zarr",
         roles=["data", "metadata"],
-        extra_fields=mocker.ANY,
+        # the following is commented out in the actual code
+        # search for RSPY-280 in the dpr_flow.py file
+        # extra_fields=mocker.ANY,
     )
 
     # Assets attached to item

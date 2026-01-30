@@ -327,10 +327,12 @@ def build_input_products(
             InputProduct(
                 id=mapping["name"],
                 path=stac_item_path,
-                # TODO: The value for this filed in the tasktable (from where the unit is built) should be filename
+                # TODO: The value for this filed in the tasktable (from where the unit is built) should be 'filename'
                 # in case of s1 l0 processor, otherwise the s1 l0 processor is failing in starting.
+                # check in the tasktable from rs-dpr-service (config/TaskTable_S1_L0_generated_by_rs_python_v1.json)
+                # that in section io, the type field is set to 'filename' for input_products (S1ACADUS).
                 # To be fixed in future iterations !
-                type="filename",  # mapping.get("type", "filename"),
+                type=mapping.get("type", "filename"),
                 store_type=mapping["store_type"],
                 store_params=storage_configuration.get_store_params(store_name),
             ),
