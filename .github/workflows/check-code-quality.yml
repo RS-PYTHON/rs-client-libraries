@@ -156,7 +156,7 @@ jobs:
           TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
           TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1
         with:
-          version: v0.68.2
+          version: v0.69.0
           scan-type: fs
           ignore-unfixed: true
           format: sarif
