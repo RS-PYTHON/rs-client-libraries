@@ -27,26 +27,26 @@ from prefect import flow, get_run_logger
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
-LOG_BUCKET = "rspython-ops-access-logs"
+LOG_BUCKET_SUFFIX = "-access-logs"
 LOG_PREFIX = "prip/"
-MAX_FILES = 1000
-AGE_THRESHOLD = timedelta(minutes=5)
+DEFAULT_MAX_FILES = 10000
+DEFAULT_AGE_THRESHOLD = 5
 BATCH_SIZE = 500  # number of rows per batch insert
 
 
 # -----------------------------
 # 1. List eligible S3 log files
 # -----------------------------
-def list_recent_files(s3):
+def list_recent_files(s3, platform: str, max_files: int, threshold_minute: int):
     """
-    List up to MAX_FILES files older than AGE_THRESHOLD.
+    List up to 'max_files' files older than 'threshold_minute'.
     """
-    cutoff = datetime.now(timezone.utc) - AGE_THRESHOLD
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=threshold_minute)
     count = 0
 
     paginator = s3.get_paginator("list_objects_v2")
 
-    for page in paginator.paginate(Bucket=LOG_BUCKET, Prefix=LOG_PREFIX):
+    for page in paginator.paginate(Bucket=platform + LOG_BUCKET_SUFFIX, Prefix=LOG_PREFIX):
         for obj in page.get("Contents", []):
             key = obj["Key"]
             last_modified = obj["LastModified"]
@@ -57,20 +57,20 @@ def list_recent_files(s3):
             yield key
             count += 1
 
-            if count >= MAX_FILES:
+            if count >= max_files:
                 return
 
 
 # -----------------------------
 # 2. Stream-read S3 object
 # -----------------------------
-def read_object(s3, key):
+def read_object(s3, platform, key):
     """
     Stream-read an S3 object line by line.
     """
     logger = get_run_logger()
     try:
-        response = s3.get_object(Bucket=LOG_BUCKET, Key=key)
+        response = s3.get_object(Bucket=platform + LOG_BUCKET_SUFFIX, Key=key)
         for line in response["Body"].iter_lines():
             if line:
                 yield line.decode("utf-8")
@@ -159,34 +159,37 @@ def batch_insert(conn, rows):
 # 5. Main pipeline
 # -----------------------------
 @flow(name="collect-obs-logs")
-async def collect_obs_logs(env: FlowEnvArgs = FlowEnvArgs(owner_id="pcuq")):
+async def collect_obs_logs(
+    platform: str = "rspython-ops",
+    max_files: int = DEFAULT_MAX_FILES,
+    threshold_minute: int = DEFAULT_AGE_THRESHOLD,
+    env: FlowEnvArgs = FlowEnvArgs(owner_id="operator-quota"),
+):
     """
     Collect and process OVH quota monitoring logs from S3 and insert them into a PostgreSQL database.
     This async function retrieves observability logs from an S3 bucket, parses them, and performs
     batch insertions into a Postgres quota database.
     Args:
+        platform : platform name, will be the prefix of the bucket name
+        max_files : number maximum of files read from the bucket
+        threshold_minute : this threshold is set to avoid reading and deleting a log file whereas it is filled
         env (FlowEnvArgs, optional): Flow environment arguments containing owner_id and other
-            configuration parameters. Defaults to FlowEnvArgs(owner_id="pcuq").
+            configuration parameters.
     Returns:
         None
     Raises:
         psycopg2.Error: If database connection or insertion operations fail.
-        KeyError: If required environment variables (POSTGRES_QUOTA_USER, POSTGRES_QUOTA_PASSWORD,
-            POSTGRES_HOST, POSTGRES_PORT, S3_ENDPOINT, S3_ACCESSKEY, S3_SECRETKEY, S3_REGION)
-            are not set.
+        KeyError: If required environment variables are not set.
         Exception: If S3 operations or log parsing encounters errors.
     Environment Variables Required:
         - POSTGRES_QUOTA_USER: PostgreSQL username for quota database
         - POSTGRES_QUOTA_PASSWORD: PostgreSQL password
         - POSTGRES_HOST: PostgreSQL host address
         - POSTGRES_PORT: PostgreSQL port number
-        - S3_ENDPOINT: S3 endpoint URL
-        - S3_ACCESSKEY: S3 access key ID
-        - S3_SECRETKEY: S3 secret access key
-        - S3_REGION: S3 region name
-    Note:
-        - Processes logs in batches to optimize database insertions
-        - Includes OpenTelemetry instrumentation for distributed tracing
+        - S3_QUOTA_ENDPOINT: S3 endpoint URL to access the bucket with logs
+        - S3_QUOTA_ACCESSKEY: S3 access key ID to access the bucket with logs
+        - S3_QUOTA_SECRETKEY: S3 secret access key to access the bucket with logs
+        - S3_QUOTA_REGION: S3 region name to access the bucket with logs
     """
 
     logger = get_run_logger()
@@ -203,21 +206,23 @@ async def collect_obs_logs(env: FlowEnvArgs = FlowEnvArgs(owner_id="pcuq")):
 
         s3 = boto3.client(
             "s3",
-            endpoint_url=os.environ["S3_ENDPOINT"],
-            aws_access_key_id=os.environ["S3_ACCESSKEY"],
-            aws_secret_access_key=os.environ["S3_SECRETKEY"],
+            endpoint_url=os.environ["S3_QUOTA_ENDPOINT"],
+            aws_access_key_id=os.environ["S3_QUOTA_ACCESSKEY"],
+            aws_secret_access_key=os.environ["S3_QUOTA_SECRETKEY"],
             config=Config(signature_version="s3v4"),
-            region_name=os.environ["S3_REGION"],
+            region_name=os.environ["S3_QUOTA_REGION"],
         )
         conn = psycopg2.connect(dbname="quotas_test", user=db_user, password=db_password, host=db_host, port=db_port)
 
         batch = []
-        logger.info("⏳ Processing OVH logs with batch insert…")
+        logger.info(
+            f"⏳ Processing Object Storage logs with batch insert from bucket '${platform}${LOG_BUCKET_SUFFIX}'.",
+        )
 
-        for key in list_recent_files(s3):
+        for key in list_recent_files(s3, platform, max_files, threshold_minute):
             logger.info(f"\n📄 Reading file: {key}")
 
-            for line in read_object(s3, key):
+            for line in read_object(s3, platform, key):
                 parsed = parse_log_line(line)
                 if parsed:
                     batch.append(parsed)
@@ -229,7 +234,7 @@ async def collect_obs_logs(env: FlowEnvArgs = FlowEnvArgs(owner_id="pcuq")):
 
             # Optional: delete processed file
             logger.info(f"\n📄 Deleting file: {key}")
-            # s3.delete_object(Bucket=LOG_BUCKET, Key=key)
+            s3.delete_object(Bucket=platform + LOG_BUCKET_SUFFIX, Key=key)
 
         # Final flush
         if batch:
