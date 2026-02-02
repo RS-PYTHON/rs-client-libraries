@@ -198,12 +198,14 @@ async def collect_obs_logs(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "obs-quota-monitoring"):
 
+        bucket_name = platform + LOG_BUCKET_SUFFIX
         logger.info("Retrieve credentials to access Postgres quota database")
         db_user = os.environ["POSTGRES_QUOTA_USER"]
         db_password = os.environ["POSTGRES_QUOTA_PASSWORD"]
         db_host = os.environ["POSTGRES_HOST"]
         db_port = os.environ["POSTGRES_PORT"]
 
+        logger.info(f"Retrieve credentials to access bucket ${bucket_name}.")
         s3 = boto3.client(
             "s3",
             endpoint_url=os.environ["S3_QUOTA_ENDPOINT"],
@@ -216,7 +218,7 @@ async def collect_obs_logs(
 
         batch = []
         logger.info(
-            f"⏳ Processing Object Storage logs with batch insert from bucket '${platform}${LOG_BUCKET_SUFFIX}'.",
+            f"⏳ Processing Object Storage logs with batch insert from bucket ${bucket_name}.",
         )
 
         for key in list_recent_files(s3, platform, max_files, threshold_minute):
