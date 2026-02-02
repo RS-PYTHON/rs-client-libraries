@@ -205,7 +205,7 @@ async def collect_obs_logs(
         db_host = os.environ["POSTGRES_HOST"]
         db_port = os.environ["POSTGRES_PORT"]
 
-        logger.info(f"Retrieve credentials to access bucket ${bucket_name}.")
+        logger.info(f"Retrieve credentials to access bucket {bucket_name}.")
         s3 = boto3.client(
             "s3",
             endpoint_url=os.environ["S3_QUOTA_ENDPOINT"],
@@ -218,7 +218,7 @@ async def collect_obs_logs(
 
         batch = []
         logger.info(
-            f"⏳ Processing Object Storage logs with batch insert from bucket ${bucket_name}.",
+            f"⏳ Processing Object Storage logs with batch insert from bucket {bucket_name}.",
         )
 
         for key in list_recent_files(s3, platform, max_files, threshold_minute):
