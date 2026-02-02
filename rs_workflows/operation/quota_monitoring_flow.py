@@ -28,7 +28,7 @@ from prefect import flow, get_run_logger
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 LOG_BUCKET_SUFFIX = "-access-logs"
-LOG_PREFIX = "prip/"
+LOG_PREFIX = ""  # we will read everything
 DEFAULT_MAX_FILES = 10000
 DEFAULT_AGE_THRESHOLD = 5
 BATCH_SIZE = 500  # number of rows per batch insert
