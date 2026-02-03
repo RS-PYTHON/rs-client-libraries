@@ -1,14 +1,14 @@
 #### From OVH administration dashboard
 
 1. Create bucket: **\<PLATFORM>-access-logs**  
-   For operation, we use **rspython-ops**. 
+   For operation, we use **rspython-ops** for **\<PLATFORM>**
    <br>
 2. Enable server access logging following the procedure:  
    https://help.ovhcloud.com/csm/fr-public-cloud-storage-s3-server-access-logging?id=kb_article_view&sysparm_article=KB0056623  
    
    Use the following configuration:
 
-   * The bucket chosen to store the log must be: **\<PLATFORM>-access-logs**.  For example, for operation, we are using "rspython-ops".
+   * The bucket chosen to store the log must be: **\<PLATFORM>-access-logs**. 
    * For each bucket that must be monitored (i.e., buckets hosting end‑user products), apply:
 
 ```json
