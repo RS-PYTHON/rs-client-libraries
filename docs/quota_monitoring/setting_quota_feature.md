@@ -1,17 +1,15 @@
 #### From OVH administration dashboard
 
 1. Create bucket: **\<PLATFORM>-access-logs**  
-   For operation, we use **rspython-ops**.
-<br>
+   For operation, we use **rspython-ops**. 
+   <br>
 2. Enable server access logging following the procedure:  
    https://help.ovhcloud.com/csm/fr-public-cloud-storage-s3-server-access-logging?id=kb_article_view&sysparm_article=KB0056623  
    
    Use the following configuration:
 
-   The bucket chosen to store the log must be: **\<PLATFORM>-access-logs**.  
-   For example, for operation, we are using "rspython-ops".
-
-  For each bucket that must be monitored (i.e., buckets hosting end‑user products), apply:
+   * The bucket chosen to store the log must be: **\<PLATFORM>-access-logs**.  For example, for operation, we are using "rspython-ops".
+   * For each bucket that must be monitored (i.e., buckets hosting end‑user products), apply:
 
 ```json
    {
@@ -21,11 +19,9 @@
      }
    }
 ```
-
 <br>
 
-3. Create an OBS account with the description:
-"Quota monitoring : access to the bucket **\<PLATFORM>-access-logs**
+3. Create an OBS account with the description: **"Quota monitoring : access to the bucket \<PLATFORM>-access-logs**
 <br>
 
 4. Grant admin rights to this OBS account on the bucket: **\<PLATFORM>-access-logs**
@@ -38,7 +34,7 @@
 
 #### From Jupyter Hub
 1. Log in using the account **operator-quota**
-<br>
+    <br>
 2. Generate the **env-var-operator-quota** Prefect Block with following additional fields.
 
 To access to the database **s3_quota**:
@@ -87,7 +83,7 @@ await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), env_v
 <br>
 
 #### From Grafana
-1. Draft the dashboard that will provide information about READ, WRITE, DOWNLOAD per user, bucket over time.
+1. Build a dashboard showing READ, WRITE, and DOWNLOAD operations per user and per bucket over time.
 * The database is named : **s3_quotas**
 * The table to be read is : **s3_access_log**
 
