@@ -1,14 +1,14 @@
 #### From OVH administration dashboard
 
-1. Create bucket: **```<PLATFORM>```-access-logs**  
+1. Create bucket: **```<PLATFORM>```-access-logs**
    For operation, we use **rspython-ops** for **```<PLATFORM>```**
    <br>
-2. Enable server access logging following the procedure:  
-   https://help.ovhcloud.com/csm/fr-public-cloud-storage-s3-server-access-logging?id=kb_article_view&sysparm_article=KB0056623  
-   
+2. Enable server access logging following the procedure:
+   https://help.ovhcloud.com/csm/fr-public-cloud-storage-s3-server-access-logging?id=kb_article_view&sysparm_article=KB0056623
+
    Use the following configuration:
 
-   * The bucket chosen to store the log must be: **```<PLATFORM>```-access-logs**. 
+   * The bucket chosen to store the log must be: **```<PLATFORM>```-access-logs**.
    * For each bucket that must be monitored (i.e., buckets hosting end‑user products), apply:
 
 ```json
@@ -38,10 +38,12 @@
 2. Generate the **env-var-operator-quota** Prefect Block with following additional fields.
 
 To access to the database **s3_quota**:
-- POSTGRES_QUOTA_USER"
+
+- POSTGRES_QUOTA_USER
 - POSTGRES_QUOTA_PASSWORD
 
 Access to bucket **```<PLATFORM>```-access-logs**:
+
 - S3_QUOTA_REGION
 - S3_QUOTA_ENDPOINT
 - S3_QUOTA_ACCESSKEY
@@ -72,7 +74,7 @@ env_vars.update(
         "S3_QUOTA_SECRETKEY" : secret_key
     })
 
-await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), env_vars) 
+await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), env_vars)
 ```
 
 <br>
@@ -86,5 +88,3 @@ await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), env_v
 1. Build a dashboard showing READ, WRITE, and DOWNLOAD operations per user and per bucket over time.
 - The database is named : **s3_quotas**
 - The table to be read is : **s3_access_log**
-
-
