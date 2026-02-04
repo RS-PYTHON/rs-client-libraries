@@ -672,6 +672,7 @@ def generate_payload(  # pylint: disable=unused-argument
             case DprProcessor.S1L0:
                 config = ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
                 # TODO: this section is temporary, should be removed when the S1 L0 processor doesn't need it anymore
+                # the processor doesn't start without these parameters
                 for workflow_step in workflow_steps:
                     workflow_step.parameters = {
                         "streaming_mode": False,
@@ -680,6 +681,14 @@ def generate_payload(  # pylint: disable=unused-argument
                     }
             case DprProcessor.S3L0:
                 config = ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
+                # TODO: this section is temporary, should be removed when the S3 L0 processor doesn't need it anymore
+                # the processor doesn't start without these parameters
+                for workflow_step in workflow_steps:
+                    workflow_step.parameters = {
+                        "temporary_path": "./output_params/tmp",
+                        "acquisition_report_output_path": "./output_params/s3",
+                        
+                    },
 
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
