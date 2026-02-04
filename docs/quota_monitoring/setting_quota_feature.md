@@ -1,14 +1,14 @@
 #### From OVH administration dashboard
 
-1. Create bucket: **\<PLATFORM>-access-logs**  
-   For operation, we use **rspython-ops** for **\<PLATFORM>**
+1. Create bucket: **```<PLATFORM>```-access-logs**  
+   For operation, we use **rspython-ops** for **```<PLATFORM>```**
    <br>
 2. Enable server access logging following the procedure:  
    https://help.ovhcloud.com/csm/fr-public-cloud-storage-s3-server-access-logging?id=kb_article_view&sysparm_article=KB0056623  
    
    Use the following configuration:
 
-   * The bucket chosen to store the log must be: **\<PLATFORM>-access-logs**. 
+   * The bucket chosen to store the log must be: **```<PLATFORM>```-access-logs**. 
    * For each bucket that must be monitored (i.e., buckets hosting end‑user products), apply:
 
 ```json
@@ -24,7 +24,7 @@
 3. Create an OBS account with the description: **"Quota monitoring : access to the bucket \<PLATFORM>-access-logs**
 <br>
 
-4. Grant admin rights to this OBS account on the bucket: **\<PLATFORM>-access-logs**
+4. Grant admin rights to this OBS account on the bucket: **```<PLATFORM>```-access-logs**
 <br>
 <br>
 
@@ -38,14 +38,14 @@
 2. Generate the **env-var-operator-quota** Prefect Block with following additional fields.
 
 To access to the database **s3_quota**:
-* POSTGRES_QUOTA_USER"
-* POSTGRES_QUOTA_PASSWORD
+- POSTGRES_QUOTA_USER"
+- POSTGRES_QUOTA_PASSWORD
 
-Access to bucket **\<PLATFORM>-access-logs**:
-* S3_QUOTA_REGION
-* S3_QUOTA_ENDPOINT
-* S3_QUOTA_ACCESSKEY
-* S3_QUOTA_SECRETKEY
+Access to bucket **```<PLATFORM>```-access-logs**:
+- S3_QUOTA_REGION
+- S3_QUOTA_ENDPOINT
+- S3_QUOTA_ACCESSKEY
+- S3_QUOTA_SECRETKEY
 
 
 This procedure will do the job.
@@ -84,7 +84,7 @@ await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), env_v
 
 #### From Grafana
 1. Build a dashboard showing READ, WRITE, and DOWNLOAD operations per user and per bucket over time.
-* The database is named : **s3_quotas**
-* The table to be read is : **s3_access_log**
+- The database is named : **s3_quotas**
+- The table to be read is : **s3_access_log**
 
 
