@@ -32,6 +32,7 @@ LOG_PREFIX = ""  # we will read everything
 DEFAULT_MAX_FILES = 10000
 DEFAULT_AGE_THRESHOLD = 5
 BATCH_SIZE = 500  # number of rows per batch insert
+DEFAULT_MAX_DAYS = 40  # number of day before removing the logs from the table
 
 
 # -----------------------------
@@ -244,3 +245,47 @@ async def collect_obs_logs(
 
         conn.close()
         print("✅ Done.")
+
+
+@flow(name="clean-obs-logs")
+async def clean_obs_logs(
+    retention_days: int = DEFAULT_MAX_DAYS,
+    env: FlowEnvArgs = FlowEnvArgs(owner_id="operator-quota"),
+):
+    """
+    Purge the table s3_access_log.
+    Args:
+        retention_days : number of days of retention of log information from OBS
+        env (FlowEnvArgs, optional): Flow environment arguments containing owner_id and other
+            configuration parameters.
+    Returns:
+        None
+    Raises:
+        psycopg2.Error: If database connection or insertion operations fail.
+    """
+
+    logger = get_run_logger()
+
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "clean-quota-database"):
+        logger.info("Retrieve credentials to access Postgres quota database")
+        db_user = os.environ["POSTGRES_QUOTA_USER"]
+        db_password = os.environ["POSTGRES_QUOTA_PASSWORD"]
+        db_host = os.environ["POSTGRES_HOST"]
+        db_port = os.environ["POSTGRES_PORT"]
+
+        conn = psycopg2.connect(dbname="quotas_test", user=db_user, password=db_password, host=db_host, port=db_port)
+
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    DELETE FROM s3_access_log
+                    WHERE time < NOW() - INTERVAL %s;
+                    """,
+                    (f"{retention_days} days",),  # ← tuple obligatoire
+                )
+
+        conn.close()
+        logger.info("⏳ Old data have been removed.")
