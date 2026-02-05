@@ -16,8 +16,11 @@
 
 
 import datetime
+import glob
 import json
 import tempfile
+import time
+from datetime import timedelta
 
 # import datetime
 from os import path as osp
@@ -400,14 +403,32 @@ async def run_processor(
         )
         # Trigger the processor run from the dpr service
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
+        start_time = time.time()
+        s3_payload_dir = osp.dirname(s3_payload_run)
         job_status = dpr_client.run_process(
             process=processor,
             cluster_info=cluster_info,
-            s3_config_dir=osp.dirname(s3_payload_run),
+            s3_config_dir=s3_payload_dir,
             payload_subpath=osp.basename(s3_payload_run),
-            s3_report_dir=osp.join(osp.dirname(s3_payload_run)),
+            s3_report_dir=s3_payload_dir,
         )
-        dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
+        try:
+            dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
+        finally:
+            logger.info(f"Processor execution time: {str(timedelta(seconds=time.time() - start_time))}")
+
+            # Download reports folder from the s3 bucket
+            with tempfile.TemporaryDirectory() as tmpdir:
+                await prefect_utils.s3_download_dir(s3_payload_dir, tmpdir)
+
+                # Display here the logs from eopf
+                local_log_file = glob.glob(osp.join(tmpdir, "**/*.processor.log"), recursive=True)
+                if local_log_file:
+                    local_log_file = local_log_file[0]
+                    with open(local_log_file, encoding="utf-8") as openend:
+                        logger.info(f"Log file {local_log_file!r}:\n{openend.read()}")
+                else:
+                    logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
 
         eopf_stac_items, eopf_types = update_eopf_assets(flow_env, input_products, payload, processor)
         # Wait for the job to finish
