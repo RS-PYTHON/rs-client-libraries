@@ -422,9 +422,9 @@ async def run_processor(
                 await prefect_utils.s3_download_dir(s3_payload_dir, tmpdir)
 
                 # Display here the logs from eopf
-                local_log_file = glob.glob(osp.join(tmpdir, "**/*.processor.log"), recursive=True)
-                if local_log_file:
-                    local_log_file = local_log_file[0]
+                local_log_files = glob.glob(osp.join(tmpdir, "**/*.processor.log"), recursive=True)
+                if local_log_files:
+                    local_log_file = local_log_files[0]
                     with open(local_log_file, encoding="utf-8") as openend:
                         s3_log_file = osp.join(s3_payload_dir, osp.relpath(local_log_file, tmpdir))
                         logger.info(f"Log file {s3_log_file!r}:\n{openend.read()}")
