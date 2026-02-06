@@ -281,7 +281,6 @@ class OgcApiClient(RsClient):
                     logger.info(f"job_status: {job_status}")
                 status_type = job_status.get("status", "")
 
-                # Exit the loop if the job is not found
                 if status_type == 404:
                     raise RuntimeError(f"{job_name} job {job_identifier!r}: NOT FOUND \n")
 
