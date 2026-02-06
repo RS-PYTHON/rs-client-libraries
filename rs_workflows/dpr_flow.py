@@ -27,6 +27,7 @@ from os import path as osp
 from pathlib import Path
 from typing import Any
 
+import anyio
 from prefect import get_run_logger, task
 from pystac import Asset, Item
 
@@ -425,9 +426,9 @@ async def run_processor(
                 local_log_files = glob.glob(osp.join(tmpdir, "**/*.processor.log"), recursive=True)
                 if local_log_files:
                     local_log_file = local_log_files[0]
-                    with open(local_log_file, encoding="utf-8") as openend:
+                    async with await anyio.open_file(local_log_file, encoding="utf-8") as opened:
                         s3_log_file = osp.join(s3_payload_dir, osp.relpath(local_log_file, tmpdir))
-                        logger.info(f"Log file {s3_log_file!r}:\n{openend.read()}")
+                        logger.info(f"Log file {s3_log_file!r}:\n{opened.read()}")
                 else:
                     logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
 
