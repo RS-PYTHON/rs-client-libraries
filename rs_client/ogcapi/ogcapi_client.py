@@ -270,10 +270,11 @@ class OgcApiClient(RsClient):
 
             if type(self).__name__ == "DprClient":
                 host_dpr_service = get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE_PUBLIC")
-                logger.warning(
-                    "You can cancel this DPR job by calling: "
-                    f"curl -X 'DELETE' '{host_dpr_service}/dpr/jobs/{job_identifier}'",
-                )
+                if logger:
+                    logger.warning(
+                        "You can cancel this DPR job by calling: "
+                        f"curl -X 'DELETE' '{host_dpr_service}/dpr/jobs/{job_identifier}'",
+                    )
 
             while True:
                 job_status = self.get_job_info(job_identifier)
