@@ -33,6 +33,7 @@ DEFAULT_MAX_FILES = 10000
 DEFAULT_AGE_THRESHOLD = 5
 BATCH_SIZE = 500  # number of rows per batch insert
 DEFAULT_MAX_DAYS = 40  # number of day before removing the logs from the table
+DB_NAME = "s3_quota"
 
 
 # -----------------------------
@@ -215,7 +216,7 @@ async def collect_obs_logs(
             config=Config(signature_version="s3v4"),
             region_name=os.environ["S3_QUOTA_REGION"],
         )
-        conn = psycopg2.connect(dbname="quotas_test", user=db_user, password=db_password, host=db_host, port=db_port)
+        conn = psycopg2.connect(dbname=DB_NAME, user=db_user, password=db_password, host=db_host, port=db_port)
 
         batch = []
         logger.info(
@@ -275,7 +276,7 @@ async def clean_obs_logs(
         db_host = os.environ["POSTGRES_HOST"]
         db_port = os.environ["POSTGRES_PORT"]
 
-        conn = psycopg2.connect(dbname="quotas_test", user=db_user, password=db_password, host=db_host, port=db_port)
+        conn = psycopg2.connect(dbname=DB_NAME, user=db_user, password=db_password, host=db_host, port=db_port)
 
         with conn:
             with conn.cursor() as cur:
