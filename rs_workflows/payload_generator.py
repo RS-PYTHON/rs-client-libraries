@@ -368,7 +368,7 @@ def build_output_products(
     Raises:
         RuntimeError: If an output mapping or configuration rule cannot be found.
     """
-
+    logger = get_run_logger()
     outputs = []
 
     for output_product in dpr_process_in.generated_product_to_collection_identifier:
@@ -402,6 +402,7 @@ def build_output_products(
                 store_name = "s3"
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
+        logger.info(f"store_name = {store_name}")
         outputs.append(
             OutputProduct(
                 id=mapping["name"],
