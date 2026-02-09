@@ -28,27 +28,23 @@ from rs_client.rs_client import RsClient
 from rs_client.stac.catalog_client import CatalogClient
 from tests.common import json_landing_page
 
-from .conftest import RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL
+from .conftest import MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL
 
 OWNER_ID = "OWNER_ID"
 
 
-def test_create_object_catalog_client(mocked_stac_catalog_url):  # pylint: disable=missing-function-docstring
+def test_create_object_catalog_client(mocked_rspy_landing_pages):  # pylint: disable=missing-function-docstring
     #####################
     # Loads the catalog #
     #####################
-    catalog: CatalogClient = RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
+    catalog: CatalogClient = RsClient(MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
     assert catalog.ps_client.id == "stac-fastapi"
 
 
 def test_get_collection_catalog_client(
     mocked_stac_catalog_get_collection,
 ):  # pylint: disable=missing-function-docstring
-    catalog: CatalogClient = RsClient(
-        mocked_stac_catalog_get_collection,
-        RS_SERVER_API_KEY,
-        OWNER_ID,
-    ).get_catalog_client()
+    catalog: CatalogClient = RsClient(MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
 
     ##################################################
     # Get the collection S1_L1 from toto catalog #
@@ -61,11 +57,7 @@ def test_get_collection_catalog_client(
 def test_all_collections_catalog_client(
     mocked_stac_catalog_get_collection,
 ):  # pylint: disable=missing-function-docstring
-    catalog: CatalogClient = RsClient(
-        mocked_stac_catalog_get_collection,
-        RS_SERVER_API_KEY,
-        OWNER_ID,
-    ).get_catalog_client()
+    catalog: CatalogClient = RsClient(MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
 
     #######################################################
     # Get all the collections accessible from pyteam user #
@@ -77,11 +69,7 @@ def test_all_collections_catalog_client(
 
 
 def test_get_items_catalog_client(mocked_stac_catalog_get_collection):  # pylint: disable=missing-function-docstring
-    catalog: CatalogClient = RsClient(
-        mocked_stac_catalog_get_collection,
-        RS_SERVER_API_KEY,
-        OWNER_ID,
-    ).get_catalog_client()
+    catalog: CatalogClient = RsClient(MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
 
     ###################################################
     # Get all the item from the collection toto:S1_L1 #
@@ -316,7 +304,7 @@ def test_search_item_inside_collection_catalog_client_mock(
         inside a collection.
     """
     catalog: CatalogClient = RsClient(
-        mocked_stac_catalog_search_inside_collection,
+        MOCKED_RSPY_WEBSITE,
         RS_SERVER_API_KEY,
         OWNER_ID,
     ).get_catalog_client()

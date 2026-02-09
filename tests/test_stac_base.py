@@ -25,7 +25,7 @@ from pystac_client.exceptions import APIError
 
 from rs_client.stac.stac_base import StacBase
 
-MOCKED_URL = "https://mocked_stac_catalog_url/"
+from .conftest import MOCKED_RSPY_WEBSITE
 
 
 class TestStacBase:
@@ -146,12 +146,11 @@ class TestStacBase:
     @pytest.mark.parametrize(
         "client, url",
         [
-            ("auxip_client", MOCKED_URL + "auxip/queryables"),
-            ("cadip_client", MOCKED_URL + "cadip/queryables"),
-            ("edrs_client", MOCKED_URL + "edrs/queryables"),
+            ("auxip_client", MOCKED_RSPY_WEBSITE + "/auxip/queryables"),
+            ("cadip_client", MOCKED_RSPY_WEBSITE + "/cadip/queryables"),
+            ("edrs_client", MOCKED_RSPY_WEBSITE + "/edrs/queryables"),
         ],
     )
-    @responses.activate
     def test_cadip_auxip_get_queryables_error(self, client, url, request):
         """Test a bad response while requesting queryables."""
         client_instance = request.getfixturevalue(client)
@@ -167,11 +166,10 @@ class TestStacBase:
     @pytest.mark.parametrize(
         "client, url",
         [
-            ("auxip_client", MOCKED_URL + "auxip/queryables"),
-            ("cadip_client", MOCKED_URL + "cadip/queryables"),
+            ("auxip_client", MOCKED_RSPY_WEBSITE + "/auxip/queryables"),
+            ("cadip_client", MOCKED_RSPY_WEBSITE + "/cadip/queryables"),
         ],
     )
-    @responses.activate
     def test_cadip_auxip_get_queryables_error_unwrapping(self, client, url, request):
         """Test a unwrapping error while requesting queryables."""
         client_instance = request.getfixturevalue(client)
@@ -184,11 +182,10 @@ class TestStacBase:
     @pytest.mark.parametrize(
         "client, url",
         [
-            ("auxip_client", MOCKED_URL + "auxip/queryables"),
-            ("cadip_client", MOCKED_URL + "cadip/queryables"),
+            ("auxip_client", MOCKED_RSPY_WEBSITE + "/auxip/queryables"),
+            ("cadip_client", MOCKED_RSPY_WEBSITE + "/cadip/queryables"),
         ],
     )
-    @responses.activate
     def test_cadip_auxip_get_queryables_error_timeout(self, client, url, request):
         """Test a timeout when requesting queryables."""
         client_instance = request.getfixturevalue(client)
@@ -208,11 +205,10 @@ class TestStacBase:
     @pytest.mark.parametrize(
         "client, url",
         [
-            ("auxip_client", MOCKED_URL + "auxip/queryables"),
-            ("cadip_client", MOCKED_URL + "cadip/queryables"),
+            ("auxip_client", MOCKED_RSPY_WEBSITE + "/auxip/queryables"),
+            ("cadip_client", MOCKED_RSPY_WEBSITE + "/cadip/queryables"),
         ],
     )
-    @responses.activate
     def test_cadip_auxip_get_queryables(self, client, url, request):
         """Test to verify the correct return of queryables."""
         client_instance = request.getfixturevalue(client)

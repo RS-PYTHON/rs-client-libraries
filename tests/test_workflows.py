@@ -22,6 +22,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+import responses
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
 from pystac import Asset, Item, ItemCollection
@@ -45,10 +46,9 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
 )
 from rs_workflows.pi_db_models import Base
+from tests.conftest import COLLECTION_ID, HTTP_OK, MOCKED_RSPY_WEBSITE, OWNER_ID
 
-OWNER_ID = "OWNER_ID"
 S3_PAYLOAD = "S3_PAYLOAD"
-RSPY_WEBSITE = "RSPY_WEBSITE"
 RSPY_APIKEY = "RSPY_APIKEY"
 CONFIG_DIR = Path(__file__).parent / "resources"
 
@@ -77,6 +77,16 @@ MOCK_PROCESSED_ITEMS = [
 #########
 # Mocks #
 #########
+
+
+@pytest.fixture(autouse=True)
+def mocked_auxip_search(mocked_stac_catalog_search_inside_collection):
+    """Mock auxip search response with the same contents as the catalog search."""
+    responses.post(
+        url=f"{MOCKED_RSPY_WEBSITE}/auxip/search",
+        json=mocked_stac_catalog_search_inside_collection,
+        status=HTTP_OK,
+    )
 
 
 class MockStr(Mock):
@@ -255,7 +265,7 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
     # Create prefect block for current user
     await Secret(
         value={  # type: ignore[arg-type]
-            "RSPY_WEBSITE": RSPY_WEBSITE,
+            "RSPY_WEBSITE": MOCKED_RSPY_WEBSITE,
             "RSPY_APIKEY": RSPY_APIKEY,
         },
     ).save(
@@ -274,16 +284,15 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
 @patch.object(prefect_utils, "s3_delete", Mock())
-@patch.object(RsClient, "get_auxip_client", MockRsClient)
-@patch.object(RsClient, "get_cadip_client", MockRsClient)
-@patch.object(RsClient, "get_catalog_client", MockRsClient)
 @patch.object(RsClient, "get_staging_client", MockRsClient)
 @patch.object(RsClient, "get_dpr_client", MockRsClient)
 async def test_dpr_processing(
     mocker,
     mock_prefect,
     mock_record_performance_indicators,
-):  # pylint: disable=unused-argument, redefined-outer-name
+    mocked_rspy_landing_pages,
+    mocked_stac_catalog_get_collection,
+):  # pylint: disable=unused-argument
     """Test the dpr_processing flow"""
 
     # Spy/patch artifact creation to assert keys
@@ -364,7 +373,7 @@ async def test_dpr_processing(
             {"GRD": ("S1_GRD", "OUTPUT_GRD_COLLECTION")},
             {"NTC": ("S2_NTC", "OUTPUT_NTC_COLLECTION")},
         ],
-        auxiliary_product_to_collection_identifier={"*": "AUX_COLLECTION"},
+        auxiliary_product_to_collection_identifier={"*": COLLECTION_ID},
         processing_mode=[ProcessingMode.NRT],  # type: ignore[list-item]
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),

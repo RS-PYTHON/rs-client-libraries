@@ -20,6 +20,7 @@ The conftest.py file serves as a means of providing fixtures for an entire direc
 Fixtures defined in a conftest.py can be used by any test in that package without needing to import them
 (pytest will automatically discover them).
 """
+import copy
 import json
 
 # pylint: disable=unused-argument
@@ -27,6 +28,7 @@ import logging
 from unittest.mock import MagicMock, mock_open
 
 import pytest
+import pytest_responses
 import requests
 import responses
 from prefect.testing.utilities import prefect_test_harness
@@ -52,10 +54,10 @@ PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
 
 HTTP_OK = 200
 HTTP_ERROR = 500
-OWNER = "toto"
+OWNER_ID = "toto"
 COLLECTION_ID = "S1_L1"
 
-MOCKED_URL = "https://mocked_stac_catalog_url"
+MOCKED_RSPY_WEBSITE = "https://mocked_rspy_website"
 COLLECTION_RESPONSE = {
     "id": COLLECTION_ID,
     "type": "Collection",
@@ -63,26 +65,26 @@ COLLECTION_RESPONSE = {
         {
             "rel": "items",
             "type": "application/geo+json",
-            "href": f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items",
+            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items",
         },
         {
             "rel": "parent",
             "type": "application/json",
-            "href": f"{MOCKED_URL}/catalog/catalogs/{OWNER}",
+            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/catalogs/{OWNER_ID}",
         },
         {
             "rel": "root",
             "type": "application/json",
-            "href": f"{MOCKED_URL}/catalog/catalogs/{OWNER}",
+            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/catalogs/{OWNER_ID}",
         },
         {
             "rel": "self",
             "type": "application/json",
-            "href": f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}",
+            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}",
         },
         {
             "rel": "items",
-            "href": f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items/",
+            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items/",
             "type": "application/geo+json",
         },
         {
@@ -91,7 +93,7 @@ COLLECTION_RESPONSE = {
             "title": "public domain",
         },
     ],
-    "owner": OWNER,
+    "owner": OWNER_ID,
     "extent": {
         "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
         "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
@@ -109,18 +111,18 @@ ITEM_RESPONSE = {
         {
             "rel": "collection",
             "type": "application/json",
-            "href": f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}",
+            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}",
         },
         {
             "rel": "parent",
             "type": "application/json",
-            "href": f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}",
+            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}",
         },
-        {"rel": "root", "type": "application/json", "href": f"{MOCKED_URL}/catalog/"},
+        {"rel": "root", "type": "application/json", "href": f"{MOCKED_RSPY_WEBSITE}/catalog/"},
         {
             "rel": "self",
             "type": "application/geo+json",
-            "href": f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items/"
+            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items/"
             "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.EOF",
         },
     ],
@@ -128,7 +130,7 @@ ITEM_RESPONSE = {
     "geometry": None,
     "collection": "S1_L1",
     "properties": {
-        "owner": OWNER,
+        "owner": OWNER_ID,
         "created": "2024-05-27T09:44:09.509000Z",
         "expires": "2025-03-28T13:07:32.278399Z",
         "updated": "2025-02-26T13:07:32.278399Z",
@@ -237,18 +239,18 @@ def mocked_stac_catalog_delete_item():
     with responses.RequestsMock() as resp:
         # This is the returned content when calling a real STAC catalog service with:
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
-        resp.get(url=MOCKED_URL + "/catalog/", json=json_landing_page, status=HTTP_OK)
+        json_landing_page = common.json_landing_page(MOCKED_RSPY_WEBSITE, f"{OWNER_ID}:{COLLECTION_ID}")
+        resp.get(url=MOCKED_RSPY_WEBSITE + "/catalog/", json=json_landing_page, status=HTTP_OK)
 
         json_status = {"status": HTTP_OK}
         resp.add(
             "DELETE",
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items/item_0",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items/item_0",
             json=json_status,
             status=HTTP_OK,
         )
 
-        yield MOCKED_URL
+        yield MOCKED_RSPY_WEBSITE
 
 
 @pytest.fixture
@@ -257,48 +259,56 @@ def mocked_stac_catalog_add_update_item():
     with responses.RequestsMock() as resp:
         # This is the returned content when calling a real STAC catalog service with:
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}", conforms_to=False)
-        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
+        json_landing_page = common.json_landing_page(
+            MOCKED_RSPY_WEBSITE,
+            f"{OWNER_ID}:{COLLECTION_ID}",
+            conforms_to=False,
+        )
+        resp.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=HTTP_OK)
 
         json_status = {"status": HTTP_OK}
         resp.add(
             "POST",
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items",
             json=json_status,
             status=HTTP_OK,
         )
         resp.add(
             "PUT",
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items/item_0",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items/item_0",
             json=json_status,
             status=HTTP_OK,
         )
 
-        yield MOCKED_URL
+        yield MOCKED_RSPY_WEBSITE
 
 
 @pytest.fixture
 def mocked_stac_catalog_add_patch_item():
     """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
     with responses.RequestsMock() as resp:
-        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}", conforms_to=False)
-        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
+        json_landing_page = common.json_landing_page(
+            MOCKED_RSPY_WEBSITE,
+            f"{OWNER_ID}:{COLLECTION_ID}",
+            conforms_to=False,
+        )
+        resp.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=HTTP_OK)
 
         json_status = {"status": HTTP_OK}
         resp.add(
             "POST",
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items",
             json=json_status,
             status=HTTP_OK,
         )
         resp.add(
             "PATCH",
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items/item_0",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items/item_0",
             json=json_status,
             status=HTTP_OK,
         )
 
-        yield MOCKED_URL
+        yield MOCKED_RSPY_WEBSITE
 
 
 @pytest.fixture
@@ -307,18 +317,18 @@ def mocked_stac_catalog_delete_collection():
     with responses.RequestsMock() as resp:
         # This is the returned content when calling a real STAC catalog service with:
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
-        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
+        json_landing_page = common.json_landing_page(MOCKED_RSPY_WEBSITE, f"{OWNER_ID}:{COLLECTION_ID}")
+        resp.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=HTTP_OK)
 
         json_status = {"status": HTTP_OK}
         resp.add(
             "DELETE",
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}",
             json=json_status,
             status=HTTP_OK,
         )
 
-        yield MOCKED_URL
+        yield MOCKED_RSPY_WEBSITE
 
 
 @pytest.fixture
@@ -327,12 +337,17 @@ def mocked_stac_catalog_add_update_collection():
     with responses.RequestsMock() as resp:
         # This is the returned content when calling a real STAC catalog service with:
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
-        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
-        resp.add("POST", url=f"{MOCKED_URL}/catalog/collections", json={"status": HTTP_OK}, status=HTTP_OK)
-        resp.add("PUT", url=f"{MOCKED_URL}/catalog/collections/OWNERID:S2_L2", json={"status": HTTP_OK}, status=HTTP_OK)
+        json_landing_page = common.json_landing_page(MOCKED_RSPY_WEBSITE, f"{OWNER_ID}:{COLLECTION_ID}")
+        resp.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=HTTP_OK)
+        resp.add("POST", url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections", json={"status": HTTP_OK}, status=HTTP_OK)
+        resp.add(
+            "PUT",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/OWNERID:S2_L2",
+            json={"status": HTTP_OK},
+            status=HTTP_OK,
+        )
 
-        yield MOCKED_URL
+        yield MOCKED_RSPY_WEBSITE
 
 
 @pytest.fixture
@@ -341,204 +356,226 @@ def mocked_stac_catalog_add_patch_collection():
     with responses.RequestsMock() as resp:
         # This is the returned content when calling a real STAC catalog service with:
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
-        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
-        resp.add("POST", url=f"{MOCKED_URL}/catalog/collections", json={"status": HTTP_OK}, status=HTTP_OK)
-        resp.add("PATCH", url=f"{MOCKED_URL}/catalog/collections/toto:S2_L2", json={"status": HTTP_OK}, status=HTTP_OK)
+        json_landing_page = common.json_landing_page(MOCKED_RSPY_WEBSITE, f"{OWNER_ID}:{COLLECTION_ID}")
+        resp.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=HTTP_OK)
+        resp.add("POST", url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections", json={"status": HTTP_OK}, status=HTTP_OK)
+        resp.add(
+            "PATCH",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/toto:S2_L2",
+            json={"status": HTTP_OK},
+            status=HTTP_OK,
+        )
 
-        yield MOCKED_URL
+        yield MOCKED_RSPY_WEBSITE
 
 
 @pytest.fixture
 def mocked_stac_catalog_add_collection_error():
     """Mock error response from a STAC catalog server made with the "requests" library. Return the mocked server URL."""
     with responses.RequestsMock() as resp:
-        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
-        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
-        resp.add("POST", url=f"{MOCKED_URL}/catalog/collections", json={"status": HTTP_ERROR}, status=HTTP_ERROR)
+        json_landing_page = common.json_landing_page(MOCKED_RSPY_WEBSITE, f"{OWNER_ID}:{COLLECTION_ID}")
+        resp.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=HTTP_OK)
+        resp.add(
+            "POST",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections",
+            json={"status": HTTP_ERROR},
+            status=HTTP_ERROR,
+        )
 
-        yield MOCKED_URL
+        yield MOCKED_RSPY_WEBSITE
 
 
 @pytest.fixture
 def mocked_stac_catalog_get_collection():
-    """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as resp:
-        # This is the returned content when calling a real STAC catalog service with:
-        # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}", conforms_to=True)
-        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
-        resp.get(
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}",
-            json=COLLECTION_RESPONSE,
-            status=HTTP_OK,
-        )
-        resp.get(
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items?collections={COLLECTION_ID}",
-            json=COLLECTION_RESPONSE,
-            status=HTTP_OK,
-        )
-        resp.get(url=f"{MOCKED_URL}/catalog/collections", json=COLLECTION_RESPONSE, status=HTTP_OK)
+    """Mock responses to a STAC catalog server made with the "requests" library."""
+    # This is the returned content when calling a real STAC catalog service with:
+    # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
+    json_landing_page = common.json_landing_page(MOCKED_RSPY_WEBSITE, f"{OWNER_ID}:{COLLECTION_ID}", conforms_to=True)
+    responses.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=HTTP_OK)
+    responses.get(
+        url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}",
+        json=COLLECTION_RESPONSE,
+        status=HTTP_OK,
+    )
+    responses.get(
+        url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items?collections={COLLECTION_ID}",
+        json=COLLECTION_RESPONSE,
+        status=HTTP_OK,
+    )
+    responses.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections", json=COLLECTION_RESPONSE, status=HTTP_OK)
 
-        yield MOCKED_URL
+    yield
 
 
 @pytest.fixture
 def mocked_stac_catalog_search_inside_collection():
     """Mock responses to a STAC catalog search request."""
-    with responses.RequestsMock() as resp:
-        url = "http://mocked_stac_catalog_url"
-        json_landing_page = common.json_landing_page(url, f"{OWNER}:{COLLECTION_ID}", conforms_to=True)
-        resp.get(url=url + "/catalog/", json=json_landing_page, status=HTTP_OK)
-        json_search = {
-            "type": "FeatureCollection",
-            "context": {"limit": 10, "returned": 2},
-            "features": [
-                {
-                    "id": "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw",
-                    "bbox": [-180, -90, 180, 90],
-                    "type": "Feature",
-                    "links": [
-                        {
-                            "rel": "collection",
-                            "type": "application/json",
-                            "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
-                        },
-                        {
-                            "rel": "parent",
-                            "type": "application/json",
-                            "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
-                        },
-                        {
-                            "rel": "root",
-                            "type": "application/json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/catalogs/toto",
-                        },
-                        {
-                            "rel": "self",
-                            "type": "application/geo+json",
-                            "href": (
-                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
-                                "toto:S1_L1/items/"
-                                "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw"
-                            ),
-                        },
-                    ],
-                    "assets": {},
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
+    json_landing_page = common.json_landing_page(MOCKED_RSPY_WEBSITE, f"{OWNER_ID}:{COLLECTION_ID}", conforms_to=True)
+    responses.get(url=MOCKED_RSPY_WEBSITE + "/catalog/", json=json_landing_page, status=HTTP_OK)
+    json_response = {
+        "type": "FeatureCollection",
+        "context": {"limit": 10, "returned": 2},
+        "features": [
+            {
+                "id": "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw",
+                "bbox": [-180, -90, 180, 90],
+                "type": "Feature",
+                "links": [
+                    {
+                        "rel": "collection",
+                        "type": "application/json",
+                        "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
                     },
-                    "collection": "S1_L1",
-                    "properties": {
-                        "gsd": 0.12345,
-                        "owner": "toto",
-                        "width": 2500,
-                        "height": 2500,
-                        "expires": "2024-08-08T07:12:45.662521Z",
-                        "updated": "2024-07-09T07:12:45.662521Z",
-                        "datetime": "2024-07-09T07:12:45.459911Z",
-                        "proj:epsg": 3857,
-                        "published": "2024-07-09T07:12:45.662515Z",
-                        "orientation": "nadir",
+                    {
+                        "rel": "parent",
+                        "type": "application/json",
+                        "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
                     },
-                    "stac_version": "1.1.0",
-                    "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
-                },
-                {
-                    "id": "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ",
-                    "bbox": [-180, -90, 180, 90],
-                    "type": "Feature",
-                    "links": [
-                        {
-                            "rel": "collection",
-                            "type": "application/json",
-                            "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
-                        },
-                        {
-                            "rel": "parent",
-                            "type": "application/json",
-                            "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
-                        },
-                        {
-                            "rel": "root",
-                            "type": "application/json",
-                            "href": "https://dev-rspy.esa-copernicus.eu/catalog/catalogs/toto",
-                        },
-                        {
-                            "rel": "self",
-                            "type": "application/geo+json",
-                            "href": (
-                                "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
-                                "toto:S1_L1/items/"
-                                "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ"
-                            ),
-                        },
-                    ],
-                    "assets": {},
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
+                    {
+                        "rel": "root",
+                        "type": "application/json",
+                        "href": "https://dev-rspy.esa-copernicus.eu/catalog/catalogs/toto",
                     },
-                    "collection": "S1_L1",
-                    "properties": {
-                        "gsd": 0.12345,
-                        "owner": "toto",
-                        "width": 2500,
-                        "height": 2500,
-                        "expires": "2024-08-08T07:12:39.570544Z",
-                        "updated": "2024-07-09T07:12:39.570544Z",
-                        "datetime": "2024-07-09T07:12:39.081716Z",
-                        "proj:epsg": 3857,
-                        "published": "2024-07-09T07:12:39.570534Z",
-                        "orientation": "nadir",
+                    {
+                        "rel": "self",
+                        "type": "application/geo+json",
+                        "href": (
+                            "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                            "toto:S1_L1/items/"
+                            "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw"
+                        ),
                     },
-                    "stac_version": "1.1.0",
-                    "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
+                ],
+                "assets": {"data": {"href": "s3://mock-bucket/DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw.bin"}},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
                 },
-            ],
-            "links": [
-                {
-                    "rel": "collection",
-                    "type": "application/json",
-                    "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1",
+                "collection": "S1_L1",
+                "properties": {
+                    "gsd": 0.12345,
+                    "owner": "toto",
+                    "width": 2500,
+                    "height": 2500,
+                    "expires": "2024-08-08T07:12:45.662521Z",
+                    "updated": "2024-07-09T07:12:45.662521Z",
+                    "datetime": "2024-07-09T07:12:45.459911Z",
+                    "proj:epsg": 3857,
+                    "published": "2024-07-09T07:12:45.662515Z",
+                    "orientation": "nadir",
+                    "product:type": "mocked_product_type",
                 },
-                {
-                    "rel": "parent",
-                    "type": "application/json",
-                    "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1",
+                "stac_version": "1.1.0",
+                "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
+            },
+            {
+                "id": "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ",
+                "bbox": [-180, -90, 180, 90],
+                "type": "Feature",
+                "links": [
+                    {
+                        "rel": "collection",
+                        "type": "application/json",
+                        "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
+                    },
+                    {
+                        "rel": "parent",
+                        "type": "application/json",
+                        "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/" "toto:S1_L1"),
+                    },
+                    {
+                        "rel": "root",
+                        "type": "application/json",
+                        "href": "https://dev-rspy.esa-copernicus.eu/catalog/catalogs/toto",
+                    },
+                    {
+                        "rel": "self",
+                        "type": "application/geo+json",
+                        "href": (
+                            "https://dev-rspy.esa-copernicus.eu/catalog/collections/"
+                            "toto:S1_L1/items/"
+                            "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ"
+                        ),
+                    },
+                ],
+                "assets": {
+                    "data": {
+                        "href": "s3://mock-bucket/S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ.bin",
+                    },
                 },
-                {
-                    "rel": "root",
-                    "type": "application/json",
-                    "href": "https://dev-rspy.esa-copernicus.eu/catalog/catalogs/toto",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
                 },
-                {
-                    "rel": "self",
-                    "type": "application/geo+json",
-                    "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1/items"),
+                "collection": "S1_L1",
+                "properties": {
+                    "gsd": 0.12345,
+                    "owner": "toto",
+                    "width": 2500,
+                    "height": 2500,
+                    "expires": "2024-08-08T07:12:39.570544Z",
+                    "updated": "2024-07-09T07:12:39.570544Z",
+                    "datetime": "2024-07-09T07:12:39.081716Z",
+                    "proj:epsg": 3857,
+                    "published": "2024-07-09T07:12:39.570534Z",
+                    "orientation": "nadir",
+                    "product:type": "mocked_product_type",
                 },
-            ],
-        }
+                "stac_version": "1.1.0",
+                "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
+            },
+        ],
+        "links": [
+            {
+                "rel": "collection",
+                "type": "application/json",
+                "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1",
+            },
+            {
+                "rel": "parent",
+                "type": "application/json",
+                "href": "https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1",
+            },
+            {
+                "rel": "root",
+                "type": "application/json",
+                "href": "https://dev-rspy.esa-copernicus.eu/catalog/catalogs/toto",
+            },
+            {
+                "rel": "self",
+                "type": "application/geo+json",
+                "href": ("https://dev-rspy.esa-copernicus.eu/catalog/collections/toto:S1_L1/items"),
+            },
+        ],
+    }
+    responses.post(url=f"{MOCKED_RSPY_WEBSITE}/catalog/search", json=json_response, status=HTTP_OK)
 
-        resp.post(url=url + "/catalog/search", json=json_search, status=HTTP_OK)
-        yield url
+    # Mock the search by individual feature with a GET request
+    for feature in json_response["features"]:
+        json_response_feature = copy.deepcopy(json_response)
+        json_response_feature["features"] = [feature]
+        responses.get(
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/search?ids={feature['id']}&collections={feature['collection']}",
+            json=json_response_feature,
+            status=HTTP_OK,
+        )
+
+    yield json_response
 
 
-@pytest.fixture(name="mocked_stac_catalog_url")
-def mocked_stac_catalog_url_():
-    """Mock responses to a STAC catalog server made with the "requests" library. Return the mocked server URL."""
-    with responses.RequestsMock(assert_all_requests_are_fired=False) as resp:
-        # This is the returned content when calling a real STAC catalog service with:
-        # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
-        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
-        resp.get(url=f"{MOCKED_URL}/auxip/", json=json_landing_page, status=HTTP_OK)
-        resp.get(url=f"{MOCKED_URL}/prip/", json=json_landing_page, status=HTTP_OK)
-        resp.get(url=f"{MOCKED_URL}/cadip/", json=json_landing_page, status=HTTP_OK)
-        resp.get(url=f"{MOCKED_URL}/edrs/", json=json_landing_page, status=HTTP_OK)
-
-        yield MOCKED_URL
+@pytest.fixture(name="mocked_rspy_landing_pages")
+def mocked_rspy_landing_pages_():
+    """Mock responses to the RSPY STAC service landing pages made with the "requests" library."""
+    # This is the returned content when calling a real STAC catalog service with:
+    # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
+    for service in "auxip", "cadip", "catalog", "edrs", "prip":
+        json_landing_page = common.json_landing_page(
+            MOCKED_RSPY_WEBSITE,
+            f"{OWNER_ID}:{COLLECTION_ID}",
+            service=service,
+        )
+        responses.get(url=f"{MOCKED_RSPY_WEBSITE}/{service}/", json=json_landing_page, status=HTTP_OK)
+    yield
 
 
 @pytest.fixture(name="set_db_env_var")
@@ -564,10 +601,10 @@ def set_db_env_var_fixture(monkeypatch):
 
 
 @pytest.fixture(name="generic_rs_client")
-def generic_rs_client_(mocked_stac_catalog_url, monkeypatch):
+def generic_rs_client_(mocked_rspy_landing_pages, monkeypatch):
     """Return a generic RsClient instance for testing."""
     monkeypatch.setenv("RSPY_OAUTH2_COOKIE", "RSPY_OAUTH2_COOKIE")
-    yield RsClient(mocked_stac_catalog_url, RS_SERVER_API_KEY, OWNER)  # will be used to test the StacClient
+    yield RsClient(MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, OWNER_ID)  # will be used to test the StacClient
 
 
 @pytest.fixture(name="auxip_client")
@@ -610,20 +647,20 @@ def mocked_stac_catalog_invalid_get_item():
         }
         # This is the returned content when calling a real STAC catalog service with:
         # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
-        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
+        json_landing_page = common.json_landing_page(MOCKED_RSPY_WEBSITE, f"{OWNER_ID}:{COLLECTION_ID}")
+        resp.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=HTTP_OK)
         resp.get(
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}",
             json=COLLECTION_RESPONSE,
             status=HTTP_OK,
         )
         resp.get(
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items/invalid_item",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items/invalid_item",
             json=data,
             status=404,
         )
 
-        yield MOCKED_URL
+        yield MOCKED_RSPY_WEBSITE
 
 
 @pytest.fixture
@@ -632,21 +669,21 @@ def mocked_stac_catalog_get_item():
     item_id = "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.EOF"
     with responses.RequestsMock(assert_all_requests_are_fired=True) as resp:
         # Mocked URL
-        json_landing_page = common.json_landing_page(MOCKED_URL, f"{OWNER}:{COLLECTION_ID}")
-        resp.get(url=f"{MOCKED_URL}/catalog/", json=json_landing_page, status=HTTP_OK)
+        json_landing_page = common.json_landing_page(MOCKED_RSPY_WEBSITE, f"{OWNER_ID}:{COLLECTION_ID}")
+        resp.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=HTTP_OK)
         resp.get(
-            url=f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}",
             json=COLLECTION_RESPONSE,
             status=HTTP_OK,
         )
-        url = f"{MOCKED_URL}/catalog/collections/{OWNER}:{COLLECTION_ID}/items/{item_id}"
+        url = f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items/{item_id}"
         resp.get(
             url=url,
             json=ITEM_RESPONSE,
             status=200,
         )
 
-        yield MOCKED_URL
+        yield MOCKED_RSPY_WEBSITE
 
 
 @pytest.fixture(autouse=True, scope="function")
