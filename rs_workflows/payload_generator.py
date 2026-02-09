@@ -397,6 +397,9 @@ def build_output_products(
                 store_name = storage_configuration.get_storage_for_pipeline_section(
                     mapping.get("origin", ""),
                 ) or storage_configuration.get_storage_for_pipeline_section("other")
+                # TODO: the following line is temporaryand for tests only ! Force eveything to s3 !
+                # Delete the following line once the things will be clarified with other store_names
+                store_name = "s3"
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
         outputs.append(
@@ -685,10 +688,9 @@ def generate_payload(  # pylint: disable=unused-argument
                 # the processor doesn't start without these parameters
                 for workflow_step in workflow_steps:
                     workflow_step.parameters = {
-                        "temporary_path": "./output_params/tmp",
-                        "acquisition_report_output_path": "./output_params/s3",
+                        "temporary_path": "./S3_D_TDS_1/output/tmp",
+                        "acquisition_report_output_path": "./S3_D_TDS_1/output/default/Report/",
                     }
-                    
 
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
