@@ -313,7 +313,7 @@ async def stage_latest_session(cadip_collection: CadipCollections, owner_identif
                 "No Cadip session found.",
             )
 
-        selected_session: str = session_found[0]  # type: ignore
+        selected_session: str = session_found[0].id  # type: ignore
         logger.info(f"Internal identifier: {selected_session}")
         # Build catalog collection name based on CADIP collection
         await stage_session_common(flow_env, cadip_collection, selected_session)
