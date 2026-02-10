@@ -280,6 +280,7 @@ class OutputProduct(BasePayloadModel):
     type: str | None = Field(default="filename")
     opening_mode: str | None = Field(default="CREATE")
     apply_eoqc: bool | None = Field(default=False)
+    final_product: bool | None = Field(default=True)
 
 
 class AdfConfig(BasePayloadModel):
