@@ -416,6 +416,7 @@ async def run_processor(
             status="OK",
             stac_items=eopf_stac_items,
             payload=payload,
+            dpr_processor_name=processor.value,
             eopf_types=eopf_types,
         )
         return eopf_stac_items

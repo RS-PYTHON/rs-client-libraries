@@ -399,6 +399,7 @@ def build_output_products(
                 ) or storage_configuration.get_storage_for_pipeline_section("other")
                 # TODO: the following line is temporary and for tests only ! Force eveything to s3 !
                 # Delete the following line once the things will be clarified with other store_names
+                # This is due to the internal discussions, disregard any other store_name but s3
                 store_name = "s3"
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
@@ -406,12 +407,6 @@ def build_output_products(
             OutputProduct(
                 id=mapping["name"],
                 path=output_path,
-                # path=(
-                #     output_path
-                #     if mapping["name"] != "S03CACHE"
-                #     else "s3://rs-dev-cluster-temp/prefect-share"
-                #     "/users/agrosu/output/l0/s3.short/S3_D_TDS_1/output/default/CACHE.short"
-                # ),
                 store_type=mapping["store_type"],
                 store_params=storage_configuration.get_store_params(store_name),
                 type=mapping.get("type", "filename"),
