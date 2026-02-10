@@ -17,6 +17,7 @@
 import getpass
 import os
 import socket
+from contextlib import suppress
 from importlib import reload
 from unittest.mock import AsyncMock, Mock, mock_open, patch
 
@@ -77,6 +78,13 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
 
     # Set local or cluster mode
     set_local_mode(local_mode, monkeypatch)
+
+    # Remove the existing blocks, if any
+    user_block_name = prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID)
+    with suppress(ValueError):
+        await Secret.delete(prefect_utils.BLOCK_NAME_ENV_GLOBAL)
+    with suppress(ValueError):
+        await Secret.delete(user_block_name)
 
     # Environment variables for all users
     env_global = {
@@ -153,7 +161,6 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
     )
 
     # Check that the blocks were written with the right values
-    user_block_name = prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID)
     assert env_global == (await Secret.load(prefect_utils.BLOCK_NAME_ENV_GLOBAL)).get()
     assert env_user == (await Secret.load(user_block_name)).get()
 

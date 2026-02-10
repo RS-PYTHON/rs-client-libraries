@@ -26,6 +26,7 @@ from starlette import status
 
 from rs_client.ogcapi.ogcapi_client import OgcValidationException
 from rs_client.rs_client import RsClient
+from tests.conftest import MOCKED_RSPY_WEBSITE
 
 RESOURCES_FOLDER = Path(osp.realpath(osp.dirname(__file__))) / "resources"
 AUXIP = "AUXIP"
@@ -40,17 +41,8 @@ TIMEOUT = 5
 # -------------------------- Staging fixtures --------------------------
 
 
-@pytest.fixture(name="dummy_href")
-def get_dummy_href():
-    """
-    Dummy href for local_mode
-    """
-    dummy_href = "https://DUMMY_HREF"
-    return dummy_href
-
-
 @pytest.fixture(name="staging_client")
-def get_staging_client(dummy_href):
+def get_staging_client():
     """Create a staging client
 
     Args:
@@ -60,7 +52,7 @@ def get_staging_client(dummy_href):
         StagingClient: StagingClient object to apply the staging
     """
     client = RsClient(
-        rs_server_href=dummy_href,
+        rs_server_href=MOCKED_RSPY_WEBSITE,
         rs_server_api_key=RS_SERVER_API_KEY,
         owner_id=OWNER_ID,
         logger=None,
@@ -108,28 +100,6 @@ def get_auxip_data_link():
     )
 
 
-@pytest.fixture(name="staging_response_sample")
-def get_staging_response_sample():
-    """
-    Return auxip FeatureCollection as a dictionary
-    """
-    return {
-        "processID": "string",
-        "type": "process",
-        "jobID": "e390e31c-b274-49d2-88c2-466cc4fe23c9",
-        "status": "accepted",
-        "message": "string",
-        "created": "2019-08-24T14:15:22Z",
-        "started": "2019-08-24T14:15:22Z",
-        "finished": "2019-08-24T14:15:22Z",
-        "updated": "2019-08-24T14:15:22Z",
-        "progress": 100,
-        "links": [
-            {"href": "string", "rel": "service", "type": "application/json", "hreflang": "en", "title": "string"},
-        ],
-    }
-
-
 # -------------------------- Test for staging endpoints --------------------------
 
 
@@ -147,26 +117,15 @@ def test_staging_ok(
     data_fixture,
     data_link_fixture,
     request,
-    dummy_href,
     staging_client,
-    staging_response_sample,
+    mocked_staging_response,  # Nominal case - stage a FeatureCollection
 ):  # pylint: disable=R0913, R0917
     """
     Nominal cases for staging
     """
     data_to_stage = request.getfixturevalue(data_fixture)
     data_link_to_stage = request.getfixturevalue(data_link_fixture)
-    process_id = "staging"
 
-    # Nominal case - stage a FeatureCollection
-    json_response = staging_response_sample
-
-    responses.add(
-        method=responses.POST,
-        url=f"{dummy_href}/processes/{process_id}/execution",
-        json=json_response,
-        status=status.HTTP_200_OK,
-    )
     staging_resp = staging_client.run_staging(data_to_stage, OUTPUT_COLLECTION)
     assert staging_resp is not None
 
@@ -202,7 +161,7 @@ def test_staging_ok(
 
 @pytest.mark.unit
 @responses.activate
-def test_staging_fails_stage_empty_dict(dummy_href, staging_client):
+def test_staging_fails_stage_empty_dict(staging_client):
     """
     Failing case where we use an empty dictionary in input of the staging
     In this case an exception should be raised
@@ -210,7 +169,7 @@ def test_staging_fails_stage_empty_dict(dummy_href, staging_client):
     process_id = "staging"
     responses.add(
         method=responses.POST,
-        url=f"{dummy_href}/processes/{process_id}/execution",
+        url=f"{MOCKED_RSPY_WEBSITE}/processes/{process_id}/execution",
         json={},
         status=422,
     )
@@ -232,21 +191,19 @@ def test_staging_fails_wrong_data_format(  # pylint: disable=R0913, R0917
     station,
     data_fixture,
     data_link_fixture,
-    dummy_href,
     staging_client,
     request,
-    staging_response_sample,
+    ogcapi_response_sample,
 ):
     """
     Failing case where the  input data is a json file
     with an unvalid format - In this case check that a pydantic ValueError is raised
     """
-    json_response = staging_response_sample
     process_id = "staging"
     responses.add(
         method=responses.POST,
-        url=f"{dummy_href}/processes/{process_id}/execution",
-        json=json_response,
+        url=f"{MOCKED_RSPY_WEBSITE}/processes/{process_id}/execution",
+        json=ogcapi_response_sample,
         status=status.HTTP_200_OK,
     )
     # ----- Check that the test raises an exception if the input file has a wrong data format
@@ -279,7 +236,7 @@ def test_staging_fails_wrong_data_format(  # pylint: disable=R0913, R0917
     "data_fixture",
     ["cadip_data", "auxip_data"],
 )
-def test_staging_fails_endpoint_send_error(data_fixture, request, dummy_href, staging_client):
+def test_staging_fails_endpoint_send_error(data_fixture, request, staging_client):
     """
     Failing case where the staging endpoint fails and return an error status code
     """
@@ -294,7 +251,7 @@ def test_staging_fails_endpoint_send_error(data_fixture, request, dummy_href, st
     # Case of a timeout for the staging
     responses.add(
         method=responses.POST,
-        url=f"{dummy_href}/processes/{process_id}/execution",
+        url=f"{MOCKED_RSPY_WEBSITE}/processes/{process_id}/execution",
         json=json_response,
         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     )

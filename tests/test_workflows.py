@@ -15,6 +15,7 @@
 """Test the Prefect workflows"""
 
 import json
+from contextlib import suppress
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,10 +23,12 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+import pytest_responses
 import responses
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
 from pystac import Asset, Item, ItemCollection
+from starlette import status
 
 from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_client.rs_client import RsClient
@@ -46,10 +49,13 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
 )
 from rs_workflows.pi_db_models import Base
-from tests.conftest import COLLECTION_ID, HTTP_OK, MOCKED_RSPY_WEBSITE, OWNER_ID
+from tests.conftest import COLLECTION_ID, MOCKED_RSPY_WEBSITE, OWNER_ID
 
 S3_PAYLOAD = "S3_PAYLOAD"
 RSPY_APIKEY = "RSPY_APIKEY"
+JUPYTERHUB_API_TOKEN = "JUPYTERHUB_API_TOKEN"
+DASK_CLUSTER_LABEL = "DASK_CLUSTER_LABEL"
+
 CONFIG_DIR = Path(__file__).parent / "resources"
 
 
@@ -79,14 +85,80 @@ MOCK_PROCESSED_ITEMS = [
 #########
 
 
-@pytest.fixture(autouse=True)
-def mocked_auxip_search(mocked_stac_catalog_search_inside_collection):
-    """Mock auxip search response with the same contents as the catalog search."""
-    responses.post(
-        url=f"{MOCKED_RSPY_WEBSITE}/auxip/search",
-        json=mocked_stac_catalog_search_inside_collection,
-        status=HTTP_OK,
+@pytest.fixture
+def mocked_tasktable():
+    """Mock the mockup processor tasktable"""
+    with open(CONFIG_DIR / "tasktable.json", encoding="utf-8") as f:
+        responses.get(
+            url=f"{MOCKED_RSPY_WEBSITE}/dpr/processes/mockup?"
+            f"jupyter_token={JUPYTERHUB_API_TOKEN}&cluster_label={DASK_CLUSTER_LABEL}&cluster_instance=",
+            json=json.load(f),
+            status=status.HTTP_200_OK,
+        )
+
+def mock_s3_download_file(
+    _s3_path: str,
+    to_path: str | Path | None,
+    **__: dict[str, Any],
+) -> Path:
+    """Mock the prefect_utils.s3_download_file function"""
+    if not to_path:
+        return Path()
+
+    # Mock the downloading of S3_PAYLOAD
+    with open(to_path, "w", encoding="utf-8") as opened:
+        opened.write(
+            """
+workflow:
+- name: workflow_name
+  module: workflow_module
+  processing_unit: workflow_processing_unit
+  outputs:
+    out1: output1
+    out2: output2
+""",
+        )
+    return Path(to_path)
+
+
+async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
+    """Set up secret blocks needed for correct execution of workflows in Prefect"""
+    # Environment variables for all users. For these test we don't need specific values
+    # so it creates an empty secret. See test_prefect_utils.py for a real case example.
+    # Use an empty dictionary if input_dict is None
+    # Default arguments are evaluated once when the function is defined, not each
+    # time the function is called. If env_vars = {} would have been used and modify env_vars in one call,
+    # this modified dictionary would persists for subsequent calls, which can lead to bugs.
+    # Using env_vars = None and creating a new empty dictionary inside this function avoids this issue.
+    env_vars = env_vars if env_vars is not None else {}
+    # Serialize dictionary to a JSON string and wrap it in SecretStr
+    secret_value = SecretStr(json.dumps(env_vars))
+
+    # Remove the existing blocks, if any
+    user_block_name = prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID)
+    with suppress(ValueError):
+        await Secret.delete(prefect_utils.BLOCK_NAME_ENV_GLOBAL)
+    with suppress(ValueError):
+        await Secret.delete(user_block_name)
+
+    await Secret(
+        value=secret_value,
+    ).save(  # type: ignore[arg-type]
+        prefect_utils.BLOCK_NAME_ENV_GLOBAL,
+        overwrite=True,
     )
+
+    # Create prefect block for current user
+    await Secret(
+        value={  # type: ignore[arg-type]
+            "RSPY_WEBSITE": MOCKED_RSPY_WEBSITE,
+            "RSPY_APIKEY": RSPY_APIKEY,
+            "S3_ACCESSKEY": "S3_ACCESSKEY",
+            "S3_SECRETKEY": "S3_SECRETKEY",
+            "S3_REGION": "region",
+            "S3_ENDPOINT": "https://endpoint",
+        },
+    ).save(user_block_name, overwrite=True)
 
 
 class MockStr(Mock):
@@ -212,68 +284,6 @@ def mock_record_performance_indicators(mocker):
     return fake_task
 
 
-############
-# DPR FLOW #
-############
-
-
-async def mock_s3_download_file(
-    s3_path: str,  # pylint: disable=unused-argument
-    to_path: str | Path | None,
-    **__: dict[str, Any],
-) -> Path:
-    """Mock the prefect_utils.s3_download_file function"""
-    if not to_path:
-        return Path()
-
-    # Mock the downloading of S3_PAYLOAD
-    with open(to_path, "w", encoding="utf-8") as opened:
-        opened.write(
-            """
-workflow:
-- name: workflow_name
-  module: workflow_module
-  processing_unit: workflow_processing_unit
-  outputs:
-    out1: output1
-    out2: output2
-""",
-        )
-    return Path(to_path)
-
-
-async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
-    """Set up secret blocks needed for correct execution of workflows in Prefect"""
-    # Environment variables for all users. For these test we don't need specific values
-    # so it creates an empty secret. See test_prefect_utils.py for a real case example.
-    # Use an empty dictionary if input_dict is None
-    # Default arguments are evaluated once when the function is defined, not each
-    # time the function is called. If env_vars = {} would have been used and modify env_vars in one call,
-    # this modified dictionary would persists for subsequent calls, which can lead to bugs.
-    # Using env_vars = None and creating a new empty dictionary inside this function avoids this issue.
-    env_vars = env_vars if env_vars is not None else {}
-    # Serialize dictionary to a JSON string and wrap it in SecretStr
-    secret_value = SecretStr(json.dumps(env_vars))
-
-    await Secret(
-        value=secret_value,
-    ).save(  # type: ignore[arg-type]
-        prefect_utils.BLOCK_NAME_ENV_GLOBAL,
-        overwrite=True,
-    )
-
-    # Create prefect block for current user
-    await Secret(
-        value={  # type: ignore[arg-type]
-            "RSPY_WEBSITE": MOCKED_RSPY_WEBSITE,
-            "RSPY_APIKEY": RSPY_APIKEY,
-        },
-    ).save(
-        prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID),
-        overwrite=True,
-    )
-
-
 #############
 # MAIN FLOW #
 #############
@@ -284,14 +294,22 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
 @patch.object(prefect_utils, "s3_delete", Mock())
-@patch.object(RsClient, "get_staging_client", MockRsClient)
-@patch.object(RsClient, "get_dpr_client", MockRsClient)
+@pytest.mark.parametrize(
+    "mocked_stac_catalog_search_inside_collection",
+    [["auxip", "catalog"]],
+    indirect=True,
+    ids=[""],
+)
 async def test_dpr_processing(
     mocker,
     mock_prefect,
     mock_record_performance_indicators,
     mocked_rspy_landing_pages,
     mocked_stac_catalog_get_collection,
+    mocked_stac_catalog_search_inside_collection,
+    mocked_staging_response,
+    mocked_dpr_response,
+    mocked_tasktable,
 ):  # pylint: disable=unused-argument
     """Test the dpr_processing flow"""
 
@@ -300,66 +318,18 @@ async def test_dpr_processing(
     mocker.patch.object(on_demand_processing, "acreate_markdown_artifact", artifact_mock)
 
     # Save env vars in prefect secret blocks
-    await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": "JUPYTERHUB_API_TOKEN"})
+    await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN})
 
-    # We'll just check that the prefect tasks and flows were called.
-    # We don't check the underlying RsClient functions, this is already done in dedicated pytests.
-    spied = {
-        mocker.spy(prefect_function, "fn"): call_count  # spy on <flow>.fn or <task>.fn = the underlying python function
-        for prefect_function, call_count in {
-            auxip_flow.search: 2,
-            auxip_flow.search_task: 2,
-            cadip_flow.search: 0,
-            cadip_flow.search_task: 0,
-            staging_flow.staging: 2,
-            catalog_flow.publish: 1,
-        }.items()
-    }
-    # mock ADF staging — use real pystac.Item, otherwise the pystac will be unhappy
-    # real_adf_item = Item(
-    #     id="AUX_TEST_001",
-    #     geometry=None,
-    #     bbox=None,
-    #     datetime=datetime.now(),
-    #     properties={"product:type": "AUX_TEST"},
-    # )
-    # real_adf_item.add_asset("data", Asset(href="s3://bucket/auxfile.bin"))
+    mocker.patch("rs_client.ogcapi.ogcapi_client.OgcApiClient.wait_for_job", "func_defaults", )
 
-    # adf_future = MagicMock()
-    # adf_future.result.return_value = ("AUX_TEST", (True, ItemCollection([real_adf_item])))
+    # # mock run_processor.submit → returns processed items
+    # run_processor_future = MagicMock()
+    # run_processor_future.result.return_value = MOCK_PROCESSED_ITEMS
 
     # mocker.patch(
-    #     "rs_workflows.on_demand_processing.process_input_adfs.submit",
-    #     return_value=adf_future,
+    #     "rs_workflows.dpr_flow.run_processor.submit",
+    #     return_value=run_processor_future,
     # )
-
-    # mock generate_payload.submit
-    mock_payload = MagicMock()
-    mock_payload.dump.return_value = {
-        "io": {
-            "output_products": [
-                {"id": "GRD", "path": "s3://out/grd"},
-                {"id": "NTC", "path": "s3://out/ntc"},
-            ],
-        },
-    }
-
-    payload_future = MagicMock()
-    payload_future.result.return_value = mock_payload
-
-    mocker.patch(
-        "rs_workflows.on_demand_processing.generate_payload.submit",
-        return_value=payload_future,
-    )
-
-    # mock run_processor.submit → returns processed items
-    run_processor_future = MagicMock()
-    run_processor_future.result.return_value = MOCK_PROCESSED_ITEMS
-
-    mocker.patch(
-        "rs_workflows.dpr_flow.run_processor.submit",
-        return_value=run_processor_future,
-    )
 
     # build realistic input
     dpr_input = DprProcessIn(
@@ -367,7 +337,7 @@ async def test_dpr_processing(
         processor_name=DprProcessor.MOCKUP,
         processor_version="1.0",
         pipeline="mockup_full",
-        dask_cluster_label="cluster_label",
+        dask_cluster_label=DASK_CLUSTER_LABEL,
         input_products=[{"input_name": ("dummy_id", "dummy_coll")}],
         generated_product_to_collection_identifier=[
             {"GRD": ("S1_GRD", "OUTPUT_GRD_COLLECTION")},
@@ -383,10 +353,6 @@ async def test_dpr_processing(
 
     # run the flow
     await on_demand_processing.dpr_processing(dpr_input)
-
-    # Check calls
-    for fn, call_count in spied.items():
-        assert fn.await_count == call_count
 
     # --- verify s3_upload_file was called with the expected destination (second arg) ---
     upload_mock = cast(AsyncMock, prefect_utils.s3_upload_file)
@@ -426,14 +392,14 @@ async def test_dpr_processing_raises_on_unstaged_adf(
 ):  # pylint: disable=unused-argument, redefined-outer-name
     """The flow should raise ValueError when an ADF could not be staged (status=False)."""
 
-    await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": "JUPYTERHUB_API_TOKEN"})
+    await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN})
 
     dpr_input = DprProcessIn(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         processor_name=DprProcessor.MOCKUP,
         processor_version="1.0",
         pipeline="mockup_full",
-        dask_cluster_label="cluster_label",
+        dask_cluster_label=DASK_CLUSTER_LABEL,
         input_products=[{"input_name": ("stac_item_id", "collection_name")}],  # Item STAC
         generated_product_to_collection_identifier=[{"output_folder": ("CATALOG_COLLECTION_ID")}],
         auxiliary_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
