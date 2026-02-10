@@ -15,9 +15,10 @@
 """Test the Prefect workflows"""
 
 import json
-from contextlib import suppress
 import os
+from contextlib import suppress
 from datetime import datetime, timezone
+from os import path as osp
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
@@ -58,28 +59,6 @@ DASK_CLUSTER_LABEL = "DASK_CLUSTER_LABEL"
 
 CONFIG_DIR = Path(__file__).parent / "resources"
 
-
-def make_mock_processed_item(item_id: str, product_type: str):
-    """Create a realistic processed item as returned by the DPR processor."""
-    return {
-        "stac_discovery": {
-            "id": item_id,
-            "geometry": {"type": "Polygon", "coordinates": [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]]},
-            "bbox": [-10, 40, 10, 60],
-            "properties": {
-                "datetime": "2024-01-01T12:00:00Z",
-                "product:type": product_type,  # ← this must be a real string!
-            },
-        },
-    }
-
-
-# Realistic processed items returned by run_processor
-MOCK_PROCESSED_ITEMS = [
-    make_mock_processed_item("S1A_20240101_GRD", "S1_GRD"),
-    make_mock_processed_item("S2A_20240101_NTC", "S2_NTC"),
-]
-
 #########
 # Mocks #
 #########
@@ -95,6 +74,7 @@ def mocked_tasktable():
             json=json.load(f),
             status=status.HTTP_200_OK,
         )
+
 
 def mock_s3_download_file(
     _s3_path: str,
@@ -118,6 +98,22 @@ workflow:
     out2: output2
 """,
         )
+    return Path(to_path)
+
+
+async def mock_s3_download_dir(
+    _s3_path: str,
+    to_path: str | Path | None,
+    **__: dict[str, Any],
+) -> Path:
+    """Mock the prefect_utils.s3_download_dir function"""
+    if not to_path:
+        return Path()
+    os.makedirs(str(to_path), exist_ok=True)
+
+    # Mock the downloading of log file
+    with open(osp.join(to_path, "mockup.processor.log"), "w", encoding="utf-8") as opened:
+        opened.write("Mockup log contents")
     return Path(to_path)
 
 
@@ -292,6 +288,7 @@ def mock_record_performance_indicators(mocker):
 @pytest.mark.asyncio
 @patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
+@patch.object(prefect_utils, "s3_download_dir", mock_s3_download_dir)
 @patch.object(prefect_utils, "s3_upload_file", AsyncMock())
 @patch.object(prefect_utils, "s3_delete", Mock())
 @pytest.mark.parametrize(
@@ -320,16 +317,32 @@ async def test_dpr_processing(
     # Save env vars in prefect secret blocks
     await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN})
 
-    mocker.patch("rs_client.ogcapi.ogcapi_client.OgcApiClient.wait_for_job", "func_defaults", )
+    # Realistic processed items returned by run_processor
+    items = {
+        "S1_GRD": Item(
+            id="S1A_20240101_GRD",
+            properties={"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
+            geometry={},
+            bbox=[],
+            datetime=datetime.now(),
+        ),
+        "S2_NTC": Item(
+            id="S2A_20240101_NTC",
+            properties={"product:type": "S2_NTC", "datetime": "2024-01-01T00:00:00Z"},
+            geometry={},
+            bbox=[],
+            datetime=datetime.now(),
+        ),
+    }
+    mocker.patch("rs_workflows.dpr_flow.update_eopf_assets", return_value=[items.values(), items.keys()])
 
-    # # mock run_processor.submit → returns processed items
-    # run_processor_future = MagicMock()
-    # run_processor_future.result.return_value = MOCK_PROCESSED_ITEMS
-
-    # mocker.patch(
-    #     "rs_workflows.dpr_flow.run_processor.submit",
-    #     return_value=run_processor_future,
-    # )
+    # Mock update of the catalog
+    for collection_id in "OUTPUT_GRD_COLLECTION", "OUTPUT_NTC_COLLECTION":
+        responses.post(
+            f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}/items",
+            json={"status": status.HTTP_200_OK},
+            status=status.HTTP_200_OK,
+        )
 
     # build realistic input
     dpr_input = DprProcessIn(

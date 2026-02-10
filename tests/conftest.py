@@ -33,9 +33,9 @@ import requests
 import responses
 from prefect.testing.utilities import prefect_test_harness
 from pydantic import SecretStr
-from rs_client.ogcapi.dpr_client import DprProcessor
 from starlette import status
 
+from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_client.rs_client import RsClient
 from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
@@ -574,6 +574,7 @@ def mocked_stac_catalog_search_inside_collection(request):
                 status=status.HTTP_200_OK,
             )
 
+
 @pytest.fixture(name="mocked_rspy_landing_pages")
 def mocked_rspy_landing_pages_():
     """Mock responses to the RSPY STAC service landing pages made with the "requests" library."""
@@ -586,6 +587,7 @@ def mocked_rspy_landing_pages_():
             service=service,
         )
         responses.get(url=f"{MOCKED_RSPY_WEBSITE}/{service}/", json=json_landing_page, status=status.HTTP_200_OK)
+
 
 @pytest.fixture(name="set_db_env_var")
 def set_db_env_var_fixture(monkeypatch):
@@ -728,28 +730,22 @@ def mocked_ogcapi_response(ogcapi_response_sample: dict, process: str):
         status=status.HTTP_200_OK,
     )
 
-    # Mock the job info. The first call returns "running", the next calls return "successful".
-    def mock_job_info(_request, finished):
-        info = {
-            "status": "successful" if finished[0] else "running",
-            "progress": 100 if finished[0] else 50,
-            "processID": process,
-            "type": "process",
-            "message": "{}",
-            "created": "2019-08-24T14:15:22Z",
-            "started": "2019-08-24T14:15:22Z",
-            "updated": "2019-08-24T14:15:22Z",
-            "jobID": job_id,
-        }
-        finished[0] = True
-        return [status.HTTP_200_OK, {}, json.dumps(info)]
-
-    finished = [False]  # "pointer" to a bool
-    responses.add_callback(
-        responses.GET,
-        f"{MOCKED_RSPY_WEBSITE}{prefix}/jobs/{job_id}",
-        callback=lambda request: mock_job_info(request, finished),
-        content_type="application/json",
+    # Mock the job info
+    mocked_job_info = {
+        "status": "successful",
+        "progress": 100,
+        "processID": process,
+        "type": "process",
+        "message": "{}",
+        "created": "2019-08-24T14:15:22Z",
+        "started": "2019-08-24T14:15:22Z",
+        "updated": "2019-08-24T14:15:22Z",
+        "jobID": job_id,
+    }
+    responses.get(
+        url=f"{MOCKED_RSPY_WEBSITE}{prefix}/jobs/{job_id}",
+        json=mocked_job_info,
+        status=status.HTTP_200_OK,
     )
 
 
