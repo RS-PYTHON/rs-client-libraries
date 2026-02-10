@@ -38,7 +38,6 @@ def create_schema(db_url: str):
         engine (sqlalchemy.engine.Engine): SQLAlchemy database engine connected to the target database.
     """
     logger = get_run_logger()
-    logger.info(f"Received: {db_url}")
     engine = create_engine(db_url)
     logger.info("Call the engine to create the table for quota monitoring")
     Base.metadata.create_all(engine)
@@ -74,7 +73,6 @@ async def init_quota_monitoring_database(env: FlowEnvArgs = FlowEnvArgs(owner_id
             f"{password}@{os.environ['POSTGRES_HOST']}:"
             f"{os.environ['POSTGRES_PORT']}/" + DB_NAME
         )
-        logger.info(db_url)
         create_schema(db_url)  # type: ignore[unused-coroutine]
 
         logger.info("The initialization of the tables for the Quota Monitoring database finished")
