@@ -21,6 +21,7 @@ from sqlalchemy import create_engine
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.operation.quota_monitoring_db_models import Base
+from urllib.parse import quote_plus
 
 DB_NAME = "s3_quota"
 
@@ -66,9 +67,11 @@ async def init_quota_monitoring_database(env: FlowEnvArgs = FlowEnvArgs(owner_id
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "init-quota-monitoring-database"):
+        password = quote_plus(os.environ["POSTGRES_QUOTA_PASSWORD"])
+
         db_url = (
             f"postgresql+psycopg2://{os.environ['POSTGRES_QUOTA_USER']}:"
-            f"{os.environ['POSTGRES_QUOTA_PASSWORD']}@{os.environ['POSTGRES_HOST']}:"
+            f"{password}@{os.environ['POSTGRES_HOST']}:"
             f"{os.environ['POSTGRES_PORT']}/" + DB_NAME
         )
         logger.info(db_url)
