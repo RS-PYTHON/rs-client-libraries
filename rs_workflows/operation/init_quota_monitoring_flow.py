@@ -44,7 +44,7 @@ def create_schema(db_url: str):
 
 
 @flow(name="quota-monitoring-db-create")
-async def init_quota_monitoring_database(env: FlowEnvArgs):
+async def init_quota_monitoring_database(env: FlowEnvArgs = FlowEnvArgs(owner_id="operator-quota")):
     """
     Initializes the Quota Monitoring database schema.
 
@@ -55,11 +55,10 @@ async def init_quota_monitoring_database(env: FlowEnvArgs):
         env (FlowEnvArgs): Prefect flow environment configuration, including runtime context variables.
 
     Environment Variables Required:
-        POSTGRES_USER (str): PostgreSQL username.
-        POSTGRES_PASSWORD (str): PostgreSQL password.
+        POSTGRES_QUOTA_USER: PostgreSQL username for quota database
+        POSTGRES_QUOTA_PASSWORD: PostgreSQL password
         POSTGRES_HOST (str): PostgreSQL host address.
         POSTGRES_PORT (str): PostgreSQL port.
-        POSTGRES_PI_DB (str): Name of the Performance Indicator database.
 
     """
     logger = get_run_logger()
@@ -67,19 +66,12 @@ async def init_quota_monitoring_database(env: FlowEnvArgs):
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "init-quota-monitoring-database"):
-
-        logger.info("Starting the initialization of the tables for the Quota Monitoring database...")
-        logger.info("Retrieve credentials to access Postgres quota database")
-        db_user = os.environ["POSTGRES_QUOTA_USER"]
-        db_password = os.environ["POSTGRES_QUOTA_PASSWORD"]
-        db_host = os.environ["POSTGRES_HOST"]
-        db_port = os.environ["POSTGRES_PORT"]
-
         db_url = (
-            f"postgresql+psycopg2://{db_user}:"
-            f"{db_password}@{db_host}:"
-            f"{db_port}/{DB_NAME}"
+            f"postgresql+psycopg2://{os.environ['POSTGRES_QUOTA_USER']}:"
+            f"{os.environ['POSTGRES_QUOTA_PASSWORD']}@{os.environ['POSTGRES_HOST']}:"
+            f"{os.environ['POSTGRES_PORT']}/" + DB_NAME
         )
+        logger.info(db_url)
         create_schema(db_url)  # type: ignore[unused-coroutine]
 
         logger.info("The initialization of the tables for the Quota Monitoring database finished")
