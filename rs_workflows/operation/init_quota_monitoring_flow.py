@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Create the Prefect flow to setup the quota monitoring database """
+"""Create the Prefect flow to setup the quota monitoring database"""
 
 import os
+from urllib.parse import quote_plus
 
 from prefect import flow, get_run_logger, task
 from sqlalchemy import create_engine
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.operation.quota_monitoring_db_models import Base
-from urllib.parse import quote_plus
 
 DB_NAME = "s3_quota"
 

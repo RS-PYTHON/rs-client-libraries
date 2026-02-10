@@ -14,15 +14,15 @@
 
 """Tables for the quota monitoring database"""
 
-from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy import (
-    Column,
+    TIMESTAMP,
     BigInteger,
+    Column,
+    Index,
     Integer,
     Text,
-    TIMESTAMP,
-    Index,
 )
+from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import DeclarativeBase
 
 
@@ -65,10 +65,8 @@ class S3AccessLog(Base):  # pylint: disable=too-few-public-methods
         # Composite index to speed up queries filtering on recent logs
         # and grouping by bucket (e.g., WHERE time >= NOW() - INTERVAL '30 days')
         Index("idx_s3log_time_bucket", "time", "bucket"),
-
         # Composite index to accelerate queries filtering by time and requester
         Index("idx_s3log_recent_requester", "time", "requester"),
-
         # Partial index for PUT operations (REST.PUT.PART)
         # Optimizes queries involving object_size for multipart uploads
         Index(
@@ -76,7 +74,6 @@ class S3AccessLog(Base):  # pylint: disable=too-few-public-methods
             "object_size",
             postgresql_where=(operation == "REST.PUT.PART"),
         ),
-
         # Partial index for GET operations (REST.GET.OBJECT)
         # Optimizes queries involving bytes_sent for object downloads
         Index(
