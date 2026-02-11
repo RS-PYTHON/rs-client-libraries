@@ -16,33 +16,31 @@
 
 import json
 import os
+import tempfile
 from contextlib import suppress
 from datetime import datetime, timezone
-from os import path as osp
 from pathlib import Path
-from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock
 
+import boto3
 import pytest
 import pytest_responses
 import responses
+from moto import mock_aws
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
 from pystac import Asset, Item, ItemCollection
 from starlette import status
 
 from rs_client.ogcapi.dpr_client import DprProcessor
-from rs_client.rs_client import RsClient
+from rs_client.stac import catalog_client
 from rs_common import prefect_utils
 from rs_workflows import (
     auxip_flow,
-    cadip_flow,
     catalog_flow,
     init_pi_db_flow,
     on_demand_processing,
     pi_db_models,
-    prip_flow,
-    staging_flow,
 )
 from rs_workflows.flow_utils import (
     DprProcessIn,
@@ -52,16 +50,65 @@ from rs_workflows.flow_utils import (
 from rs_workflows.pi_db_models import Base
 from tests.conftest import COLLECTION_ID, MOCKED_RSPY_WEBSITE, OWNER_ID
 
-S3_PAYLOAD = "S3_PAYLOAD"
+CONFIG_DIR = Path(__file__).parent / "resources"
+
+
+##################
+# Mock variables #
+##################
+
 RSPY_APIKEY = "RSPY_APIKEY"
 JUPYTERHUB_API_TOKEN = "JUPYTERHUB_API_TOKEN"
 DASK_CLUSTER_LABEL = "DASK_CLUSTER_LABEL"
 
-CONFIG_DIR = Path(__file__).parent / "resources"
+S3_ACCESSKEY = "S3_ACCESSKEY"
+S3_SECRETKEY = "S3_SECRETKEY"
+S3_REGION = "us-east-1"
+S3_ENDPOINT = "https://endpoint"
 
-#########
-# Mocks #
-#########
+BUCKET = "test-bucket"
+
+# Realistic processed items returned by run_processor
+ITEMS = {
+    "S1_GRD": Item(
+        id="S1A_20240101_GRD",
+        properties={"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
+        geometry={},
+        bbox=[],
+        datetime=datetime.now(),
+    ),
+    "S2_NTC": Item(
+        id="S2A_20240101_NTC",
+        properties={"product:type": "S2_NTC", "datetime": "2024-01-01T00:00:00Z"},
+        geometry={},
+        bbox=[],
+        datetime=datetime.now(),
+    ),
+}
+
+MAP_PRODUCT_TO_COLLECTION = [
+    {"GRD": ("S1_GRD", "OUTPUT_GRD_COLLECTION")},
+    {"NTC": ("S2_NTC", "OUTPUT_NTC_COLLECTION")},
+]
+
+##################
+# Mock functions #
+##################
+
+
+@pytest.fixture(scope="function")
+def mocked_s3(monkeypatch):
+    """Return a mocked S3 client."""
+    monkeypatch.setenv("MOTO_S3_CUSTOM_ENDPOINTS", S3_ENDPOINT)
+    with mock_aws():
+        client = boto3.client(
+            service_name="s3",
+            region_name=S3_REGION,
+            aws_access_key_id=S3_ACCESSKEY,
+            aws_secret_access_key=S3_SECRETKEY,
+        )
+        client.create_bucket(Bucket=BUCKET)
+        yield client
 
 
 @pytest.fixture
@@ -76,45 +123,34 @@ def mocked_tasktable():
         )
 
 
-def mock_s3_download_file(
-    _s3_path: str,
-    to_path: str | Path | None,
-    **__: dict[str, Any],
-) -> Path:
-    """Mock the prefect_utils.s3_download_file function"""
-    if not to_path:
-        return Path()
-
-    # Mock the downloading of S3_PAYLOAD
-    with open(to_path, "w", encoding="utf-8") as opened:
-        opened.write(
-            """
-workflow:
-- name: workflow_name
-  module: workflow_module
-  processing_unit: workflow_processing_unit
-  outputs:
-    out1: output1
-    out2: output2
-""",
+@pytest.fixture
+def mocked_post_items():
+    """Mock posting of the items in the catalog."""
+    item_collections = [list(col.values())[0][1] for col in MAP_PRODUCT_TO_COLLECTION]
+    for collection_id in item_collections:
+        responses.post(
+            f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}/items",
+            json={"status": status.HTTP_200_OK},
+            status=status.HTTP_200_OK,
         )
-    return Path(to_path)
 
 
-async def mock_s3_download_dir(
-    _s3_path: str,
-    to_path: str | Path | None,
-    **__: dict[str, Any],
-) -> Path:
-    """Mock the prefect_utils.s3_download_dir function"""
-    if not to_path:
-        return Path()
-    os.makedirs(str(to_path), exist_ok=True)
+@pytest.fixture(autouse=True)
+def mock_record_performance_indicators(mocker):
+    """
+    Auto-applied fixture that mocks the Prefect task `record_performance_indicators`
+    so that no real DB or side effects are triggered during tests.
+    """
+    fake_task = MagicMock()
+    fake_task.fn = MagicMock()
+    mocker.patch("rs_workflows.dpr_flow.record_performance_indicators", fake_task, create=True)
 
-    # Mock the downloading of log file
-    with open(osp.join(to_path, "mockup.processor.log"), "w", encoding="utf-8") as opened:
-        opened.write("Mockup log contents")
-    return Path(to_path)
+    return fake_task
+
+
+#####################
+# Utility functions #
+#####################
 
 
 async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
@@ -149,148 +185,20 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
         value={  # type: ignore[arg-type]
             "RSPY_WEBSITE": MOCKED_RSPY_WEBSITE,
             "RSPY_APIKEY": RSPY_APIKEY,
-            "S3_ACCESSKEY": "S3_ACCESSKEY",
-            "S3_SECRETKEY": "S3_SECRETKEY",
-            "S3_REGION": "region",
-            "S3_ENDPOINT": "https://endpoint",
+            "S3_ACCESSKEY": S3_ACCESSKEY,
+            "S3_SECRETKEY": S3_SECRETKEY,
+            "S3_REGION": S3_REGION,
+            "S3_ENDPOINT": S3_ENDPOINT,
         },
     ).save(user_block_name, overwrite=True)
 
 
-class MockStr(Mock):
-    """Mock str"""
-
-    def split(self, *_, **__):
-        """Mock str split"""
-        return ["split1", "split2"]
-
-
-class MockRsClient(Mock):
-    """Mock RsClient class"""
-
-    # Mocked properties
-    id = "id"
-    assets = {"asset1": MockStr(), "asset2": MockStr()}
-    properties = {
-        "prop1": MockStr(),
-        "prop2": MockStr(),
-    }
-
-    def search(self, *_, **__):
-        """Mock stac search"""
-        items = []
-        # Return two minimal STAC Items that mimic AUXIP search results.
-        for i in ["test1", "test2"]:
-            # Each item has:
-            #   - properties["product:type"] - read by dpr_processing to label the ADF type
-            #   - a single asset with an S3 href - dpr_processing takes the first asset.href
-            it = Item(
-                id=i,
-                properties={"product:type": "AUX_MOCK"},
-                geometry={},
-                bbox=[],
-                datetime=datetime.now(),
-            )
-            it.add_asset("data", Asset(href=f"s3://mock-bucket/{i}.bin"))
-            items.append(it)
-        return ItemCollection(items)
-
-    def get_items(self, *_, **__):
-        """Mock stac get_items"""
-        return self.search()
-
-    def get_collections(self, *_, **__):
-        """Mock stac get_collections"""
-        return [MockRsClient()] * 2
-
-    def wait_for_job(self, *_, **__):
-        """Mock successful job that returns processed items."""
-        return MOCK_PROCESSED_ITEMS
-
-    def wait_for_jobs(self, *_, **__):
-        """Mock wait_for_jobs"""
-        return {"job_status": {"status": "successful"}}
-
-    def get_process(self, *_, **__):
-        """Mock DprClient get_process"""
-        filename = "tasktable.json"
-        with open(CONFIG_DIR / filename, encoding="utf-8") as f:
-            return json.load(f)
-
-
-# ---------- Prefect task mocks used by flow ----------
-class PayloadStub:  # pylint: disable=too-few-public-methods
-    """Minimal payload object used by the flow tests."""
-
-    def dump(self):
-        """Return the minimal structure consumed by yaml.dump()."""
-        return {"workflow": [], "io": {"input_products": [], "output_products": []}}
-
-
-class PrefectFutureStub:  # pylint: disable=too-few-public-methods
-    """Mock future that mimics Prefect's Future API for tests."""
-
-    def result(self):
-        """Return a PayloadStub instance."""
-        return PayloadStub()
-
-
-class GeneratePayloadTaskMock(Mock):
-    """Mock of a Prefect task used to stub generate_payload.submit()."""
-
-    def submit(self, *_, **__):
-        """Return a PrefectFutureStub."""
-        return PrefectFutureStub()
-
-
-class PrefectFutureFailStub:  # pylint: disable=too-few-public-methods
-    """Mock future that returns a failed ADF staging result to trigger ValueError."""
-
-    def result(self):
-        """Return [(False, ItemCollection([...]))] with an item that has one asset."""
-        it = Item(
-            id="unstaged1",
-            properties={"product:type": "AUX_MOCK"},
-            geometry={},
-            bbox=[],
-            datetime=datetime.now(),
-        )
-        it.add_asset("data", Asset(href="s3://mock-bucket/unstaged1.bin"))
-        return ("ADFS_NAME", (False, ItemCollection([it])))
-
-
-class ProcessInputAdfsTaskFailMock(Mock):
-    """Mock of process_input_adfs to force status=False in the flow."""
-
-    def submit(self, *_, **__):
-        """Return a PrefectFutureFailStub."""
-        return PrefectFutureFailStub()
-
-
-@pytest.fixture(autouse=True)
-def mock_record_performance_indicators(mocker):
-    """
-    Auto-applied fixture that mocks the Prefect task `record_performance_indicators`
-    so that no real DB or side effects are triggered during tests.
-    """
-    fake_task = MagicMock()
-    fake_task.fn = MagicMock()
-    mocker.patch("rs_workflows.dpr_flow.record_performance_indicators", fake_task, create=True)
-
-    return fake_task
-
-
-#############
-# MAIN FLOW #
-#############
+#########
+# Tests #
+#########
 
 
 @pytest.mark.asyncio
-@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
-@patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
-@patch.object(prefect_utils, "s3_download_dir", mock_s3_download_dir)
-@patch.object(prefect_utils, "s3_upload_file", AsyncMock())
-@patch.object(prefect_utils, "s3_delete", Mock())
 @pytest.mark.parametrize(
     "mocked_stac_catalog_search_inside_collection",
     [["auxip", "catalog"]],
@@ -299,50 +207,44 @@ def mock_record_performance_indicators(mocker):
 )
 async def test_dpr_processing(
     mocker,
-    mock_prefect,
-    mock_record_performance_indicators,
+    mocked_s3,
     mocked_rspy_landing_pages,
     mocked_stac_catalog_get_collection,
     mocked_stac_catalog_search_inside_collection,
     mocked_staging_response,
-    mocked_dpr_response,
     mocked_tasktable,
+    mocked_dpr_response,
+    mocked_post_items,
 ):  # pylint: disable=unused-argument
     """Test the dpr_processing flow"""
+
+    #########
+    # Mocks #
+    #########
 
     # Spy/patch artifact creation to assert keys
     artifact_mock = AsyncMock()
     mocker.patch.object(on_demand_processing, "acreate_markdown_artifact", artifact_mock)
 
+    # Mock the update_eopf_assets function
+    mocker.patch("rs_workflows.dpr_flow.update_eopf_assets", return_value=[ITEMS.values(), ITEMS.keys()])
+
+    # Upload a mock processor log file
+    with tempfile.NamedTemporaryFile() as tmp:
+        tmp.write(b"Dummy processor log contents\n")
+        tmp.flush()
+        mocked_s3.upload_file(tmp.name, BUCKET, "mockup.processor.log")
+
+    # Spy on function calls
+    spy_s3_upload_file = mocker.spy(prefect_utils, "s3_upload_file")
+    spy_s3_delete = mocker.spy(prefect_utils, "s3_delete")
+
+    ################
+    # Init and run #
+    ################
+
     # Save env vars in prefect secret blocks
     await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN})
-
-    # Realistic processed items returned by run_processor
-    items = {
-        "S1_GRD": Item(
-            id="S1A_20240101_GRD",
-            properties={"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
-            geometry={},
-            bbox=[],
-            datetime=datetime.now(),
-        ),
-        "S2_NTC": Item(
-            id="S2A_20240101_NTC",
-            properties={"product:type": "S2_NTC", "datetime": "2024-01-01T00:00:00Z"},
-            geometry={},
-            bbox=[],
-            datetime=datetime.now(),
-        ),
-    }
-    mocker.patch("rs_workflows.dpr_flow.update_eopf_assets", return_value=[items.values(), items.keys()])
-
-    # Mock update of the catalog
-    for collection_id in "OUTPUT_GRD_COLLECTION", "OUTPUT_NTC_COLLECTION":
-        responses.post(
-            f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}/items",
-            json={"status": status.HTTP_200_OK},
-            status=status.HTTP_200_OK,
-        )
 
     # build realistic input
     dpr_input = DprProcessIn(
@@ -352,32 +254,31 @@ async def test_dpr_processing(
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
         input_products=[{"input_name": ("dummy_id", "dummy_coll")}],
-        generated_product_to_collection_identifier=[
-            {"GRD": ("S1_GRD", "OUTPUT_GRD_COLLECTION")},
-            {"NTC": ("S2_NTC", "OUTPUT_NTC_COLLECTION")},
-        ],
+        generated_product_to_collection_identifier=MAP_PRODUCT_TO_COLLECTION,
         auxiliary_product_to_collection_identifier={"*": COLLECTION_ID},
         processing_mode=[ProcessingMode.NRT],  # type: ignore[list-item]
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         satellite="S1A",
-        s3_payload_file="s3://test-bucket/payload.yaml",
+        s3_payload_file=f"s3://test-bucket/payload.yaml",
     )
 
     # run the flow
     await on_demand_processing.dpr_processing(dpr_input)
 
+    ###########
+    # Asserts #
+    ###########
+
     # --- verify s3_upload_file was called with the expected destination (second arg) ---
-    upload_mock = cast(AsyncMock, prefect_utils.s3_upload_file)
-    upload_calls = upload_mock.await_args_list
+    upload_calls = spy_s3_upload_file.call_args_list
     assert len(upload_calls) == 1
     args = upload_calls[0].args
     assert isinstance(args[0], (str, Path))  # temp file path
     assert args[1] == dpr_input.s3_payload_file  # destination S3 path
 
     # --- verify s3_delete was called with the payload file ---
-    delete_mock = cast(Mock, prefect_utils.s3_delete)
-    delete_calls = delete_mock.call_args_list  # pylint: disable=no-member
+    delete_calls = spy_s3_delete.call_args_list  # pylint: disable=no-member
     assert len(delete_calls) == 1
     args = delete_calls[0].args
     assert args[0] == dpr_input.s3_payload_file  # destination S3 path for payload file
@@ -388,22 +289,40 @@ async def test_dpr_processing(
     assert keys == ["processing-unit-list", "auxip-cql2", "auxip-cql2", "dpr-payload-file"]
 
 
-@patch.dict(os.environ, {}, clear=False)
-@patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
-@patch.object(prefect_utils, "s3_upload_file", AsyncMock())
-@patch.object(prefect_utils, "s3_delete", Mock())
-@patch.object(RsClient, "get_auxip_client", MockRsClient)
-@patch.object(RsClient, "get_cadip_client", MockRsClient)
-@patch.object(RsClient, "get_catalog_client", MockRsClient)
-@patch.object(RsClient, "get_staging_client", MockRsClient)
-@patch.object(RsClient, "get_dpr_client", MockRsClient)
-@patch.object(on_demand_processing, "process_input_adfs", ProcessInputAdfsTaskFailMock())
-async def test_dpr_processing_raises_on_unstaged_adf(
-    mocker,
-    mock_prefect,
-    mock_record_performance_indicators,
-):  # pylint: disable=unused-argument, redefined-outer-name
+async def test_dpr_processing_raises_on_unstaged_adf(mocker, mocked_tasktable):
     """The flow should raise ValueError when an ADF could not be staged (status=False)."""
+
+    #########
+    # Mocks #
+    #########
+
+    class PrefectFutureFailStub:  # pylint: disable=too-few-public-methods
+        """Mock future that returns a failed ADF staging result to trigger ValueError."""
+
+        def result(self):
+            """Return [(False, ItemCollection([...]))] with an item that has one asset."""
+            it = Item(
+                id="unstaged1",
+                properties={"product:type": "AUX_MOCK"},
+                geometry={},
+                bbox=[],
+                datetime=datetime.now(),
+            )
+            it.add_asset("data", Asset(href="s3://mock-bucket/unstaged1.bin"))
+            return ("ADFS_NAME", (False, ItemCollection([it])))
+
+    class ProcessInputAdfsTaskFailMock(Mock):
+        """Mock of process_input_adfs to force status=False in the flow."""
+
+        def submit(self, *_, **__):
+            """Return a PrefectFutureFailStub."""
+            return PrefectFutureFailStub()
+
+    mocker.patch.object(on_demand_processing, "process_input_adfs", ProcessInputAdfsTaskFailMock())
+
+    ################
+    # Init and run #
+    ################
 
     await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN})
 
@@ -426,100 +345,65 @@ async def test_dpr_processing_raises_on_unstaged_adf(
         await on_demand_processing.dpr_processing(dpr_input)
 
 
-@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
-@patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
-@patch.object(prefect_utils, "s3_upload_file", AsyncMock())
-@patch.object(prefect_utils, "s3_delete", Mock())
-@patch.object(RsClient, "get_cadip_client", MockRsClient)
-@patch.object(RsClient, "get_staging_client", MockRsClient)
-async def test_on_demand_cadip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
+@pytest.mark.parametrize(
+    "mocked_stac_catalog_search_inside_collection",
+    [["cadip"]],
+    indirect=True,
+    ids=[""],
+)
+async def test_on_demand_cadip_staging(
+    mocked_rspy_landing_pages,
+    mocked_stac_catalog_search_inside_collection,
+    mocked_staging_response,
+):
     """Test the on_demand_cadip_staging flow"""
-
     await setup_worklow_test_env()
-
-    # We'll just check that the prefect tasks and flows were called.
-    # We don't check the underlying RsClient functions, this is already done in dedicated pytests.
-    spied = {
-        mocker.spy(prefect_function, "fn"): call_count  # spy on <flow>.fn or <task>.fn = the underlying python function
-        for prefect_function, call_count in {
-            cadip_flow.search: 1,
-            cadip_flow.search_task: 1,
-            staging_flow.staging: 1,
-        }.items()
-    }
-
-    # Run the prefect flow
     await on_demand_processing.on_demand_cadip_staging(
         env=FlowEnvArgs(owner_id=OWNER_ID),
-        cadip_collection_identifier="cadip_collection_identifier",
-        session_identifier="session_identifier",
+        # values come from the mocked_stac_catalog_search_inside_collection fixture
+        cadip_collection_identifier="S1_L1",
+        session_identifier="DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw",
         catalog_collection_identifier="catalog_collection_identifier",
     )
 
-    # Check calls
-    for fn, call_count in spied.items():
-        assert fn.await_count == call_count
 
-
-@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
-@patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
-@patch.object(prefect_utils, "s3_upload_file", AsyncMock())
-@patch.object(prefect_utils, "s3_delete", Mock())
-@patch.object(RsClient, "get_auxip_client", MockRsClient)
-@patch.object(RsClient, "get_staging_client", MockRsClient)
-@patch.object(RsClient, "get_catalog_client", MockRsClient)
-async def test_on_demand_auxip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
+@pytest.mark.parametrize(
+    "mocked_stac_catalog_search_inside_collection",
+    [["auxip", "catalog"]],
+    indirect=True,
+    ids=[""],
+)
+async def test_on_demand_auxip_staging(
+    mocked_rspy_landing_pages,
+    mocked_stac_catalog_search_inside_collection,
+    mocked_staging_response,
+    mocked_stac_catalog_get_collection,
+):
     """Test the on_demand_auxip_staging flow"""
-
     await setup_worklow_test_env()
-
-    # We'll just check that the prefect tasks and flows were called.
-    # We don't check the underlying RsClient functions, this is already done in dedicated pytests.
-    spied = {
-        mocker.spy(prefect_function, "fn"): call_count  # spy on <flow>.fn or <task>.fn = the underlying python function
-        for prefect_function, call_count in {
-            auxip_flow.auxip_staging: 1,
-            auxip_flow.search: 1,
-            auxip_flow.search_task: 1,
-            staging_flow.staging: 1,
-        }.items()
-    }
-
-    # Run the prefect flow
     await auxip_flow.on_demand_auxip_staging(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         start_datetime="2024-05-27T09:44:09.509000Z",
         end_datetime="2024-05-27T09:44:19.509000Z",
         product_type="AUX_PP2",
-        catalog_collection_identifier="catalog_collection_identifier",
+        # value comes from the mocked_stac_catalog_search_inside_collection fixture
+        catalog_collection_identifier="S1_L1",
     )
 
-    # Check calls
-    for fn, call_count in spied.items():
-        assert fn.await_count == call_count
 
-
-@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
-@patch.object(prefect_utils, "s3_download_file", mock_s3_download_file)
-@patch.object(prefect_utils, "s3_upload_file", AsyncMock())
-@patch.object(prefect_utils, "s3_delete", Mock())
-@patch.object(RsClient, "get_prip_client", MockRsClient)
-@patch.object(RsClient, "get_staging_client", MockRsClient)
-async def test_on_demand_prip_staging(mocker, mock_prefect):  # pylint: disable=unused-argument
+@pytest.mark.parametrize(
+    "mocked_stac_catalog_search_inside_collection",
+    [["prip"]],
+    indirect=True,
+    ids=[""],
+)
+async def test_on_demand_prip_staging(
+    mocked_rspy_landing_pages,
+    mocked_stac_catalog_search_inside_collection,
+    mocked_staging_response,
+):
     """Test the on_demand_prip_staging flow"""
-
     await setup_worklow_test_env()
-
-    spied = {
-        mocker.spy(prefect_function, "fn"): call_count
-        for prefect_function, call_count in {
-            prip_flow.search: 1,
-            prip_flow.search_task: 1,
-            staging_flow.staging: 1,
-        }.items()
-    }
-
-    # Run the prefect flow
     await on_demand_processing.on_demand_prip_staging(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         start_datetime="2024-05-27T09:44:09.509000Z",
@@ -529,30 +413,19 @@ async def test_on_demand_prip_staging(mocker, mock_prefect):  # pylint: disable=
         catalog_collection_identifier="catalog_collection_identifier",
     )
 
-    # Check calls
-    for fn, call_count in spied.items():
-        assert fn.await_count == call_count
 
-
-@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
-@patch.object(RsClient, "get_catalog_client", MockRsClient)
-async def test_catalog_search(mocker, mock_prefect):  # pylint: disable=unused-argument
+async def test_catalog_search(
+    mocked_rspy_landing_pages,
+    mocked_stac_catalog_search_inside_collection,
+):
     """Test the catalog_search flow"""
-
     await setup_worklow_test_env()
-
-    spy_search = mocker.spy(MockRsClient, "search")
-
-    # Run the prefect flow
     await catalog_flow.catalog_search(env=FlowEnvArgs(owner_id=OWNER_ID), catalog_cql2={"filter": {}})
 
-    assert spy_search.call_count == 1
-    spy_search.reset_mock()
 
-
-def test_create_schema(monkeypatch, patch_prefect_logger):  # pylint: disable=unused-argument
+def test_create_schema(monkeypatch):  # pylint: disable=unused-argument
     """
-    Tests that the `create_schema` task correctly triggers table creation.
+    Tests that the `create_schema` task for the PI computing correctly triggers table creation.
 
     This test verifies:
       - The SQLAlchemy engine is created using the provided database URL.
@@ -638,7 +511,7 @@ def test_insert_pi_categories(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_init_pi_database(monkeypatch, mock_prefect):  # pylint: disable=unused-argument
+async def test_init_pi_database(monkeypatch):  # pylint: disable=unused-argument
     """
     End-to-end test of the `init_pi_database` flow.
 
@@ -694,61 +567,27 @@ async def test_init_pi_database(monkeypatch, mock_prefect):  # pylint: disable=u
 
 
 @pytest.mark.asyncio
-async def test_publish_task_success(mocker):
+async def test_publish_task_success(
+    mocker,
+    mocked_rspy_landing_pages,
+    mocked_post_items,
+    mocked_stac_catalog_get_collection,
+):
     """Test: publish task adds item to catalog with correct collection and asset"""
-    # mock CatalogClient and FlowEnv
-    mock_catalog_client = MagicMock()
-    mock_rs_client = MagicMock()
-    mock_rs_client.get_catalog_client.return_value = mock_catalog_client
-
-    mock_flow_env = MagicMock()
-    mock_flow_env.rs_client = mock_rs_client
-
-    mocker.patch("rs_workflows.catalog_flow.FlowEnv", return_value=mock_flow_env)
-
-    # mock prefect logger
-    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
-
-    # mock os.path.join
-    mocker.patch("os.path.join", side_effect=lambda *parts: "/".join(parts))
-
-    # input data
-    env = FlowEnvArgs(owner_id="test-owner")
-
-    catalog_collection_identifier = [
-        {"S1_GRD": ("S1_GRD", "OUTPUT_GRD_COLLECTION")},  # ← will match
-        {"S2_NTC": ("S2_NTC", "OUTPUT_NTC_COLLECTION")},
-    ]
-
-    payload_file = MagicMock()
-    payload_file.io.output_products = [
-        MagicMock(id="GRD", path="s3://output-bucket/grd-output"),
-    ]
-
-    items = [
-        {
-            "id": "S1A_20240101_GRD",
-            "geometry": {"type": "Polygon", "coordinates": [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]]},
-            "bbox": [-10, 40, 10, 60],
-            "properties": {
-                "datetime": "2024-01-01T12:00:00Z",
-                "product:type": "S1_GRD",
-            },
-        },
-    ]
+    await setup_worklow_test_env()
+    env = FlowEnvArgs(owner_id=OWNER_ID)
+    spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
 
     # run the async task
-    await catalog_flow.publish.fn(env, catalog_collection_identifier, items)
+    await catalog_flow.publish.fn(env, MAP_PRODUCT_TO_COLLECTION, ITEMS.values())
 
-    # assertions
-    mock_catalog_client.add_item.assert_called_once()
-
-    # verify correct collection and item
-    collection_id, item = mock_catalog_client.add_item.call_args[0]
-    assert collection_id == "OUTPUT_GRD_COLLECTION"
-    assert item["id"] == "S1A_20240101_GRD"
-    expected_datetime = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    assert item["properties"]["datetime"] == expected_datetime
+    # Verify correct collection and item
+    assert spy_add_item.call_count == len(ITEMS)
+    for i in range(len(ITEMS)):
+        _, collection_id, item = spy_add_item.call_args_list[i][0]
+        expected_item = list(ITEMS.values())[i]
+        assert collection_id == list(MAP_PRODUCT_TO_COLLECTION[i].values())[0][1]
+        assert item == expected_item
 
     # verify asset, temporarily commented out until asset creation is re-enabled
     # asset_key = "S1A_20240101_GRD.zarr"
@@ -760,60 +599,14 @@ async def test_publish_task_success(mocker):
 
 
 @pytest.mark.asyncio
-async def test_publish_multiple_items(mocker):
-    """Test: multiple items -> multiple add_item calls"""
-    mock_catalog_client = MagicMock()
-    mock_flow_env = MagicMock(rs_client=MagicMock(get_catalog_client=lambda: mock_catalog_client))
-    mocker.patch("rs_workflows.payload_generator.FlowEnv", return_value=mock_flow_env)
-    mocker.patch("rs_workflows.payload_generator.get_run_logger")
-    mocker.patch("rs_workflows.catalog_flow.FlowEnv", return_value=mock_flow_env)
-    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
-    mocker.patch("os.path.join", side_effect=lambda *parts: "/".join(parts))
-
-    payload_file = MagicMock()
-    payload_file.io.output_products = [
-        MagicMock(id="GRD", path="s3://out/grd"),
-        MagicMock(id="NTC", path="s3://out/ntc"),
-    ]
-
-    catalog_collection_identifier = [
-        {"S1_GRD": ("S1_GRD", "COLL_GRD")},
-        {"S2_NTC": ("S2_NTC", "COLL_NTC")},
-    ]
-
-    items = [
-        {
-            "id": "item1",
-            "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
-            "geometry": None,
-            "bbox": None,
-        },
-        {
-            "id": "item2",
-            "properties": {"product:type": "S2_NTC", "datetime": "2024-01-02T00:00:00Z"},
-            "geometry": None,
-            "bbox": None,
-        },
-    ]
-
-    await catalog_flow.publish.fn(FlowEnvArgs(owner_id="test"), catalog_collection_identifier, items)
-
-    assert mock_catalog_client.add_item.call_count == 2
-    calls = mock_catalog_client.add_item.mock_calls
-    assert calls[0][1][0] == "COLL_GRD"
-    assert calls[1][1][0] == "COLL_NTC"
-
-
-@pytest.mark.asyncio
-async def test_publish_skips_when_no_matching_output_collection(mocker):
-    """Test: no matching output product -> item skipped (no error)"""
-    mock_catalog_client = MagicMock()
-    mock_flow_env = MagicMock(rs_client=MagicMock(get_catalog_client=lambda: mock_catalog_client))
-    mocker.patch("rs_workflows.payload_generator.FlowEnv", return_value=mock_flow_env)
-    mocker.patch("rs_workflows.payload_generator.get_run_logger")
-    mocker.patch("rs_workflows.catalog_flow.FlowEnv", return_value=mock_flow_env)
-    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
-    mocker.patch("os.path.join", side_effect=lambda *parts: "/".join(parts))
+async def test_publish_skips_when_no_matching_output_collection(
+    mocker,
+    mocked_rspy_landing_pages,
+):
+    """Test: no matching output product -> item skipped"""
+    await setup_worklow_test_env()
+    env = FlowEnvArgs(owner_id=OWNER_ID)
+    spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
 
     catalog_collection_identifier = [{"INVALID": ("INVALID", "COLL_GRD")}]
 
@@ -825,7 +618,8 @@ async def test_publish_skips_when_no_matching_output_collection(mocker):
             "bbox": None,
         },
     ]
-    with pytest.raises(RuntimeError):
-        await catalog_flow.publish.fn(FlowEnvArgs(owner_id="test"), catalog_collection_identifier, items)
 
-        mock_catalog_client.add_item.assert_not_called()
+    with pytest.raises(RuntimeError) as error:
+        await catalog_flow.publish.fn(env, catalog_collection_identifier, items)
+        spy_add_item.assert_not_called()
+    assert str(error.value.__cause__) == "Product type unknown: S1_GRD"

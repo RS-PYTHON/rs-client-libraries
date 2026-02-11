@@ -50,7 +50,6 @@ async def test_get_ip_address():
     assert prefect_utils.get_ip_address() == socket.gethostbyname(socket.gethostname())
 
 
-@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 async def test_read_apikey(monkeypatch, mocker):
     """Test the read_apikey function"""
 
@@ -71,7 +70,6 @@ async def test_read_apikey(monkeypatch, mocker):
     handle.write.assert_called_once_with(f"\nRSPY_APIKEY={apikey}\n")
 
 
-@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @pytest.mark.parametrize("local_mode", [True, False], ids=["local", "cluster"])
 async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # pylint: disable=unused-argument
     """Test the init_prefect_blocks function"""

@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from rs_client.ogcapi.dpr_client import DprProcessor
+from rs_workflows import dpr_flow
 from rs_workflows.dpr_flow import (
     compute_eopf_origin_datetime,
     create_stac_item,
@@ -265,10 +266,7 @@ def test_update_eopf_assets_happy_path(mocker):
         return_value=all_files,
     )
 
-    mock_extract = mocker.patch(
-        "rs_workflows.dpr_flow.extract_products_and_zattrs",
-        return_value=[(product, zattrs)],
-    )
+    spy_extract = mocker.spy(dpr_flow, "extract_products_and_zattrs")
 
     mock_read = mocker.patch(
         "rs_workflows.dpr_flow.read_zattrs_sync",
@@ -292,7 +290,7 @@ def test_update_eopf_assets_happy_path(mocker):
 
     mock_s3_list.assert_called_once_with("s3://my-bucket/output/")
 
-    mock_extract.assert_called_once_with(
+    spy_extract.assert_called_once_with(
         all_files,
         "s3://my-bucket/output/",
     )
@@ -303,8 +301,8 @@ def test_update_eopf_assets_happy_path(mocker):
         env,
         input_products,
         eopf_items[0],
-        "s3://my-bucket/output/product_a/.zattrs",
-        "product_a",
+        zattrs,
+        product,
         DprProcessor.S1L0,
     )
 

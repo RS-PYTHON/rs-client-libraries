@@ -428,7 +428,7 @@ async def run_processor(
                     local_log_file = local_log_files[0]
                     async with await anyio.open_file(local_log_file, encoding="utf-8") as opened:
                         s3_log_file = osp.join(s3_payload_dir, osp.relpath(local_log_file, tmpdir))
-                        logger.info(f"Log file {s3_log_file!r}:\n{opened.read()}")
+                        logger.info(f"Log file {s3_log_file!r}:\n{await opened.read()}")
                 else:
                     logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
 

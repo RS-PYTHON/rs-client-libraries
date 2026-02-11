@@ -25,6 +25,7 @@ import json
 
 # pylint: disable=unused-argument
 import logging
+import os
 from unittest.mock import MagicMock, mock_open
 
 import pytest
@@ -212,13 +213,19 @@ def before_and_after(session_mocker):
 
 
 @pytest.fixture(scope="function", autouse=True)
+def patch_dict(mocker):
+    """Don't modify the global os.environ from tests."""
+    mocker.patch.dict(os.environ, {}, clear=False)
+
+
+@pytest.fixture(scope="function", autouse=True)
 def clear_caches():
     """Clear caches at the end of each test"""
     yield
     StacBase.get_collection.cache_clear()  # pylint:disable=no-member
 
 
-@pytest.fixture(name="mock_prefect", scope="session")
+@pytest.fixture(name="mock_prefect", scope="session", autouse=True)
 def __mock_prefect():
     """
     Init a mockup prefect server, see: https://docs.prefect.io/v3/how-to-guides/workflows/test-workflows
@@ -565,14 +572,30 @@ def mocked_stac_catalog_search_inside_collection(request):
         responses.post(url=f"{MOCKED_RSPY_WEBSITE}/{service}/search", json=json_response, status=status.HTTP_200_OK)
 
         # Mock the search by individual feature with a GET request
+        ids = []
+        collections = set()
         for feature in json_response["features"]:
+
+            id = feature["id"]
+            ids.append(id)
+
+            collection = feature["collection"]
+            collections.add(collection)
+
             json_response_feature = copy.deepcopy(json_response)
             json_response_feature["features"] = [feature]
             responses.get(
-                url=f"{MOCKED_RSPY_WEBSITE}/{service}/search?ids={feature['id']}&collections={feature['collection']}",
+                url=f"{MOCKED_RSPY_WEBSITE}/{service}/search?ids={id}&collections={collection}",
                 json=json_response_feature,
                 status=status.HTTP_200_OK,
             )
+
+        # Mock the search on all features with a GET request
+        responses.get(
+            url=f"{MOCKED_RSPY_WEBSITE}/{service}/search?ids={','.join(ids)}&collections={','.join(collections)}",
+            json=json_response_feature,
+            status=status.HTTP_200_OK,
+        )
 
 
 @pytest.fixture(name="mocked_rspy_landing_pages")
@@ -771,6 +794,10 @@ def patch_prefect_logger(monkeypatch):
     test_logger.setLevel(logging.DEBUG)
     test_logger.addHandler(logging.NullHandler())
     monkeypatch.setattr(init_pi_db_flow, "get_run_logger", lambda: logging.getLogger("test"))
+    monkeypatch.setattr(
+        "rs_workflows.catalog_flow.get_run_logger",
+        lambda **kwargs: test_logger,
+    )
     monkeypatch.setattr(
         "rs_workflows.flow_utils.get_run_logger",
         lambda **kwargs: test_logger,
