@@ -24,6 +24,8 @@ import psycopg2
 import psycopg2.extras
 from botocore.client import Config
 from prefect import flow, get_run_logger
+from prefect.artifacts import create_progress_artifact, update_progress_artifact
+from prefect.states import Failed
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
@@ -40,15 +42,12 @@ DB_NAME = "s3_quota"
 # 1. List eligible S3 log files
 # -----------------------------
 def list_recent_files(s3, platform: str, max_files: int, threshold_minute: int):
-    """
-    List up to 'max_files' files older than 'threshold_minute'.
-    """
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=threshold_minute)
-    count = 0
+    files = []
 
     paginator = s3.get_paginator("list_objects_v2")
 
-    for page in paginator.paginate(Bucket=platform + LOG_BUCKET_SUFFIX, Prefix=LOG_PREFIX):
+    for page in paginator.paginate(...):
         for obj in page.get("Contents", []):
             key = obj["Key"]
             last_modified = obj["LastModified"]
@@ -56,11 +55,12 @@ def list_recent_files(s3, platform: str, max_files: int, threshold_minute: int):
             if last_modified > cutoff:
                 continue
 
-            yield key
-            count += 1
+            files.append(key)
 
-            if count >= max_files:
-                return
+            if len(files) >= max_files:
+                return files
+
+    return files
 
 
 # -----------------------------
@@ -78,6 +78,7 @@ def read_object(s3, platform, key):
                 yield line.decode("utf-8")
     except botocore.exceptions.ClientError as e:
         logger.error(f"Error reading {key}: {e}")
+        return Failed(message=str(e))
 
 
 # -----------------------------
@@ -160,7 +161,7 @@ def batch_insert(conn, rows):
 # -----------------------------
 # 5. Main pipeline
 # -----------------------------
-@flow(name="collect-obs-logs")
+@flow(timeout_seconds=600, name="collect-obs-logs")
 async def collect_obs_logs(
     platform: str = "rspython-ops",
     max_files: int = DEFAULT_MAX_FILES,
@@ -222,8 +223,13 @@ async def collect_obs_logs(
         logger.info(
             f"⏳ Processing Object Storage logs with batch insert from bucket {bucket_name}.",
         )
+        progress_artifact_id = create_progress_artifact(progress=0.0,
+                                                        description="Progression on logs files tratement.")
 
-        for key in list_recent_files(s3, platform, max_files, threshold_minute):
+        list_files = list_recent_files(s3, platform, max_files, threshold_minute)
+        len_list_files = len (list_files)
+        i = 0
+        for key in list_files):
             logger.info(f"\n📄 Reading file: {key}")
 
             for line in read_object(s3, platform, key):
@@ -239,6 +245,8 @@ async def collect_obs_logs(
             # Optional: delete processed file
             logger.info(f"\n📄 Deleting file: {key}")
             s3.delete_object(Bucket=platform + LOG_BUCKET_SUFFIX, Key=key)
+            i = i+1
+            update_progress_artifact(artifact_id=progress_artifact_id, progress=i*100/len_list_files)
 
         # Final flush
         if batch:
