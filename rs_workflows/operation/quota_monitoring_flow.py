@@ -24,6 +24,8 @@ import psycopg2
 import psycopg2.extras
 from botocore.client import Config
 from prefect import flow, get_run_logger
+from prefect.states import Failed
+from psycopg2 import DatabaseError, IntegrityError
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
@@ -151,7 +153,6 @@ def batch_insert(conn, rows):
     """
     if not rows:
         return
-
     with conn.cursor() as cur:
         psycopg2.extras.execute_values(cur, INSERT_SQL, rows)
     conn.commit()
@@ -160,7 +161,7 @@ def batch_insert(conn, rows):
 # -----------------------------
 # 5. Main pipeline
 # -----------------------------
-@flow(name="collect-obs-logs")
+@flow(timeout_seconds=600, name="collect-obs-logs")
 async def collect_obs_logs(
     platform: str = "rspython-ops",
     max_files: int = DEFAULT_MAX_FILES,
@@ -222,30 +223,44 @@ async def collect_obs_logs(
         logger.info(
             f"⏳ Processing Object Storage logs with batch insert from bucket {bucket_name}.",
         )
+        try:
+            for key in list_recent_files(s3, platform, max_files, threshold_minute):
+                logger.info(f"\n📄 Reading file: {key}")
 
-        for key in list_recent_files(s3, platform, max_files, threshold_minute):
-            logger.info(f"\n📄 Reading file: {key}")
+                for line in read_object(s3, platform, key):
+                    parsed = parse_log_line(line)
+                    if parsed:
+                        batch.append(parsed)
 
-            for line in read_object(s3, platform, key):
-                parsed = parse_log_line(line)
-                if parsed:
-                    batch.append(parsed)
+                    # Flush batch when full
+                    if len(batch) >= BATCH_SIZE:
+                        batch_insert(conn, batch)
+                        batch = []
 
-                # Flush batch when full
-                if len(batch) >= BATCH_SIZE:
-                    batch_insert(conn, batch)
-                    batch = []
+                # Optional: delete processed file
+                logger.info(f"\n📄 Deleting file: {key}")
+                s3.delete_object(Bucket=platform + LOG_BUCKET_SUFFIX, Key=key)
 
-            # Optional: delete processed file
-            logger.info(f"\n📄 Deleting file: {key}")
-            s3.delete_object(Bucket=platform + LOG_BUCKET_SUFFIX, Key=key)
+            # Final flush
+            if batch:
+                batch_insert(conn, batch)
 
-        # Final flush
-        if batch:
-            batch_insert(conn, batch)
+            conn.close()
+            print("✅ Done.")
 
-        conn.close()
-        print("✅ Done.")
+        except botocore.exceptions.ClientError as err:
+            print("❌ S3 access failed.")
+            return Failed(message=str(err))
+
+        except IntegrityError as exc:
+            conn.rollback()
+            logger.error(f"❌ Database integrity error: {exc}")
+            return Failed(message=str(exc))
+
+        except DatabaseError as exc:
+            conn.rollback()
+            logger.error(f"❌ Database error: {exc}")
+            return Failed(message=str(exc))
 
 
 @flow(name="clean-obs-logs")
