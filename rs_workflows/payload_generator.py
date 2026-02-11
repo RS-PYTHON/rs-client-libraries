@@ -370,7 +370,7 @@ def build_output_products(
     """
 
     outputs = []
-
+    generated_uuid = uuid.uuid4()
     for output_product in dpr_process_in.generated_product_to_collection_identifier:
         product_name = next(iter(output_product))
         mapping = next((outp for outp in unit.get("output_products", []) if outp["name"] == product_name), None)
@@ -387,7 +387,7 @@ def build_output_products(
             raise RuntimeError(f"Invalid output_products definition for '{product_name}'")
 
         bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
-        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid.uuid4()))
+        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(generated_uuid))
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
         if not store_name:

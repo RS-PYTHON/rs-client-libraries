@@ -43,23 +43,33 @@ def s3_list(s3_prefix: str):
 
 
 def extract_products_and_zattrs(files: list[str], base_path: str):
-    """
-    Extract product names and associated .zattrs files from a list of file paths.
+    """Extract product names and their corresponding .zattrs file paths.
 
-    This function scans a list of file paths and identifies Zarr products by
-    detecting valid `.zattrs` files under the given base path. It supports both
-    common Zarr layouts:
-    1. base_path/<product>/.zattrs
-    2. base_path/<product>/<product>/.zattrs
+    Filters a list of file paths to find .zattrs files located directly under
+    product directories within a base path, following the structure:
+    base_path/product_name/.zattrs
 
     Args:
-        files (list[str]): List of file paths to scan.
-        base_path (str): Base directory under which products are located.
+        files: List of file paths to search through.
+        base_path: The base directory path to strip from file paths.
 
     Returns:
-        tuple[list[str], list[str]]:
-            - A list of unique product names discovered.
-            - A list of full paths to detected `.zattrs` files.
+        A list of tuples, where each tuple contains:
+            - product_name (str): The name of the product directory.
+            - file (str): The full path to the .zattrs file.
+
+        Only includes files that are exactly two levels deep from the base_path
+        and have the filename '.zattrs'.
+
+    Example:
+        >>> files = [
+        ...     "/data/products/product_a/.zattrs",
+        ...     "/data/products/product_b/.zattrs",
+        ...     "/data/products/product_c/subdir/file.txt"
+        ... ]
+        >>> extract_products_and_zattrs(files, "/data/products")
+        [('product_a', '/data/products/product_a/.zattrs'),
+         ('product_b', '/data/products/product_b/.zattrs')]
     """
     dirs_and_attrs = []
 
@@ -220,57 +230,20 @@ def update_eopf_assets(
     payload: dict,
     dpr_processor: DprProcessor,
 ) -> tuple[Any, Any]:
-    """
-    Update EOPF-related STAC assets by discovering products in S3 and
-    generating corresponding STAC items from `.zattrs` metadata.
 
-    This task inspects the workflow output products defined in the payload,
-    identifies the unique S3 base path, and discovers all product files and
-    associated `.zattrs` metadata files under that path. The `.zattrs`
-    metadata is read synchronously and used to extract EOPF discovery
-    information and product types, which are then converted into STAC items.
-
-    Steps performed:
-    1. Extract the unique S3 base path from ``payload["I/O"]["output_products"]``.
-    2. List all files under the resolved S3 path.
-    3. Separate product files from `.zattrs` metadata files.
-    4. Read and parse `.zattrs` metadata synchronously.
-    5. Extract EOPF discovery metadata and EOPF product types.
-    6. Build STAC items using the extracted metadata and input products.
-
-    Parameters
-    ----------
-    env : object
-        Execution environment used to provide context when creating STAC items.
-    input_products : list[dict]
-        List of input product mappings used to relate generated STAC items
-        to their upstream products.
-    payload : dict
-        Workflow payload containing input/output definitions. The S3 discovery
-        path is read from ``payload["I/O"]["output_products"]``.
-
-    Returns
-    -------
-    tuple
-        A tuple ``(stac_items, eopf_types)`` where:
-        - stac_items : list
-            List of STAC items generated from EOPF `.zattrs` discovery metadata.
-        - eopf_types : list[str]
-            List of extracted EOPF product type identifiers.
-    """
     logger = get_run_logger()
     logger.info("Starting EOPF asset update.")
-    logger.debug(f"Payload received: {payload}")
+    logger.info(f"Payload received: {payload}")
     logger.info("Input products: %s", input_products)
-    # Determine path
-    paths = {prod["path"] for prod in payload["I/O"]["output_products"]}
-    path = next(iter(paths))
-    logger.info(f"Using S3 path: {path}")
-
+    # Get all .zattrs files found in the output products paths
+    zattrs_list = []
+    for prod in payload["I/O"]["output_products"]:
+        if prod.get("final_product", True):
+            path = prod["path"]
+            zattrs_list.extend(extract_products_and_zattrs(s3_list(path), path))
     # List & extract
-    all_files = s3_list(path)
-    logger.info(f"Found {len(all_files)} files under path.")
-    zattrs_list = extract_products_and_zattrs(all_files, path)
+    logger.info(f"Found {len(zattrs_list)} .zattrs files under path.")
+
     stac_items = []
     eopf_types = []
     for product_name, zattrs_s3_location in zattrs_list:
