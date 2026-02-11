@@ -1,4 +1,4 @@
-# Copyright 2025 Airbus defence And Space
+# Copyright 2026 Airbus defence And Space
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ import psycopg2
 import psycopg2.extras
 from botocore.client import Config
 from prefect import flow, get_run_logger
+from prefect.states import Failed
+from psycopg2 import DatabaseError, IntegrityError
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
@@ -33,6 +35,7 @@ DEFAULT_MAX_FILES = 10000
 DEFAULT_AGE_THRESHOLD = 5
 BATCH_SIZE = 500  # number of rows per batch insert
 DEFAULT_MAX_DAYS = 40  # number of day before removing the logs from the table
+DB_NAME = "s3_quota"
 
 
 # -----------------------------
@@ -150,7 +153,6 @@ def batch_insert(conn, rows):
     """
     if not rows:
         return
-
     with conn.cursor() as cur:
         psycopg2.extras.execute_values(cur, INSERT_SQL, rows)
     conn.commit()
@@ -159,7 +161,7 @@ def batch_insert(conn, rows):
 # -----------------------------
 # 5. Main pipeline
 # -----------------------------
-@flow(name="collect-obs-logs")
+@flow(timeout_seconds=600, name="collect-obs-logs")
 async def collect_obs_logs(
     platform: str = "rspython-ops",
     max_files: int = DEFAULT_MAX_FILES,
@@ -215,36 +217,50 @@ async def collect_obs_logs(
             config=Config(signature_version="s3v4"),
             region_name=os.environ["S3_QUOTA_REGION"],
         )
-        conn = psycopg2.connect(dbname="quotas_test", user=db_user, password=db_password, host=db_host, port=db_port)
+        conn = psycopg2.connect(dbname=DB_NAME, user=db_user, password=db_password, host=db_host, port=db_port)
 
         batch = []
         logger.info(
             f"⏳ Processing Object Storage logs with batch insert from bucket {bucket_name}.",
         )
+        try:
+            for key in list_recent_files(s3, platform, max_files, threshold_minute):
+                logger.info(f"\n📄 Reading file: {key}")
 
-        for key in list_recent_files(s3, platform, max_files, threshold_minute):
-            logger.info(f"\n📄 Reading file: {key}")
+                for line in read_object(s3, platform, key):
+                    parsed = parse_log_line(line)
+                    if parsed:
+                        batch.append(parsed)
 
-            for line in read_object(s3, platform, key):
-                parsed = parse_log_line(line)
-                if parsed:
-                    batch.append(parsed)
+                    # Flush batch when full
+                    if len(batch) >= BATCH_SIZE:
+                        batch_insert(conn, batch)
+                        batch = []
 
-                # Flush batch when full
-                if len(batch) >= BATCH_SIZE:
-                    batch_insert(conn, batch)
-                    batch = []
+                # Optional: delete processed file
+                logger.info(f"\n📄 Deleting file: {key}")
+                s3.delete_object(Bucket=platform + LOG_BUCKET_SUFFIX, Key=key)
 
-            # Optional: delete processed file
-            logger.info(f"\n📄 Deleting file: {key}")
-            s3.delete_object(Bucket=platform + LOG_BUCKET_SUFFIX, Key=key)
+            # Final flush
+            if batch:
+                batch_insert(conn, batch)
 
-        # Final flush
-        if batch:
-            batch_insert(conn, batch)
+            conn.close()
+            print("✅ Done.")
 
-        conn.close()
-        print("✅ Done.")
+        except botocore.exceptions.ClientError as err:
+            print("❌ S3 access failed.")
+            return Failed(message=str(err))
+
+        except IntegrityError as exc:
+            conn.rollback()
+            logger.error(f"❌ Database integrity error: {exc}")
+            return Failed(message=str(exc))
+
+        except DatabaseError as exc:
+            conn.rollback()
+            logger.error(f"❌ Database error: {exc}")
+            return Failed(message=str(exc))
 
 
 @flow(name="clean-obs-logs")
@@ -275,7 +291,7 @@ async def clean_obs_logs(
         db_host = os.environ["POSTGRES_HOST"]
         db_port = os.environ["POSTGRES_PORT"]
 
-        conn = psycopg2.connect(dbname="quotas_test", user=db_user, password=db_password, host=db_host, port=db_port)
+        conn = psycopg2.connect(dbname=DB_NAME, user=db_user, password=db_password, host=db_host, port=db_port)
 
         with conn:
             with conn.cursor() as cur:

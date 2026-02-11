@@ -15,6 +15,7 @@
 """Create the database used in performance indicator"""
 
 import os
+from urllib.parse import quote_plus
 
 from prefect import flow, get_run_logger, task
 from sqlalchemy import create_engine
@@ -58,7 +59,6 @@ def create_schema(db_url: str):
         engine (sqlalchemy.engine.Engine): SQLAlchemy database engine connected to the target database.
     """
     logger = get_run_logger()
-    logger.info(f"Received: {db_url}")
     engine = create_engine(db_url)
     logger.info("Call the create_all")
     Base.metadata.create_all(engine)
@@ -126,7 +126,7 @@ async def init_pi_database(env: FlowEnvArgs):
 
         db_url = (
             f"postgresql+psycopg2://{os.environ['POSTGRES_USER']}:"
-            f"{os.environ['POSTGRES_PASSWORD']}@{os.environ['POSTGRES_HOST']}:"
+            f"{quote_plus(os.environ['POSTGRES_PASSWORD'])}@{os.environ['POSTGRES_HOST']}:"
             f"{os.environ['POSTGRES_PORT']}/{os.environ['POSTGRES_PI_DB']}"
         )
         # Prefect tasks attempt to serialize inputs (for caching, retries, mapping, etc.) and

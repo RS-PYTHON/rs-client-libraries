@@ -68,12 +68,7 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
 
 
 @task(name="Cadip session search")
-async def cadip_session_search(
-    env: FlowEnvArgs,
-    cadip_collection_identifier: str,
-    start_datetime: str,
-    end_datetime: str,
-) -> ItemCollection:
+async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: str, limit: int = 10) -> ItemCollection:
     """
     Search for CADIP sessions within a given time interval.
 
@@ -82,14 +77,8 @@ async def cadip_session_search(
             Flow environment arguments (e.g., owner_id, credentials).
         cadip_collection_identifier:
             CADIP collection identifier (e.g., "s1_sgs") to specify the station.
-        start_datetime:
-            Start of the search interval in ISO 8601 format (string).
-        end_datetime:
-            End of the search interval in ISO 8601 format (string).
-
-    Raises:
-        ValueError:
-            If start_datetime or end_datetime is not provided.
+        limit:
+            Number maximum of STAC items to be retrieved
 
     Returns:
         ItemCollection:
@@ -103,8 +92,18 @@ async def cadip_session_search(
 
         cadip_client: CadipClient = flow_env.rs_client.get_cadip_client()
 
+        # Current time in UTC
+        end_datetime: datetime = datetime.now(timezone.utc)
+
+        # Go back 10 hours
+        start_datetime: datetime = end_datetime - timedelta(hours=10)
+
+        # Format timestamps in ISO 8601 with Z suffix
+        start_str = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        end_str = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
         # Validate input datetimes
-        if not start_datetime or not end_datetime:
+        if not start_str or not end_str:
             raise ValueError("start_datetime or end_datetime is not set properly")
 
         # Build CQL2 query for temporal intersection
@@ -113,10 +112,10 @@ async def cadip_session_search(
                 "op": "t_intersects",
                 "args": [
                     {"property": "datetime"},
-                    {"interval": [start_datetime, end_datetime]},
+                    {"interval": [start_str, end_str]},
                 ],
             },
-            "limit": 10,
+            "limit": limit,
             "sortby": [{"field": "datetime", "direction": "desc"}],
         }
 
@@ -207,12 +206,19 @@ class CadipCollections(str, Enum):
     S1_SGS = "s1_sgs"
     S1_MPS = "s1_mps"
     S1_MTI = "s1_mti"
+    S1_NSG = "s1_nsg"
+    S1_PAR = "s1_par"
+    S1_INS = "s1_ins"
+    S1_KSE = "s1_kse"
+    S2_PAR = "s2_par"
     S2_SGS = "s2_sgs"
+    S2_INS = "s2_ins"
+    S2_KSE = "s2_kse"
     S3_SGS = "s3_sgs"
 
 
 @flow(name="select and stage a session")
-async def stage_selected_session(cadip_collection: CadipCollections, owner_identifier: str = "pcuq"):
+async def stage_selected_session(cadip_collection: CadipCollections, owner_identifier: str = "copernicus"):
     """
     Stage a selected CADIP session for processing.
 
@@ -221,7 +227,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
 
     Args:
         cadip_collection (CadipCollections): The CADIP collection to search within.
-        owner_identifier (str, optional): The owner identifier for the flow environment. Defaults to "pcuq".
+        owner_identifier (str, optional): The owner identifier for the flow environment. Defaults to "copernicus".
 
     Raises:
         ValueError: If no CADIP session is found within the specified time window.
@@ -234,27 +240,15 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
     with flow_env.start_span(__name__, "stage_selected_session"):
         logger = get_run_logger()
 
-        # Current time in UTC
-        end_datetime: datetime = datetime.now(timezone.utc)
-
-        # Go back 10 hours
-        start_datetime: datetime = end_datetime - timedelta(hours=10)
-
-        # Format timestamps in ISO 8601 with Z suffix
-        start_str = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-        end_str = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-
         # Search for CADIP sessions in the given time window
         session_found = cadip_session_search.submit(
             flow_env.serialize(),
             cadip_collection_identifier=cadip_collection,
-            start_datetime=start_str,
-            end_datetime=end_str,
         ).result()
 
         if not session_found:
             raise ValueError(
-                f"No Cadip session found for start_datetime={start_datetime!r} and end_datetime={end_datetime!r}",
+                "No Cadip session found.",
             )
 
         # Build dictionary of sessions with descriptive keys
@@ -282,25 +276,86 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
         selected_session: str = session_list[selection.selected.value]  # type: ignore
         logger.info(f"Internal identifier: {selected_session}")
 
-        # Build catalog collection name based on CADIP collection
-        sat = cadip_collection[1]
-        catalog_cadip_collection = f"s0{sat}-cadip-session"
+        await stage_session_common(flow_env, cadip_collection, selected_session)
 
-        # URL to search the STAC ItemCollection
-        cadip_client = flow_env.rs_client.get_cadip_client()
-        cadip_search_url = f"{cadip_client.href_service}/search?ids={selected_session}"
 
-        # Stage the selected session
-        date1 = datetime.now(timezone.utc)
-        result_staging = cadip_session_stage.submit(
+@flow(name="select and stage latest session")
+async def stage_latest_session(cadip_collection: CadipCollections, owner_identifier: str = "copernicus"):
+    """
+    Stage the latest CADIP session from a selected station.
+
+    This function searches for CADIP sessions within a 10-hour window and get the latest.
+
+    Args:
+        cadip_collection (CadipCollections): The CADIP collection to search within.
+        owner_identifier (str, optional): The owner identifier for the flow environment. Defaults to "copernicus".
+
+    Raises:
+        ValueError: If no CADIP session is found within the specified time window.
+
+    Returns:
+        None
+    """
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
+    with flow_env.start_span(__name__, "stage_selected_session"):
+        logger = get_run_logger()
+
+        # Search for CADIP sessions in the given time window
+        session_found = cadip_session_search.submit(
             flow_env.serialize(),
-            cadip_search_url=cadip_search_url,
-            catalog_cadip_collection=catalog_cadip_collection,
-        )
-        result_staging.result()  # type: ignore[unused-coroutine]
-        date2 = datetime.now(timezone.utc)
-        result_artifact = create_result_artifact.submit(
-            selected_session,
-            date2 - date1,
-        )
-        result_artifact.result()  # type: ignore[unused-coroutine]
+            cadip_collection_identifier=cadip_collection,
+            limit=1,
+        ).result()
+
+        if not session_found:
+            raise ValueError(
+                "No Cadip session found.",
+            )
+
+        selected_session: str = session_found[0].id  # type: ignore
+        logger.info(f"Internal identifier: {selected_session}")
+        # Build catalog collection name based on CADIP collection
+        await stage_session_common(flow_env, cadip_collection, selected_session)
+
+
+async def stage_session_common(flow_env: FlowEnv, cadip_collection: CadipCollections, selected_session: str):
+    """
+    Stage a CADIP session by searching and staging it in the catalog.
+    This asynchronous function stages a selected CADIP session by:
+    Args:
+        flow_env (FlowEnv): The flow environment containing the RS client and configuration.
+        cadip_collection (CadipCollections): The CADIP collection identifier (used to determine satellite).
+        selected_session (str): The session ID to be staged.
+    Returns:
+        None
+    Raises:
+        Exception: Any exceptions raised by the cadip_session_stage or create_result_artifact tasks.
+    Notes:
+        - The function uses Prefect's task submission pattern with result() calls to wait for completion.
+        - Staging duration is calculated and included in the result artifact.
+        - Requires an active logger context (from get_run_logger()).
+    """
+
+    logger = get_run_logger()
+
+    # Build catalog collection name based on CADIP collection
+    sat = cadip_collection[1]
+    catalog_cadip_collection = f"s0{sat}-cadip-session"
+
+    # URL to search the STAC ItemCollection
+    cadip_client = flow_env.rs_client.get_cadip_client()
+
+    # Stage the selected session
+    date_start = datetime.now(timezone.utc)
+    result_staging = cadip_session_stage.submit(
+        flow_env.serialize(),
+        cadip_search_url=f"{cadip_client.href_service}/search?ids={selected_session}",
+        catalog_cadip_collection=catalog_cadip_collection,
+    )
+    result_staging.result()  # type: ignore[unused-coroutine]
+
+    # Create artifact
+    result_artifact = create_result_artifact.submit(selected_session, datetime.now(timezone.utc) - date_start)
+    result_artifact.result()  # type: ignore[unused-coroutine]
+    logger.info(f"Session {selected_session} staged successfully.")
