@@ -47,7 +47,7 @@ def list_recent_files(s3, platform: str, max_files: int, threshold_minute: int):
 
     paginator = s3.get_paginator("list_objects_v2")
 
-    for page in paginator.paginate(...):
+    for page in paginator.paginate(Bucket=platform + LOG_BUCKET_SUFFIX, Prefix=LOG_PREFIX):
         for obj in page.get("Contents", []):
             key = obj["Key"]
             last_modified = obj["LastModified"]
