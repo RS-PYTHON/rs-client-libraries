@@ -31,6 +31,7 @@ from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_common import prefect_utils
 from rs_workflows import catalog_flow
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
 
 
@@ -227,20 +228,56 @@ def create_stac_item(
 def update_eopf_assets(
     env,
     input_products: list[dict],
-    payload: dict,
+    payload: PayloadSchema,
     dpr_processor: DprProcessor,
 ) -> tuple[Any, Any]:
+    """Update EOPF assets by extracting metadata and creating STAC items.
 
+    This Prefect task processes output products from a DPR (Data Processing Request)
+    workflow, extracts EOPF (Earth Observation Processing Framework) metadata from
+    .zattrs files, and generates STAC (SpatioTemporal Asset Catalog) items for
+    each discovered product.
+
+    Workflow:
+        1. Lists all .zattrs files in the output product paths
+        2. Reads and validates EOPF discovery metadata from each .zattrs file
+        3. Extracts product type information
+        4. Creates corresponding STAC items for catalog registration
+
+    Args:
+        env: Environment configuration object containing runtime settings.
+        input_products: List of dictionaries representing input product metadata.
+        payload: PayloadSchema object containing I/O configuration, including
+            output product paths to scan for .zattrs files.
+        dpr_processor: DprProcessor instance used for processing context and
+            STAC item creation.
+
+    Returns:
+        A tuple containing:
+            - stac_items (list): List of STAC items created from EOPF metadata.
+            - eopf_types (list): List of product types extracted from the .zattrs
+              files (corresponds to stac_items by index).
+
+    Raises:
+        RuntimeError: If any .zattrs file cannot be read or does not contain
+            required EOPF discovery metadata (stac_discovery.properties).
+
+    Notes:
+        - Requires .zattrs files to follow EOPF metadata conventions
+        - Each .zattrs file must contain stac_discovery.properties.product:type
+        - Uses S3 storage backend (via s3_list and read_zattrs_sync functions)
+    """
     logger = get_run_logger()
     logger.info("Starting EOPF asset update.")
     logger.info(f"Payload received: {payload}")
     logger.info("Input products: %s", input_products)
     # Get all .zattrs files found in the output products paths
     zattrs_list = []
-    for prod in payload["I/O"]["output_products"]:
-        if prod.get("final_product", True):
-            path = prod["path"]
-            zattrs_list.extend(extract_products_and_zattrs(s3_list(path), path))
+    if payload.io is None:
+        raise ValueError("Payload I/O configuration is missing.")
+    for prod in payload.io.output_products:
+        path = prod.path
+        zattrs_list.extend(extract_products_and_zattrs(s3_list(path), path))
     # List & extract
     logger.info(f"Found {len(zattrs_list)} .zattrs files under path.")
 
@@ -346,7 +383,7 @@ def compute_eopf_origin_datetime(env, input_products, dpr_processor: DprProcesso
 async def run_processor(
     env: FlowEnvArgs,
     processor: DprProcessor,
-    payload: dict,
+    payload: PayloadSchema,
     cluster_info: ClusterInfo,
     s3_payload_run: str,
     input_products: list[dict],

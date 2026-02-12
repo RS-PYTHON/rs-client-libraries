@@ -226,13 +226,10 @@ def test_update_eopf_assets_happy_path(mocker):
         {"id": "input_1"},
     ]
 
-    payload = {
-        "I/O": {
-            "output_products": [
-                {"path": "s3://my-bucket/output/"},
-            ],
-        },
-    }
+    payload = mocker.Mock()
+    payload.io.output_products = [
+        mocker.Mock(path="s3://my-bucket/output/"),
+    ]
 
     all_files = [
         "s3://my-bucket/output/product_a/.zattrs",

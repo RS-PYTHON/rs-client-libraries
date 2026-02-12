@@ -173,11 +173,10 @@ async def dpr_processing(
             markdown=pretty_markdown,
             description="DPR Payload file",
         )
-
         # re-create the generated payload as a dictionary, as it will be used for
         # the payload file to upload to S3. here, the secrets are revealed
-        generated_payload_res_as_dict = generated_payload_res.dump(True)
-        yaml_str = yaml.dump(generated_payload_res_as_dict, default_flow_style=False, sort_keys=False)
+        generated_payload_res_with_secrets = generated_payload_res.dump(reveal_secrets=True)
+        yaml_str = yaml.dump(generated_payload_res_with_secrets, default_flow_style=False, sort_keys=False)
         # upload the config payload file to S3
         tmp_dir = std_tempfile.gettempdir()
         tmp_file_path = os.path.join(tmp_dir, f"dpr_payload_{datetime.datetime.now().timestamp()}.yaml")
@@ -195,7 +194,7 @@ async def dpr_processing(
         processed_items = run_processor.submit(
             flow_env.serialize(),
             dpr_input.processor_name,
-            generated_payload_res_as_dict,
+            generated_payload_res,
             cluster_info,
             dpr_input.s3_payload_file,
             dpr_input.input_products,

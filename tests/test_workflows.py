@@ -144,7 +144,13 @@ class MockRsClient(Mock):
 class PayloadStub:  # pylint: disable=too-few-public-methods
     """Minimal payload object used by the flow tests."""
 
-    def dump(self):
+    def __init__(self):
+        self.workflow = []
+        self.io = MagicMock()
+        self.io.input_products = []
+        self.io.output_products = []
+
+    def dump(self, reveal_secrets: bool = False):  # pylint: disable=unused-argument
         """Return the minimal structure consumed by yaml.dump()."""
         return {"workflow": [], "io": {"input_products": [], "output_products": []}}
 
@@ -334,6 +340,22 @@ async def test_dpr_processing(
             ],
         },
     }
+    # Mock attribute access for updated dpr_flow.py
+    # payload.io.output_products
+    mock_out_grd = MagicMock()
+    mock_out_grd.id = "GRD"
+    mock_out_grd.path = "s3://out/grd"
+
+    mock_out_ntc = MagicMock()
+    mock_out_ntc.id = "NTC"
+    mock_out_ntc.path = "s3://out/ntc"
+
+    mock_payload.io.output_products = [mock_out_grd, mock_out_ntc]
+
+    # Mock payload.workflow[0].inputs.values() for record_performance.py
+    mock_step = MagicMock()
+    mock_step.inputs = {"input1": "20231003T110000"}  # Provides a timestamp for extract_min_datetime
+    mock_payload.workflow = [mock_step]
 
     payload_future = MagicMock()
     payload_future.result.return_value = mock_payload
