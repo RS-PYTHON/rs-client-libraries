@@ -326,7 +326,8 @@ def test_update_eopf_assets_skips_non_final_products(mocker):
     mock_s3_list = mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://out/final/prod/.zattrs"])
 
     mocker.patch(
-        "rs_workflows.dpr_flow.extract_products_and_zattrs", return_value=[("prod", "s3://out/final/prod/.zattrs")],
+        "rs_workflows.dpr_flow.extract_products_and_zattrs",
+        return_value=[("prod", "s3://out/final/prod/.zattrs")],
     )
 
     mocker.patch(

@@ -276,23 +276,25 @@ def update_eopf_assets(
     if payload.io is None:
         raise ValueError("Payload I/O configuration is missing.")
     for prod in payload.io.output_products:
+        logger.info(f"Checking if output product {prod.id} should be added to the catalog")
         if prod.final_product:
-            path = prod.path
-            zattrs_list.extend(extract_products_and_zattrs(s3_list(path), path))
+            zattrs_list.extend(extract_products_and_zattrs(s3_list(prod.path), prod.path))
+            logger.info(f"Added {prod.id} to the list of products to be added to the catalog.")
+        else:
+            logger.info(f"Output product {prod.id} is not marked as final_product, skipping catalog registration.")
     # List & extract
     logger.info(f"Found {len(zattrs_list)} .zattrs files under path.")
 
     stac_items = []
     eopf_types = []
     for product_name, zattrs_s3_location in zattrs_list:
-        logger.debug(f"Discovered .zattrs file: {zattrs_s3_location}")
+        logger.info(f"Product = {product_name} | zattrs = {zattrs_s3_location}")
         # Read metadata
         zattrs_data = read_zattrs_sync(zattrs_s3_location)
         if not zattrs_data:
             logger.error(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
             raise RuntimeError(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
         logger.info(f"DPR processor output {zattrs_data}")
-        logger.info(f"Path = {path} | zattrs = {zattrs_s3_location}")
 
         # Extract EOPF info
         if "stac_discovery" not in zattrs_data or "properties" not in zattrs_data["stac_discovery"]:
