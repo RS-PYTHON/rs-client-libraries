@@ -347,7 +347,7 @@ def test_compute_eopf_origin_datetime_single_item(mocker):
         return_value=mock_future,
     )
 
-    result = compute_eopf_origin_datetime(env, input_products, DprProcessor.S1L0)
+    result = compute_eopf_origin_datetime(env, input_products)
 
     assert result == "2024-01-10T12:00:00+00:00"
 
@@ -385,7 +385,7 @@ def test_compute_eopf_origin_datetime_multiple_items_returns_max(mocker):
         side_effect=[future_1, future_2],
     )
 
-    result = compute_eopf_origin_datetime(env, input_products, DprProcessor.S1L0)
+    result = compute_eopf_origin_datetime(env, input_products)
 
     assert result == "2024-02-01T00:00:00+00:00"
 
@@ -414,6 +414,6 @@ def test_compute_eopf_origin_datetime_raises_on_catalog_error(mocker):
 
     with pytest.raises(
         RuntimeError,
-        match="No valid CADU items found to compute eopf:origin_datetime",
+        match="No valid items found to compute eopf:origin_datetime",
     ):
-        compute_eopf_origin_datetime(env, input_products, DprProcessor.S1L0)
+        compute_eopf_origin_datetime(env, input_products)

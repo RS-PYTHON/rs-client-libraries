@@ -26,7 +26,6 @@ from prefect.blocks.system import Secret
 from pydantic import SecretStr
 from pystac import Asset, Item, ItemCollection
 
-from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_client.rs_client import RsClient
 from rs_common import prefect_utils
 from rs_workflows import (
@@ -355,7 +354,7 @@ async def test_dpr_processing(
     # build realistic input
     dpr_input = DprProcessIn(
         env=FlowEnvArgs(owner_id=OWNER_ID),
-        processor_name=DprProcessor.MOCKUP,
+        processor_name="mockup",
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label="cluster_label",
@@ -421,7 +420,7 @@ async def test_dpr_processing_raises_on_unstaged_adf(
 
     dpr_input = DprProcessIn(
         env=FlowEnvArgs(owner_id=OWNER_ID),
-        processor_name=DprProcessor.MOCKUP,
+        processor_name="mockup",
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label="cluster_label",
