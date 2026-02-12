@@ -14,8 +14,10 @@
 
 """Test the Prefect workflows"""
 
+
 import json
 import tempfile
+import typing
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +43,7 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
     ProcessingMode,
 )
+from rs_workflows.payload_generator import RSPY_TEMP_BUCKET
 from tests.conftest import (
     COLLECTION_ID,
     MOCKED_BUCKET,
@@ -51,6 +54,7 @@ from tests.conftest import (
     S3_REGION,
     S3_SECRETKEY,
 )
+from tests.test_dpr_flow_helper import make_mock_item
 
 CONFIG_DIR = Path(__file__).parent / "resources"
 
@@ -62,24 +66,6 @@ CONFIG_DIR = Path(__file__).parent / "resources"
 RSPY_APIKEY = "RSPY_APIKEY"
 JUPYTERHUB_API_TOKEN = "JUPYTERHUB_API_TOKEN"
 DASK_CLUSTER_LABEL = "DASK_CLUSTER_LABEL"
-
-# Realistic processed items returned by run_processor
-ITEMS = {
-    "S1_GRD": Item(
-        id="S1A_20240101_GRD",
-        properties={"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
-        geometry={},
-        bbox=[],
-        datetime=datetime.now(),
-    ),
-    "S2_NTC": Item(
-        id="S2A_20240101_NTC",
-        properties={"product:type": "S2_NTC", "datetime": "2024-01-01T00:00:00Z"},
-        geometry={},
-        bbox=[],
-        datetime=datetime.now(),
-    ),
-}
 
 MAP_PRODUCT_TO_COLLECTION = [
     {"GRD": ("S1_GRD", "OUTPUT_GRD_COLLECTION")},
@@ -166,6 +152,7 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 #############
 
 
+@typing.no_type_check
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "mocked_stac_catalog_search_inside_collection",
@@ -193,9 +180,6 @@ async def test_dpr_processing(
     artifact_mock = AsyncMock()
     mocker.patch.object(on_demand_processing, "acreate_markdown_artifact", artifact_mock)
 
-    # Mock the update_eopf_assets function
-    mocker.patch("rs_workflows.dpr_flow.update_eopf_assets", return_value=[ITEMS.values(), ITEMS.keys()])
-
     # Upload a mock processor log file
     with tempfile.NamedTemporaryFile() as tmp:
         tmp.write(b"Dummy processor log contents\n")
@@ -204,9 +188,9 @@ async def test_dpr_processing(
 
     # Mock posting of the items in the catalog
     item_collections = [list(col.values())[0][1] for col in MAP_PRODUCT_TO_COLLECTION]
-    for collection_id in item_collections:
+    for result_collection_id in item_collections:
         responses.post(
-            f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}/items",
+            f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{result_collection_id}/items",
             json={"status": status.HTTP_200_OK},
             status=status.HTTP_200_OK,
         )
@@ -215,6 +199,44 @@ async def test_dpr_processing(
     spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
     spy_s3_upload_file = mocker.spy(prefect_utils, "s3_upload_file")
     spy_s3_delete = mocker.spy(prefect_utils, "s3_delete")
+
+    ########################################
+    # Mock items returned by the processor #
+    ########################################
+
+    def make_mock_processed_item(item_id: str, product_type: str):
+        """Create a realistic processed item as returned by the DPR processor."""
+        return {
+            "stac_discovery": {
+                "id": item_id,
+                "geometry": {"type": "Polygon", "coordinates": [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]]},
+                "bbox": [-10, 40, 10, 60],
+                "properties": {
+                    "datetime": "2024-01-01T12:00:00Z",
+                    "product:type": product_type,  # ← this must be a real string!
+                },
+            },
+        }
+
+    expected_items = {
+        "GRD": make_mock_processed_item("S1A_20240101_GRD", "S1_GRD"),
+        "NTC": make_mock_processed_item("S2A_20240101_NTC", "S2_NTC"),
+    }
+
+    # Upload .zattrs file
+    mocked_s3.create_bucket(Bucket=RSPY_TEMP_BUCKET)
+    for product_name, zattrs_data in expected_items.items():
+        mocked_s3.put_object(
+            Body=json.dumps(zattrs_data),
+            Bucket=RSPY_TEMP_BUCKET,
+            Key=f"dpr_mockup_results/{OWNER_ID}/TEST_FLOW_OUTPUT/{product_name}/.zattrs",
+        )
+
+    # Mock catalog_flow.get_item method
+    mock_future = mocker.Mock()
+    max_eopf_datetime = "2024-01-10T12:00:00+00:00"
+    mock_future.result.return_value = make_mock_item(max_eopf_datetime, mocker)
+    mocker.patch("rs_workflows.dpr_flow.catalog_flow.get_item.submit", return_value=mock_future)
 
     ################
     # Init and run #
@@ -230,7 +252,7 @@ async def test_dpr_processing(
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
-        input_products=[{"input_name": ("dummy_id", "dummy_coll")}],
+        input_products=[{"input_name": ("dummy_id", "dummy_collection")}],
         generated_product_to_collection_identifier=MAP_PRODUCT_TO_COLLECTION,  # type: ignore
         auxiliary_product_to_collection_identifier={"*": COLLECTION_ID},
         processing_mode=[ProcessingMode.NRT],  # type: ignore[list-item]
@@ -247,21 +269,35 @@ async def test_dpr_processing(
     # Asserts #
     ###########
 
-    # Verify correct collection and item
-    assert spy_add_item.call_count == len(ITEMS)
-    for i in range(len(ITEMS)):
-        _, collection_id, item = spy_add_item.call_args_list[i][0]
-        expected_item = list(ITEMS.values())[i]
-        assert collection_id == list(MAP_PRODUCT_TO_COLLECTION[i].values())[0][1]
-        assert item == expected_item
+    # catalog_client.CatalogClient.add_item is the last step of the flow.
+    # We check that it was called with the expected items, generated by the processor.
+    assert spy_add_item.call_count == len(expected_items)
+    for i in range(len(expected_items)):
 
-    # verify asset, temporarily commented out until asset creation is re-enabled
-    # asset_key = "S1A_20240101_GRD.zarr"
-    # asset = item.assets[asset_key]
-    # assert asset.href == f"s3://{MOCKED_BUCKET}/grd-output/S1A_20240101_GRD.zarr"
-    # assert asset.title == asset_key
-    # assert asset.media_type == "application/vnd+zarr"
-    # assert asset.roles == ["data", "metadata"]
+        # Check the values of the collection_id and item passed to the add_item method.
+        _, result_collection_id, result_item = spy_add_item.call_args_list[i][0]
+        assert result_collection_id == list(MAP_PRODUCT_TO_COLLECTION[i].values())[0][1]
+
+        product_name = result_item.id
+        expected_stac_data = expected_items[product_name]["stac_discovery"]
+        expected_item = Item(
+            id=product_name,
+            geometry=expected_stac_data["geometry"],
+            bbox=expected_stac_data["bbox"],
+            datetime=datetime.fromisoformat(expected_stac_data["properties"]["datetime"]),
+            properties=expected_stac_data["properties"]
+            | {"eopf:origin_datetime": max_eopf_datetime, "stac_version": "1.1.0"},
+            stac_extensions=[],
+            assets={
+                product_name: Asset(
+                    href=f"s3://{RSPY_TEMP_BUCKET}/dpr_mockup_results/{OWNER_ID}/TEST_FLOW_OUTPUT/{product_name}",
+                    title=product_name,
+                    media_type="application/vnd+zarr",
+                    roles=["data", "metadata"],
+                ),
+            },
+        )
+        assert result_item.to_dict() == expected_item.to_dict()
 
     # --- verify s3_upload_file was called with the expected destination (second arg) ---
     upload_calls = spy_s3_upload_file.call_args_list

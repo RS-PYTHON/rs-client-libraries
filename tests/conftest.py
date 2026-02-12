@@ -38,7 +38,6 @@ from prefect.testing.utilities import prefect_test_harness
 from pydantic import SecretStr
 from starlette import status
 
-from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_client.rs_client import RsClient
 from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
@@ -238,6 +237,10 @@ def clear_caches():
 def mocked_s3(monkeypatch):
     """Return a mocked S3 client."""
     monkeypatch.setenv("MOTO_S3_CUSTOM_ENDPOINTS", S3_ENDPOINT)
+    monkeypatch.setenv("S3_ACCESSKEY", S3_ACCESSKEY)
+    monkeypatch.setenv("S3_SECRETKEY", S3_SECRETKEY)
+    monkeypatch.setenv("S3_REGION", S3_REGION)
+    monkeypatch.setenv("S3_ENDPOINT", S3_ENDPOINT)
     with mock_aws():
         client = boto3.client(
             service_name="s3",
@@ -805,7 +808,7 @@ def _mocked_staging_response(ogcapi_response_sample, scope="function"):
 @pytest.fixture(name="mocked_dpr_response")
 def _mocked_dpr_response(ogcapi_response_sample, scope="function"):
     """Mock nominal dpr mockup processor response"""
-    yield mocked_ogcapi_response(ogcapi_response_sample, DprProcessor.MOCKUP.value)
+    yield mocked_ogcapi_response(ogcapi_response_sample, "mockup")
 
 
 @pytest.fixture(name="patch_prefect_logger", autouse=True, scope="function")
