@@ -53,14 +53,14 @@ def get_dpr_client() -> DprClient:
 
 
 @responses.activate
-@pytest.mark.parametrize("process", [DprProcessor.MOCKUP, DprProcessor.S1L0])
-def test_dpr_client(mocker, dpr_client: DprClient, process: DprProcessor, ogcapi_response_sample: dict):
+@pytest.mark.parametrize("process", ["mockup", DprProcessor.S1L0.value])
+def test_dpr_client(mocker, dpr_client: DprClient, process: str, ogcapi_response_sample: dict):
     """Test nominal DPR service response"""
 
     # Mock response from DPR service
     responses.add(
         method=responses.POST,
-        url=f"{MOCKED_RSPY_WEBSITE}/dpr/processes/{process.value}/execution",
+        url=f"{MOCKED_RSPY_WEBSITE}/dpr/processes/{process}/execution",
         json=ogcapi_response_sample,
         status=status.HTTP_200_OK,
     )

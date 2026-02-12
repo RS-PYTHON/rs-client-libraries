@@ -113,7 +113,7 @@ def create_stac_item(
     eopf_feature,
     s3_data_location,
     product_name: str,
-    dpr_processor: DprProcessor,
+    dpr_processor: str,
 ) -> Item:
     """
     Create a list of STAC Items from EOPF features and processing payload metadata.
@@ -126,12 +126,14 @@ def create_stac_item(
     Args:
         eopf_features (list[dict]): List of GeoJSON-like feature dictionaries.
         s3_data_location (str): Base S3 path where output products are stored.
+        product_name (str): Product name
+        dpr_processor (str): DPR processor name
 
     Returns:
         list[Item]: List of constructed STAC Item objects.
     """
 
-    def build_item(feature_dict: dict, eopf_origin_datetimes, product_name, dpr_processor: DprProcessor) -> Item:
+    def build_item(feature_dict: dict, eopf_origin_datetimes, product_name, dpr_processor: str) -> Item:
         """
         Build a STAC Item from a feature dictionary.
 
@@ -157,7 +159,7 @@ def create_stac_item(
         # - do not set stac_extension SAR for Sentinel-3 products "with instrument different from SRAL"
         # Get in line with the story once clarified !
         stac_extensions: list[str] = []
-        if dpr_processor == DprProcessor.S1L0:
+        if dpr_processor == DprProcessor.S1L0.value:
             stac_extensions = [
                 # TODO: We don't include the full list for now to avoid issues with catalog ingestion
                 # This is because some extensions may require specific properties that are not properly
@@ -209,7 +211,7 @@ def create_stac_item(
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
-    eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products, dpr_processor)
+    eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
 
     item = build_item(eopf_feature, eopf_origin_datetime, product_name, dpr_processor)
     item.assets = {product_name: build_asset(s3_data_location, product_name)}
@@ -222,7 +224,7 @@ def update_eopf_assets(
     env,
     input_products: list[dict],
     payload: dict,
-    dpr_processor: DprProcessor,
+    dpr_processor: str,
 ) -> tuple[Any, Any]:
     """
     Update EOPF-related STAC assets by discovering products in S3 and
@@ -252,6 +254,8 @@ def update_eopf_assets(
     payload : dict
         Workflow payload containing input/output definitions. The S3 discovery
         path is read from ``payload["I/O"]["output_products"]``.
+    dpr_processor: str
+        DPR processor name
 
     Returns
     -------
@@ -308,12 +312,12 @@ def update_eopf_assets(
     return stac_items, eopf_types
 
 
-def compute_eopf_origin_datetime(env, input_products, dpr_processor: DprProcessor) -> str:
+def compute_eopf_origin_datetime(env, input_products) -> str:
     """
-    Compute the maximum ``eopf:origin_datetime`` across all input CADU products.
+    Compute the maximum ``eopf:origin_datetime`` across all input products.
 
     For each input product, this function retrieves the corresponding item
-    from the catalog using its CADU ID and collection ID, extracts the
+    from the catalog using its item ID and collection ID, extracts the
     ``eopf:origin_datetime`` property, and returns the latest (maximum)
     datetime value found.
 
@@ -327,7 +331,7 @@ def compute_eopf_origin_datetime(env, input_products, dpr_processor: DprProcesso
         to the catalog flow.
     input_products : Iterable[dict]
         Iterable of input product mappings. Each mapping is expected to
-        contain values of the form ``(cadu_id, collection_id)``.
+        contain values of the form ``(item_id, collection_id)``.
 
     Returns
     -------
@@ -337,36 +341,33 @@ def compute_eopf_origin_datetime(env, input_products, dpr_processor: DprProcesso
         returns the fallback value ``"2023-01-01T00:00:00Z"``.
     """
     logger = get_run_logger()
-    cadu_items = []
-    if dpr_processor == DprProcessor.MOCKUP:
-        logger.info("Mockup processor detected, using fixed eopf:origin_datetime value.")
-        return "2023-01-01T00:00:00Z"
+    items = []
 
     for input_product in input_products:
-        for _, (cadu_id, collection_id) in input_product.items():
+        for _, (item_id, collection_id) in input_product.items():
             try:
                 future = catalog_flow.get_item.submit(
                     env.serialize(),
                     collection_id,
-                    cadu_id,
+                    item_id,
                 )
-                cadu_items.append(future.result())
+                items.append(future.result())
             except RuntimeError as rte:
-                logger.exception(f"Failed to get CADU item '{cadu_id}' from collection '{collection_id}'")
-                raise RuntimeError("No valid CADU items found to compute eopf:origin_datetime") from rte
+                logger.exception(f"Failed to get item '{item_id}' from collection '{collection_id}'")
+                raise RuntimeError("No valid items found to compute eopf:origin_datetime") from rte
 
-    logger.info(f"Items matching input found in catalog: {len(cadu_items)}")
+    logger.info(f"Items matching input found in catalog: {len(items)}")
 
-    if not cadu_items:
+    if not items:
         # error maybe?
-        logger.error("No valid CADU items found to compute eopf:origin_datetime. Exit")
-        raise RuntimeError("No valid CADU items found to compute eopf:origin_datetime")
+        logger.error("No valid items found to compute eopf:origin_datetime. Exit")
+        raise RuntimeError("No valid items found to compute eopf:origin_datetime")
 
     max_eopf_datetime = max(
         datetime.datetime.fromisoformat(
             item.to_dict()["properties"]["eopf:origin_datetime"].replace("Z", "+00:00"),  # type: ignore
         )
-        for item in cadu_items
+        for item in items
     ).isoformat()
 
     logger.info(f"Maximum eopf datetime computed from all items is {max_eopf_datetime}")
@@ -376,7 +377,7 @@ def compute_eopf_origin_datetime(env, input_products, dpr_processor: DprProcesso
 @task(name="Run DPR processor")
 async def run_processor(
     env: FlowEnvArgs,
-    processor: DprProcessor,
+    processor: str,
     payload: dict,
     cluster_info: ClusterInfo,
     s3_payload_run: str,
@@ -400,7 +401,7 @@ async def run_processor(
             status="OK",
             dpr_processing_input_stac_items=s3_payload_run,
             payload=payload,
-            dpr_processor_name=processor.value,
+            dpr_processor_name=processor,
         )
         # Trigger the processor run from the dpr service
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
@@ -414,7 +415,7 @@ async def run_processor(
             s3_report_dir=s3_payload_dir,
         )
         try:
-            dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
+            dpr_client.wait_for_job(job_status, logger, f"{processor!r} processor")
         finally:
             logger.info(f"Processor execution time: {str(timedelta(seconds=time.time() - start_time))}")
 
