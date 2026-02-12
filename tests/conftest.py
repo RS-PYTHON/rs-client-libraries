@@ -30,7 +30,7 @@ from unittest.mock import MagicMock, mock_open
 
 import boto3
 import pytest
-import pytest_responses
+import pytest_responses  # pylint: disable=unused-import # noqa: F401 # used to avoid adding @responses.activate
 import requests
 import responses
 from moto import mock_aws
@@ -545,7 +545,7 @@ def mocked_stac_catalog_search_inside_collection(request):
                     ],
                     "assets": {
                         "data": {
-                            "href": "s3://mock-bucket/S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ.bin",
+                            "href": "s3://mock-bucket/S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ.bin",  # noqa: E501 # pylint: disable=line-too-long
                         },
                     },
                     "geometry": {
@@ -600,16 +600,16 @@ def mocked_stac_catalog_search_inside_collection(request):
         collections = set()
         for feature in json_response["features"]:
 
-            id = feature["id"]
-            ids.append(id)
+            _id = feature["id"]  # type: ignore
+            ids.append(_id)
 
-            collection = feature["collection"]
+            collection = feature["collection"]  # type: ignore
             collections.add(collection)
 
             json_response_feature = copy.deepcopy(json_response)
             json_response_feature["features"] = [feature]
             responses.get(
-                url=f"{MOCKED_RSPY_WEBSITE}/{service}/search?ids={id}&collections={collection}",
+                url=f"{MOCKED_RSPY_WEBSITE}/{service}/search?ids={_id}&collections={collection}",
                 json=json_response_feature,
                 status=status.HTTP_200_OK,
             )
@@ -695,8 +695,8 @@ def stac_client_(generic_rs_client):
     yield generic_rs_client.get_catalog_client()
 
 
-@pytest.fixture
-def mocked_stac_catalog_invalid_get_item():
+@pytest.fixture(name="mocked_stac_catalog_invalid_get_item")
+def _mocked_stac_catalog_invalid_get_item():
     """Fixture that mock invalid response of catalog from /collections/{collection-id}/items/{item-id}"""
     data = {
         "code": "NotFoundError",
@@ -720,8 +720,8 @@ def mocked_stac_catalog_invalid_get_item():
     yield MOCKED_RSPY_WEBSITE
 
 
-@pytest.fixture
-def mocked_stac_catalog_get_item():
+@pytest.fixture(name="mocked_stac_catalog_get_item")
+def _mocked_stac_catalog_get_item():
     """Fixture that mock valid response of catalog from /collections/{collection-id}/items/{item-id}"""
     item_id = "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.EOF"
     # Mocked URL
@@ -742,8 +742,8 @@ def mocked_stac_catalog_get_item():
     yield MOCKED_RSPY_WEBSITE
 
 
-@pytest.fixture
-def ogcapi_response_sample() -> dict:
+@pytest.fixture(name="ogcapi_response_sample")
+def _ogcapi_response_sample() -> dict:
     """
     Return auxip FeatureCollection as a dictionary
     """
@@ -796,20 +796,20 @@ def mocked_ogcapi_response(ogcapi_response_sample: dict, process: str):
     )
 
 
-@pytest.fixture
-def mocked_staging_response(ogcapi_response_sample, scope="function"):
+@pytest.fixture(name="mocked_staging_response")
+def _mocked_staging_response(ogcapi_response_sample, scope="function"):
     """Mock nominal staging response"""
     yield mocked_ogcapi_response(ogcapi_response_sample, "staging")
 
 
-@pytest.fixture
-def mocked_dpr_response(ogcapi_response_sample, scope="function"):
+@pytest.fixture(name="mocked_dpr_response")
+def _mocked_dpr_response(ogcapi_response_sample, scope="function"):
     """Mock nominal dpr mockup processor response"""
     yield mocked_ogcapi_response(ogcapi_response_sample, DprProcessor.MOCKUP.value)
 
 
-@pytest.fixture(autouse=True, scope="function")
-def patch_prefect_logger(monkeypatch):
+@pytest.fixture(name="patch_prefect_logger", autouse=True, scope="function")
+def _patch_prefect_logger(monkeypatch):
     """
     Patch get_run_logger in rs_workflows.flow_utils to return a real logger.
     Prevents MissingContextError when FlowEnv.__init__ calls get_run_logger().
@@ -836,8 +836,8 @@ def patch_prefect_logger(monkeypatch):
     )
 
 
-@pytest.fixture
-def sample_unit():
+@pytest.fixture(name="sample_unit")
+def _sample_unit():
     """Fixture that builds a test sample unit"""
     return {
         "name": "unit1",
@@ -856,8 +856,8 @@ def sample_unit():
     }
 
 
-@pytest.fixture
-def mock_dpr_process_in():
+@pytest.fixture(name="mock_dpr_process_in")
+def _mock_dpr_process_in():
     """
     Realistic mock of DprProcessIn matching actual usage in flow_utils.py.
     """
@@ -892,8 +892,8 @@ def mock_dpr_process_in():
     return mock
 
 
-@pytest.fixture
-def mock_store_params():
+@pytest.fixture(name="mock_store_params")
+def _mock_store_params():
     """Fixture that mocks the store params"""
     return StoreParams(
         storage_options=StorageOptions(
@@ -905,8 +905,8 @@ def mock_store_params():
     )
 
 
-@pytest.fixture
-def flow_env(monkeypatch, generic_rs_client: RsClient) -> FlowEnv:
+@pytest.fixture(name="flow_env")
+def _flow_env(monkeypatch, generic_rs_client: RsClient) -> FlowEnv:
     """
     FlowEnv that contains a rs-client (mocked as well).
     The environment variables that FlowEnv reads from prefect blocks are
@@ -926,14 +926,14 @@ def flow_env(monkeypatch, generic_rs_client: RsClient) -> FlowEnv:
     return env
 
 
-@pytest.fixture
-def catalog_client(generic_rs_client):
+@pytest.fixture(name="catalog_client")
+def _catalog_client(generic_rs_client):
     """The catalog client extracted from the RsClient."""
     return generic_rs_client.get_catalog_client()
 
 
-@pytest.fixture
-def mock_storage_config_json(mocker) -> str:
+@pytest.fixture(name="mock_storage_config_json")
+def _mock_storage_config_json(mocker) -> str:
     """
     Fully in-memory mock of /etc/storage_configuration.json
     Uses real json.load() and real open() so we have a realistic parsing
@@ -943,8 +943,8 @@ def mock_storage_config_json(mocker) -> str:
     return "/fake/etc/storage_configuration.json"
 
 
-@pytest.fixture
-def mock_storage_config_invalid_json(mocker) -> str:
+@pytest.fixture(name="mock_storage_config_invalid_json")
+def _mock_storage_config_invalid_json(mocker) -> str:
     """
     Mock a read for an invalid storage_configuration.json file
     """
@@ -999,8 +999,8 @@ class MockResponse:
             raise requests.HTTPError(f"HTTP {self.status_code}")
 
 
-@pytest.fixture
-def sample_config_data():
+@pytest.fixture(name="sample_config_data")
+def _sample_config_data():
     """
     Returns a dictionary representing a sample configuration for testing StorageConfig.
     Includes product-specific, default unit/pipeline storage, and definitions for S3, local, and shared disk storage.
@@ -1039,8 +1039,8 @@ def sample_config_data():
     }
 
 
-@pytest.fixture
-def secrets():
+@pytest.fixture(name="secrets")
+def _secrets():
     """
     Returns a dictionary of mock secrets corresponding to the placeholders in sample_config_data.
     """
@@ -1052,8 +1052,8 @@ def secrets():
     }
 
 
-@pytest.fixture
-def config_file(mocker, sample_config_data):  # pylint: disable=redefined-outer-name
+@pytest.fixture(name="config_file")
+def _config_file(mocker, sample_config_data):  # pylint: disable=redefined-outer-name
     """
     Mocks the storage configuration file using the sample configuration data.
     Avoids creating a physical file on disk.
@@ -1064,14 +1064,14 @@ def config_file(mocker, sample_config_data):  # pylint: disable=redefined-outer-
     return "/dummy/path/config.json"
 
 
-@pytest.fixture
-def _mock_os_env(monkeypatch):
+@pytest.fixture(name="_mock_os_env")
+def __mock_os_env(monkeypatch):
     monkeypatch.setenv("RSPY_HOST_OSAM", "https://dummy-osam")
     return "https://dummy-osam"
 
 
-@pytest.fixture
-def _mock_get_success(monkeypatch):
+@pytest.fixture(name="_mock_get_success")
+def __mock_get_success(monkeypatch):
     """Mock requests.get for successful CSV fetch."""
 
     def _mock_get(url, timeout):
@@ -1084,8 +1084,8 @@ def _mock_get_success(monkeypatch):
     return _mock_get
 
 
-@pytest.fixture
-def _mock_bucket_config_with_fallback(monkeypatch):
+@pytest.fixture(name="_mock_bucket_config_with_fallback")
+def __mock_bucket_config_with_fallback(monkeypatch):
     """Mock requests.get, with wildcard * char"""
 
     def _mock_get(url, timeout):
@@ -1098,8 +1098,8 @@ def _mock_bucket_config_with_fallback(monkeypatch):
     return _mock_get
 
 
-@pytest.fixture
-def _mock_bucket_config_no_fallback(monkeypatch):
+@pytest.fixture(name="_mock_bucket_config_no_fallback")
+def __mock_bucket_config_no_fallback(monkeypatch):
     """Mock requests.get, without wildcard * char"""
 
     def _mock_get(url, timeout):
@@ -1112,8 +1112,8 @@ def _mock_bucket_config_no_fallback(monkeypatch):
     return _mock_get
 
 
-@pytest.fixture
-def _mock_get_network_error(monkeypatch):
+@pytest.fixture(name="_mock_get_network_error")
+def __mock_get_network_error(monkeypatch):
     """Mock requests.get to simulate a network failure."""
 
     def _mock_get(url, timeout):
@@ -1123,8 +1123,8 @@ def _mock_get_network_error(monkeypatch):
     return _mock_get
 
 
-@pytest.fixture
-def _mock_get_invalid_json(monkeypatch):
+@pytest.fixture(name="_mock_get_invalid_json")
+def __mock_get_invalid_json(monkeypatch):
     """Mock requests.get returning non-list JSON."""
 
     def _mock_get(url, timeout):
@@ -1134,8 +1134,8 @@ def _mock_get_invalid_json(monkeypatch):
     return _mock_get
 
 
-@pytest.fixture
-def _mock_get_row_not_list(monkeypatch):
+@pytest.fixture(name="_mock_get_row_not_list")
+def __mock_get_row_not_list(monkeypatch):
     """Mock returning a list where elements are NOT lists."""
 
     def _mock_get(url, timeout):
@@ -1145,8 +1145,8 @@ def _mock_get_row_not_list(monkeypatch):
     return _mock_get
 
 
-@pytest.fixture
-def _mock_get_non_string(monkeypatch):
+@pytest.fixture(name="_mock_get_non_string")
+def __mock_get_non_string(monkeypatch):
     """Mock returning a list containing non-string elements inside a row."""
 
     def _mock_get(url, timeout):
@@ -1156,8 +1156,8 @@ def _mock_get_non_string(monkeypatch):
     return _mock_get
 
 
-@pytest.fixture
-def _mock_get_row_wrong_length_too_short(monkeypatch):
+@pytest.fixture(name="_mock_get_row_wrong_length_too_short")
+def __mock_get_row_wrong_length_too_short(monkeypatch):
     """Row has fewer than 5 columns."""
 
     def _mock_get(url, timeout):
@@ -1167,8 +1167,8 @@ def _mock_get_row_wrong_length_too_short(monkeypatch):
     return _mock_get
 
 
-@pytest.fixture
-def _mock_get_row_wrong_length_too_long(monkeypatch):
+@pytest.fixture(name="_mock_get_row_wrong_length_too_long")
+def __mock_get_row_wrong_length_too_long(monkeypatch):
     """Row has more than 5 columns."""
 
     def _mock_get(url, timeout):

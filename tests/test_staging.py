@@ -119,7 +119,7 @@ def test_staging_ok(
     request,
     staging_client,
     mocked_staging_response,  # Nominal case - stage a FeatureCollection
-):  # pylint: disable=R0913, R0917
+):  # pylint: disable=unused-argument
     """
     Nominal cases for staging
     """

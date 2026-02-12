@@ -33,7 +33,9 @@ from .conftest import MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL
 OWNER_ID = "OWNER_ID"
 
 
-def test_create_object_catalog_client(mocked_rspy_landing_pages):  # pylint: disable=missing-function-docstring
+def test_create_object_catalog_client(
+    mocked_rspy_landing_pages,  # pylint: disable=unused-argument
+):  # pylint: disable=missing-function-docstring
     #####################
     # Loads the catalog #
     #####################
@@ -42,7 +44,7 @@ def test_create_object_catalog_client(mocked_rspy_landing_pages):  # pylint: dis
 
 
 def test_get_collection_catalog_client(
-    mocked_stac_catalog_get_collection,
+    mocked_stac_catalog_get_collection,  # pylint: disable=unused-argument
 ):  # pylint: disable=missing-function-docstring
     catalog: CatalogClient = RsClient(MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
 
@@ -55,7 +57,7 @@ def test_get_collection_catalog_client(
 
 
 def test_all_collections_catalog_client(
-    mocked_stac_catalog_get_collection,
+    mocked_stac_catalog_get_collection,  # pylint: disable=unused-argument
 ):  # pylint: disable=missing-function-docstring
     catalog: CatalogClient = RsClient(MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
 
@@ -68,7 +70,9 @@ def test_all_collections_catalog_client(
         assert collection is not None
 
 
-def test_get_items_catalog_client(mocked_stac_catalog_get_collection):  # pylint: disable=missing-function-docstring
+def test_get_items_catalog_client(
+    mocked_stac_catalog_get_collection,  # pylint: disable=unused-argument
+):  # pylint: disable=missing-function-docstring
     catalog: CatalogClient = RsClient(MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
 
     ###################################################
@@ -293,7 +297,7 @@ def test_remove_item_catalog_client(mocked_stac_catalog_delete_item):  # pylint:
 
 
 def test_search_item_inside_collection_catalog_client_mock(
-    mocked_stac_catalog_search_inside_collection,
+    mocked_stac_catalog_search_inside_collection,  # pylint: disable=unused-argument
 ):
     """Test searching items inside a collection
     This test verifies that items within a specific collection are correctly retrieved and
