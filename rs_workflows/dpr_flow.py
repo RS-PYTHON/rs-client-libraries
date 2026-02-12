@@ -276,8 +276,9 @@ def update_eopf_assets(
     if payload.io is None:
         raise ValueError("Payload I/O configuration is missing.")
     for prod in payload.io.output_products:
-        path = prod.path
-        zattrs_list.extend(extract_products_and_zattrs(s3_list(path), path))
+        if prod.final_product:
+            path = prod.path
+            zattrs_list.extend(extract_products_and_zattrs(s3_list(path), path))
     # List & extract
     logger.info(f"Found {len(zattrs_list)} .zattrs files under path.")
 

@@ -306,6 +306,55 @@ def test_update_eopf_assets_happy_path(mocker):
     )
 
 
+def test_update_eopf_assets_skips_non_final_products(mocker):
+    """
+    Verify that update_eopf_assets skips processing for products where
+    final_product is False.
+    """
+    env = mocker.Mock()
+    input_products = [{"id": "input_1"}]
+
+    # Mock products: one final, one intermediate (not final)
+    mock_prod_final = mocker.Mock(path="s3://out/final", final_product=True)
+    mock_prod_intermediate = mocker.Mock(path="s3://out/intermediate", final_product=False)
+
+    payload = mocker.Mock()
+    payload.io.output_products = [mock_prod_final, mock_prod_intermediate]
+
+    # Mock s3_list and extract to return something only for the final product
+    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mock_s3_list = mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://out/final/prod/.zattrs"])
+
+    mocker.patch(
+        "rs_workflows.dpr_flow.extract_products_and_zattrs", return_value=[("prod", "s3://out/final/prod/.zattrs")],
+    )
+
+    mocker.patch(
+        "rs_workflows.dpr_flow.read_zattrs_sync",
+        return_value={
+            "stac_discovery": {
+                "id": "item1",
+                "properties": {"product:type": "S1_L0"},
+            },
+        },
+    )
+    mocker.patch("rs_workflows.dpr_flow.create_stac_item", return_value=[mocker.Mock()])
+
+    # Run function
+    update_eopf_assets.fn(
+        env=env,
+        input_products=input_products,
+        payload=payload,
+        dpr_processor=DprProcessor.S1L0,
+    )
+
+    # Assert s3_list was called ONLY for the final product path
+    mock_s3_list.assert_called_once_with("s3://out/final")
+
+    # Assert s3_list was NOT called for intermediate product path
+    assert mocker.call("s3://out/intermediate") not in mock_s3_list.mock_calls
+
+
 def make_mock_item(origin_datetime: str, mocker):
     """Return a random product with eopf datetieme set"""
     mock_item = mocker.Mock()

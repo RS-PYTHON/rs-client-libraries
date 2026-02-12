@@ -411,6 +411,7 @@ def build_output_products(
                 store_params=storage_configuration.get_store_params(store_name),
                 type=mapping.get("type", "filename"),
                 opening_mode=mapping.get("opening_mode", "CREATE"),
+                final_product=mapping.get("final_product", True),
             ),
         )
 
