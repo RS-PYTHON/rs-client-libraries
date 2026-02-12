@@ -28,10 +28,12 @@ import logging
 import os
 from unittest.mock import MagicMock, mock_open
 
+import boto3
 import pytest
 import pytest_responses
 import requests
 import responses
+from moto import mock_aws
 from prefect.testing.utilities import prefect_test_harness
 from pydantic import SecretStr
 from starlette import status
@@ -49,7 +51,14 @@ from rs_workflows.payload_template import (  # StoreOptionsWrapper,
 )
 from tests import common
 
-# Use dummy values
+# Mocked values
+
+S3_ACCESSKEY = "S3_ACCESSKEY"
+S3_SECRETKEY = "S3_SECRETKEY"
+S3_REGION = "us-east-1"
+S3_ENDPOINT = "https://endpoint"
+MOCKED_BUCKET = "test-bucket"
+
 RSPY_UAC_CHECK_URL = "https://www.rspy-uac-manager.com"
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 PLATFORMS = [EPlatform.S1A, EPlatform.S2A]
@@ -223,6 +232,21 @@ def clear_caches():
     """Clear caches at the end of each test"""
     yield
     StacBase.get_collection.cache_clear()  # pylint:disable=no-member
+
+
+@pytest.fixture(scope="function")
+def mocked_s3(monkeypatch):
+    """Return a mocked S3 client."""
+    monkeypatch.setenv("MOTO_S3_CUSTOM_ENDPOINTS", S3_ENDPOINT)
+    with mock_aws():
+        client = boto3.client(
+            service_name="s3",
+            region_name=S3_REGION,
+            aws_access_key_id=S3_ACCESSKEY,
+            aws_secret_access_key=S3_SECRETKEY,
+        )
+        client.create_bucket(Bucket=MOCKED_BUCKET)
+        yield client
 
 
 @pytest.fixture(name="mock_prefect", scope="session", autouse=True)

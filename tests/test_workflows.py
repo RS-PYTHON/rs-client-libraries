@@ -22,11 +22,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock
 
-import boto3
 import pytest
 import pytest_responses
 import responses
-from moto import mock_aws
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
 from pystac import Asset, Item, ItemCollection
@@ -47,8 +45,18 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
     ProcessingMode,
 )
+from rs_workflows.payload_generator import RSPY_TEMP_BUCKET
 from rs_workflows.pi_db_models import Base
-from tests.conftest import COLLECTION_ID, MOCKED_RSPY_WEBSITE, OWNER_ID
+from tests.conftest import (
+    COLLECTION_ID,
+    MOCKED_BUCKET,
+    MOCKED_RSPY_WEBSITE,
+    OWNER_ID,
+    S3_ACCESSKEY,
+    S3_ENDPOINT,
+    S3_REGION,
+    S3_SECRETKEY,
+)
 
 CONFIG_DIR = Path(__file__).parent / "resources"
 
@@ -60,13 +68,6 @@ CONFIG_DIR = Path(__file__).parent / "resources"
 RSPY_APIKEY = "RSPY_APIKEY"
 JUPYTERHUB_API_TOKEN = "JUPYTERHUB_API_TOKEN"
 DASK_CLUSTER_LABEL = "DASK_CLUSTER_LABEL"
-
-S3_ACCESSKEY = "S3_ACCESSKEY"
-S3_SECRETKEY = "S3_SECRETKEY"
-S3_REGION = "us-east-1"
-S3_ENDPOINT = "https://endpoint"
-
-BUCKET = "test-bucket"
 
 # Realistic processed items returned by run_processor
 ITEMS = {
@@ -96,21 +97,6 @@ MAP_PRODUCT_TO_COLLECTION = [
 ##################
 
 
-@pytest.fixture(scope="function")
-def mocked_s3(monkeypatch):
-    """Return a mocked S3 client."""
-    monkeypatch.setenv("MOTO_S3_CUSTOM_ENDPOINTS", S3_ENDPOINT)
-    with mock_aws():
-        client = boto3.client(
-            service_name="s3",
-            region_name=S3_REGION,
-            aws_access_key_id=S3_ACCESSKEY,
-            aws_secret_access_key=S3_SECRETKEY,
-        )
-        client.create_bucket(Bucket=BUCKET)
-        yield client
-
-
 @pytest.fixture
 def mocked_tasktable():
     """Mock the mockup processor tasktable"""
@@ -119,18 +105,6 @@ def mocked_tasktable():
             url=f"{MOCKED_RSPY_WEBSITE}/dpr/processes/mockup?"
             f"jupyter_token={JUPYTERHUB_API_TOKEN}&cluster_label={DASK_CLUSTER_LABEL}&cluster_instance=",
             json=json.load(f),
-            status=status.HTTP_200_OK,
-        )
-
-
-@pytest.fixture
-def mocked_post_items():
-    """Mock posting of the items in the catalog."""
-    item_collections = [list(col.values())[0][1] for col in MAP_PRODUCT_TO_COLLECTION]
-    for collection_id in item_collections:
-        responses.post(
-            f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}/items",
-            json={"status": status.HTTP_200_OK},
             status=status.HTTP_200_OK,
         )
 
@@ -193,9 +167,9 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
     ).save(user_block_name, overwrite=True)
 
 
-#########
-# Tests #
-#########
+#############
+# DPR flows #
+#############
 
 
 @pytest.mark.asyncio
@@ -208,13 +182,12 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
 async def test_dpr_processing(
     mocker,
     mocked_s3,
-    mocked_rspy_landing_pages,
-    mocked_stac_catalog_get_collection,
-    mocked_stac_catalog_search_inside_collection,
-    mocked_staging_response,
-    mocked_tasktable,
-    mocked_dpr_response,
-    mocked_post_items,
+    mocked_rspy_landing_pages,  # /auxip, /cadip, /catalog, /...
+    mocked_stac_catalog_get_collection,  # /catalog/collections[/...]
+    mocked_stac_catalog_search_inside_collection,  # /auxip/search[/...], /catalog/search[/...]
+    mocked_staging_response,  # /processes/staging/execution, /jobs/{job_id}
+    mocked_tasktable,  # /dpr/processes/mockup?...
+    mocked_dpr_response,  # /dpr/processes/mockup/execution, /dpr/jobs/{job_id}
 ):  # pylint: disable=unused-argument
     """Test the dpr_processing flow"""
 
@@ -233,9 +206,19 @@ async def test_dpr_processing(
     with tempfile.NamedTemporaryFile() as tmp:
         tmp.write(b"Dummy processor log contents\n")
         tmp.flush()
-        mocked_s3.upload_file(tmp.name, BUCKET, "mockup.processor.log")
+        mocked_s3.upload_file(tmp.name, MOCKED_BUCKET, "mockup.processor.log")
+
+    # Mock posting of the items in the catalog
+    item_collections = [list(col.values())[0][1] for col in MAP_PRODUCT_TO_COLLECTION]
+    for collection_id in item_collections:
+        responses.post(
+            f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}/items",
+            json={"status": status.HTTP_200_OK},
+            status=status.HTTP_200_OK,
+        )
 
     # Spy on function calls
+    spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
     spy_s3_upload_file = mocker.spy(prefect_utils, "s3_upload_file")
     spy_s3_delete = mocker.spy(prefect_utils, "s3_delete")
 
@@ -260,7 +243,7 @@ async def test_dpr_processing(
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         satellite="S1A",
-        s3_payload_file=f"s3://test-bucket/payload.yaml",
+        s3_payload_file=f"s3://{MOCKED_BUCKET}/payload.yaml",
     )
 
     # run the flow
@@ -269,6 +252,22 @@ async def test_dpr_processing(
     ###########
     # Asserts #
     ###########
+
+    # Verify correct collection and item
+    assert spy_add_item.call_count == len(ITEMS)
+    for i in range(len(ITEMS)):
+        _, collection_id, item = spy_add_item.call_args_list[i][0]
+        expected_item = list(ITEMS.values())[i]
+        assert collection_id == list(MAP_PRODUCT_TO_COLLECTION[i].values())[0][1]
+        assert item == expected_item
+
+    # verify asset, temporarily commented out until asset creation is re-enabled
+    # asset_key = "S1A_20240101_GRD.zarr"
+    # asset = item.assets[asset_key]
+    # assert asset.href == f"s3://{MOCKED_BUCKET}/grd-output/S1A_20240101_GRD.zarr"
+    # assert asset.title == asset_key
+    # assert asset.media_type == "application/vnd+zarr"
+    # assert asset.roles == ["data", "metadata"]
 
     # --- verify s3_upload_file was called with the expected destination (second arg) ---
     upload_calls = spy_s3_upload_file.call_args_list
@@ -289,7 +288,10 @@ async def test_dpr_processing(
     assert keys == ["processing-unit-list", "auxip-cql2", "auxip-cql2", "dpr-payload-file"]
 
 
-async def test_dpr_processing_raises_on_unstaged_adf(mocker, mocked_tasktable):
+async def test_dpr_processing_raises_on_unstaged_adf(
+    mocker,
+    mocked_tasktable,  # /dpr/processes/mockup?...
+):
     """The flow should raise ValueError when an ADF could not be staged (status=False)."""
 
     #########
@@ -308,7 +310,7 @@ async def test_dpr_processing_raises_on_unstaged_adf(mocker, mocked_tasktable):
                 bbox=[],
                 datetime=datetime.now(),
             )
-            it.add_asset("data", Asset(href="s3://mock-bucket/unstaged1.bin"))
+            it.add_asset("data", Asset(href=f"s3://{MOCKED_BUCKET}/unstaged1.bin"))
             return ("ADFS_NAME", (False, ItemCollection([it])))
 
     class ProcessInputAdfsTaskFailMock(Mock):
@@ -339,7 +341,7 @@ async def test_dpr_processing_raises_on_unstaged_adf(mocker, mocked_tasktable):
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         satellite="S1A",
-        s3_payload_file="s3://test-bucket/payload.yaml",
+        s3_payload_file=f"s3://{MOCKED_BUCKET}/payload.yaml",
     )
     with pytest.raises(ValueError, match="was not correctly staged"):
         await on_demand_processing.dpr_processing(dpr_input)
@@ -352,9 +354,9 @@ async def test_dpr_processing_raises_on_unstaged_adf(mocker, mocked_tasktable):
     ids=[""],
 )
 async def test_on_demand_cadip_staging(
-    mocked_rspy_landing_pages,
-    mocked_stac_catalog_search_inside_collection,
-    mocked_staging_response,
+    mocked_rspy_landing_pages,  # /auxip, /cadip, /catalog, ...
+    mocked_stac_catalog_search_inside_collection,  # /cadip/search[/...]
+    mocked_staging_response,  # /processes/staging/execution, /jobs/{job_id}
 ):
     """Test the on_demand_cadip_staging flow"""
     await setup_worklow_test_env()
@@ -374,10 +376,10 @@ async def test_on_demand_cadip_staging(
     ids=[""],
 )
 async def test_on_demand_auxip_staging(
-    mocked_rspy_landing_pages,
-    mocked_stac_catalog_search_inside_collection,
-    mocked_staging_response,
-    mocked_stac_catalog_get_collection,
+    mocked_rspy_landing_pages,  # /auxip, /cadip, /catalog, ...
+    mocked_stac_catalog_search_inside_collection,  # /auxip/search[/...], /catalog/search[/...]
+    mocked_staging_response,  # /processes/staging/execution, /jobs/{job_id}
+    mocked_stac_catalog_get_collection,  # /catalog/collections/...
 ):
     """Test the on_demand_auxip_staging flow"""
     await setup_worklow_test_env()
@@ -398,9 +400,9 @@ async def test_on_demand_auxip_staging(
     ids=[""],
 )
 async def test_on_demand_prip_staging(
-    mocked_rspy_landing_pages,
-    mocked_stac_catalog_search_inside_collection,
-    mocked_staging_response,
+    mocked_rspy_landing_pages,  # /auxip, /cadip, /catalog, ...
+    mocked_stac_catalog_search_inside_collection,  # /prip/search[/...]
+    mocked_staging_response,  # /processes/staging/execution, /jobs/{job_id}
 ):
     """Test the on_demand_prip_staging flow"""
     await setup_worklow_test_env()
@@ -415,12 +417,44 @@ async def test_on_demand_prip_staging(
 
 
 async def test_catalog_search(
-    mocked_rspy_landing_pages,
-    mocked_stac_catalog_search_inside_collection,
+    mocked_rspy_landing_pages,  # /auxip, /cadip, /catalog, ...
+    mocked_stac_catalog_search_inside_collection,  # /catalog/search[/...]
 ):
     """Test the catalog_search flow"""
     await setup_worklow_test_env()
     await catalog_flow.catalog_search(env=FlowEnvArgs(owner_id=OWNER_ID), catalog_cql2={"filter": {}})
+
+
+@pytest.mark.asyncio
+async def test_publish_skips_when_no_matching_output_collection(
+    mocker,
+    mocked_rspy_landing_pages,  # /auxip, /cadip, /catalog, ...
+):
+    """Test: no matching output product -> item skipped"""
+    await setup_worklow_test_env()
+    env = FlowEnvArgs(owner_id=OWNER_ID)
+    spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
+
+    catalog_collection_identifier = [{"INVALID": ("INVALID", "COLL_GRD")}]
+
+    items = [
+        {
+            "id": "item1",
+            "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
+            "geometry": None,
+            "bbox": None,
+        },
+    ]
+
+    with pytest.raises(RuntimeError) as error:
+        await catalog_flow.publish.fn(env, catalog_collection_identifier, items)
+        spy_add_item.assert_not_called()
+    assert str(error.value.__cause__) == "Product type unknown: S1_GRD"
+
+
+################
+# PI computing #
+################
 
 
 def test_create_schema(monkeypatch):  # pylint: disable=unused-argument
@@ -564,62 +598,3 @@ async def test_init_pi_database(monkeypatch):  # pylint: disable=unused-argument
     mock_create_schema.assert_called_once_with(expected_db_url)
     mock_insert_pi_categories.assert_called_once_with(expected_db_url)
     mock_logger.info.assert_any_call("The initialization of the tables for the performance indicator database finished")
-
-
-@pytest.mark.asyncio
-async def test_publish_task_success(
-    mocker,
-    mocked_rspy_landing_pages,
-    mocked_post_items,
-    mocked_stac_catalog_get_collection,
-):
-    """Test: publish task adds item to catalog with correct collection and asset"""
-    await setup_worklow_test_env()
-    env = FlowEnvArgs(owner_id=OWNER_ID)
-    spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
-
-    # run the async task
-    await catalog_flow.publish.fn(env, MAP_PRODUCT_TO_COLLECTION, ITEMS.values())
-
-    # Verify correct collection and item
-    assert spy_add_item.call_count == len(ITEMS)
-    for i in range(len(ITEMS)):
-        _, collection_id, item = spy_add_item.call_args_list[i][0]
-        expected_item = list(ITEMS.values())[i]
-        assert collection_id == list(MAP_PRODUCT_TO_COLLECTION[i].values())[0][1]
-        assert item == expected_item
-
-    # verify asset, temporarily commented out until asset creation is re-enabled
-    # asset_key = "S1A_20240101_GRD.zarr"
-    # asset = item.assets[asset_key]
-    # assert asset.href == "s3://output-bucket/grd-output/S1A_20240101_GRD.zarr"
-    # assert asset.title == asset_key
-    # assert asset.media_type == "application/vnd+zarr"
-    # assert asset.roles == ["data", "metadata"]
-
-
-@pytest.mark.asyncio
-async def test_publish_skips_when_no_matching_output_collection(
-    mocker,
-    mocked_rspy_landing_pages,
-):
-    """Test: no matching output product -> item skipped"""
-    await setup_worklow_test_env()
-    env = FlowEnvArgs(owner_id=OWNER_ID)
-    spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
-
-    catalog_collection_identifier = [{"INVALID": ("INVALID", "COLL_GRD")}]
-
-    items = [
-        {
-            "id": "item1",
-            "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
-            "geometry": None,
-            "bbox": None,
-        },
-    ]
-
-    with pytest.raises(RuntimeError) as error:
-        await catalog_flow.publish.fn(env, catalog_collection_identifier, items)
-        spy_add_item.assert_not_called()
-    assert str(error.value.__cause__) == "Product type unknown: S1_GRD"
