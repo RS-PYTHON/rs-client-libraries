@@ -56,8 +56,9 @@ def test_get_href_service(
     assert get_href_service(rs_server_href, "RSPY_HOST_UNKNWON") == rs_server_href.rstrip("/")
 
 
-def test_resolve_collection_tuple():
+def test_resolve_collection_tuple(mocker):
     """Check resolve_collection works with tuple (product_type, collection) values."""
+    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
     input_collections = [
         {"output_folder1": ("product_type_1", "collection_1")},
         {"output_folder2": ("product_type_2", "collection_2")},
@@ -68,8 +69,9 @@ def test_resolve_collection_tuple():
         resolve_collection("tip_42", input_collections)
 
 
-def test_resolve_collection_string():
+def test_resolve_collection_string(mocker):
     """Check resolve_collection works with string values as product types."""
+    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
     input_collections = [{"output_folder1": "product_type_1"}, {"output_folder2": "product_type_2"}]
     assert resolve_collection("product_type_1", input_collections) == "product_type_1"
     assert resolve_collection("product_type_2", input_collections) == "product_type_2"
@@ -78,8 +80,9 @@ def test_resolve_collection_string():
         resolve_collection("tip_42", input_collections)
 
 
-def test_resolve_collection_dict_mixed():
+def test_resolve_collection_dict_mixed(mocker):
     """Check resolve_collection works with mixed dict: tuple and string values."""
+    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
     input_collections = {"output_folder1": ("product_type_1", "collection_1"), "output_folder2": "product_type_2"}
 
     # Tuple case: returns collection part

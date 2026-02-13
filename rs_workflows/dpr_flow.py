@@ -273,17 +273,16 @@ def update_eopf_assets(
     logger.info("Starting EOPF asset update.")
     logger.info(f"Payload received: {payload}")
     logger.info("Input products: %s", input_products)
+
+    if payload.io is None:
+        raise RuntimeError("Payload I/O configuration is missing.")
     # Get all .zattrs files found in the output products paths
     zattrs_list = []
-    if payload.io is None:
-        raise ValueError("Payload I/O configuration is missing.")
     for prod in payload.io.output_products:
-        logger.info(f"Checking if output product {prod.id} should be added to the catalog")
-        if prod.final_product:
-            zattrs_list.extend(extract_products_and_zattrs(s3_list(prod.path), prod.path))
-            logger.info(f"Added {prod.id} to the list of products to be added to the catalog.")
-        else:
-            logger.info(f"Output product {prod.id} is not marked as final_product, skipping catalog registration.")
+        path = prod.path
+        zattrs_list.extend(extract_products_and_zattrs(s3_list(path), path))
+        logger.info(f"Product {prod.id} has been added to the list and will be published to the catalog.")
+
     # List & extract
     logger.info(f"Found {len(zattrs_list)} .zattrs files under path.")
 
@@ -403,6 +402,23 @@ async def run_processor(
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "run-processor"):
+        if payload.io is None:
+            raise ValueError("Payload I/O configuration is missing.")
+        # First, remove the output products that are not final products from
+        # the payload to avoid triggering the catalog registration for them
+        # Create a temporary list for keeping track of products to keep
+        kept_products = []
+
+        # Iterate over the original products
+        for prod in payload.io.output_products:
+            if prod.final_product:
+                kept_products.append(prod)
+            else:
+                logger.info(f"Output product {prod.id} is not marked as final_product, skipping catalog registration.")
+
+        # Update the original output_products list with the kept products
+        payload.io.output_products[:] = kept_products
+
         record_performance_indicators(  # type: ignore
             start_date=datetime.datetime.now(),
             status="OK",

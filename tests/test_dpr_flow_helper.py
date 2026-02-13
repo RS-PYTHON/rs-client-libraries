@@ -308,20 +308,20 @@ def test_update_eopf_assets_happy_path(mocker):
 
 def test_update_eopf_assets_skips_non_final_products(mocker):
     """
-    Verify that update_eopf_assets skips processing for products where
-    final_product is False.
+    Verify that update_eopf_assets processes only final products.
+    Note: Filtering of non-final products happens in run_processor before
+    calling update_eopf_assets, so this function only receives final products.
     """
     env = mocker.Mock()
     input_products = [{"id": "input_1"}]
 
-    # Mock products: one final, one intermediate (not final)
+    # Mock only final products (non-final products are already filtered by run_processor)
     mock_prod_final = mocker.Mock(path="s3://out/final", final_product=True)
-    mock_prod_intermediate = mocker.Mock(path="s3://out/intermediate", final_product=False)
 
     payload = mocker.Mock()
-    payload.io.output_products = [mock_prod_final, mock_prod_intermediate]
+    payload.io.output_products = [mock_prod_final]  # Only final products
 
-    # Mock s3_list and extract to return something only for the final product
+    # Mock s3_list and extract to return something for the final product
     mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
     mock_s3_list = mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://out/final/prod/.zattrs"])
 
@@ -349,11 +349,8 @@ def test_update_eopf_assets_skips_non_final_products(mocker):
         dpr_processor=DprProcessor.S1L0,
     )
 
-    # Assert s3_list was called ONLY for the final product path
+    # Assert s3_list was called for the final product path
     mock_s3_list.assert_called_once_with("s3://out/final")
-
-    # Assert s3_list was NOT called for intermediate product path
-    assert mocker.call("s3://out/intermediate") not in mock_s3_list.mock_calls
 
 
 def make_mock_item(origin_datetime: str, mocker):
