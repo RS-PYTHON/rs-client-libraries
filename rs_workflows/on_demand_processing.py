@@ -24,6 +24,7 @@ import anyio
 import yaml
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
+from starlette.status import HTTP_400_BAD_REQUEST
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
@@ -94,19 +95,10 @@ async def dpr_processing(
     Prefect flow for dpr-process.
 
     Args:
-        env: Prefect flow environment
-        processor: DPR processor name
-        cluster_label (str): Dask cluster label e.g. "dask-l0"
-        cadip_collection_identifier: CADIP collection identifier that contains the mission and station
-            (e.g. s1_ins for Sentinel-1 sessions from the Inuvik station)
-        session_identifier: Session identifier
-        catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
-        s3_payload_template: S3 bucket location of the DPR payload file template.
-        s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
-        catalog bucket.
+        dpr_input: Processing request inputs
     """
     logger = get_run_logger()
-    logger.info(f"Starting the DPR processing flow with processor: {dpr_input.processor_name.value}")
+    logger.info(f"Starting the DPR processing flow with processor: {dpr_input.processor_name}")
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(dpr_input.env)
 
@@ -120,7 +112,10 @@ async def dpr_processing(
         )
 
         # read tasktable and construct list of processing units
-        task_table = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name.value, cluster_info)
+        process_resp = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name, cluster_info)
+        if "status" in process_resp and int(process_resp["status"]) >= HTTP_400_BAD_REQUEST:
+            raise ValueError(f"Could not retrieve task table for process '{dpr_input.processor_name}': {process_resp}")
+        task_table = process_resp
         processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
         out = build_unit_list(
             tasktable=task_table,

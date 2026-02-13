@@ -590,7 +590,7 @@ def generate_payload(  # pylint: disable=unused-argument
     # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
     # in cluster mode, it should be mounted as volume from a predefined (?) configmap
 
-    if dpr_process_in.processor_name == DprProcessor.MOCKUP:
+    if dpr_process_in.processor_name.lower() == "mockup":
         logger.info("Generating payload for mockup processor")
         # TODO: the ouput path can be also computed, by using the following 3 lines
         # and add output_mockup_path as param to build_mockup_payload
@@ -599,7 +599,7 @@ def generate_payload(  # pylint: disable=unused-argument
         # output_mockup_path=build_output_products(unit_list[0], dpr_process_in, store_params, flow_env, config_rows)
         return build_mockup_payload(flow_env.owner_id)
 
-    logger.info(f"Starting payload generation for DPR processor '{dpr_process_in.processor_name.value}'")
+    logger.info(f"Starting payload generation for DPR processor '{dpr_process_in.processor_name}'")
     logger.info("Loading storage configuration template from file")
     secrets = Secret.load(
         prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, flow_env.owner_id),
