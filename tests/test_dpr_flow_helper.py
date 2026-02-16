@@ -14,6 +14,7 @@
 """test of helper functions for dpr_flow.py"""
 import datetime
 import json
+import typing
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,7 @@ from rs_workflows.dpr_flow import (
     s3_list,
     update_eopf_assets,
 )
+from rs_workflows.payload_generator import RSPY_TEMP_BUCKET
 
 
 def test_s3_list_returns_full_s3_paths(mocker):
@@ -174,7 +176,7 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
 
     mock_item_cls.return_value = mock_item
 
-    item = create_stac_item(
+    create_stac_item(
         env=env,
         input_products=input_products,
         eopf_feature=eopf_feature,
@@ -192,6 +194,7 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
     assert isinstance(first_call_kwargs["datetime"], datetime.datetime)
     assert first_call_kwargs["properties"]["eopf:origin_datetime"] == "2024-01-10T12:00:00"
     assert first_call_kwargs["properties"]["stac_version"] == "1.1.0"
+    assert "feature_1.zarr" in first_call_kwargs["assets"]
 
     # Asset built correctly
     mock_asset_cls.assert_called_with(
@@ -204,11 +207,9 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
         # extra_fields=mocker.ANY,
     )
 
-    # Assets attached to item
-    assert "feature_1.zarr" in item.assets
 
-
-def test_update_eopf_assets_happy_path(mocker):
+@typing.no_type_check
+def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
     """
     Verify that the update_eopf_assets Prefect task correctly orchestrates
     discovery and processing of EOPF products:
@@ -221,92 +222,31 @@ def test_update_eopf_assets_happy_path(mocker):
     - Returns the STAC items and the list of product types
     """
     env = mocker.Mock()
+    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
 
-    input_products = [
-        {"id": "input_1"},
-    ]
+    s3_path, expected_items = mocked_processor_output
 
     payload = {
         "I/O": {
             "output_products": [
-                {"path": "s3://my-bucket/output/"},
+                {"path": f"s3://{RSPY_TEMP_BUCKET}/{s3_path}/"},
             ],
         },
     }
 
-    all_files = [
-        "s3://my-bucket/output/product_a/.zattrs",
-    ]
-
-    product = "product_a"
-    zattrs = "s3://my-bucket/output/product_a/.zattrs"
-
-    zattrs_data = {
-        "stac_discovery": {
-            "id": "feature_1",
-            "geometry": {"type": "Point", "coordinates": [0, 0]},
-            "bbox": [0, 0, 0, 0],
-            "properties": {
-                "datetime": "2024-01-01T00:00:00",
-                "product:type": "EOPF_TYPE_A",
-            },
-        },
-    }
-
-    eopf_items = [zattrs_data["stac_discovery"]]  # type: ignore
-    eopf_types = ["EOPF_TYPE_A"]
-
-    mock_stac_items = [mocker.Mock()]
-
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
-
-    mock_s3_list = mocker.patch(
-        "rs_workflows.dpr_flow.s3_list",
-        return_value=all_files,
-    )
-
-    mock_extract = mocker.patch(
-        "rs_workflows.dpr_flow.extract_products_and_zattrs",
-        return_value=[(product, zattrs)],
-    )
-
-    mock_read = mocker.patch(
-        "rs_workflows.dpr_flow.read_zattrs_sync",
-        return_value=zattrs_data,
-    )
-
-    mock_create = mocker.patch(
-        "rs_workflows.dpr_flow.create_stac_item",
-        return_value=mock_stac_items,
-    )
-
-    stac_items, result_eopf_types = update_eopf_assets.fn(
+    # Call method
+    result_items, result_eopf_types = update_eopf_assets.fn(
         env=env,
-        input_products=input_products,
+        input_products=[{"input_name": ("dummy_id", "dummy_collection")}],
         payload=payload,
         dpr_processor=DprProcessor.S1L0,
     )
 
-    assert stac_items[0] == mock_stac_items
-    assert result_eopf_types == eopf_types
-
-    mock_s3_list.assert_called_once_with("s3://my-bucket/output/")
-
-    mock_extract.assert_called_once_with(
-        all_files,
-        "s3://my-bucket/output/",
-    )
-
-    mock_read.assert_called_once_with(zattrs)
-
-    mock_create.assert_called_once_with(
-        env,
-        input_products,
-        eopf_items[0],
-        "s3://my-bucket/output/product_a/.zattrs",
-        "product_a",
-        DprProcessor.S1L0,
-    )
+    # Check results
+    assert result_eopf_types == [
+        expected_item["properties"]["product:type"] for expected_item in expected_items.values()
+    ]
+    assert {result_item.id: result_item.to_dict() for result_item in result_items} == expected_items
 
 
 def make_mock_item(origin_datetime: str, mocker):

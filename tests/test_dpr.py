@@ -26,23 +26,15 @@ from starlette import status
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_client.rs_client import RsClient
+from tests.conftest import MOCKED_RSPY_WEBSITE
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = getpass.getuser()
 CLUSTER_INFO = ClusterInfo("", "", "")
 
 
-@pytest.fixture(name="dummy_href")
-def get_dummy_href():
-    """
-    Dummy href for local_mode
-    """
-    dummy_href = "https://DUMMY_HREF"
-    return dummy_href
-
-
 @pytest.fixture(name="dpr_client")
-def get_dpr_client(dummy_href) -> DprClient:
+def get_dpr_client() -> DprClient:
     """Create a dpr client
 
     Args:
@@ -52,7 +44,7 @@ def get_dpr_client(dummy_href) -> DprClient:
         DprClient: DprClient instance
     """
     client = RsClient(
-        rs_server_href=dummy_href,
+        rs_server_href=MOCKED_RSPY_WEBSITE,
         rs_server_api_key=RS_SERVER_API_KEY,
         owner_id=OWNER_ID,
         logger=None,
@@ -60,34 +52,16 @@ def get_dpr_client(dummy_href) -> DprClient:
     return client.get_dpr_client()
 
 
-@pytest.fixture(name="dpr_response_sample")
-def get_dpr_response_sample() -> dict:
-    """
-    Return sample rs-dpr-service response.
-    """
-    return {
-        "status": "running",
-        "message": "Processor execution started",
-        "processID": "dpr-service",
-        "progress": 0,
-        "type": "process",
-        "created": "2025-09-04T09:41:26Z",
-        "started": "2025-09-04T09:41:26Z",
-        "updated": "2025-09-04T09:41:26Z",
-        "jobID": "f4efad68-e198-4a08-b6ee-de67d497ca31",
-    }
-
-
 @responses.activate
 @pytest.mark.parametrize("process", ["mockup", DprProcessor.S1L0.value])
-def test_dpr_client(mocker, dpr_client: DprClient, process: str, dummy_href: str, dpr_response_sample: dict):
+def test_dpr_client(mocker, dpr_client: DprClient, process: str, ogcapi_response_sample: dict):
     """Test nominal DPR service response"""
 
     # Mock response from DPR service
     responses.add(
         method=responses.POST,
-        url=f"{dummy_href}/dpr/processes/{process}/execution",
-        json=dpr_response_sample,
+        url=f"{MOCKED_RSPY_WEBSITE}/dpr/processes/{process}/execution",
+        json=ogcapi_response_sample,
         status=status.HTTP_200_OK,
     )
 
@@ -102,7 +76,7 @@ def test_dpr_client(mocker, dpr_client: DprClient, process: str, dummy_href: str
     mocker.patch("rs_client.ogcapi.dpr_client.prefect_utils.s3_download_file", new=mock_download)
 
     # Run the DPR processing
-    assert dpr_client.run_process(process, CLUSTER_INFO, "", "", "", {}) == dpr_response_sample
+    assert dpr_client.run_process(process, CLUSTER_INFO, "", "", "", {}) == ogcapi_response_sample
 
 
 @pytest.mark.asyncio

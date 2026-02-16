@@ -16,14 +16,18 @@
 
 
 import datetime
+import glob
 import json
 import tempfile
+import time
+from datetime import timedelta
 
 # import datetime
 from os import path as osp
 from pathlib import Path
 from typing import Any
 
+import anyio
 from prefect import get_run_logger, task
 from pystac import Asset, Item
 
@@ -129,7 +133,13 @@ def create_stac_item(
         list[Item]: List of constructed STAC Item objects.
     """
 
-    def build_item(feature_dict: dict, eopf_origin_datetimes, product_name, dpr_processor: str) -> Item:
+    def build_item(
+        feature_dict: dict,
+        eopf_origin_datetimes,
+        product_name,
+        dpr_processor: str,
+        assets: dict[str, Asset],
+    ) -> Item:
         """
         Build a STAC Item from a feature dictionary.
 
@@ -180,6 +190,7 @@ def create_stac_item(
             datetime=datetime.datetime.fromisoformat(feature_dict["properties"]["datetime"]),
             properties=feature_dict["properties"],
             stac_extensions=stac_extensions,
+            assets=assets,
         )
 
     def build_asset(path: str, product_name: str) -> Asset:
@@ -209,9 +220,13 @@ def create_stac_item(
     # Note: input_products != input_adfs
     eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
 
-    item = build_item(eopf_feature, eopf_origin_datetime, product_name, dpr_processor)
-    item.assets = {product_name: build_asset(s3_data_location, product_name)}
-
+    item = build_item(
+        eopf_feature,
+        eopf_origin_datetime,
+        product_name,
+        dpr_processor,
+        assets={product_name: build_asset(s3_data_location, product_name)},
+    )
     return item
 
 
@@ -401,14 +416,33 @@ async def run_processor(
         )
         # Trigger the processor run from the dpr service
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
+        start_time = time.time()
+        s3_payload_dir = osp.dirname(s3_payload_run)
         job_status = dpr_client.run_process(
             process=processor,
             cluster_info=cluster_info,
-            s3_config_dir=osp.dirname(s3_payload_run),
+            s3_config_dir=s3_payload_dir,
             payload_subpath=osp.basename(s3_payload_run),
-            s3_report_dir=osp.join(osp.dirname(s3_payload_run)),
+            s3_report_dir=s3_payload_dir,
         )
-        dpr_client.wait_for_job(job_status, logger, f"{processor!r} processor")
+        try:
+            dpr_client.wait_for_job(job_status, logger, f"{processor!r} processor")
+        finally:
+            logger.info(f"Processor execution time: {str(timedelta(seconds=time.time() - start_time))}")
+
+            # Download reports folder from the s3 bucket
+            with tempfile.TemporaryDirectory() as tmpdir:
+                await prefect_utils.s3_download_dir(s3_payload_dir, tmpdir)
+
+                # Display here the logs from eopf
+                local_log_files = glob.glob(osp.join(tmpdir, "**/*.processor.log"), recursive=True)
+                if local_log_files:
+                    local_log_file = local_log_files[0]
+                    async with await anyio.open_file(local_log_file, encoding="utf-8") as opened:
+                        s3_log_file = osp.join(s3_payload_dir, osp.relpath(local_log_file, tmpdir))
+                        logger.info(f"Log file {s3_log_file!r}:\n{await opened.read()}")
+                else:
+                    logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
 
         eopf_stac_items, eopf_types = update_eopf_assets(flow_env, input_products, payload, processor)
         # Wait for the job to finish

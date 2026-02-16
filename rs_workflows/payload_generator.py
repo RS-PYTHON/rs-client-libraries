@@ -43,6 +43,7 @@ from rs_workflows.storage_configuration import StorageConfig
 
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
 DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
+RSPY_TEMP_BUCKET = "rs-dev-cluster-temp"
 
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
@@ -558,7 +559,7 @@ def build_mockup_payload(owner_id):
     output_products = [
         OutputProduct(
             id=outp,
-            path=f"s3://rs-dev-cluster-temp/dpr_mockup_results/{owner_id}/TEST_FLOW_OUTPUT/",
+            path=f"s3://{RSPY_TEMP_BUCKET}/dpr_mockup_results/{owner_id}/TEST_FLOW_OUTPUT/",
             store_type="zarr",
             type="folder",
             store_params=None,

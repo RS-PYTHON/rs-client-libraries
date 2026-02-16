@@ -94,6 +94,8 @@ flake8 = "^7.1.1"
 flake8-pyproject = "^1.2.3"
 responses = "^0.25.7"
 starlette = "^0.50.0"
+pytest-responses = "^0.5.1"
+moto = "^5.1.21"
 
 [tool.poetry.group.demo.dependencies] # for hybrid mode
 jupyterlab = "^4.5.0"

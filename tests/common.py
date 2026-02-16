@@ -15,7 +15,7 @@
 """Common code for the pytests."""
 
 
-def json_landing_page(href: str, user_collection: str, conforms_to=True):
+def json_landing_page(href: str, user_collection: str, service="catalog", conforms_to=True):
     """Return the catalog landing page."""
 
     conforms_to_dict = (
@@ -54,9 +54,9 @@ def json_landing_page(href: str, user_collection: str, conforms_to=True):
         "stac_version": "1.1.0",
         **conforms_to_dict,
         "links": [
-            {"rel": "self", "type": "application/json", "href": f"{href}/catalog/"},
-            {"rel": "root", "type": "application/json", "href": f"{href}/catalog/"},
-            {"rel": "data", "type": "application/json", "href": f"{href}/catalog/collections"},
+            {"rel": "self", "type": "application/json", "href": f"{href}/{service}/"},
+            {"rel": "root", "type": "application/json", "href": f"{href}/{service}/"},
+            {"rel": "data", "type": "application/json", "href": f"{href}/{service}/collections"},
             {
                 "rel": "conformance",
                 "type": "application/json",
@@ -67,21 +67,21 @@ def json_landing_page(href: str, user_collection: str, conforms_to=True):
                 "rel": "search",
                 "type": "application/geo+json",
                 "title": "STAC search",
-                "href": f"{href}/catalog/search",
+                "href": f"{href}/{service}/search",
                 "method": "GET",
             },
             {
                 "rel": "search",
                 "type": "application/geo+json",
                 "title": "STAC search",
-                "href": f"{href}/catalog/search",
+                "href": f"{href}/{service}/search",
                 "method": "POST",
             },
             {
                 "rel": "child",
                 "type": "application/json",
                 "title": "{user_collection}",
-                "href": f"{href}/catalog/collections/{user_collection}",
+                "href": f"{href}/{service}/collections/{user_collection}",
             },
             {
                 "rel": "service-desc",

@@ -17,6 +17,7 @@
 import getpass
 import os
 import socket
+from contextlib import suppress
 from importlib import reload
 from unittest.mock import AsyncMock, Mock, mock_open, patch
 
@@ -49,7 +50,6 @@ async def test_get_ip_address():
     assert prefect_utils.get_ip_address() == socket.gethostbyname(socket.gethostname())
 
 
-@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 async def test_read_apikey(monkeypatch, mocker):
     """Test the read_apikey function"""
 
@@ -70,13 +70,19 @@ async def test_read_apikey(monkeypatch, mocker):
     handle.write.assert_called_once_with(f"\nRSPY_APIKEY={apikey}\n")
 
 
-@patch.dict(os.environ, {}, clear=False)  # don't modify os.environ outside this test
 @pytest.mark.parametrize("local_mode", [True, False], ids=["local", "cluster"])
 async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # pylint: disable=unused-argument
     """Test the init_prefect_blocks function"""
 
     # Set local or cluster mode
     set_local_mode(local_mode, monkeypatch)
+
+    # Remove the existing blocks, if any
+    user_block_name = prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID)
+    with suppress(ValueError):
+        await Secret.delete(prefect_utils.BLOCK_NAME_ENV_GLOBAL)
+    with suppress(ValueError):
+        await Secret.delete(user_block_name)
 
     # Environment variables for all users
     env_global = {
@@ -153,7 +159,6 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
     )
 
     # Check that the blocks were written with the right values
-    user_block_name = prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID)
     assert env_global == (await Secret.load(prefect_utils.BLOCK_NAME_ENV_GLOBAL)).get()
     assert env_user == (await Secret.load(user_block_name)).get()
 
