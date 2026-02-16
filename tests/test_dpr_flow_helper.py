@@ -19,7 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from rs_client.ogcapi.dpr_client import DprProcessor
+from rs_client.ogcapi import dpr_client
+from rs_client.ogcapi.dpr_client import ClusterInfo, DprProcessor
 from rs_workflows.dpr_flow import (
     compute_eopf_origin_datetime,
     create_stac_item,
@@ -30,7 +31,11 @@ from rs_workflows.dpr_flow import (
     s3_list,
     update_eopf_assets,
 )
+from rs_workflows.flow_utils import FlowEnvArgs
 from rs_workflows.payload_generator import RSPY_TEMP_BUCKET
+from tests.conftest import MOCKED_BUCKET, OWNER_ID
+
+CLUSTER_INFO = ClusterInfo("", "", "")
 
 
 def test_s3_list_returns_full_s3_paths(mocker):
@@ -379,8 +384,13 @@ def test_update_eopf_assets_skips_non_final_products(mocker):
     mock_s3_list.assert_called_once_with("s3://out/final")
 
 
+@pytest.mark.parametrize("mocked_dpr_response", ["s3_l0"], indirect=True, ids=[""])
 @pytest.mark.asyncio
-async def test_run_processor_filters_non_final_products(mocker):
+async def test_run_processor_filters_non_final_products(
+    mocker,
+    mocked_dpr_response,  # /dpr/processes/s3_l0/execution, /dpr/jobs/{job_id}
+    mocked_processor_log,
+):  # pylint: disable=unused-argument
     """
     Verify that run_processor correctly filters out non-final products from
     payload.io.output_products before processing.
@@ -391,11 +401,10 @@ async def test_run_processor_filters_non_final_products(mocker):
     - The DPR processor is called with the filtered payload
     - update_eopf_assets receives the filtered payload
     """
-    # Mock environment and dependencies
-    env = mocker.Mock()
+    # # Mock environment and dependencies
+    # env = mocker.Mock()
     processor = "s3_l0"
-    cluster_info = mocker.Mock()
-    s3_payload_run = "s3://bucket/payload.json"
+    s3_payload_run = f"s3://{MOCKED_BUCKET}/payload.yaml"
     input_products = [{"id": "input1"}]
 
     # Create mock products: 2 final, 1 non-final
@@ -412,21 +421,23 @@ async def test_run_processor_filters_non_final_products(mocker):
     mock_logger = mocker.Mock()
     mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mock_logger)
 
-    # Mock FlowEnv and its dependencies
-    mock_flow_env = mocker.Mock()
-    mock_span = mocker.Mock()
-    mock_span.__enter__ = mocker.Mock(return_value=mock_span)
-    mock_span.__exit__ = mocker.Mock(return_value=False)
-    mock_flow_env.start_span.return_value = mock_span
+    # # Mock FlowEnv and its dependencies
+    # mock_flow_env = mocker.Mock()
+    # mock_span = mocker.Mock()
+    # mock_span.__enter__ = mocker.Mock(return_value=mock_span)
+    # mock_span.__exit__ = mocker.Mock(return_value=False)
+    # mock_flow_env.start_span.return_value = mock_span
 
-    # Mock DPR client
-    mock_dpr_client = mocker.Mock()
-    mock_job_status = mocker.Mock()
-    mock_dpr_client.run_process.return_value = mock_job_status
-    mock_dpr_client.wait_for_job.return_value = None
-    mock_flow_env.rs_client.get_dpr_client.return_value = mock_dpr_client
+    # Spy DPR client
+    spy_run_process = mocker.spy(dpr_client.DprClient, "run_process")
+    spy_wait_for_job = mocker.spy(dpr_client.DprClient, "wait_for_job")
+    # mock_dpr_client = mocker.Mock()
+    # mock_job_status = mocker.Mock()
+    # mock_dpr_client.run_process.return_value = mock_job_status
+    # mock_dpr_client.wait_for_job.return_value = None
+    # mock_flow_env.rs_client.get_dpr_client.return_value = mock_dpr_client
 
-    mocker.patch("rs_workflows.dpr_flow.FlowEnv", return_value=mock_flow_env)
+    # mocker.patch("rs_workflows.dpr_flow.FlowEnv", return_value=mock_flow_env)
 
     # Mock record_performance_indicators
     mocker.patch("rs_workflows.dpr_flow.record_performance_indicators")
@@ -438,10 +449,10 @@ async def test_run_processor_filters_non_final_products(mocker):
 
     # Run the function
     result = await run_processor.fn(
-        env=env,
+        env=FlowEnvArgs(owner_id=OWNER_ID),
         processor=processor,
         payload=payload,
-        cluster_info=cluster_info,
+        cluster_info=CLUSTER_INFO,
         s3_payload_run=s3_payload_run,
         input_products=input_products,
     )
@@ -458,8 +469,10 @@ async def test_run_processor_filters_non_final_products(mocker):
     )
 
     # Verify DPR client was called
-    mock_dpr_client.run_process.assert_called_once()
-    mock_dpr_client.wait_for_job.assert_called_once_with(mock_job_status, mock_logger, "'s3_l0' processor")
+    # mock_dpr_client.run_process.assert_called_once()
+    # mock_dpr_client.wait_for_job.assert_called_once_with(mock_job_status, mock_logger, "'s3_l0' processor")
+    spy_run_process.assert_called_once()
+    spy_wait_for_job.assert_called_once()
 
     # Verify result is the STAC items from update_eopf_assets
     assert result == mock_stac_items
