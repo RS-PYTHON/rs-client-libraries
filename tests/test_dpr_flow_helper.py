@@ -176,7 +176,7 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
 
     mock_item_cls.return_value = mock_item
 
-    item = create_stac_item(
+    create_stac_item(
         env=env,
         input_products=input_products,
         eopf_feature=eopf_feature,
