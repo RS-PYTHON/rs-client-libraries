@@ -21,6 +21,7 @@ Fixtures defined in a conftest.py can be used by any test in that package withou
 (pytest will automatically discover them).
 """
 import copy
+import datetime
 import json
 
 # pylint: disable=unused-argument
@@ -36,6 +37,7 @@ import responses
 from moto import mock_aws
 from prefect.testing.utilities import prefect_test_harness
 from pydantic import SecretStr
+from pystac import Asset, Item
 from starlette import status
 
 from rs_client.rs_client import RsClient
@@ -44,6 +46,7 @@ from rs_common.config import EPlatform
 from rs_common.utils import env_bool
 from rs_workflows import init_pi_db_flow
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.payload_generator import RSPY_TEMP_BUCKET
 from rs_workflows.payload_template import (  # StoreOptionsWrapper,
     StorageOptions,
     StoreParams,
@@ -233,8 +236,8 @@ def clear_caches():
     StacBase.get_collection.cache_clear()  # pylint:disable=no-member
 
 
-@pytest.fixture(scope="function")
-def mocked_s3(monkeypatch):
+@pytest.fixture(scope="function", name="mocked_s3")
+def _mocked_s3(monkeypatch):
     """Return a mocked S3 client."""
     monkeypatch.setenv("MOTO_S3_CUSTOM_ENDPOINTS", S3_ENDPOINT)
     monkeypatch.setenv("S3_ACCESSKEY", S3_ACCESSKEY)
@@ -893,6 +896,83 @@ def _mock_dpr_process_in():
     mock.processor_name = msg
 
     return mock
+
+
+@pytest.fixture(name="mocked_processor_output")
+def _mocked_processor_output(mocker, mocked_s3) -> tuple[str, dict[str, dict]]:
+    """
+    Mock items returned by the DPR processor.
+
+    Returns the S3 path and the items that we expect to be passed to catalog_client.CatalogClient.add_item
+    """
+
+    # Mock catalog_flow.get_item method
+    max_eopf_datetime = "2024-01-10T12:00:00+00:00"
+    mock_item = mocker.Mock()
+    mock_item.to_dict.return_value = {
+        "properties": {
+            "eopf:origin_datetime": max_eopf_datetime,
+        },
+    }
+    mock_future = mocker.Mock()
+    mock_future.result.return_value = mock_item
+    mocker.patch("rs_workflows.dpr_flow.catalog_flow.get_item.submit", return_value=mock_future)
+
+    def mock_zattrs_data(item_id: str, product_type: str):
+        """Mock .zattrs contents returned by the DPR processor."""
+        return {
+            "stac_discovery": {
+                "id": item_id,
+                "geometry": {"type": "Polygon", "coordinates": [[[-10, 40], [10, 40], [10, 60], [-10, 60], [-10, 40]]]},
+                "bbox": [-10, 40, 10, 60],
+                "properties": {
+                    "datetime": "2024-01-01T12:00:00Z",
+                    "product:type": product_type,  # ← this must be a real string!
+                },
+            },
+        }
+
+    # key=product_name, value=zattrs_data
+    zattrs_products = {
+        "GRD": mock_zattrs_data("S1A_20240101_GRD", "S1_GRD"),
+        "NTC": mock_zattrs_data("S2A_20240101_NTC", "S2_NTC"),
+    }
+
+    mocked_s3.create_bucket(Bucket=RSPY_TEMP_BUCKET)
+    expected_items = {}
+    s3_path = f"dpr_mockup_results/{OWNER_ID}/TEST_FLOW_OUTPUT"
+
+    # For each product
+    for product_name, zattrs_data in zattrs_products.items():
+
+        # Upload .zattrs file
+        mocked_s3.put_object(
+            Body=json.dumps(zattrs_data),
+            Bucket=RSPY_TEMP_BUCKET,
+            Key=f"{s3_path}/{product_name}/.zattrs",
+        )
+
+        # Build the item that we expect to be passed to catalog_client.CatalogClient.add_item
+        stac_data = zattrs_data["stac_discovery"]
+        expected_item = Item(
+            id=product_name,
+            geometry=stac_data["geometry"],
+            bbox=stac_data["bbox"],
+            datetime=datetime.datetime.fromisoformat(stac_data["properties"]["datetime"]),
+            properties=stac_data["properties"] | {"eopf:origin_datetime": max_eopf_datetime, "stac_version": "1.1.0"},
+            stac_extensions=[],
+            assets={
+                product_name: Asset(
+                    href=f"s3://{RSPY_TEMP_BUCKET}/{s3_path}/{product_name}",
+                    title=product_name,
+                    media_type="application/vnd+zarr",
+                    roles=["data", "metadata"],
+                ),
+            },
+        )
+        expected_items[product_name] = expected_item.to_dict()
+
+    return s3_path, expected_items
 
 
 @pytest.fixture(name="mock_store_params")

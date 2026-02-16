@@ -133,7 +133,13 @@ def create_stac_item(
         list[Item]: List of constructed STAC Item objects.
     """
 
-    def build_item(feature_dict: dict, eopf_origin_datetimes, product_name, dpr_processor: str) -> Item:
+    def build_item(
+        feature_dict: dict,
+        eopf_origin_datetimes,
+        product_name,
+        dpr_processor: str,
+        assets: dict[str, Asset],
+    ) -> Item:
         """
         Build a STAC Item from a feature dictionary.
 
@@ -184,6 +190,7 @@ def create_stac_item(
             datetime=datetime.datetime.fromisoformat(feature_dict["properties"]["datetime"]),
             properties=feature_dict["properties"],
             stac_extensions=stac_extensions,
+            assets=assets,
         )
 
     def build_asset(path: str, product_name: str) -> Asset:
@@ -213,9 +220,13 @@ def create_stac_item(
     # Note: input_products != input_adfs
     eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
 
-    item = build_item(eopf_feature, eopf_origin_datetime, product_name, dpr_processor)
-    item.assets = {product_name: build_asset(s3_data_location, product_name)}
-
+    item = build_item(
+        eopf_feature,
+        eopf_origin_datetime,
+        product_name,
+        dpr_processor,
+        assets={product_name: build_asset(s3_data_location, product_name)},
+    )
     return item
 
 
