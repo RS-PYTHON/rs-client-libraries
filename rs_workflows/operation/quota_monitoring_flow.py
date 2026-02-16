@@ -24,7 +24,6 @@ import psycopg2
 import psycopg2.extras
 from botocore.client import Config
 from prefect import flow, get_run_logger
-from prefect.states import Failed
 from psycopg2 import DatabaseError, IntegrityError
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
@@ -250,34 +249,35 @@ async def collect_obs_logs(
 
         except botocore.exceptions.ClientError as err:
             print("❌ S3 access failed.")
-            return Failed(message=str(err))
+            raise RuntimeError(f"S3 access failed: {err} !") from err
 
         except IntegrityError as exc:
             conn.rollback()
             logger.error(f"❌ Database integrity error: {exc}")
-            return Failed(message=str(exc))
+            raise RuntimeError(f"Database integrity error: {exc} !") from exc
 
         except DatabaseError as exc:
             conn.rollback()
             logger.error(f"❌ Database error: {exc}")
-            return Failed(message=str(exc))
+            raise RuntimeError(f"Database error: {exc} !") from exc
 
 
-@flow(name="clean-obs-logs")
-async def clean_obs_logs(
-    retention_days: int = DEFAULT_MAX_DAYS,
+@flow(name="consolidate-obs-logs")
+async def consolidate_obs_logs(
+    retention_hours: int = 2,
     env: FlowEnvArgs = FlowEnvArgs(owner_id="operator-quota"),
 ):
     """
-    Purge the table s3_access_log.
+    Consolidate old OBS access logs into s3_log_consolidate, then purge them
+    from s3_access_log.
+
     Args:
-        retention_days : number of days of retention of log information from OBS
-        env (FlowEnvArgs, optional): Flow environment arguments containing owner_id and other
-            configuration parameters.
-    Returns:
-        None
+        retention_hours: Number of hours to retain in the raw s3_access_log table.
+        env (FlowEnvArgs, optional): Flow environment arguments containing owner_id
+            and other configuration parameters.
+
     Raises:
-        psycopg2.Error: If database connection or insertion operations fail.
+        psycopg2.Error: If database connection or SQL operations fail.
     """
 
     logger = get_run_logger()
@@ -291,17 +291,60 @@ async def clean_obs_logs(
         db_host = os.environ["POSTGRES_HOST"]
         db_port = os.environ["POSTGRES_PORT"]
 
-        conn = psycopg2.connect(dbname=DB_NAME, user=db_user, password=db_password, host=db_host, port=db_port)
+        conn = psycopg2.connect(
+            dbname=DB_NAME,
+            user=db_user,
+            password=db_password,
+            host=db_host,
+            port=db_port,
+        )
 
         with conn:
             with conn.cursor() as cur:
+                logger.info("⏳ Consolidating and cleaning OBS logs older than %s hours", retention_hours)
+
                 cur.execute(
                     """
+                    WITH params AS (
+                        SELECT (now() - INTERVAL %s) AS max_time
+                    ),
+                    ins AS (
+                        INSERT INTO s3_log_consolidate (
+                            bucket,
+                            time,
+                            requester,
+                            operation,
+                            bytes_sent,
+                            object_size,
+                            total_time_ms,
+                            turnaround_time_ms
+                        )
+                        SELECT
+                            bucket,
+                            date_trunc('hour', time) AS date_truncated,
+                            requester,
+                            operation,
+                            SUM(bytes_sent)  AS bytes_sent,
+                            SUM(object_size) AS object_size,
+                            SUM(total_time_ms) AS total_time_ms,
+                            SUM(turnaround_time_ms) AS turnaround_time_ms
+                        FROM s3_access_log, params
+                        WHERE time < params.max_time
+                          AND http_status = 200
+                          AND operation NOT IN (
+                                'REST.GET.ACL',
+                                'REST.HEAD.BUCKET',
+                                'REST.GET.TAGGING',
+                                'REST.GET.BUCKETVERSIONS'
+                          )
+                        GROUP BY 1, 2, 3, 4
+                        RETURNING 1
+                    )
                     DELETE FROM s3_access_log
-                    WHERE time < NOW() - INTERVAL %s;
+                    WHERE time < (SELECT max_time FROM params);
                     """,
-                    (f"{retention_days} days",),  # ← tuple obligatoire
+                    (f"{retention_hours} hours",),
                 )
 
         conn.close()
-        logger.info("⏳ Old data have been removed.")
+        logger.info("✔ Consolidation and cleanup completed.")
