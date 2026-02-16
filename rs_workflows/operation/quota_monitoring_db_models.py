@@ -14,14 +14,7 @@
 
 """Tables for the quota monitoring database"""
 
-from sqlalchemy import (
-    TIMESTAMP,
-    BigInteger,
-    Column,
-    Index,
-    Integer,
-    Text,
-)
+from sqlalchemy import TIMESTAMP, BigInteger, Column, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import INET
 from sqlalchemy.orm import DeclarativeBase
 
@@ -81,4 +74,34 @@ class S3AccessLog(Base):  # pylint: disable=too-few-public-methods
             "bytes_sent",
             postgresql_where=(operation == "REST.GET.OBJECT"),
         ),
+    )
+
+
+class S3LogConsolidate(Base):  # pylint: disable=too-few-public-methods
+    """
+    ORM mapping for the s3_log_consolidate table.
+    Mirrors the PostgreSQL schema.
+    """
+
+    __tablename__ = "s3_log_consolidate"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    bucket = Column(Text, nullable=False)
+    time = Column(TIMESTAMP, nullable=False)
+    requester = Column(Text)
+    operation = Column(Text)
+
+    bytes_sent = Column(BigInteger)
+    object_size = Column(BigInteger)
+    total_time_ms = Column(BigInteger)
+    turnaround_time_ms = Column(BigInteger)
+
+    created_at = Column(TIMESTAMP, nullable=False, server_default=text("now()"))
+
+    __table_args__ = (
+        # Index to accelerate recent-time queries by bucket
+        Index("idx_s3log_consolidate_time_bucket", "time", "bucket"),
+        # Composite index for analytics by requester and operation
+        Index("idx_s3log_consolidate_time_requester_operation", "time", "requester", "operation"),
     )

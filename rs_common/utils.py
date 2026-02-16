@@ -112,3 +112,11 @@ def create_valcover_filter(
             },
         ],
     }
+
+
+# True if the 'RSPY_LOCAL_MODE' environemnt variable is set to 1, true or yes (case insensitive).
+# By default: if not set or set to a different value, return False.
+LOCAL_MODE: bool = env_bool("RSPY_LOCAL_MODE", default=False)
+
+# Cluster mode is the opposite of local mode
+CLUSTER_MODE: bool = not LOCAL_MODE
