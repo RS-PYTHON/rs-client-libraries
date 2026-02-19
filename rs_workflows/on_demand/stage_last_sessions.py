@@ -166,6 +166,7 @@ async def cadip_session_stage(
         staging_client = flow_env.rs_client.get_staging_client()
 
         # Trigger staging and wait for jobs to finish
+        logger.info(f"Start staging URL'{cadip_search_url}' on collection '{catalog_cadip_collection}'.")
         job_all_status = staging_client.run_staging(cadip_search_url, catalog_cadip_collection)
         staging_client.wait_for_jobs(
             job_all_status,
@@ -272,11 +273,14 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
 
         # Pause Prefect flow to let user select a session
         selection = await apause_flow_run(wait_for_input=SessionSelection)
-
         selected_session: str = session_list[selection.selected.value]  # type: ignore
-        logger.info(f"Internal identifier: {selected_session}")
 
-        await stage_session_common(flow_env, cadip_collection, selected_session)
+        if selected_session is not None:
+            logger.info(f"Session to be stagged: {selected_session}")
+            # Build catalog collection name based on CADIP collection
+            await stage_session_common(flow_env, cadip_collection, selected_session)
+        else:
+            logger.info("No session has been found.")
 
 
 @flow(name="select and stage latest session")
@@ -314,9 +318,12 @@ async def stage_latest_session(cadip_collection: CadipCollections, owner_identif
             )
 
         selected_session: str = session_found[0].id  # type: ignore
-        logger.info(f"Internal identifier: {selected_session}")
-        # Build catalog collection name based on CADIP collection
-        await stage_session_common(flow_env, cadip_collection, selected_session)
+        if selected_session is not None:
+            logger.info(f"Session to be stagged: {selected_session}")
+            # Build catalog collection name based on CADIP collection
+            await stage_session_common(flow_env, cadip_collection, selected_session)
+        else:
+            logger.info("No session has been found.")
 
 
 async def stage_session_common(flow_env: FlowEnv, cadip_collection: CadipCollections, selected_session: str):
