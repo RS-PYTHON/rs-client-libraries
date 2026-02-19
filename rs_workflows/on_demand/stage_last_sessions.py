@@ -273,9 +273,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
 
         # Pause Prefect flow to let user select a session
         selection = await apause_flow_run(wait_for_input=SessionSelection)
-
         selected_session: str = session_list[selection.selected.value]  # type: ignore
-        logger.info(f"Session to be stagged: {selected_session}")
 
         if selected_session is not None:
             logger.info(f"Session to be stagged: {selected_session}")
