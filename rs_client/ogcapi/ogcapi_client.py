@@ -276,15 +276,17 @@ class OgcApiClient(RsClient):
                         f"curl -X 'DELETE' '{host_dpr_service}/dpr/jobs/{job_identifier}'",
                     )
 
-            previous_status = {"type": "unknown",
-                               "progress": "unknown",
-                               "created": "unknown",
-                               "started": "unknown",
-                               "updated": "unknown",
-                               "status": "unknown",
-                               "processID": "unknown",
-                               "message": "unknown",
-                               "jobID": "unknown"}
+            previous_status = {
+                "type": "unknown",
+                "progress": "unknown",
+                "created": "unknown",
+                "started": "unknown",
+                "updated": "unknown",
+                "status": "unknown",
+                "processID": "unknown",
+                "message": "unknown",
+                "jobID": "unknown",
+            }
             # We use previous_status to remove log when the status remains unchanged.
             # This way we reduce the number of unusefull information
 
