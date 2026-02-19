@@ -280,7 +280,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
             # Build catalog collection name based on CADIP collection
             await stage_session_common(flow_env, cadip_collection, selected_session)
         else:
-            logger.info("No session has been founded.")
+            logger.info("No session has been found.")
 
 
 @flow(name="select and stage latest session")
@@ -323,7 +323,7 @@ async def stage_latest_session(cadip_collection: CadipCollections, owner_identif
             # Build catalog collection name based on CADIP collection
             await stage_session_common(flow_env, cadip_collection, selected_session)
         else:
-            logger.info("No session has been founded.")
+            logger.info("No session has been found.")
 
 
 async def stage_session_common(flow_env: FlowEnv, cadip_collection: CadipCollections, selected_session: str):

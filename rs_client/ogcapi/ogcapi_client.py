@@ -276,33 +276,23 @@ class OgcApiClient(RsClient):
                         f"curl -X 'DELETE' '{host_dpr_service}/dpr/jobs/{job_identifier}'",
                     )
 
-            previous_status = {
-                "type": "unknown",
-                "progress": "unknown",
-                "created": "unknown",
-                "started": "unknown",
-                "updated": "unknown",
-                "status": "unknown",
-                "processID": "unknown",
-                "message": "unknown",
-                "jobID": "unknown",
-            }
+            previous_status: dict[str, str] = {}
             # We use previous_status to remove log when the status remains unchanged.
-            # This way we reduce the number of unusefull information
+            # This way we reduce the number of useless information
 
             while True:
                 job_status = self.get_job_info(job_identifier)
-                to_be_log = previous_status != job_status
+                to_be_logged = previous_status != job_status
                 previous_status = job_status
 
-                if logger and to_be_log:
+                if logger and to_be_logged:
                     logger.info(f"job_status: {job_status}")
                 status_type = job_status.get("status", "")
 
                 if status_type == 404:
                     raise RuntimeError(f"{job_name} job {job_identifier!r}: NOT FOUND \n")
 
-                if logger and to_be_log:
+                if logger and to_be_logged:
                     logger.info(
                         f"----- {job_name} job {job_identifier!r}: {status_type.upper()} \n",
                     )
