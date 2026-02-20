@@ -26,6 +26,10 @@ from pystac import ItemCollection
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.utils import ReportManager
+from urllib.parse import urlparse
+
+report_verbose: ReportManager = None
 
 
 @task(name="create result artifact")
@@ -140,7 +144,8 @@ async def cadip_session_stage(
     env: FlowEnvArgs,
     cadip_search_url: str,
     catalog_cadip_collection: str,
-) -> None:
+    verbose: bool = False
+) -> dict:
     """
     Stage CADIP items into the target catalog collection.
 
@@ -151,9 +156,6 @@ async def cadip_session_stage(
             Either a pystac.ItemCollection or a JSON string representing CADIP items.
         catalog_cadip_collection:
             Target catalog collection identifier where sessions will be staged.
-
-    Returns:
-        None. Side effects include triggering staging jobs and logging their status.
     """
 
     # Initialize flow environment and telemetry span
@@ -168,11 +170,14 @@ async def cadip_session_stage(
         # Trigger staging and wait for jobs to finish
         logger.info(f"Start staging URL'{cadip_search_url}' on collection '{catalog_cadip_collection}'.")
         job_all_status = staging_client.run_staging(cadip_search_url, catalog_cadip_collection)
-        staging_client.wait_for_jobs(
+        result = staging_client.wait_for_jobs(
             job_all_status,
             logger,
             poll_interval=2,  # Poll every 2 seconds
         )
+        parsed = urlparse(cadip_search_url)
+        hostname = parsed.hostname
+        return result[hostname]
 
 
 def make_session_enum(values: dict[str, str]) -> Enum:
@@ -284,7 +289,9 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
 
 
 @flow(name="select and stage latest session")
-async def stage_latest_session(cadip_collection: CadipCollections, owner_identifier: str = "copernicus"):
+async def stage_latest_session(cadip_collection: CadipCollections, 
+                               owner_identifier: str = "copernicus",
+                               verbose: bool = False):
     """
     Stage the latest CADIP session from a selected station.
 
@@ -300,7 +307,9 @@ async def stage_latest_session(cadip_collection: CadipCollections, owner_identif
     Returns:
         None
     """
-    # Init flow environment and opentelemetry span
+    if verbose:
+        report_verbose = ReportManager()
+
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
     with flow_env.start_span(__name__, "stage_selected_session"):
         logger = get_run_logger()
@@ -313,20 +322,29 @@ async def stage_latest_session(cadip_collection: CadipCollections, owner_identif
         ).result()
 
         if not session_found:
+            if verbose:
+                report_verbose.failed_step(1, "No session has been found.")
             raise ValueError(
                 "No Cadip session found.",
             )
 
         selected_session: str = session_found[0].id  # type: ignore
         if selected_session is not None:
+            if verbose:
+                report_verbose.success_step(1, f"Session {selected_session} has been found.")
             logger.info(f"Session to be stagged: {selected_session}")
             # Build catalog collection name based on CADIP collection
-            await stage_session_common(flow_env, cadip_collection, selected_session)
+            await stage_session_common(flow_env, cadip_collection, selected_session, verbose)
         else:
             logger.info("No session has been found.")
+            if verbose:
+                report_verbose.failed_step(1, "No session has been found.")
 
 
-async def stage_session_common(flow_env: FlowEnv, cadip_collection: CadipCollections, selected_session: str):
+async def stage_session_common(flow_env: FlowEnv,
+                               cadip_collection: CadipCollections,
+                               selected_session: str,
+                               verbose: bool = False):
     """
     Stage a CADIP session by searching and staging it in the catalog.
     This asynchronous function stages a selected CADIP session by:
@@ -365,4 +383,6 @@ async def stage_session_common(flow_env: FlowEnv, cadip_collection: CadipCollect
     # Create artifact
     result_artifact = create_result_artifact.submit(selected_session, datetime.now(timezone.utc) - date_start)
     result_artifact.result()  # type: ignore[unused-coroutine]
+
+    print(result_staging)
     logger.info(f"Session {selected_session} staged successfully.")
