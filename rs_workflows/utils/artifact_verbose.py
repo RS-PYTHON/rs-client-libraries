@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
-from prefect.artifacts import create_table_artifact
+from prefect.artifacts import acreate_table_artifact
 
 
 class ReportManager:
@@ -54,7 +54,7 @@ class ReportManager:
         }
         self.report.append(item)
 
-    def add_report_as_artefact(self, key_value: str, description_value: str):
+    async def push_report(self, key_value: str, description_value: str):
         """
         Publish the accumulated report as a Prefect table artifact.
 
@@ -72,7 +72,7 @@ class ReportManager:
         now = datetime.now()
         timestamp = now.strftime("%A %d %B %Y, %H:%M:%S")
 
-        return create_table_artifact(
+        await acreate_table_artifact(
             key=key_value.lower(),
             table=self.report,
             description=f"{description_value} - {timestamp}",

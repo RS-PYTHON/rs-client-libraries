@@ -29,7 +29,6 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.utils import ReportManager
 from urllib.parse import urlparse
 
-report_verbose: ReportManager = None
 
 
 @task(name="create result artifact")
@@ -143,9 +142,8 @@ async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: st
 async def cadip_session_stage(
     env: FlowEnvArgs,
     cadip_search_url: str,
-    catalog_cadip_collection: str,
-    verbose: bool = False
-) -> dict:
+    catalog_cadip_collection: str
+) -> str:
     """
     Stage CADIP items into the target catalog collection.
 
@@ -176,8 +174,8 @@ async def cadip_session_stage(
             poll_interval=2,  # Poll every 2 seconds
         )
         parsed = urlparse(cadip_search_url)
-        hostname = parsed.hostname
-        return result[hostname]
+        hostname = parsed.hostname        
+        return result[hostname].get("status", "")
 
 
 def make_session_enum(values: dict[str, str]) -> Enum:
@@ -307,8 +305,7 @@ async def stage_latest_session(cadip_collection: CadipCollections,
     Returns:
         None
     """
-    if verbose:
-        report_verbose = ReportManager()
+    report_verbose = ReportManager() if verbose else None
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
     with flow_env.start_span(__name__, "stage_selected_session"):
@@ -322,7 +319,7 @@ async def stage_latest_session(cadip_collection: CadipCollections,
         ).result()
 
         if not session_found:
-            if verbose:
+            if report_verbose is not None:
                 report_verbose.failed_step(1, "No session has been found.")
             raise ValueError(
                 "No Cadip session found.",
@@ -330,21 +327,24 @@ async def stage_latest_session(cadip_collection: CadipCollections,
 
         selected_session: str = session_found[0].id  # type: ignore
         if selected_session is not None:
-            if verbose:
+            if report_verbose is not None:
                 report_verbose.success_step(1, f"Session {selected_session} has been found.")
             logger.info(f"Session to be stagged: {selected_session}")
             # Build catalog collection name based on CADIP collection
-            await stage_session_common(flow_env, cadip_collection, selected_session, verbose)
+            await stage_session_common(flow_env, cadip_collection, selected_session, verbose, report_verbose)
         else:
             logger.info("No session has been found.")
-            if verbose:
+            if report_verbose is not None:
                 report_verbose.failed_step(1, "No session has been found.")
+        if report_verbose is not None:
+            await report_verbose.push_report("test-report", "Step by step results")
 
 
 async def stage_session_common(flow_env: FlowEnv,
                                cadip_collection: CadipCollections,
                                selected_session: str,
-                               verbose: bool = False):
+                               verbose: bool = False,
+                               report_verbose: ReportManager | None = None):
     """
     Stage a CADIP session by searching and staging it in the catalog.
     This asynchronous function stages a selected CADIP session by:
@@ -376,13 +376,18 @@ async def stage_session_common(flow_env: FlowEnv,
     result_staging = cadip_session_stage.submit(
         flow_env.serialize(),
         cadip_search_url=f"{cadip_client.href_service}/search?ids={selected_session}",
-        catalog_cadip_collection=catalog_cadip_collection,
+        catalog_cadip_collection=catalog_cadip_collection
     )
-    result_staging.result()  # type: ignore[unused-coroutine]
+    status = result_staging.result()
 
-    # Create artifact
     result_artifact = create_result_artifact.submit(selected_session, datetime.now(timezone.utc) - date_start)
     result_artifact.result()  # type: ignore[unused-coroutine]
 
-    print(result_staging)
-    logger.info(f"Session {selected_session} staged successfully.")
+    if status == "successful":
+        logger.info(f"Session {selected_session} staged successfully.")
+        if report_verbose is not None:
+            report_verbose.success_step(2, "Staging completed successfully.")
+    else:
+        logger.error(f"Session {selected_session} staged failed (status is '{status}').")
+        if report_verbose is not None:
+            report_verbose.failed_step(2, "Staging failed (status is '{status}').")
