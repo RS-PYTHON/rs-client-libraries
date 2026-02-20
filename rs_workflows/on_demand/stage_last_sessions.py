@@ -26,7 +26,7 @@ from pystac import ItemCollection
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from rs_workflows.utils import ReportManager
+from rs_workflows.utils.artifact_verbose import ReportManager
 from urllib.parse import urlparse
 
 

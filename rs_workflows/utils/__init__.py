@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""utilitiy module for flows."""
+""" util module for flow """
 
 # Set automatically by running `poetry dynamic-versioning`
 __version__ = "0.0.0"
