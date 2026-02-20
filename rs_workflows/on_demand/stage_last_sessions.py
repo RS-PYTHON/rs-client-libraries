@@ -340,7 +340,6 @@ async def stage_session_common(
     flow_env: FlowEnv,
     cadip_collection: CadipCollections,
     selected_session: str,
-    verbose: bool = False,
     report_verbose: ReportManager | None = None,
 ):
     """
