@@ -17,7 +17,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from prefect import apause_flow_run, flow, get_run_logger, task
 from prefect.artifacts import acreate_link_artifact, acreate_markdown_artifact
@@ -27,8 +27,6 @@ from pystac import ItemCollection
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.utils.artifact_verbose import ReportManager
-from urllib.parse import urlparse
-
 
 
 @task(name="create result artifact")
@@ -139,11 +137,7 @@ async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: st
 
 
 @task(name="Cadip session stage")
-async def cadip_session_stage(
-    env: FlowEnvArgs,
-    cadip_search_url: str,
-    catalog_cadip_collection: str
-) -> str:
+async def cadip_session_stage(env: FlowEnvArgs, cadip_search_url: str, catalog_cadip_collection: str) -> str:
     """
     Stage CADIP items into the target catalog collection.
 
@@ -174,7 +168,7 @@ async def cadip_session_stage(
             poll_interval=2,  # Poll every 2 seconds
         )
         parsed = urlparse(cadip_search_url)
-        hostname = parsed.hostname        
+        hostname = parsed.hostname
         return result[hostname].get("status", "")
 
 
@@ -287,9 +281,11 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
 
 
 @flow(name="select and stage latest session")
-async def stage_latest_session(cadip_collection: CadipCollections, 
-                               owner_identifier: str = "copernicus",
-                               verbose: bool = False):
+async def stage_latest_session(
+    cadip_collection: CadipCollections,
+    owner_identifier: str = "copernicus",
+    verbose: bool = False,
+):
     """
     Stage the latest CADIP session from a selected station.
 
@@ -340,11 +336,13 @@ async def stage_latest_session(cadip_collection: CadipCollections,
             await report_verbose.push_report("test-report", "Step by step results")
 
 
-async def stage_session_common(flow_env: FlowEnv,
-                               cadip_collection: CadipCollections,
-                               selected_session: str,
-                               verbose: bool = False,
-                               report_verbose: ReportManager | None = None):
+async def stage_session_common(
+    flow_env: FlowEnv,
+    cadip_collection: CadipCollections,
+    selected_session: str,
+    verbose: bool = False,
+    report_verbose: ReportManager | None = None,
+):
     """
     Stage a CADIP session by searching and staging it in the catalog.
     This asynchronous function stages a selected CADIP session by:
@@ -376,7 +374,7 @@ async def stage_session_common(flow_env: FlowEnv,
     result_staging = cadip_session_stage.submit(
         flow_env.serialize(),
         cadip_search_url=f"{cadip_client.href_service}/search?ids={selected_session}",
-        catalog_cadip_collection=catalog_cadip_collection
+        catalog_cadip_collection=catalog_cadip_collection,
     )
     status = result_staging.result()
 

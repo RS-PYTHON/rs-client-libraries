@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime
+
 from prefect.artifacts import acreate_table_artifact
 
 
