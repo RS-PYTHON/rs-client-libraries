@@ -327,7 +327,7 @@ async def stage_latest_session(
                 report_verbose.success_step(1, f"Session {selected_session} has been found.")
             logger.info(f"Session to be stagged: {selected_session}")
             # Build catalog collection name based on CADIP collection
-            await stage_session_common(flow_env, cadip_collection, selected_session, verbose, report_verbose)
+            await stage_session_common(flow_env, cadip_collection, selected_session, report_verbose)
         else:
             logger.info("No session has been found.")
             if report_verbose is not None:

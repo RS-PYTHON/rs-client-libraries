@@ -70,7 +70,7 @@ urllib3 = ">=2.6.3"
 SQLAlchemy = "^2.0.37"
 uv = ">=0.9.7"
 psycopg2-binary = ">=2.9.10"
-werkzeug = "3.1.5"
+werkzeug = ">=3.1.6"
 
 [tool.poetry.group.dev]
 optional = true
