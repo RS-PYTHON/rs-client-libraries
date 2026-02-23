@@ -20,15 +20,15 @@ from enum import Enum
 from urllib.parse import urlencode, urlparse
 
 from prefect import apause_flow_run  # type: ignore # pylint: disable=import-error
-from prefect import (  # type: ignore # pylint: disable=import-error
+from prefect import (
     flow,
     get_run_logger,
     task,
 )
-from prefect.artifacts import (  # type: ignore # pylint: disable=import-error
+from prefect.artifacts import (
     acreate_link_artifact,  # type: ignore # pylint: disable=import-error
 )
-from prefect.artifacts import (  # type: ignore # pylint: disable=import-error
+from prefect.artifacts import (
     acreate_markdown_artifact,  # type: ignore # pylint: disable=import-error
 )
 from pydantic import BaseModel, Field  # type: ignore # pylint: disable=import-error
