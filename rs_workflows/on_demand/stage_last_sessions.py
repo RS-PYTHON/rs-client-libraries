@@ -17,7 +17,7 @@
 import json
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 from prefect import apause_flow_run, flow, get_run_logger, task
 from prefect.artifacts import acreate_link_artifact, acreate_markdown_artifact
@@ -26,6 +26,7 @@ from pystac import ItemCollection
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.utils.artifact_verbose import ReportManager
 
 
 @task(name="create result artifact")
@@ -136,11 +137,7 @@ async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: st
 
 
 @task(name="Cadip session stage")
-async def cadip_session_stage(
-    env: FlowEnvArgs,
-    cadip_search_url: str,
-    catalog_cadip_collection: str,
-) -> None:
+async def cadip_session_stage(env: FlowEnvArgs, cadip_search_url: str, catalog_cadip_collection: str) -> str:
     """
     Stage CADIP items into the target catalog collection.
 
@@ -151,9 +148,6 @@ async def cadip_session_stage(
             Either a pystac.ItemCollection or a JSON string representing CADIP items.
         catalog_cadip_collection:
             Target catalog collection identifier where sessions will be staged.
-
-    Returns:
-        None. Side effects include triggering staging jobs and logging their status.
     """
 
     # Initialize flow environment and telemetry span
@@ -166,12 +160,16 @@ async def cadip_session_stage(
         staging_client = flow_env.rs_client.get_staging_client()
 
         # Trigger staging and wait for jobs to finish
+        logger.info(f"Start staging URL'{cadip_search_url}' on collection '{catalog_cadip_collection}'.")
         job_all_status = staging_client.run_staging(cadip_search_url, catalog_cadip_collection)
-        staging_client.wait_for_jobs(
+        result = staging_client.wait_for_jobs(
             job_all_status,
             logger,
             poll_interval=2,  # Poll every 2 seconds
         )
+        parsed = urlparse(cadip_search_url)
+        hostname = parsed.hostname
+        return result[hostname].get("status", "")
 
 
 def make_session_enum(values: dict[str, str]) -> Enum:
@@ -272,15 +270,22 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
 
         # Pause Prefect flow to let user select a session
         selection = await apause_flow_run(wait_for_input=SessionSelection)
-
         selected_session: str = session_list[selection.selected.value]  # type: ignore
-        logger.info(f"Internal identifier: {selected_session}")
 
-        await stage_session_common(flow_env, cadip_collection, selected_session)
+        if selected_session is not None:
+            logger.info(f"Session to be stagged: {selected_session}")
+            # Build catalog collection name based on CADIP collection
+            await stage_session_common(flow_env, cadip_collection, selected_session)
+        else:
+            logger.info("No session has been found.")
 
 
 @flow(name="select and stage latest session")
-async def stage_latest_session(cadip_collection: CadipCollections, owner_identifier: str = "copernicus"):
+async def stage_latest_session(
+    cadip_collection: CadipCollections,
+    owner_identifier: str = "copernicus",
+    verbose: bool = False,
+):
     """
     Stage the latest CADIP session from a selected station.
 
@@ -296,7 +301,8 @@ async def stage_latest_session(cadip_collection: CadipCollections, owner_identif
     Returns:
         None
     """
-    # Init flow environment and opentelemetry span
+    report_verbose = ReportManager() if verbose else None
+
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
     with flow_env.start_span(__name__, "stage_selected_session"):
         logger = get_run_logger()
@@ -309,17 +315,33 @@ async def stage_latest_session(cadip_collection: CadipCollections, owner_identif
         ).result()
 
         if not session_found:
+            if report_verbose is not None:
+                report_verbose.failed_step(1, "No session has been found.")
             raise ValueError(
                 "No Cadip session found.",
             )
 
         selected_session: str = session_found[0].id  # type: ignore
-        logger.info(f"Internal identifier: {selected_session}")
-        # Build catalog collection name based on CADIP collection
-        await stage_session_common(flow_env, cadip_collection, selected_session)
+        if selected_session is not None:
+            if report_verbose is not None:
+                report_verbose.success_step(1, f"Session {selected_session} has been found.")
+            logger.info(f"Session to be stagged: {selected_session}")
+            # Build catalog collection name based on CADIP collection
+            await stage_session_common(flow_env, cadip_collection, selected_session, verbose, report_verbose)
+        else:
+            logger.info("No session has been found.")
+            if report_verbose is not None:
+                report_verbose.failed_step(1, "No session has been found.")
+        if report_verbose is not None:
+            await report_verbose.push_report("test-report", "Step by step results")
 
 
-async def stage_session_common(flow_env: FlowEnv, cadip_collection: CadipCollections, selected_session: str):
+async def stage_session_common(
+    flow_env: FlowEnv,
+    cadip_collection: CadipCollections,
+    selected_session: str,
+    report_verbose: ReportManager | None = None,
+):
     """
     Stage a CADIP session by searching and staging it in the catalog.
     This asynchronous function stages a selected CADIP session by:
@@ -353,9 +375,16 @@ async def stage_session_common(flow_env: FlowEnv, cadip_collection: CadipCollect
         cadip_search_url=f"{cadip_client.href_service}/search?ids={selected_session}",
         catalog_cadip_collection=catalog_cadip_collection,
     )
-    result_staging.result()  # type: ignore[unused-coroutine]
+    status = result_staging.result()
 
-    # Create artifact
     result_artifact = create_result_artifact.submit(selected_session, datetime.now(timezone.utc) - date_start)
     result_artifact.result()  # type: ignore[unused-coroutine]
-    logger.info(f"Session {selected_session} staged successfully.")
+
+    if status == "successful":
+        logger.info(f"Session {selected_session} staged successfully.")
+        if report_verbose is not None:
+            report_verbose.success_step(2, "Staging completed successfully.")
+    else:
+        logger.error(f"Session {selected_session} staged failed (status is '{status}').")
+        if report_verbose is not None:
+            report_verbose.failed_step(2, "Staging failed (status is '{status}').")
