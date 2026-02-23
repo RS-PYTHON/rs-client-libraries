@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Report Manager to create artifact table """
+"""Report Manager to create artifact table"""
 
 from datetime import datetime
-
-from prefect.artifacts import acreate_table_artifact  # type: ignore # pylint: disable=import-error
+from prefect.artifacts import (
+    acreate_table_artifact,  # type: ignore # pylint: disable=import-error
+)
 
 
 class ReportManager:
