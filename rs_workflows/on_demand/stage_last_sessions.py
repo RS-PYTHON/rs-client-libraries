@@ -19,10 +19,20 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from urllib.parse import urlencode, urlparse
 
-from prefect import apause_flow_run, flow, get_run_logger, task
-from prefect.artifacts import acreate_link_artifact, acreate_markdown_artifact
-from pydantic import BaseModel, Field
-from pystac import ItemCollection
+from prefect import apause_flow_run  # type: ignore # pylint: disable=import-error
+from prefect import (  # type: ignore # pylint: disable=import-error
+    flow,
+    get_run_logger,
+    task,
+)
+from prefect.artifacts import (  # type: ignore # pylint: disable=import-error
+    acreate_link_artifact,  # type: ignore # pylint: disable=import-error
+)
+from prefect.artifacts import (  # type: ignore # pylint: disable=import-error
+    acreate_markdown_artifact,  # type: ignore # pylint: disable=import-error
+)
+from pydantic import BaseModel, Field  # type: ignore # pylint: disable=import-error
+from pystac import ItemCollection  # type: ignore # pylint: disable=import-error
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
@@ -259,6 +269,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
         session_enum = make_session_enum(session_list)
 
         # Pydantic model for Prefect pause input
+        # pylint: disable=too-few-public-methods
         class SessionSelection(BaseModel):
             """
 
@@ -327,7 +338,7 @@ async def stage_latest_session(
                 report_verbose.success_step(1, f"Session {selected_session} has been found.")
             logger.info(f"Session to be stagged: {selected_session}")
             # Build catalog collection name based on CADIP collection
-            await stage_session_common(flow_env, cadip_collection, selected_session, verbose, report_verbose)
+            await stage_session_common(flow_env, cadip_collection, selected_session, report_verbose)
         else:
             logger.info("No session has been found.")
             if report_verbose is not None:
