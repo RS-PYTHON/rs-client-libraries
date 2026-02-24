@@ -56,10 +56,10 @@ from tests import common
 
 # Mocked values
 
-S3_ACCESSKEY = "S3_ACCESSKEY"
-S3_SECRETKEY = "S3_SECRETKEY"
+S3_ACCESSKEY = "testing"
+S3_SECRETKEY = "testing"
 S3_REGION = "us-east-1"
-S3_ENDPOINT = "https://endpoint"
+S3_ENDPOINT = "https://localhost:5000"
 MOCKED_BUCKET = "test-bucket"
 
 RSPY_UAC_CHECK_URL = "https://www.rspy-uac-manager.com"
@@ -217,6 +217,14 @@ def before_and_after(session_mocker):
         "opentelemetry.exporter.otlp.proto.grpc.exporter.OTLPExporterMixin",
     )._export.return_value = True
 
+    # Standard AWS environment variables that moto expects to be set to avoid
+    # looking for real credentials or hitting real AWS endpoints.
+    os.environ["AWS_ACCESS_KEY_ID"] = S3_ACCESSKEY
+    os.environ["AWS_SECRET_ACCESS_KEY"] = S3_SECRETKEY
+    os.environ["AWS_SECURITY_TOKEN"] = "testing"
+    os.environ["AWS_SESSION_TOKEN"] = "testing"
+    os.environ["AWS_DEFAULT_REGION"] = S3_REGION
+
     yield
 
     ###################
@@ -245,12 +253,19 @@ def _mocked_s3(monkeypatch):
     monkeypatch.setenv("S3_SECRETKEY", S3_SECRETKEY)
     monkeypatch.setenv("S3_REGION", S3_REGION)
     monkeypatch.setenv("S3_ENDPOINT", S3_ENDPOINT)
+    # Standard AWS environment variables
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", S3_ACCESSKEY)
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", S3_SECRETKEY)
+    monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", S3_REGION)
     with mock_aws():
         client = boto3.client(
             service_name="s3",
             region_name=S3_REGION,
             aws_access_key_id=S3_ACCESSKEY,
             aws_secret_access_key=S3_SECRETKEY,
+            endpoint_url=S3_ENDPOINT,
         )
         client.create_bucket(Bucket=MOCKED_BUCKET)
         yield client
