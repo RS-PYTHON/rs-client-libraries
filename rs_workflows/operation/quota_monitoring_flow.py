@@ -1,4 +1,4 @@
-# Copyright 2025 Airbus defence And Space
+# Copyright 2026 Airbus defence And Space
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import psycopg2
 import psycopg2.extras
 from botocore.client import Config
 from prefect import flow, get_run_logger
+from psycopg2 import DatabaseError, IntegrityError
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
@@ -151,7 +152,6 @@ def batch_insert(conn, rows):
     """
     if not rows:
         return
-
     with conn.cursor() as cur:
         psycopg2.extras.execute_values(cur, INSERT_SQL, rows)
     conn.commit()
@@ -160,7 +160,7 @@ def batch_insert(conn, rows):
 # -----------------------------
 # 5. Main pipeline
 # -----------------------------
-@flow(name="collect-obs-logs")
+@flow(timeout_seconds=600, name="collect-obs-logs")
 async def collect_obs_logs(
     platform: str = "rspython-ops",
     max_files: int = DEFAULT_MAX_FILES,
@@ -222,47 +222,62 @@ async def collect_obs_logs(
         logger.info(
             f"⏳ Processing Object Storage logs with batch insert from bucket {bucket_name}.",
         )
+        try:
+            for key in list_recent_files(s3, platform, max_files, threshold_minute):
+                logger.info(f"\n📄 Reading file: {key}")
 
-        for key in list_recent_files(s3, platform, max_files, threshold_minute):
-            logger.info(f"\n📄 Reading file: {key}")
+                for line in read_object(s3, platform, key):
+                    parsed = parse_log_line(line)
+                    if parsed:
+                        batch.append(parsed)
 
-            for line in read_object(s3, platform, key):
-                parsed = parse_log_line(line)
-                if parsed:
-                    batch.append(parsed)
+                    # Flush batch when full
+                    if len(batch) >= BATCH_SIZE:
+                        batch_insert(conn, batch)
+                        batch = []
 
-                # Flush batch when full
-                if len(batch) >= BATCH_SIZE:
-                    batch_insert(conn, batch)
-                    batch = []
+                # Optional: delete processed file
+                logger.info(f"\n📄 Deleting file: {key}")
+                s3.delete_object(Bucket=platform + LOG_BUCKET_SUFFIX, Key=key)
 
-            # Optional: delete processed file
-            logger.info(f"\n📄 Deleting file: {key}")
-            s3.delete_object(Bucket=platform + LOG_BUCKET_SUFFIX, Key=key)
+            # Final flush
+            if batch:
+                batch_insert(conn, batch)
 
-        # Final flush
-        if batch:
-            batch_insert(conn, batch)
+            conn.close()
+            print("✅ Done.")
 
-        conn.close()
-        print("✅ Done.")
+        except botocore.exceptions.ClientError as err:
+            print("❌ S3 access failed.")
+            raise RuntimeError(f"S3 access failed: {err} !") from err
+
+        except IntegrityError as exc:
+            conn.rollback()
+            logger.error(f"❌ Database integrity error: {exc}")
+            raise RuntimeError(f"Database integrity error: {exc} !") from exc
+
+        except DatabaseError as exc:
+            conn.rollback()
+            logger.error(f"❌ Database error: {exc}")
+            raise RuntimeError(f"Database error: {exc} !") from exc
 
 
-@flow(name="clean-obs-logs")
-async def clean_obs_logs(
-    retention_days: int = DEFAULT_MAX_DAYS,
+@flow(name="consolidate-obs-logs")
+async def consolidate_obs_logs(
+    retention_hours: int = 2,
     env: FlowEnvArgs = FlowEnvArgs(owner_id="operator-quota"),
 ):
     """
-    Purge the table s3_access_log.
+    Consolidate old OBS access logs into s3_log_consolidate, then purge them
+    from s3_access_log.
+
     Args:
-        retention_days : number of days of retention of log information from OBS
-        env (FlowEnvArgs, optional): Flow environment arguments containing owner_id and other
-            configuration parameters.
-    Returns:
-        None
+        retention_hours: Number of hours to retain in the raw s3_access_log table.
+        env (FlowEnvArgs, optional): Flow environment arguments containing owner_id
+            and other configuration parameters.
+
     Raises:
-        psycopg2.Error: If database connection or insertion operations fail.
+        psycopg2.Error: If database connection or SQL operations fail.
     """
 
     logger = get_run_logger()
@@ -276,17 +291,60 @@ async def clean_obs_logs(
         db_host = os.environ["POSTGRES_HOST"]
         db_port = os.environ["POSTGRES_PORT"]
 
-        conn = psycopg2.connect(dbname=DB_NAME, user=db_user, password=db_password, host=db_host, port=db_port)
+        conn = psycopg2.connect(
+            dbname=DB_NAME,
+            user=db_user,
+            password=db_password,
+            host=db_host,
+            port=db_port,
+        )
 
         with conn:
             with conn.cursor() as cur:
+                logger.info("⏳ Consolidating and cleaning OBS logs older than %s hours", retention_hours)
+
                 cur.execute(
                     """
+                    WITH params AS (
+                        SELECT (now() - INTERVAL %s) AS max_time
+                    ),
+                    ins AS (
+                        INSERT INTO s3_log_consolidate (
+                            bucket,
+                            time,
+                            requester,
+                            operation,
+                            bytes_sent,
+                            object_size,
+                            total_time_ms,
+                            turnaround_time_ms
+                        )
+                        SELECT
+                            bucket,
+                            date_trunc('hour', time) AS date_truncated,
+                            requester,
+                            operation,
+                            SUM(bytes_sent)  AS bytes_sent,
+                            SUM(object_size) AS object_size,
+                            SUM(total_time_ms) AS total_time_ms,
+                            SUM(turnaround_time_ms) AS turnaround_time_ms
+                        FROM s3_access_log, params
+                        WHERE time < params.max_time
+                          AND http_status = 200
+                          AND operation NOT IN (
+                                'REST.GET.ACL',
+                                'REST.HEAD.BUCKET',
+                                'REST.GET.TAGGING',
+                                'REST.GET.BUCKETVERSIONS'
+                          )
+                        GROUP BY 1, 2, 3, 4
+                        RETURNING 1
+                    )
                     DELETE FROM s3_access_log
-                    WHERE time < NOW() - INTERVAL %s;
+                    WHERE time < (SELECT max_time FROM params);
                     """,
-                    (f"{retention_days} days",),  # ← tuple obligatoire
+                    (f"{retention_hours} hours",),
                 )
 
         conn.close()
-        logger.info("⏳ Old data have been removed.")
+        logger.info("✔ Consolidation and cleanup completed.")

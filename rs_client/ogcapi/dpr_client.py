@@ -44,10 +44,18 @@ class DprProcessor(str, Enum):
     """DPR processor name"""
 
     # String value = resource name in the rs-dpr-service
-    MOCKUP = "mockup"
     S1L0 = "s1_l0"
     S3L0 = "s3_l0"
     S1ARD = "s1_ard"
+
+
+class DprPipeline(str, Enum):
+    """DPR pipeline name"""
+
+    # String value = resource name in the rs-dpr-service
+    S1L0FULL = "s1_l0_full"
+    S3L0FULL = "s3_l0_full"
+    S1ARDFULL = "s1_ard_full"
 
 
 @dataclass
@@ -108,7 +116,7 @@ class DprClient(OgcApiClient):
 
     def run_process(
         self,
-        process: DprProcessor,
+        process: str,
         cluster_info: ClusterInfo,
         s3_config_dir: str,
         payload_subpath: str,
@@ -118,7 +126,7 @@ class DprClient(OgcApiClient):
         """Method to start the process from rs-client - Call the endpoint /processes/{process}/execution
 
         Args:
-            process: DPR process
+            process: DPR process name
             cluster_info: Information to connect to a DPR Dask cluster
             s3_config_dir: S3 bucket folder that contains the payload and configuration files to pass to the processor
             payload_subpath: Payload file path, relative to the config folder
@@ -131,7 +139,7 @@ class DprClient(OgcApiClient):
             (or None if endpoint fails) of the running job
         """
 
-        use_mockup = process == DprProcessor.MOCKUP
+        use_mockup = process.lower() == "mockup"
 
         # Data to pass to the real processor
         data = {}
@@ -163,7 +171,7 @@ class DprClient(OgcApiClient):
         data.update(asdict(cluster_info))
 
         # Call the parent method
-        return super()._run_process(process.value, data)
+        return super()._run_process(process, data)
 
     def run_conv_safe_zarr(self, payload: dict, cluster_info: ClusterInfo):
         """Method to start the safe to zarr conversion process from rs-client -

@@ -285,7 +285,7 @@ def test_generate_payload_mockup_processor(flow_env, mock_dpr_process_in):
     """
     Test the special MOCKUP processor path returns a valid mock payload.
     """
-    mock_dpr_process_in.processor_name = DprProcessor.MOCKUP
+    mock_dpr_process_in.processor_name = "MOCKUP"
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[],

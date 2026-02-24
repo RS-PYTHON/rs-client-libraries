@@ -35,6 +35,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace.span import NonRecordingSpan, Span, SpanContext, TraceFlags
 from opentelemetry.util._decorator import _agnosticcontextmanager
 
+from rs_common import utils
 from rs_common.logging import Logging
 from rs_common.utils import env_bool
 
@@ -138,7 +139,8 @@ def init_traces(service_name: str, logger=None):
         if not FROM_PYTEST:
             tempo_endpoint = os.getenv("TEMPO_ENDPOINT")
             if not tempo_endpoint:
-                logger.warning("'TEMPO_ENDPOINT' variable is missing, cannot initialize OpenTelemetry")
+                if utils.CLUSTER_MODE:
+                    logger.warning("'TEMPO_ENDPOINT' variable is missing, cannot initialize OpenTelemetry")
                 return
 
             # TODO: to avoid errors in local mode:

@@ -16,14 +16,18 @@
 
 
 import datetime
+import glob
 import json
 import tempfile
+import time
+from datetime import timedelta
 
 # import datetime
 from os import path as osp
 from pathlib import Path
 from typing import Any
 
+import anyio
 from prefect import get_run_logger, task
 from pystac import Asset, Item
 
@@ -31,6 +35,7 @@ from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_common import prefect_utils
 from rs_workflows import catalog_flow
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
 
 
@@ -43,23 +48,33 @@ def s3_list(s3_prefix: str):
 
 
 def extract_products_and_zattrs(files: list[str], base_path: str):
-    """
-    Extract product names and associated .zattrs files from a list of file paths.
+    """Extract product names and their corresponding .zattrs file paths.
 
-    This function scans a list of file paths and identifies Zarr products by
-    detecting valid `.zattrs` files under the given base path. It supports both
-    common Zarr layouts:
-    1. base_path/<product>/.zattrs
-    2. base_path/<product>/<product>/.zattrs
+    Filters a list of file paths to find .zattrs files located directly under
+    product directories within a base path, following the structure:
+    base_path/product_name/.zattrs
 
     Args:
-        files (list[str]): List of file paths to scan.
-        base_path (str): Base directory under which products are located.
+        files: List of file paths to search through.
+        base_path: The base directory path to strip from file paths.
 
     Returns:
-        tuple[list[str], list[str]]:
-            - A list of unique product names discovered.
-            - A list of full paths to detected `.zattrs` files.
+        A list of tuples, where each tuple contains:
+            - product_name (str): The name of the product directory.
+            - file (str): The full path to the .zattrs file.
+
+        Only includes files that are exactly two levels deep from the base_path
+        and have the filename '.zattrs'.
+
+    Example:
+        >>> files = [
+        ...     "/data/products/product_a/.zattrs",
+        ...     "/data/products/product_b/.zattrs",
+        ...     "/data/products/product_c/subdir/file.txt"
+        ... ]
+        >>> extract_products_and_zattrs(files, "/data/products")
+        [('product_a', '/data/products/product_a/.zattrs'),
+         ('product_b', '/data/products/product_b/.zattrs')]
     """
     dirs_and_attrs = []
 
@@ -109,7 +124,7 @@ def create_stac_item(
     eopf_feature,
     s3_data_location,
     product_name: str,
-    dpr_processor: DprProcessor,
+    dpr_processor: str,
 ) -> Item:
     """
     Create a list of STAC Items from EOPF features and processing payload metadata.
@@ -122,12 +137,20 @@ def create_stac_item(
     Args:
         eopf_features (list[dict]): List of GeoJSON-like feature dictionaries.
         s3_data_location (str): Base S3 path where output products are stored.
+        product_name (str): Product name
+        dpr_processor (str): DPR processor name
 
     Returns:
         list[Item]: List of constructed STAC Item objects.
     """
 
-    def build_item(feature_dict: dict, eopf_origin_datetimes, product_name, dpr_processor: DprProcessor) -> Item:
+    def build_item(
+        feature_dict: dict,
+        eopf_origin_datetimes,
+        product_name,
+        dpr_processor: str,
+        assets: dict[str, Asset],
+    ) -> Item:
         """
         Build a STAC Item from a feature dictionary.
 
@@ -153,7 +176,7 @@ def create_stac_item(
         # - do not set stac_extension SAR for Sentinel-3 products "with instrument different from SRAL"
         # Get in line with the story once clarified !
         stac_extensions: list[str] = []
-        if dpr_processor == DprProcessor.S1L0:
+        if dpr_processor == DprProcessor.S1L0.value:
             stac_extensions = [
                 # TODO: We don't include the full list for now to avoid issues with catalog ingestion
                 # This is because some extensions may require specific properties that are not properly
@@ -178,6 +201,7 @@ def create_stac_item(
             datetime=datetime.datetime.fromisoformat(feature_dict["properties"]["datetime"]),
             properties=feature_dict["properties"],
             stac_extensions=stac_extensions,
+            assets=assets,
         )
 
     def build_asset(path: str, product_name: str) -> Asset:
@@ -205,11 +229,15 @@ def create_stac_item(
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
-    eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products, dpr_processor)
+    eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
 
-    item = build_item(eopf_feature, eopf_origin_datetime, product_name, dpr_processor)
-    item.assets = {product_name: build_asset(s3_data_location, product_name)}
-
+    item = build_item(
+        eopf_feature,
+        eopf_origin_datetime,
+        product_name,
+        dpr_processor,
+        assets={product_name: build_asset(s3_data_location, product_name)},
+    )
     return item
 
 
@@ -217,71 +245,72 @@ def create_stac_item(
 def update_eopf_assets(
     env,
     input_products: list[dict],
-    payload: dict,
-    dpr_processor: DprProcessor,
+    payload: PayloadSchema,
+    dpr_processor: str,
 ) -> tuple[Any, Any]:
-    """
-    Update EOPF-related STAC assets by discovering products in S3 and
-    generating corresponding STAC items from `.zattrs` metadata.
+    """Update EOPF assets by extracting metadata and creating STAC items.
 
-    This task inspects the workflow output products defined in the payload,
-    identifies the unique S3 base path, and discovers all product files and
-    associated `.zattrs` metadata files under that path. The `.zattrs`
-    metadata is read synchronously and used to extract EOPF discovery
-    information and product types, which are then converted into STAC items.
+    This Prefect task processes output products from a DPR (Data Processing Request)
+    workflow, extracts EOPF (Earth Observation Processing Framework) metadata from
+    .zattrs files, and generates STAC (SpatioTemporal Asset Catalog) items for
+    each discovered product.
 
-    Steps performed:
-    1. Extract the unique S3 base path from ``payload["I/O"]["output_products"]``.
-    2. List all files under the resolved S3 path.
-    3. Separate product files from `.zattrs` metadata files.
-    4. Read and parse `.zattrs` metadata synchronously.
-    5. Extract EOPF discovery metadata and EOPF product types.
-    6. Build STAC items using the extracted metadata and input products.
+    Workflow:
+        1. Lists all .zattrs files in the output product paths
+        2. Reads and validates EOPF discovery metadata from each .zattrs file
+        3. Extracts product type information
+        4. Creates corresponding STAC items for catalog registration
 
-    Parameters
-    ----------
-    env : object
-        Execution environment used to provide context when creating STAC items.
-    input_products : list[dict]
-        List of input product mappings used to relate generated STAC items
-        to their upstream products.
-    payload : dict
-        Workflow payload containing input/output definitions. The S3 discovery
-        path is read from ``payload["I/O"]["output_products"]``.
+    Args:
+        env: Environment configuration object containing runtime settings.
+        input_products: List of dictionaries representing input product metadata.
+        payload: PayloadSchema object containing I/O configuration, including
+            output product paths to scan for .zattrs files.
+        dpr_processor: str
+            DPR processor name
 
-    Returns
-    -------
-    tuple
-        A tuple ``(stac_items, eopf_types)`` where:
-        - stac_items : list
-            List of STAC items generated from EOPF `.zattrs` discovery metadata.
-        - eopf_types : list[str]
-            List of extracted EOPF product type identifiers.
+    Returns:
+        A tuple containing:
+            - stac_items (list): List of STAC items created from EOPF metadata.
+            - eopf_types (list): List of product types extracted from the .zattrs
+              files (corresponds to stac_items by index).
+
+    Raises:
+        RuntimeError: If any .zattrs file cannot be read or does not contain
+            required EOPF discovery metadata (stac_discovery.properties).
+
+    Notes:
+        - Requires .zattrs files to follow EOPF metadata conventions
+        - Each .zattrs file must contain stac_discovery.properties.product:type
+        - Uses S3 storage backend (via s3_list and read_zattrs_sync functions)
     """
     logger = get_run_logger()
     logger.info("Starting EOPF asset update.")
-    logger.debug(f"Payload received: {payload}")
+    logger.info(f"Payload received: {payload}")
     logger.info("Input products: %s", input_products)
-    # Determine path
-    paths = {prod["path"] for prod in payload["I/O"]["output_products"]}
-    path = next(iter(paths))
-    logger.info(f"Using S3 path: {path}")
+
+    if payload.io is None:
+        raise RuntimeError("Payload I/O configuration is missing.")
+    # Get all .zattrs files found in the output products paths
+    zattrs_list = []
+    for prod in payload.io.output_products:
+        path = prod.path
+        zattrs_list.extend(extract_products_and_zattrs(s3_list(path), path))
+        logger.info(f"Product {prod.id} has been added to the list and will be published to the catalog.")
 
     # List & extract
-    all_files = s3_list(path)
-    logger.info(f"Found {len(all_files)} files under path.")
-    zattrs_list = extract_products_and_zattrs(all_files, path)
+    logger.info(f"Found {len(zattrs_list)} .zattrs files under path.")
+
     stac_items = []
     eopf_types = []
     for product_name, zattrs_s3_location in zattrs_list:
-        logger.debug(f"Discovered .zattrs file: {zattrs_s3_location}")
+        logger.info(f"Product = {product_name} | zattrs = {zattrs_s3_location}")
         # Read metadata
         zattrs_data = read_zattrs_sync(zattrs_s3_location)
         if not zattrs_data:
             logger.error(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
             raise RuntimeError(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
         logger.info(f"DPR processor output {zattrs_data}")
-        logger.info(f"Path = {path} | zattrs = {zattrs_s3_location}")
 
         # Extract EOPF info
         if "stac_discovery" not in zattrs_data or "properties" not in zattrs_data["stac_discovery"]:
@@ -304,12 +333,12 @@ def update_eopf_assets(
     return stac_items, eopf_types
 
 
-def compute_eopf_origin_datetime(env, input_products, dpr_processor: DprProcessor) -> str:
+def compute_eopf_origin_datetime(env, input_products) -> str:
     """
-    Compute the maximum ``eopf:origin_datetime`` across all input CADU products.
+    Compute the maximum ``eopf:origin_datetime`` across all input products.
 
     For each input product, this function retrieves the corresponding item
-    from the catalog using its CADU ID and collection ID, extracts the
+    from the catalog using its item ID and collection ID, extracts the
     ``eopf:origin_datetime`` property, and returns the latest (maximum)
     datetime value found.
 
@@ -323,7 +352,7 @@ def compute_eopf_origin_datetime(env, input_products, dpr_processor: DprProcesso
         to the catalog flow.
     input_products : Iterable[dict]
         Iterable of input product mappings. Each mapping is expected to
-        contain values of the form ``(cadu_id, collection_id)``.
+        contain values of the form ``(item_id, collection_id)``.
 
     Returns
     -------
@@ -333,36 +362,33 @@ def compute_eopf_origin_datetime(env, input_products, dpr_processor: DprProcesso
         returns the fallback value ``"2023-01-01T00:00:00Z"``.
     """
     logger = get_run_logger()
-    cadu_items = []
-    if dpr_processor == DprProcessor.MOCKUP:
-        logger.info("Mockup processor detected, using fixed eopf:origin_datetime value.")
-        return "2023-01-01T00:00:00Z"
+    items = []
 
     for input_product in input_products:
-        for _, (cadu_id, collection_id) in input_product.items():
+        for _, (item_id, collection_id) in input_product.items():
             try:
                 future = catalog_flow.get_item.submit(
                     env.serialize(),
                     collection_id,
-                    cadu_id,
+                    item_id,
                 )
-                cadu_items.append(future.result())
+                items.append(future.result())
             except RuntimeError as rte:
-                logger.exception(f"Failed to get CADU item '{cadu_id}' from collection '{collection_id}'")
-                raise RuntimeError("No valid CADU items found to compute eopf:origin_datetime") from rte
+                logger.exception(f"Failed to get item '{item_id}' from collection '{collection_id}'")
+                raise RuntimeError("No valid items found to compute eopf:origin_datetime") from rte
 
-    logger.info(f"Items matching input found in catalog: {len(cadu_items)}")
+    logger.info(f"Items matching input found in catalog: {len(items)}")
 
-    if not cadu_items:
+    if not items:
         # error maybe?
-        logger.error("No valid CADU items found to compute eopf:origin_datetime. Exit")
-        raise RuntimeError("No valid CADU items found to compute eopf:origin_datetime")
+        logger.error("No valid items found to compute eopf:origin_datetime. Exit")
+        raise RuntimeError("No valid items found to compute eopf:origin_datetime")
 
     max_eopf_datetime = max(
         datetime.datetime.fromisoformat(
             item.to_dict()["properties"]["eopf:origin_datetime"].replace("Z", "+00:00"),  # type: ignore
         )
-        for item in cadu_items
+        for item in items
     ).isoformat()
 
     logger.info(f"Maximum eopf datetime computed from all items is {max_eopf_datetime}")
@@ -372,8 +398,8 @@ def compute_eopf_origin_datetime(env, input_products, dpr_processor: DprProcesso
 @task(name="Run DPR processor")
 async def run_processor(
     env: FlowEnvArgs,
-    processor: DprProcessor,
-    payload: dict,
+    processor: str,
+    payload: PayloadSchema,
     cluster_info: ClusterInfo,
     s3_payload_run: str,
     input_products: list[dict],
@@ -391,23 +417,59 @@ async def run_processor(
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "run-processor"):
+        if payload.io is None:
+            raise ValueError("Payload I/O configuration is missing.")
+        # First, remove the output products that are not final products from
+        # the payload to avoid triggering the catalog registration for them
+        # Create a temporary list for keeping track of products to keep
+        kept_products = []
+
+        # Iterate over the original products
+        for prod in payload.io.output_products:
+            if prod.final_product:
+                kept_products.append(prod)
+            else:
+                logger.info(f"Output product {prod.id} is not marked as final_product, skipping catalog registration.")
+
+        # Update the original output_products list with the kept products
+        payload.io.output_products[:] = kept_products
+
         record_performance_indicators(  # type: ignore
             start_date=datetime.datetime.now(),
             status="OK",
             dpr_processing_input_stac_items=s3_payload_run,
             payload=payload,
-            dpr_processor_name=processor.value,
+            dpr_processor_name=processor,
         )
         # Trigger the processor run from the dpr service
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
+        start_time = time.time()
+        s3_payload_dir = osp.dirname(s3_payload_run)
         job_status = dpr_client.run_process(
             process=processor,
             cluster_info=cluster_info,
-            s3_config_dir=osp.dirname(s3_payload_run),
+            s3_config_dir=s3_payload_dir,
             payload_subpath=osp.basename(s3_payload_run),
-            s3_report_dir=osp.join(osp.dirname(s3_payload_run)),
+            s3_report_dir=s3_payload_dir,
         )
-        dpr_client.wait_for_job(job_status, logger, f"{processor.value!r} processor")
+        try:
+            dpr_client.wait_for_job(job_status, logger, f"{processor!r} processor")
+        finally:
+            logger.info(f"Processor execution time: {str(timedelta(seconds=time.time() - start_time))}")
+
+            # Download reports folder from the s3 bucket
+            with tempfile.TemporaryDirectory() as tmpdir:
+                await prefect_utils.s3_download_dir(s3_payload_dir, tmpdir)
+
+                # Display here the logs from eopf
+                local_log_files = glob.glob(osp.join(tmpdir, "**/*.processor.log"), recursive=True)
+                if local_log_files:
+                    local_log_file = local_log_files[0]
+                    async with await anyio.open_file(local_log_file, encoding="utf-8") as opened:
+                        s3_log_file = osp.join(s3_payload_dir, osp.relpath(local_log_file, tmpdir))
+                        logger.info(f"Log file {s3_log_file!r}:\n{await opened.read()}")
+                else:
+                    logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
 
         eopf_stac_items, eopf_types = update_eopf_assets(flow_env, input_products, payload, processor)
         # Wait for the job to finish
@@ -416,7 +478,7 @@ async def run_processor(
             status="OK",
             stac_items=eopf_stac_items,
             payload=payload,
-            dpr_processor_name=processor.value,
+            dpr_processor_name=processor,
             eopf_types=eopf_types,
         )
         return eopf_stac_items

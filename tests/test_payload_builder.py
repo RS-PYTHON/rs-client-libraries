@@ -145,7 +145,7 @@ def test_build_unit_list_requires_one_of_pipeline_or_unit():
 
 def test_build_unit_list_invalid_tasktable_root_type():
     """Test that providing a non-dict task table raises TaskTableError with the expected message."""
-    with pytest.raises(TaskTableError, match=r"Task table root must be a JSON object \(dict\)\."):
+    with pytest.raises(TaskTableError, match=r"Task table root must be a JSON object \(dict\):.+"):
         build_unit_list("not a dict", pipeline="p1")  # type: ignore[arg-type]
 
 
@@ -153,7 +153,7 @@ def test_build_unit_list_missing_or_invalid_pipelines_list():
     """Test that a missing or non-list 'pipelines' field in the task table raises
     TaskTableError with the expected message."""
     tt: dict[str, Any] = {"units": [], "io": []}
-    with pytest.raises(TaskTableError, match='Missing or invalid "pipelines" list in task table\\.'):
+    with pytest.raises(TaskTableError, match=r"Missing or invalid 'pipelines' list in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
 
@@ -161,7 +161,7 @@ def test_build_unit_list_missing_or_invalid_units_list():
     """Test that a missing or non-list 'units' field in the task table raises
     TaskTableError with the expected message."""
     tt: dict[str, Any] = {"pipelines": [], "io": []}
-    with pytest.raises(TaskTableError, match='Missing or invalid "units" list in task table\\.'):
+    with pytest.raises(TaskTableError, match=r"Missing or invalid 'units' list in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
 
@@ -171,7 +171,7 @@ def test_build_unit_list_missing_or_invalid_io_list():
         "pipelines": [{"name": "p1", "steps": [{"order": 1, "unit_name": "u1"}]}],
         "units": [{"name": "u1", "module": "m", "input_products": [], "input_adfs": [], "output_products": []}],
     }
-    with pytest.raises(TaskTableError, match='Missing or invalid "io" list in task table\\.'):
+    with pytest.raises(TaskTableError, match=r"Missing or invalid 'io' list in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
 

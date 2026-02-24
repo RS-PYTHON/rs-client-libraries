@@ -30,6 +30,7 @@ from requests import Response
 from requests.models import PreparedRequest
 
 from rs_client.rs_client import TIMEOUT, RsClient
+from rs_common.utils import get_href_service
 
 
 class OgcValidationException(Exception):
@@ -267,12 +268,31 @@ class OgcApiClient(RsClient):
             if not job_identifier:
                 raise RuntimeError("Job identifier is missing.")
 
+            if type(self).__name__ == "DprClient":
+                host_dpr_service = get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE_PUBLIC")
+                if logger:
+                    logger.warning(
+                        "You can cancel this DPR job by calling: "
+                        f"curl -X 'DELETE' '{host_dpr_service}/dpr/jobs/{job_identifier}'",
+                    )
+
+            previous_status: dict[str, str] = {}
+            # We use previous_status to remove log when the status remains unchanged.
+            # This way we reduce the number of useless information
+
             while True:
                 job_status = self.get_job_info(job_identifier)
-                if logger:
+                to_be_logged = previous_status != job_status
+                previous_status = job_status
+
+                if logger and to_be_logged:
                     logger.info(f"job_status: {job_status}")
                 status_type = job_status.get("status", "")
-                if logger:
+
+                if status_type == 404:
+                    raise RuntimeError(f"{job_name} job {job_identifier!r}: NOT FOUND \n")
+
+                if logger and to_be_logged:
                     logger.info(
                         f"----- {job_name} job {job_identifier!r}: {status_type.upper()} \n",
                     )

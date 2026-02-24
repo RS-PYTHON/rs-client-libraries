@@ -27,6 +27,7 @@ from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient
 from rs_client.ogcapi.ogcapi_client import OgcValidationException
 from rs_client.rs_client import RsClient
 from rs_common.logging import Logging
+from tests.conftest import MOCKED_RSPY_WEBSITE
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = getpass.getuser()
@@ -38,20 +39,11 @@ logger = Logging.default(__name__)
 # -------------------------- Staging fixtures --------------------------
 
 
-@pytest.fixture(name="dummy_href")
-def get_dummy_href():
-    """
-    Dummy href for local_mode
-    """
-    dummy_href = "https://DUMMY_HREF"
-    return dummy_href
-
-
 @pytest.fixture(name="client")
-def get_client(request, dummy_href):
+def get_client(request):
     """Create a dpr or staging client."""
     client = RsClient(
-        rs_server_href=dummy_href,
+        rs_server_href=MOCKED_RSPY_WEBSITE,
         rs_server_api_key=RS_SERVER_API_KEY,
         owner_id=OWNER_ID,
         logger=None,
@@ -105,14 +97,14 @@ class TestOgcApi:
 
     @pytest.mark.unit
     @responses.activate
-    def test_get_processes(self, client, dummy_href, processes_sample):
+    def test_get_processes(self, client, processes_sample):
         """
         Test to check the behaviour of the function to get the status of a specific job
         """
         json_response = processes_sample
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}processes",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes",
             json=json_response,
             status=status.HTTP_200_OK,
         )
@@ -125,14 +117,14 @@ class TestOgcApi:
         json_response.pop("links")
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/processes",
+            url=f"{MOCKED_RSPY_WEBSITE}/processes",
             json=json_response,
             status=status.HTTP_200_OK,
         )
 
     @pytest.mark.unit
     @responses.activate
-    def test_get_process(self, client, dummy_href):
+    def test_get_process(self, client):
         """
         Test to check the behaviour of the function to get the status of a specific job
         """
@@ -191,7 +183,7 @@ class TestOgcApi:
         # ----- Check that the process information are returned if we specify a valid job identifier in input
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}processes/{process_id}",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes/{process_id}",
             json=json_response,
             status=status.HTTP_200_OK,
         )
@@ -207,7 +199,7 @@ class TestOgcApi:
         }
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}processes/{process_id}",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes/{process_id}",
             json=not_found_response,
             status=status.HTTP_404_NOT_FOUND,
         )
@@ -231,7 +223,7 @@ class TestOgcApi:
         }
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}processes/{process_id}",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes/{process_id}",
             json=json_response,
             status=status.HTTP_200_OK,
         )
@@ -241,7 +233,7 @@ class TestOgcApi:
 
     @pytest.mark.unit
     @responses.activate
-    def test_get_jobs(self, client, dummy_href):
+    def test_get_jobs(self, client):
         """
         Test to check the behaviour of the function to get all running jobs
         """
@@ -277,7 +269,7 @@ class TestOgcApi:
         # ----- Check that the jobs information are sent if the endpoints returns a valid response
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}jobs",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}jobs",
             json=json_response,
             status=status.HTTP_200_OK,
         )
@@ -287,7 +279,7 @@ class TestOgcApi:
         # ----- Check that an exception is raised if the endpoints returns a status error code
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}jobs",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}jobs",
             json={
                 "type": "https://developer.mozilla.org/en/docs/Web/HTTP/Reference/Status/500",
                 "status": 500,
@@ -303,7 +295,7 @@ class TestOgcApi:
         list(json_response["jobs"])[0].pop("jobID")
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}jobs",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}jobs",
             json=json_response,
             status=status.HTTP_200_OK,
         )
@@ -313,7 +305,7 @@ class TestOgcApi:
 
     @pytest.mark.unit
     @responses.activate
-    def test_get_job(self, client, dummy_href):
+    def test_get_job(self, client):
         """
         Test to check the behaviour of the function to get the status of a specific job
         """
@@ -336,7 +328,7 @@ class TestOgcApi:
         # ----- Check that the job information are returned if we specify a valid job identifier in input
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}jobs/{job_id}",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}jobs/{job_id}",
             json=json_response,
             status=status.HTTP_200_OK,
         )
@@ -347,7 +339,7 @@ class TestOgcApi:
         job_id = "0000000"
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}jobs/{job_id}",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}jobs/{job_id}",
             json={
                 "type": "https://developer.mozilla.org/en/docs/Web/HTTP/Reference/Status/404",
                 "status": 404,
@@ -363,14 +355,14 @@ class TestOgcApi:
         json_response.pop("jobID")
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}jobs",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}jobs",
             json=json_response,
             status=status.HTTP_200_OK,
         )
 
     @pytest.mark.unit
     @responses.activate
-    def test_delete_job(self, client, dummy_href):
+    def test_delete_job(self, client):
         """
         Test to check the behaviour of the function to get the status of a specific job
         """
@@ -399,7 +391,7 @@ class TestOgcApi:
         # ----- Check that the job information are returned if we specify a valid job identifier in input
         responses.add(
             method=responses.DELETE,
-            url=f"{dummy_href}/{client.endpoint_prefix}jobs/{job_id}",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}jobs/{job_id}",
             json=json_response,
             status=status.HTTP_200_OK,
         )
@@ -411,7 +403,7 @@ class TestOgcApi:
         job_id = "0000000"
         responses.add(
             method=responses.DELETE,
-            url=f"{dummy_href}/{client.endpoint_prefix}jobs/{job_id}",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}jobs/{job_id}",
             json={
                 "type": "https://developer.mozilla.org/en/docs/Web/HTTP/Reference/Status/404",
                 "status": 404,
@@ -427,7 +419,7 @@ class TestOgcApi:
         json_response.pop("jobID")
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}jobs",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}jobs",
             json=json_response,
             status=status.HTTP_200_OK,
         )
@@ -437,7 +429,7 @@ class TestOgcApi:
 
     @pytest.mark.unit
     @responses.activate
-    def test_get_job_results(self, client, dummy_href):
+    def test_get_job_results(self, client):
         """
         Test to check the behaviour of the function to get the status of a specific job
         """
@@ -453,7 +445,7 @@ class TestOgcApi:
         # ----- Check that the job results are returned if we specify a valid job identifier in input
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}jobs/{job_id}/results",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}jobs/{job_id}/results",
             json=json_response,
             status=status.HTTP_200_OK,
         )
@@ -464,7 +456,7 @@ class TestOgcApi:
         job_id = "0000000"
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}jobs/{job_id}/results",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}jobs/{job_id}/results",
             json={
                 "type": "https://developer.mozilla.org/en/docs/Web/HTTP/Reference/Status/404",
                 "status": 404,
@@ -479,7 +471,7 @@ class TestOgcApi:
 
     @pytest.mark.unit
     @responses.activate
-    def test_validate_and_unmarshal_request(self, client, dummy_href):
+    def test_validate_and_unmarshal_request(self, client):
         """
         Test to check the behaviour of the method to validate endpoints responses
         """
@@ -502,7 +494,7 @@ class TestOgcApi:
         # Nominal case - the json request body is valid
         request = requests.Request(
             method="POST",
-            url=f"{dummy_href}/{client.endpoint_prefix}processes/{process_id}/execution",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes/{process_id}/execution",
             json=request_body,
         ).prepare()
         result = client.validate_and_unmarshal_request(request)
@@ -512,7 +504,7 @@ class TestOgcApi:
         request_body["response"] = "unauthorized_value"
         request = requests.Request(
             method="POST",
-            url=f"{dummy_href}/{client.endpoint_prefix}processes/{process_id}/execution",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes/{process_id}/execution",
             json=request_body,
         ).prepare()
 
@@ -522,7 +514,7 @@ class TestOgcApi:
 
     @pytest.mark.unit
     @responses.activate
-    def test_validate_and_unmarshal_response(self, client, dummy_href, processes_sample):
+    def test_validate_and_unmarshal_response(self, client, processes_sample):
         """
         Test to check the behaviour of the method to validate endpoints responses
         """
@@ -532,11 +524,11 @@ class TestOgcApi:
         json_response = processes_sample
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}processes",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes",
             json=json_response,
             status=status.HTTP_200_OK,
         )
-        response = requests.get(url=f"{dummy_href}/{client.endpoint_prefix}processes", timeout=TIMEOUT)
+        response = requests.get(url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes", timeout=TIMEOUT)
         process_resp = client.validate_and_unmarshal_response(response)
         assert process_resp == json_response
 
@@ -552,11 +544,11 @@ class TestOgcApi:
         json_response.pop("links")
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}processes",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes",
             json=json_response,
             status=status.HTTP_200_OK,
         )
-        response = requests.get(url=f"{dummy_href}/{client.endpoint_prefix}processes", timeout=TIMEOUT)
+        response = requests.get(url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes", timeout=TIMEOUT)
         with pytest.raises(OgcValidationException) as exc_info:
             client.validate_and_unmarshal_response(response)
         assert "'links' is a required property" in str(exc_info.value)
@@ -568,11 +560,11 @@ class TestOgcApi:
         json_response = processes_sample
         responses.add(
             method=responses.GET,
-            url=f"{dummy_href}/{client.endpoint_prefix}processes",
+            url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes",
             json=json_response,
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-        response = requests.get(url=f"{dummy_href}/{client.endpoint_prefix}processes", timeout=TIMEOUT)
+        response = requests.get(url=f"{MOCKED_RSPY_WEBSITE}/{client.endpoint_prefix}processes", timeout=TIMEOUT)
         with pytest.raises(OgcValidationException) as exc_info:
             client.validate_and_unmarshal_response(response)
         assert "Unknown response http status: 500" in str(exc_info.value)

@@ -179,6 +179,11 @@ def resolve_collection(product_type: str, target_collections) -> str:
         ValueError: If the product type cannot be resolved.
     """
     collections = {}
+    logger = get_run_logger()
+    logger.info(
+        f"Resolving target collection for product type '{product_type}' "
+        f"with target_collections: {target_collections}",
+    )
 
     if isinstance(target_collections, dict):
         # normalize dict input
@@ -199,6 +204,7 @@ def resolve_collection(product_type: str, target_collections) -> str:
                     collections[value] = value
 
     # lookup product_type
+    logger.info(f"Collections found: {collections}")
     target_collection = collections.get(product_type, collections.get("*"))
     if not target_collection:
         raise ValueError(f"Product type unknown: {product_type}")

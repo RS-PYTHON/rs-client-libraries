@@ -164,13 +164,13 @@ def build_unit_list(
     """
     # Validate pipelines shape
     if not isinstance(tasktable, dict):
-        raise TaskTableError("Task table root must be a JSON object (dict).")
+        raise TaskTableError(f"Task table root must be a JSON object (dict): {tasktable}")
     if "pipelines" not in tasktable or not isinstance(tasktable["pipelines"], list):
-        raise TaskTableError('Missing or invalid "pipelines" list in task table.')
+        raise TaskTableError(f"Missing or invalid 'pipelines' list in task table: {tasktable}")
     if "units" not in tasktable or not isinstance(tasktable["units"], list):
-        raise TaskTableError('Missing or invalid "units" list in task table.')
+        raise TaskTableError(f"Missing or invalid 'units' list in task table: {tasktable}")
     if "io" not in tasktable or not isinstance(tasktable["io"], list):
-        raise TaskTableError('Missing or invalid "io" list in task table.')
+        raise TaskTableError(f"Missing or invalid 'io' list in task table: {tasktable}")
 
     # Build indices for quick lookup
     units_index: dict[str, dict[str, Any]] = {}

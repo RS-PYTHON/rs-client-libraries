@@ -43,6 +43,7 @@ from rs_workflows.storage_configuration import StorageConfig
 
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
 DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
+RSPY_TEMP_BUCKET = "rs-dev-cluster-temp"
 
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
@@ -411,6 +412,7 @@ def build_output_products(
                 store_params=storage_configuration.get_store_params(store_name),
                 type=mapping.get("type", "filename"),
                 opening_mode=mapping.get("opening_mode", "CREATE"),
+                final_product=mapping.get("final_product", True),
             ),
         )
 
@@ -467,42 +469,6 @@ def load_storage_configuration(
         raise FileNotFoundError(f"Storage configuration file not found: {config_path}")
 
     return StorageConfig(secrets, config_path, logger)
-
-
-# def load_store_params_from_config(storage_configuration: StorageConfig, storage_name: str) -> StoreParams:
-#     """
-#     Loads storage configuration from a JSON file and constructs a StoreParams object.
-
-#     Args:
-#         config_path (str): Path to the storage configuration JSON file.
-#             Defaults to '/etc/storage_configuration.json'.
-
-#     Returns:
-#         StoreParams: The StoreParams object built from the configuration file.
-
-#     Raises:
-#         FileNotFoundError: If the JSON file does not exist.
-#         ValueError: If the JSON structure is invalid or missing required fields.
-#     """
-
-#     storage_options = None
-#     try:
-#         storage_config_options = storage_configuration.get_storage_details(storage_name)
-#     except KeyError:
-#         return None
-
-#     # S3 configuration
-#     storage_options = StorageOptions(
-#         name="s3",
-#         key=storage_config_options["storage_options"]["key"],
-#         secret=storage_config_options["storage_options"]["secret"],
-#         client_kwargs={
-#             "endpoint_url": storage_config_options["storage_options"]["endpoint_url"],
-#             "region_name": storage_config_options["storage_options"]["region_name"],
-#         },
-#     )
-
-#     return StoreParams(storage_options=storage_options)
 
 
 def build_mockup_payload(owner_id):
@@ -562,7 +528,7 @@ def build_mockup_payload(owner_id):
     output_products = [
         OutputProduct(
             id=outp,
-            path=f"s3://rs-dev-cluster-temp/dpr_mockup_results/{owner_id}/TEST_FLOW_OUTPUT/",
+            path=f"s3://{RSPY_TEMP_BUCKET}/dpr_mockup_results/{owner_id}/TEST_FLOW_OUTPUT/",
             store_type="zarr",
             type="folder",
             store_params=None,
@@ -625,7 +591,7 @@ def generate_payload(  # pylint: disable=unused-argument
     # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
     # in cluster mode, it should be mounted as volume from a predefined (?) configmap
 
-    if dpr_process_in.processor_name == DprProcessor.MOCKUP:
+    if dpr_process_in.processor_name.lower() == "mockup":
         logger.info("Generating payload for mockup processor")
         # TODO: the ouput path can be also computed, by using the following 3 lines
         # and add output_mockup_path as param to build_mockup_payload
@@ -634,7 +600,7 @@ def generate_payload(  # pylint: disable=unused-argument
         # output_mockup_path=build_output_products(unit_list[0], dpr_process_in, store_params, flow_env, config_rows)
         return build_mockup_payload(flow_env.owner_id)
 
-    logger.info(f"Starting payload generation for DPR processor '{dpr_process_in.processor_name.value}'")
+    logger.info(f"Starting payload generation for DPR processor '{dpr_process_in.processor_name}'")
     logger.info("Loading storage configuration template from file")
     secrets = Secret.load(
         prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, flow_env.owner_id),
@@ -691,6 +657,7 @@ def generate_payload(  # pylint: disable=unused-argument
                     workflow_step.parameters = {
                         "temporary_path": "./S3_D_TDS_1/output/tmp",
                         "acquisition_report_output_path": "./S3_D_TDS_1/output/default/Report/",
+                        "ignore_output": "S03CACHE",
                     }
 
     # Build the full payload using the schema
