@@ -710,3 +710,29 @@ def test_build_output_products_error_no_storage(
 
     with pytest.raises(RuntimeError, match="Unable to determine the output bucket"):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_process_in, mock_store_params, mocker):
+    """
+    Test that build_output_products raises an error if an output product
+    defined in the unit is missing from dpr_process_in.generated_product_to_collection_identifier.
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    # sample_unit has "output1" and "output2"
+    # We provide only "output1" in generated_product_to_collection_identifier
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        {"output1": "OUT_COLL"},
+    ]
+
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid.uuid4",
+        return_value="00000000-0000-0000-0000-000000000000",
+    )
+
+    # This should raise RuntimeError with the proposed change
+    with pytest.raises(RuntimeError, match="Couldn't find any relation for output product 'output2'"):
+        build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])

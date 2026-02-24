@@ -371,6 +371,7 @@ def build_output_products(
     """
 
     outputs = []
+    processed_products = set()
 
     for output_product in dpr_process_in.generated_product_to_collection_identifier:
         product_name = next(iter(output_product))
@@ -379,6 +380,7 @@ def build_output_products(
         if not mapping:
             raise RuntimeError(f"Couldn't find any output for task table entry '{product_name}'")
 
+        processed_products.add(product_name)
         product_type_and_collection = output_product[product_name]
         if isinstance(product_type_and_collection, tuple):
             product_type, output_collection = product_type_and_collection
@@ -415,6 +417,12 @@ def build_output_products(
                 final_product=mapping.get("final_product", True),
             ),
         )
+
+    # ensure that all keys from unit["output_products"] are present into
+    # dpr_process_in.generated_product_to_collection_identifier
+    for unit_output in unit.get("output_products", []):
+        if unit_output["name"] not in processed_products:
+            raise RuntimeError(f"Couldn't find any relation for output product '{unit_output['name']}'")
 
     return outputs
 
