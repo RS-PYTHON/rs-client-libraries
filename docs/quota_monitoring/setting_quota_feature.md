@@ -29,7 +29,7 @@
 <br>
 
 #### From Keycloak
-1. Create the account **operator-quota** and assign tge role **RS-JUPYTER-USER**
+1. Create the account **operator-quota** and assign the role **RS-JUPYTER-USER**
 <br><br>
 
 #### From Jupyter Hub
@@ -81,7 +81,11 @@ await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), env_v
 
 
 #### From Prefect
-1. Run the flow **collect-obs-logs** periodically with owner id **operator-quota**
+With owner id **operator-quota**, run the flows:
+- **quota-monitoring-db-create** once to create the database tables for the service
+- **collect-obs-logs** every 10 minutes to collect logs from object storage
+- **consolidate-obs-logs** every 2 hours to consolidate information per user, bucket and hour
+
 <br>
 
 #### From Grafana
