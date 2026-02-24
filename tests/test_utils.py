@@ -14,12 +14,28 @@
 
 """Unit tests for utility funtions."""
 
+import json
+from contextlib import suppress
+
 import pytest
 import requests  # type: ignore
 import responses
+from prefect.blocks.system import Secret
+from pydantic import SecretStr
 
+from rs_common import prefect_utils
 from rs_common.utils import get_href_service, read_response_error
 from rs_workflows.catalog_flow import resolve_collection
+from tests.conftest import (
+    MOCKED_RSPY_WEBSITE,
+    OWNER_ID,
+    S3_ACCESSKEY,
+    S3_ENDPOINT,
+    S3_REGION,
+    S3_SECRETKEY,
+)
+
+RSPY_APIKEY = "RSPY_APIKEY"
 
 
 @responses.activate
@@ -94,3 +110,43 @@ def test_resolve_collection_dict_mixed(mocker):
     # Unknown product type should raise
     with pytest.raises(ValueError):
         resolve_collection("tip_42", input_collections)
+
+
+async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
+    """Set up secret blocks needed for correct execution of workflows in Prefect"""
+    # Environment variables for all users. For these test we don't need specific values
+    # so it creates an empty secret. See test_prefect_utils.py for a real case example.
+    # Use an empty dictionary if input_dict is None
+    # Default arguments are evaluated once when the function is defined, not each
+    # time the function is called. If env_vars = {} would have been used and modify env_vars in one call,
+    # this modified dictionary would persists for subsequent calls, which can lead to bugs.
+    # Using env_vars = None and creating a new empty dictionary inside this function avoids this issue.
+    env_vars = env_vars if env_vars is not None else {}
+    # Serialize dictionary to a JSON string and wrap it in SecretStr
+    secret_value = SecretStr(json.dumps(env_vars))
+
+    # Remove the existing blocks, if any
+    user_block_name = prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID)
+    with suppress(ValueError):
+        await Secret.delete(prefect_utils.BLOCK_NAME_ENV_GLOBAL)
+    with suppress(ValueError):
+        await Secret.delete(user_block_name)
+
+    await Secret(
+        value=secret_value,
+    ).save(  # type: ignore[arg-type]
+        prefect_utils.BLOCK_NAME_ENV_GLOBAL,
+        overwrite=True,
+    )
+
+    # Create prefect block for current user
+    await Secret(
+        value={  # type: ignore[arg-type]
+            "RSPY_WEBSITE": MOCKED_RSPY_WEBSITE,
+            "RSPY_APIKEY": RSPY_APIKEY,
+            "S3_ACCESSKEY": S3_ACCESSKEY,
+            "S3_SECRETKEY": S3_SECRETKEY,
+            "S3_REGION": S3_REGION,
+            "S3_ENDPOINT": S3_ENDPOINT,
+        },
+    ).save(user_block_name, overwrite=True)

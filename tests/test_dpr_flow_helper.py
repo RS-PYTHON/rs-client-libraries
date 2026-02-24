@@ -34,6 +34,7 @@ from rs_workflows.dpr_flow import (
 from rs_workflows.flow_utils import FlowEnvArgs
 from rs_workflows.payload_generator import RSPY_TEMP_BUCKET
 from tests.conftest import MOCKED_BUCKET, OWNER_ID
+from tests.test_utils import setup_worklow_test_env
 
 CLUSTER_INFO = ClusterInfo("", "", "")
 
@@ -401,6 +402,8 @@ async def test_run_processor_filters_non_final_products(
     - The DPR processor is called with the filtered payload
     - update_eopf_assets receives the filtered payload
     """
+    await setup_worklow_test_env()
+
     # # Mock environment and dependencies
     # env = mocker.Mock()
     processor = "s3_l0"
