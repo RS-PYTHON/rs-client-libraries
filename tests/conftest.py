@@ -217,14 +217,6 @@ def before_and_after(session_mocker):
         "opentelemetry.exporter.otlp.proto.grpc.exporter.OTLPExporterMixin",
     )._export.return_value = True
 
-    # Standard AWS environment variables that moto expects to be set to avoid
-    # looking for real credentials or hitting real AWS endpoints.
-    os.environ["AWS_ACCESS_KEY_ID"] = S3_ACCESSKEY
-    os.environ["AWS_SECRET_ACCESS_KEY"] = S3_SECRETKEY
-    os.environ["AWS_SECURITY_TOKEN"] = "testing"
-    os.environ["AWS_SESSION_TOKEN"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = S3_REGION
-
     yield
 
     ###################
