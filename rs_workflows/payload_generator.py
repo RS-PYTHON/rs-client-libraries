@@ -529,7 +529,9 @@ def build_mockup_payload(owner_id):
     output_products = [
         OutputProduct(
             id=outp,
-            path=f"s3://{RSPY_TEMP_BUCKET}/dpr_mockup_results/{owner_id}/TEST_FLOW_OUTPUT/",
+            path=os.path.join(
+                "s3://", RSPY_TEMP_BUCKET, "dpr_mockup_results", owner_id, "TEST_FLOW_OUTPUT", str(uuid.uuid4()),
+            ),
             store_type="zarr",
             type="folder",
             store_params=None,

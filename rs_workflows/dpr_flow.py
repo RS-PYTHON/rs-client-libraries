@@ -228,7 +228,10 @@ def create_stac_item(
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
-    eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
+    if dpr_processor.lower() == "mockup":
+        eopf_origin_datetime = "2026-01-01T00:00:00Z"
+    else:
+        eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
 
     item = build_item(
         eopf_feature,
@@ -298,7 +301,7 @@ def update_eopf_assets(
         logger.info(f"Product {prod.id} has been added to the list and will be published to the catalog.")
 
     # List & extract
-    logger.info(f"Found {len(zattrs_list)} .zattrs files under path.")
+    logger.info(f"Found {len(zattrs_list)} .zattrs files under path. The list: {zattrs_list}")
 
     stac_items = []
     eopf_types = []
@@ -371,6 +374,10 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
                     collection_id,
                     item_id,
                 )
+                if not future.result():
+                    logger.error(f"No valid item {item_id} found to compute eopf:origin_datetime. Exit")
+                    raise RuntimeError(f"No valid  item {item_id} found to compute eopf:origin_datetime")
+
                 items.append(future.result())
             except RuntimeError as rte:
                 logger.exception(f"Failed to get item '{item_id}' from collection '{collection_id}'")
