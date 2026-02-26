@@ -60,6 +60,8 @@ S3_ACCESSKEY = "testing"
 S3_SECRETKEY = "testing"
 S3_REGION = "us-east-1"
 S3_ENDPOINT = "https://localhost:5000"
+AWS_SECURITY_TOKEN = "testing"
+AWS_SESSION_TOKEN = "testing"
 MOCKED_BUCKET = "test-bucket"
 
 RSPY_UAC_CHECK_URL = "https://www.rspy-uac-manager.com"
@@ -248,8 +250,8 @@ def _mocked_s3(monkeypatch):
     # Standard AWS environment variables
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", S3_ACCESSKEY)
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", S3_SECRETKEY)
-    monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
-    monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
+    monkeypatch.setenv("AWS_SECURITY_TOKEN", AWS_SECURITY_TOKEN)
+    monkeypatch.setenv("AWS_SESSION_TOKEN", AWS_SESSION_TOKEN)
     monkeypatch.setenv("AWS_DEFAULT_REGION", S3_REGION)
     with mock_aws():
         client = boto3.client(
