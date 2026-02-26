@@ -25,6 +25,8 @@ from sqlalchemy import MetaData, Table, create_engine, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 
+from rs_workflows.payload_template import PayloadSchema
+
 
 def get_db_session():
     """Initialize and return a DB session."""
@@ -349,7 +351,7 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
     Args:
         flow_run_id (str): Unique identifier of the current flow run.
         dpr_processor_name (str): Name of the DPR processor (e.g., `"s3_l0"`).
-        payload (dict): JSON-like payload containing workflow metadata and STAC inputs/outputs.
+        payload (PayloadSchema): JSON-like payload containing workflow metadata and STAC inputs/outputs.
 
     Raises:
         KeyError: If an expected EOPF type from the payload is not found in the lookup mapping.
@@ -398,7 +400,9 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
 
     eopf_type_lookup = {k: (min_c, max_c) for k, min_c, max_c in eopf_type_dict}
 
-    list_items = list((payload["workflow"][0]["inputs"]).values())
+    list_items = []
+    if payload.workflow and payload.workflow[0].inputs:
+        list_items = list(payload.workflow[0].inputs.values())
     min_val = extract_min_datetime(list_items)
 
     try:
@@ -720,7 +724,7 @@ def record_performance_indicators(
     dpr_processor_version: str | None = None,
     dpr_processor_unit: str | None = None,
     dpr_processing_input_stac_items: str | None = None,
-    payload: dict | None = None,
+    payload: PayloadSchema | None = None,
     # product_realised params
     stac_items=None,
     eopf_types=None,

@@ -28,6 +28,7 @@ import json
 # pylint: disable=unused-argument
 import logging
 import os
+import tempfile
 from unittest.mock import MagicMock, mock_open
 
 import boto3
@@ -56,10 +57,12 @@ from tests import common
 
 # Mocked values
 
-S3_ACCESSKEY = "S3_ACCESSKEY"
-S3_SECRETKEY = "S3_SECRETKEY"
+S3_ACCESSKEY = "testing"
+S3_SECRETKEY = "testing"
 S3_REGION = "us-east-1"
-S3_ENDPOINT = "https://endpoint"
+S3_ENDPOINT = "https://localhost:5000"
+AWS_SECURITY_TOKEN = "testing"
+AWS_SESSION_TOKEN = "testing"
 MOCKED_BUCKET = "test-bucket"
 
 RSPY_UAC_CHECK_URL = "https://www.rspy-uac-manager.com"
@@ -245,12 +248,19 @@ def _mocked_s3(monkeypatch):
     monkeypatch.setenv("S3_SECRETKEY", S3_SECRETKEY)
     monkeypatch.setenv("S3_REGION", S3_REGION)
     monkeypatch.setenv("S3_ENDPOINT", S3_ENDPOINT)
+    # Standard AWS environment variables
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", S3_ACCESSKEY)
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", S3_SECRETKEY)
+    monkeypatch.setenv("AWS_SECURITY_TOKEN", AWS_SECURITY_TOKEN)
+    monkeypatch.setenv("AWS_SESSION_TOKEN", AWS_SESSION_TOKEN)
+    monkeypatch.setenv("AWS_DEFAULT_REGION", S3_REGION)
     with mock_aws():
         client = boto3.client(
             service_name="s3",
             region_name=S3_REGION,
             aws_access_key_id=S3_ACCESSKEY,
             aws_secret_access_key=S3_SECRETKEY,
+            endpoint_url=S3_ENDPOINT,
         )
         client.create_bucket(Bucket=MOCKED_BUCKET)
         yield client
@@ -803,16 +813,16 @@ def mocked_ogcapi_response(ogcapi_response_sample: dict, process: str):
     )
 
 
-@pytest.fixture(name="mocked_staging_response")
-def _mocked_staging_response(ogcapi_response_sample, scope="function"):
+@pytest.fixture(name="mocked_staging_response", scope="function")
+def _mocked_staging_response(ogcapi_response_sample):
     """Mock nominal staging response"""
     yield mocked_ogcapi_response(ogcapi_response_sample, "staging")
 
 
-@pytest.fixture(name="mocked_dpr_response")
-def _mocked_dpr_response(ogcapi_response_sample, scope="function"):
+@pytest.fixture(name="mocked_dpr_response", scope="function")
+def _mocked_dpr_response(ogcapi_response_sample, request):
     """Mock nominal dpr mockup processor response"""
-    yield mocked_ogcapi_response(ogcapi_response_sample, "mockup")
+    yield mocked_ogcapi_response(ogcapi_response_sample, request.param)
 
 
 @pytest.fixture(name="patch_prefect_logger", autouse=True, scope="function")
@@ -899,14 +909,22 @@ def _mock_dpr_process_in():
     return mock
 
 
+@pytest.fixture(name="mocked_processor_log")
+def _mocked_processor_log(mocker, mocked_s3):
+    """Upload a mock processor log file"""
+    with tempfile.NamedTemporaryFile() as tmp:
+        tmp.write(b"Dummy processor log contents\n")
+        tmp.flush()
+        mocked_s3.upload_file(tmp.name, MOCKED_BUCKET, "mockup.processor.log")
+
+
 @pytest.fixture(name="mocked_processor_output")
-def _mocked_processor_output(mocker, mocked_s3) -> tuple[str, dict[str, dict]]:
+def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[str, dict[str, dict]]:
     """
     Mock items returned by the DPR processor.
 
     Returns the S3 path and the items that we expect to be passed to catalog_client.CatalogClient.add_item
     """
-
     # Mock catalog_flow.get_item method
     max_eopf_datetime = "2024-01-10T12:00:00+00:00"
     mock_item = mocker.Mock()

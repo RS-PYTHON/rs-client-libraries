@@ -462,14 +462,14 @@ def test_record_product_expected_insert_data(mock_db_env, mocker):
 
     flow_run_id = "test-flow-id"
     dpr_processor_name = "s3_l0"
-    payload = {
-        "workflow": [
-            {
-                "inputs": {"AUX1": "S1A_OPER_AUX_RESORB_OPOD_20251008T123456_V20200123T071044_20200123T102814"},
-                "outputs": {"out1": "S03DORDOP", "out2": "S03MWRL0_"},
-            },
-        ],
-    }
+
+    # Mock PayloadSchema
+    mock_input_step = MagicMock()
+    mock_input_step.inputs = {"AUX1": "S1A_OPER_AUX_RESORB_OPOD_20251008T123456_V20200123T071044_20200123T102814"}
+    mock_input_step.outputs = {"out1": "S03DORDOP", "out2": "S03MWRL0_"}
+
+    payload = MagicMock()
+    payload.workflow = [mock_input_step]
 
     # Patch dependencies
     mocker.patch.object(record_flow_module, "extract_min_datetime", return_value="2025-10-08T12:34:56")
@@ -504,11 +504,12 @@ def test_record_product_expected_rollback_on_keyerror(mocker, mock_db_env):
     mocker.patch("rs_workflows.record_performance.get_pi_category_id", return_value=1)
 
     # Provide a payload with an unknown eopf_type
-    payload = {
-        "workflow": [
-            {"inputs": {"AUX1": "S1A_OPER_AUX_OBMEMC_PDMC_20210211T000000"}, "outputs": {"out1": "UNKNOWN_EOPF_TYPE"}},
-        ],
-    }
+    mock_input_step = MagicMock()
+    mock_input_step.inputs = {"AUX1": "S1A_OPER_AUX_OBMEMC_PDMC_20210211T000000"}
+    mock_input_step.outputs = {"out1": "UNKNOWN_EOPF_TYPE"}
+
+    payload = MagicMock()
+    payload.workflow = [mock_input_step]
 
     with pytest.raises(KeyError):
         record_flow_module.record_product_expected.fn("flow-error", "s3_l0", payload, ["UNKNOWN_EOPF_TYPE"])

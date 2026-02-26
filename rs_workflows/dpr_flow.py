@@ -34,6 +34,7 @@ from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_common import prefect_utils
 from rs_workflows import catalog_flow
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
 
 
@@ -46,23 +47,33 @@ def s3_list(s3_prefix: str):
 
 
 def extract_products_and_zattrs(files: list[str], base_path: str):
-    """
-    Extract product names and associated .zattrs files from a list of file paths.
+    """Extract product names and their corresponding .zattrs file paths.
 
-    This function scans a list of file paths and identifies Zarr products by
-    detecting valid `.zattrs` files under the given base path. It supports both
-    common Zarr layouts:
-    1. base_path/<product>/.zattrs
-    2. base_path/<product>/<product>/.zattrs
+    Filters a list of file paths to find .zattrs files located directly under
+    product directories within a base path, following the structure:
+    base_path/product_name/.zattrs
 
     Args:
-        files (list[str]): List of file paths to scan.
-        base_path (str): Base directory under which products are located.
+        files: List of file paths to search through.
+        base_path: The base directory path to strip from file paths.
 
     Returns:
-        tuple[list[str], list[str]]:
-            - A list of unique product names discovered.
-            - A list of full paths to detected `.zattrs` files.
+        A list of tuples, where each tuple contains:
+            - product_name (str): The name of the product directory.
+            - file (str): The full path to the .zattrs file.
+
+        Only includes files that are exactly two levels deep from the base_path
+        and have the filename '.zattrs'.
+
+    Example:
+        >>> files = [
+        ...     "/data/products/product_a/.zattrs",
+        ...     "/data/products/product_b/.zattrs",
+        ...     "/data/products/product_c/subdir/file.txt"
+        ... ]
+        >>> extract_products_and_zattrs(files, "/data/products")
+        [('product_a', '/data/products/product_a/.zattrs'),
+         ('product_b', '/data/products/product_b/.zattrs')]
     """
     dirs_and_attrs = []
 
@@ -233,73 +244,72 @@ def create_stac_item(
 def update_eopf_assets(
     env,
     input_products: list[dict],
-    payload: dict,
+    payload: PayloadSchema,
     dpr_processor: str,
 ) -> tuple[Any, Any]:
-    """
-    Update EOPF-related STAC assets by discovering products in S3 and
-    generating corresponding STAC items from `.zattrs` metadata.
+    """Update EOPF assets by extracting metadata and creating STAC items.
 
-    This task inspects the workflow output products defined in the payload,
-    identifies the unique S3 base path, and discovers all product files and
-    associated `.zattrs` metadata files under that path. The `.zattrs`
-    metadata is read synchronously and used to extract EOPF discovery
-    information and product types, which are then converted into STAC items.
+    This Prefect task processes output products from a DPR (Data Processing Request)
+    workflow, extracts EOPF (Earth Observation Processing Framework) metadata from
+    .zattrs files, and generates STAC (SpatioTemporal Asset Catalog) items for
+    each discovered product.
 
-    Steps performed:
-    1. Extract the unique S3 base path from ``payload["I/O"]["output_products"]``.
-    2. List all files under the resolved S3 path.
-    3. Separate product files from `.zattrs` metadata files.
-    4. Read and parse `.zattrs` metadata synchronously.
-    5. Extract EOPF discovery metadata and EOPF product types.
-    6. Build STAC items using the extracted metadata and input products.
+    Workflow:
+        1. Lists all .zattrs files in the output product paths
+        2. Reads and validates EOPF discovery metadata from each .zattrs file
+        3. Extracts product type information
+        4. Creates corresponding STAC items for catalog registration
 
-    Parameters
-    ----------
-    env : object
-        Execution environment used to provide context when creating STAC items.
-    input_products : list[dict]
-        List of input product mappings used to relate generated STAC items
-        to their upstream products.
-    payload : dict
-        Workflow payload containing input/output definitions. The S3 discovery
-        path is read from ``payload["I/O"]["output_products"]``.
-    dpr_processor: str
-        DPR processor name
+    Args:
+        env: Environment configuration object containing runtime settings.
+        input_products: List of dictionaries representing input product metadata.
+        payload: PayloadSchema object containing I/O configuration, including
+            output product paths to scan for .zattrs files.
+        dpr_processor: str
+            DPR processor name
 
-    Returns
-    -------
-    tuple
-        A tuple ``(stac_items, eopf_types)`` where:
-        - stac_items : list
-            List of STAC items generated from EOPF `.zattrs` discovery metadata.
-        - eopf_types : list[str]
-            List of extracted EOPF product type identifiers.
+    Returns:
+        A tuple containing:
+            - stac_items (list): List of STAC items created from EOPF metadata.
+            - eopf_types (list): List of product types extracted from the .zattrs
+              files (corresponds to stac_items by index).
+
+    Raises:
+        RuntimeError: If any .zattrs file cannot be read or does not contain
+            required EOPF discovery metadata (stac_discovery.properties).
+
+    Notes:
+        - Requires .zattrs files to follow EOPF metadata conventions
+        - Each .zattrs file must contain stac_discovery.properties.product:type
+        - Uses S3 storage backend (via s3_list and read_zattrs_sync functions)
     """
     logger = get_run_logger()
     logger.info("Starting EOPF asset update.")
-    logger.debug(f"Payload received: {payload}")
+    logger.info(f"Payload received: {payload}")
     logger.info("Input products: %s", input_products)
-    # Determine path
-    paths = {prod["path"] for prod in payload["I/O"]["output_products"]}
-    path = next(iter(paths))
-    logger.info(f"Using S3 path: {path}")
+
+    if payload.io is None:
+        raise RuntimeError("Payload I/O configuration is missing.")
+    # Get all .zattrs files found in the output products paths
+    zattrs_list = []
+    for prod in payload.io.output_products:
+        path = prod.path
+        zattrs_list.extend(extract_products_and_zattrs(s3_list(path), path))
+        logger.info(f"Product {prod.id} has been added to the list and will be published to the catalog.")
 
     # List & extract
-    all_files = s3_list(path)
-    logger.info(f"Found {len(all_files)} files under path.")
-    zattrs_list = extract_products_and_zattrs(all_files, path)
+    logger.info(f"Found {len(zattrs_list)} .zattrs files under path.")
+
     stac_items = []
     eopf_types = []
     for product_name, zattrs_s3_location in zattrs_list:
-        logger.debug(f"Discovered .zattrs file: {zattrs_s3_location}")
+        logger.info(f"Product = {product_name} | zattrs = {zattrs_s3_location}")
         # Read metadata
         zattrs_data = read_zattrs_sync(zattrs_s3_location)
         if not zattrs_data:
             logger.error(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
             raise RuntimeError(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
         logger.info(f"DPR processor output {zattrs_data}")
-        logger.info(f"Path = {path} | zattrs = {zattrs_s3_location}")
 
         # Extract EOPF info
         if "stac_discovery" not in zattrs_data or "properties" not in zattrs_data["stac_discovery"]:
@@ -388,7 +398,7 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
 async def run_processor(
     env: FlowEnvArgs,
     processor: str,
-    payload: dict,
+    payload: PayloadSchema,
     cluster_info: ClusterInfo,
     s3_payload_run: str,
     input_products: list[dict],
@@ -406,6 +416,23 @@ async def run_processor(
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "run-processor"):
+        if payload.io is None:
+            raise ValueError("Payload I/O configuration is missing.")
+        # First, remove the output products that are not final products from
+        # the payload to avoid triggering the catalog registration for them
+        # Create a temporary list for keeping track of products to keep
+        kept_products = []
+
+        # Iterate over the original products
+        for prod in payload.io.output_products:
+            if prod.final_product:
+                kept_products.append(prod)
+            else:
+                logger.info(f"Output product {prod.id} is not marked as final_product, skipping catalog registration.")
+
+        # Update the original output_products list with the kept products
+        payload.io.output_products[:] = kept_products
+
         record_performance_indicators(  # type: ignore
             start_date=datetime.datetime.now(),
             status="OK",
@@ -450,6 +477,7 @@ async def run_processor(
             status="OK",
             stac_items=eopf_stac_items,
             payload=payload,
+            dpr_processor_name=processor,
             eopf_types=eopf_types,
         )
         return eopf_stac_items

@@ -15,9 +15,7 @@
 """Test the Prefect workflows"""
 
 import json
-import tempfile
 import typing
-from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock
@@ -25,8 +23,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 import pytest
 import pytest_responses  # pylint: disable=unused-import # noqa: F401 # used to avoid adding @responses.activate
 import responses
-from prefect.blocks.system import Secret
-from pydantic import SecretStr
 from pystac import Asset, Item, ItemCollection
 from starlette import status
 
@@ -47,11 +43,8 @@ from tests.conftest import (
     MOCKED_BUCKET,
     MOCKED_RSPY_WEBSITE,
     OWNER_ID,
-    S3_ACCESSKEY,
-    S3_ENDPOINT,
-    S3_REGION,
-    S3_SECRETKEY,
 )
+from tests.test_utils import setup_worklow_test_env
 
 CONFIG_DIR = Path(__file__).parent / "resources"
 
@@ -60,7 +53,6 @@ CONFIG_DIR = Path(__file__).parent / "resources"
 # Mock variables #
 ##################
 
-RSPY_APIKEY = "RSPY_APIKEY"
 JUPYTERHUB_API_TOKEN = "JUPYTERHUB_API_TOKEN"
 DASK_CLUSTER_LABEL = "DASK_CLUSTER_LABEL"
 
@@ -99,51 +91,6 @@ def mock_record_performance_indicators(mocker):
     return fake_task
 
 
-#####################
-# Utility functions #
-#####################
-
-
-async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
-    """Set up secret blocks needed for correct execution of workflows in Prefect"""
-    # Environment variables for all users. For these test we don't need specific values
-    # so it creates an empty secret. See test_prefect_utils.py for a real case example.
-    # Use an empty dictionary if input_dict is None
-    # Default arguments are evaluated once when the function is defined, not each
-    # time the function is called. If env_vars = {} would have been used and modify env_vars in one call,
-    # this modified dictionary would persists for subsequent calls, which can lead to bugs.
-    # Using env_vars = None and creating a new empty dictionary inside this function avoids this issue.
-    env_vars = env_vars if env_vars is not None else {}
-    # Serialize dictionary to a JSON string and wrap it in SecretStr
-    secret_value = SecretStr(json.dumps(env_vars))
-
-    # Remove the existing blocks, if any
-    user_block_name = prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, OWNER_ID)
-    with suppress(ValueError):
-        await Secret.delete(prefect_utils.BLOCK_NAME_ENV_GLOBAL)
-    with suppress(ValueError):
-        await Secret.delete(user_block_name)
-
-    await Secret(
-        value=secret_value,
-    ).save(  # type: ignore[arg-type]
-        prefect_utils.BLOCK_NAME_ENV_GLOBAL,
-        overwrite=True,
-    )
-
-    # Create prefect block for current user
-    await Secret(
-        value={  # type: ignore[arg-type]
-            "RSPY_WEBSITE": MOCKED_RSPY_WEBSITE,
-            "RSPY_APIKEY": RSPY_APIKEY,
-            "S3_ACCESSKEY": S3_ACCESSKEY,
-            "S3_SECRETKEY": S3_SECRETKEY,
-            "S3_REGION": S3_REGION,
-            "S3_ENDPOINT": S3_ENDPOINT,
-        },
-    ).save(user_block_name, overwrite=True)
-
-
 #############
 # DPR flows #
 #############
@@ -157,6 +104,7 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
     indirect=True,
     ids=[""],
 )
+@pytest.mark.parametrize("mocked_dpr_response", ["mockup"], indirect=True, ids=[""])
 async def test_dpr_processing(
     mocker,
     mocked_s3,
@@ -177,12 +125,6 @@ async def test_dpr_processing(
     # Spy/patch artifact creation to assert keys
     artifact_mock = AsyncMock()
     mocker.patch.object(on_demand_processing, "acreate_markdown_artifact", artifact_mock)
-
-    # Upload a mock processor log file
-    with tempfile.NamedTemporaryFile() as tmp:
-        tmp.write(b"Dummy processor log contents\n")
-        tmp.flush()
-        mocked_s3.upload_file(tmp.name, MOCKED_BUCKET, "mockup.processor.log")
 
     # Mock posting of the items in the catalog
     item_collections = [list(col.values())[0][1] for col in MAP_PRODUCT_TO_COLLECTION]

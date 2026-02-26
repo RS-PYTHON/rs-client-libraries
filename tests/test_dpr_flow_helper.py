@@ -20,16 +20,24 @@ from pathlib import Path
 
 import pytest
 
-from rs_client.ogcapi.dpr_client import DprProcessor
+from rs_client.ogcapi import dpr_client
+from rs_client.ogcapi.dpr_client import ClusterInfo, DprProcessor
 from rs_workflows.dpr_flow import (
     compute_eopf_origin_datetime,
     create_stac_item,
+    extract_products_and_zattrs,
     read_zattrs_sync,
+    run_processor,
     s3_download_file_sync,
     s3_list,
     update_eopf_assets,
 )
+from rs_workflows.flow_utils import FlowEnvArgs
 from rs_workflows.payload_generator import RSPY_TEMP_BUCKET
+from tests.conftest import MOCKED_BUCKET, OWNER_ID
+from tests.test_utils import setup_worklow_test_env
+
+CLUSTER_INFO = ClusterInfo("", "", "")
 
 
 def test_s3_list_returns_full_s3_paths(mocker):
@@ -100,6 +108,90 @@ def test_read_zattrs_sync_downloads_and_parses_json(mocker):
 
     assert mock_download.call_count == 1
     mock_download.assert_any_call(zattrs_path, mocker.ANY, _sync=True)
+
+
+def test_extract_products_and_zattrs():
+    """
+    Verify that extract_products_and_zattrs correctly filters and extracts
+    product names and .zattrs file paths from a list of files.
+
+    The function should:
+    - Include files that are exactly two levels deep: base_path/product_name/.zattrs
+    - Exclude files that are deeper in the directory structure
+    - Exclude files that are not named .zattrs
+    - Handle various base_path formats (with/without trailing slash)
+    """
+    base_path = "s3://my-bucket/output"
+
+    files = [
+        # Valid .zattrs files (should be included)
+        "s3://my-bucket/output/product_a/.zattrs",
+        "s3://my-bucket/output/product_b/.zattrs",
+        "s3://my-bucket/output/S03OLCL0_/.zattrs",
+        # Too deep - nested subdirectories (should be excluded)
+        "s3://my-bucket/output/product_c/subdir/.zattrs",
+        "s3://my-bucket/output/product_d/deep/nested/.zattrs",
+        # Not .zattrs files (should be excluded)
+        "s3://my-bucket/output/product_e/data.json",
+        "s3://my-bucket/output/product_f/metadata.xml",
+        # Too shallow - directly under base_path (should be excluded)
+        "s3://my-bucket/output/.zattrs",
+        # Other files in product directories (should be excluded)
+        "s3://my-bucket/output/product_a/data.zarr",
+        "s3://my-bucket/output/product_b/config.yaml",
+    ]
+
+    result = extract_products_and_zattrs(files, base_path)
+
+    # Should only include the three valid .zattrs files
+    assert len(result) == 3
+    assert ("product_a", "s3://my-bucket/output/product_a/.zattrs") in result
+    assert ("product_b", "s3://my-bucket/output/product_b/.zattrs") in result
+    assert ("S03OLCL0_", "s3://my-bucket/output/S03OLCL0_/.zattrs") in result
+
+
+def test_extract_products_and_zattrs_with_trailing_slash():
+    """
+    Verify that extract_products_and_zattrs works correctly when base_path
+    has a trailing slash.
+    """
+    base_path = "s3://my-bucket/output/"  # Note the trailing slash
+
+    files = [
+        "s3://my-bucket/output/product_a/.zattrs",
+        "s3://my-bucket/output/product_b/.zattrs",
+    ]
+
+    result = extract_products_and_zattrs(files, base_path)
+
+    assert len(result) == 2
+    assert ("product_a", "s3://my-bucket/output/product_a/.zattrs") in result
+    assert ("product_b", "s3://my-bucket/output/product_b/.zattrs") in result
+
+
+def test_extract_products_and_zattrs_empty_list():
+    """
+    Verify that extract_products_and_zattrs returns an empty list when
+    given an empty file list.
+    """
+    result = extract_products_and_zattrs([], "s3://my-bucket/output")
+    assert not result
+
+
+def test_extract_products_and_zattrs_no_matches():
+    """
+    Verify that extract_products_and_zattrs returns an empty list when
+    no files match the expected pattern.
+    """
+    base_path = "s3://my-bucket/output"
+    files = [
+        "s3://my-bucket/output/product_a/data.json",
+        "s3://my-bucket/output/product_b/subdir/.zattrs",
+        "s3://my-bucket/output/.zattrs",
+    ]
+
+    result = extract_products_and_zattrs(files, base_path)
+    assert not result
 
 
 def test_s3_download_file_sync_downloads_and_returns_path(mocker):
@@ -227,13 +319,10 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
 
     s3_path, expected_items = mocked_processor_output
 
-    payload = {
-        "I/O": {
-            "output_products": [
-                {"path": f"s3://{RSPY_TEMP_BUCKET}/{s3_path}/"},
-            ],
-        },
-    }
+    payload = mocker.Mock()
+    payload.io.output_products = [
+        mocker.Mock(path=f"s3://{RSPY_TEMP_BUCKET}/{s3_path}/"),
+    ]
 
     # Call method
     result_items, result_eopf_types = update_eopf_assets.fn(
@@ -248,6 +337,180 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
         expected_item["properties"]["product:type"] for expected_item in expected_items.values()
     ]
     assert {result_item.id: result_item.to_dict() for result_item in result_items} == expected_items
+
+
+def test_update_eopf_assets_skips_non_final_products(mocker):
+    """
+    Verify that update_eopf_assets processes only final products.
+    Note: Filtering of non-final products happens in run_processor before
+    calling update_eopf_assets, so this function only receives final products.
+    """
+    env = mocker.Mock()
+    input_products = [{"id": "input_1"}]
+
+    # Mock only final products (non-final products are already filtered by run_processor)
+    mock_prod_final = mocker.Mock(path="s3://out/final", final_product=True)
+
+    payload = mocker.Mock()
+    payload.io.output_products = [mock_prod_final]  # Only final products
+
+    # Mock s3_list and extract to return something for the final product
+    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mock_s3_list = mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://out/final/prod/.zattrs"])
+
+    mocker.patch(
+        "rs_workflows.dpr_flow.extract_products_and_zattrs",
+        return_value=[("prod", "s3://out/final/prod/.zattrs")],
+    )
+
+    mocker.patch(
+        "rs_workflows.dpr_flow.read_zattrs_sync",
+        return_value={
+            "stac_discovery": {
+                "id": "item1",
+                "properties": {"product:type": "S1_L0"},
+            },
+        },
+    )
+    mocker.patch("rs_workflows.dpr_flow.create_stac_item", return_value=[mocker.Mock()])
+
+    # Run function
+    update_eopf_assets.fn(
+        env=env,
+        input_products=input_products,
+        payload=payload,
+        dpr_processor=DprProcessor.S1L0,
+    )
+
+    # Assert s3_list was called for the final product path
+    mock_s3_list.assert_called_once_with("s3://out/final")
+
+
+@pytest.mark.parametrize("mocked_dpr_response", ["s3_l0"], indirect=True, ids=[""])
+@pytest.mark.asyncio
+async def test_run_processor_filters_non_final_products(
+    mocker,
+    mocked_dpr_response,  # /dpr/processes/s3_l0/execution, /dpr/jobs/{job_id}
+    mocked_processor_log,
+):  # pylint: disable=unused-argument
+    """
+    Verify that run_processor correctly filters out non-final products from
+    payload.io.output_products before processing.
+
+    This test ensures that:
+    - Products with final_product=False are removed from the payload
+    - Products with final_product=True are kept
+    - The DPR processor is called with the filtered payload
+    - update_eopf_assets receives the filtered payload
+    """
+    await setup_worklow_test_env()
+
+    # # Mock environment and dependencies
+    # env = mocker.Mock()
+    processor = "s3_l0"
+    s3_payload_run = f"s3://{MOCKED_BUCKET}/payload.yaml"
+    input_products = [{"id": "input1"}]
+
+    # Create mock products: 2 final, 1 non-final
+    mock_prod_final_1 = mocker.Mock(id="product_final_1", path="s3://out/final1", final_product=True)
+    mock_prod_final_2 = mocker.Mock(id="product_final_2", path="s3://out/final2", final_product=True)
+    mock_prod_intermediate = mocker.Mock(id="product_intermediate", path="s3://out/intermediate", final_product=False)
+
+    # Create payload with mixed products
+    payload = mocker.Mock()
+    payload.io = mocker.Mock()
+    payload.io.output_products = [mock_prod_final_1, mock_prod_intermediate, mock_prod_final_2]
+
+    # Mock Prefect logger
+    mock_logger = mocker.Mock()
+    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mock_logger)
+
+    # Spy DPR client
+    spy_run_process = mocker.spy(dpr_client.DprClient, "run_process")
+    spy_wait_for_job = mocker.spy(dpr_client.DprClient, "wait_for_job")
+    # mock_dpr_client = mocker.Mock()
+    # mock_job_status = mocker.Mock()
+    # mock_dpr_client.run_process.return_value = mock_job_status
+    # mock_dpr_client.wait_for_job.return_value = None
+    # mock_flow_env.rs_client.get_dpr_client.return_value = mock_dpr_client
+
+    # mocker.patch("rs_workflows.dpr_flow.FlowEnv", return_value=mock_flow_env)
+
+    # Mock record_performance_indicators
+    mocker.patch("rs_workflows.dpr_flow.record_performance_indicators")
+
+    # Mock update_eopf_assets to return mock STAC items
+    mock_stac_items = [mocker.Mock(), mocker.Mock()]
+    mock_eopf_types = ["S03OLCL0_", "S03SLSL0_"]
+    mocker.patch("rs_workflows.dpr_flow.update_eopf_assets", return_value=(mock_stac_items, mock_eopf_types))
+
+    # Run the function
+    result = await run_processor.fn(
+        env=FlowEnvArgs(owner_id=OWNER_ID),
+        processor=processor,
+        payload=payload,
+        cluster_info=CLUSTER_INFO,
+        s3_payload_run=s3_payload_run,
+        input_products=input_products,
+    )
+
+    # Verify that non-final products were filtered out
+    assert len(payload.io.output_products) == 2
+    assert mock_prod_final_1 in payload.io.output_products
+    assert mock_prod_final_2 in payload.io.output_products
+    assert mock_prod_intermediate not in payload.io.output_products
+
+    # Verify logger was called for the filtered product
+    mock_logger.info.assert_any_call(
+        "Output product product_intermediate is not marked as final_product, skipping catalog registration.",
+    )
+
+    # Verify DPR client was called
+    # mock_dpr_client.run_process.assert_called_once()
+    # mock_dpr_client.wait_for_job.assert_called_once_with(mock_job_status, mock_logger, "'s3_l0' processor")
+    spy_run_process.assert_called_once()
+    spy_wait_for_job.assert_called_once()
+
+    # Verify result is the STAC items from update_eopf_assets
+    assert result == mock_stac_items
+
+
+@pytest.mark.asyncio
+async def test_run_processor_raises_on_missing_io_config(mocker):
+    """
+    Verify that run_processor raises ValueError when payload.io is None.
+    """
+    env = mocker.Mock()
+    processor = "s3_l0"
+    cluster_info = mocker.Mock()
+    s3_payload_run = "s3://bucket/payload.json"
+    input_products = [{"id": "input1"}]
+
+    # Create payload with None io
+    payload = mocker.Mock()
+    payload.io = None
+
+    # Mock Prefect logger
+    mocker.patch("rs_workflows.dpr_flow.get_run_logger")
+
+    # Mock FlowEnv
+    mock_flow_env = mocker.Mock()
+    mock_span = mocker.Mock()
+    mock_span.__enter__ = mocker.Mock(return_value=mock_span)
+    mock_span.__exit__ = mocker.Mock(return_value=False)
+    mock_flow_env.start_span.return_value = mock_span
+    mocker.patch("rs_workflows.dpr_flow.FlowEnv", return_value=mock_flow_env)
+
+    # Verify ValueError is raised
+    with pytest.raises(ValueError, match="Payload I/O configuration is missing"):
+        await run_processor.fn(
+            env=env,
+            processor=processor,
+            payload=payload,
+            cluster_info=cluster_info,
+            s3_payload_run=s3_payload_run,
+            input_products=input_products,
+        )
 
 
 def make_mock_item(origin_datetime: str, mocker):

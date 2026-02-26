@@ -399,6 +399,10 @@ def build_output_products(
                 store_name = storage_configuration.get_storage_for_pipeline_section(
                     mapping.get("origin", ""),
                 ) or storage_configuration.get_storage_for_pipeline_section("other")
+                # TODO: the following line is temporary and for tests only ! Force eveything to s3 !
+                # Delete the following line once the things will be clarified with other store_names
+                # This is due to the internal discussions, disregard any other store_name but s3
+                store_name = "s3"
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
         outputs.append(
@@ -409,6 +413,7 @@ def build_output_products(
                 store_params=storage_configuration.get_store_params(store_name),
                 type=mapping.get("type", "filename"),
                 opening_mode=mapping.get("opening_mode", "CREATE"),
+                final_product=mapping.get("final_product", True),
             ),
         )
 
@@ -465,42 +470,6 @@ def load_storage_configuration(
         raise FileNotFoundError(f"Storage configuration file not found: {config_path}")
 
     return StorageConfig(secrets, config_path, logger)
-
-
-# def load_store_params_from_config(storage_configuration: StorageConfig, storage_name: str) -> StoreParams:
-#     """
-#     Loads storage configuration from a JSON file and constructs a StoreParams object.
-
-#     Args:
-#         config_path (str): Path to the storage configuration JSON file.
-#             Defaults to '/etc/storage_configuration.json'.
-
-#     Returns:
-#         StoreParams: The StoreParams object built from the configuration file.
-
-#     Raises:
-#         FileNotFoundError: If the JSON file does not exist.
-#         ValueError: If the JSON structure is invalid or missing required fields.
-#     """
-
-#     storage_options = None
-#     try:
-#         storage_config_options = storage_configuration.get_storage_details(storage_name)
-#     except KeyError:
-#         return None
-
-#     # S3 configuration
-#     storage_options = StorageOptions(
-#         name="s3",
-#         key=storage_config_options["storage_options"]["key"],
-#         secret=storage_config_options["storage_options"]["secret"],
-#         client_kwargs={
-#             "endpoint_url": storage_config_options["storage_options"]["endpoint_url"],
-#             "region_name": storage_config_options["storage_options"]["region_name"],
-#         },
-#     )
-
-#     return StoreParams(storage_options=storage_options)
 
 
 def build_mockup_payload(owner_id):
@@ -674,6 +643,7 @@ def generate_payload(  # pylint: disable=unused-argument
             case DprProcessor.S1L0:
                 config = ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
                 # TODO: this section is temporary, should be removed when the S1 L0 processor doesn't need it anymore
+                # the processor doesn't start without these parameters
                 for workflow_step in workflow_steps:
                     workflow_step.parameters = {
                         "streaming_mode": False,
@@ -682,6 +652,14 @@ def generate_payload(  # pylint: disable=unused-argument
                     }
             case DprProcessor.S3L0:
                 config = ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
+                # TODO: this section is temporary, should be removed when the S3 L0 processor doesn't need it anymore
+                # the processor doesn't start without these parameters
+                for workflow_step in workflow_steps:
+                    workflow_step.parameters = {
+                        "temporary_path": "./S3_D_TDS_1/output/tmp",
+                        "acquisition_report_output_path": "./S3_D_TDS_1/output/default/Report/",
+                        "ignore_output": "S03CACHE",
+                    }
 
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
