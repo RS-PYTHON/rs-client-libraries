@@ -365,6 +365,9 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
     """
     logger = get_run_logger()
     items = []
+    if not input_products:
+        logger.error("No valid input products found to compute eopf:origin_datetime. Exit")
+        raise RuntimeError("No valid input products found to compute eopf:origin_datetime")
 
     for input_product in input_products:
         for _, (item_id, collection_id) in input_product.items():
@@ -375,8 +378,13 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
                     item_id,
                 )
                 if not future.result():
-                    logger.error(f"No valid item {item_id} found to compute eopf:origin_datetime. Exit")
-                    raise RuntimeError(f"No valid  item {item_id} found to compute eopf:origin_datetime")
+                    logger.error(
+                        f"Expected valid input product item {item_id} was not found"
+                        " to compute eopf:origin_datetime. Exit",
+                    )
+                    raise RuntimeError(
+                        f"Expected valid input product item {item_id} was not found" " to compute eopf:origin_datetime",
+                    )
 
                 items.append(future.result())
             except RuntimeError as rte:
@@ -384,11 +392,6 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
                 raise RuntimeError("No valid items found to compute eopf:origin_datetime") from rte
 
     logger.info(f"Items matching input found in catalog: {len(items)}")
-
-    if not items:
-        # error maybe?
-        logger.error("No valid items found to compute eopf:origin_datetime. Exit")
-        raise RuntimeError("No valid items found to compute eopf:origin_datetime")
 
     max_eopf_datetime = max(
         datetime.datetime.fromisoformat(
