@@ -101,7 +101,7 @@ def test_get_io_builds_input_and_output(
         return_value="mocked-output-bucket",
     )
     mocker.patch(
-        "rs_workflows.payload_generator.uuid.uuid4",
+        "rs_workflows.payload_generator.uuid4",
         return_value="00000000-0000-0000-0000-000000000000",
     )
 
@@ -611,7 +611,7 @@ def test_build_output_products_specific_storage(
 
     mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
     mocker.patch(
-        "rs_workflows.payload_generator.uuid.uuid4",
+        "rs_workflows.payload_generator.uuid4",
         return_value="00000000-0000-0000-0000-000000000000",
     )
 
