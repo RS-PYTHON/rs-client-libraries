@@ -424,13 +424,6 @@ async def test_run_processor_filters_non_final_products(
     mock_logger = mocker.Mock()
     mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mock_logger)
 
-    # # Mock FlowEnv and its dependencies
-    # mock_flow_env = mocker.Mock()
-    # mock_span = mocker.Mock()
-    # mock_span.__enter__ = mocker.Mock(return_value=mock_span)
-    # mock_span.__exit__ = mocker.Mock(return_value=False)
-    # mock_flow_env.start_span.return_value = mock_span
-
     # Spy DPR client
     spy_run_process = mocker.spy(dpr_client.DprClient, "run_process")
     spy_wait_for_job = mocker.spy(dpr_client.DprClient, "wait_for_job")
