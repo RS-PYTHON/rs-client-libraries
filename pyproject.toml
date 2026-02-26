@@ -1,4 +1,4 @@
-# Copyright 2025 CS Group
+# Copyright 2023-2026 Airbus, CS Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ version = "0.0.0"
 description = "Copernicus Sentinel rs-client library and processing workflows."
 license = "Apache-2.0"
 authors = ["ESA under contract with Airbus and CS <ops_coprs@airbus.com>"]
-readme = "README.adoc"
+readme = "README.md"
 homepage = "https://home.rs-python.eu/"
 repository = "https://github.com/RS-PYTHON/rs-client-libraries"
 documentation = "https://home.rs-python.eu/rs-documentation/rs-client-libraries/docs/doc/"
