@@ -1,4 +1,4 @@
-# Copyright 2025 CS Group
+# Copyright 2023-2026 Airbus, CS Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """test of helper functions for dpr_flow.py"""
+
 import datetime
 import json
 import typing

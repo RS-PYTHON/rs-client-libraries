@@ -1,4 +1,4 @@
-# Copyright 2025 CS Group
+# Copyright 2023-2026 Airbus, CS Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """This module contains functions to generate DPR payloads for RS-Server."""
+
 import fnmatch
 import os
 import uuid
