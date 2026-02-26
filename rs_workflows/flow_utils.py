@@ -174,141 +174,223 @@ class FlowEnv:
             yield span
 
 
-class DprProcessIn(BaseModel):  # pylint: disable=too-many-instance-attributes
-    """
-    Input parameters for the 'dpr-process' flow
+class InputProduct(BaseModel):
+    """Represents one input product for the processor."""
 
-    Attributes:
-        env: Prefect flow environment
-        processor_name: DPR processor name
-        processor_version: DPR processor version
-        dask_cluster_label: Dask cluster label e.g. "dask-l0"
-        s3_payload_file: S3 path where the processor payload will be written
-        pipeline: Processor pipeline name. The task table propose one or several pipelines.
-          Mandatory if unit is not provided.
-        unit: Processor unit name. Advanced users can call directly a single unit of the task table.
-          Mandatory if pipeline is not provided.
-        priority: Priority for the cluster dask to be able to prioritise task execution. By default is "low".
-        workflow_type: Workflow type (benchmarking, on-demand, systematic). By default is "on-demand".
-        input_products: List of input products for the processor, structured as follows:
-          * input_products.name
-          * (stac item identifier, collection name)
-          Example: [( "S1CADUS", ["S1A1234", "s01-cadip-session"])]
-        generated_product_to_collection_identifier: List of output products for the processor, structured as follows:
-          * output_products.name
-          * (product:type, collection name)
-          or
-          * product:type
-          When the collection name is not specified, it is equal to product:type.
-          Example: [( "SRAL0", "s03sral0_" ),( "MWRL0", "s03mwrl0", "my-collection" )]
-        auxiliary_product_to_collection_identifier: Collection name where to push each auxiliary file (in rs-catalog).
-          To apply the same treatment to all product types simultaneously, a "*" wildcard can be used.
-          By default (when no input is provided), the collection name is set to <mission>-aux-<product:type>
-        processing_mode: List of modes to be applied when calling the DPR processor.
-        start_datetime: Date that can be used to retrieve auxiliary data on the right time frame.
-        end_datetime: Date that can be used to retrieve auxiliary data on the right time frame.
-        satellite: In certain CQL2 queries from task tables, the <satellite> parameter must be provided,
-          as some auxiliary files depend on the satellite.
-    """
+    name: str = Field(description="Input product name.")
+    stac_item_id: str = Field(description="STAC item identifier.")
+    collection_name: str = Field(description="Collection name.")
 
-    env: FlowEnvArgs = Field(description="Prefect flow environment")
-    processor_name: DprProcessor | str = Field(description="DPR processor name")
-    processor_version: str = Field(description="DPR processor version")
-    dask_cluster_label: str = Field(description='Dask cluster label e.g. "dask-l0"')
-    s3_payload_file: str = Field(description="S3 path where the processor payload will be written")
-    # 'pipeline' or 'unit' must be provided
-    pipeline: DprPipeline | str | None = Field(
+
+class GeneratedProduct(BaseModel):
+    """Represents one generated output product."""
+
+    name: str = Field(description="Output product name.")
+    product_type: str = Field(description="Product type.")
+    collection_name: str | None = Field(
         default=None,
-        description="Processor pipeline name. The task table propose one or several pipelines. "
-        "Mandatory if unit is not provided.",
+        description="Collection name. If not provided, it defaults to product_type.",
     )
-    unit: str | None = Field(
+
+
+class AuxiliaryProductMapping(BaseModel):
+    """Represents mapping for auxiliary products."""
+
+    product_type: str = Field(description="Product type or '*' wildcard.")
+    collection_name: str = Field(description="Collection name.")
+
+
+class DprProcessIn(BaseModel):
+    """
+    Input parameters for executing the 'dpr-process' flow.
+
+    This model defines all the configuration needed to run a DPR processor,
+    including input datasets, generated outputs, auxiliary data mapping,
+    processing modes, and scheduling parameters.
+
+    Example:
+
+    ```python
+    dpr_input = DprProcessIn(
+        env=FlowEnvArgs(owner_id="user"),
+        processor_name="my_processor",
+        processor_version="v1.0.0",
+        dask_cluster_label="dask-l0",
+        s3_payload_file="s3://my-bucket/payload.json",
+        pipeline="radiometry",
+        priority=Priority.HIGH,
+        workflow_type=WorkflowType.ON_DEMAND,
+        input_products=[
+            InputProduct(
+                name="rad_input",
+                stac_item_id="rad123",
+                collection_name="TEST_FLOW_INPUT"
+            )
+        ],
+        generated_product_to_collection_identifier=[
+            GeneratedProduct(
+                name="rad_output",
+                product_type="processed",
+                collection_name="TEST_FLOW_OUTPUT"
+            )
+        ],
+        auxiliary_product_to_collection_identifier=[
+            AuxiliaryProductMapping(
+                product_type="temperature",
+                collection_name="TEST_FLOW_AUXIP"
+            ),
+            AuxiliaryProductMapping(
+                product_type="*",
+                collection_name="TEST_FLOW_AUXIP"
+            )
+        ],
+        processing_mode=[ProcessingMode.ALWAYS],
+        start_datetime=datetime(2014, 1, 1, 11, 0, 0),
+        end_datetime=datetime(2025, 10, 3, 11, 0, 0),
+        satellite="Sentinel-2"
+    )
+    ```
+    """
+
+    env: FlowEnvArgs = Field(
+        title="Flow Environment",
+        description="Environment configuration for Prefect flow. Includes identifiers like owner_id.",
+        example={"owner_id": "user"},
+    )
+
+    processor_name: str | DprProcessor = Field(
+        title="DPR Processor Name",
+        description="Name of the DPR processor to run. Can be a string or DprProcessor enum.",
+        example="my_processor",
+    )
+
+    processor_version: str = Field(
+        title="Processor Version",
+        description="Version of the processor. If not relevant, can be empty string.",
+        example="v1.0.0",
+    )
+
+    dask_cluster_label: str = Field(
+        title="Dask Cluster Label",
+        description='Label of the Dask cluster to use, e.g. "dask-l0" for local testing.',
+        example="dask-l0",
+    )
+
+    s3_payload_file: str = Field(
+        title="S3 Payload File",
+        description="S3 path where the processor payload (JSON) will be written for execution.",
+        example="s3://my-bucket/payload.json",
+    )
+
+    pipeline: str | DprPipeline | None = Field(
+        title="Pipeline Name",
         default=None,
-        description="Processor unit name. Advanced users can call directly a single unit of the task table. "
-        "Mandatory if pipeline is not provided.",
+        description="Name of the processing pipeline. Must be provided if `unit` is not set.",
+        example="radiometry",
+    )
+
+    unit: str | None = Field(
+        title="Unit Name",
+        default=None,
+        description="Processing unit name. Must be provided if `pipeline` is not set.",
+        example=None,
     )
 
     priority: Priority = Field(
+        title="Processing Priority",
         default=Priority.LOW,
-        description="Priority for the cluster dask to be able to prioritise task execution. Default: `low`.",
-    )
-    workflow_type: WorkflowType = Field(
-        default=WorkflowType.ON_DEMAND,
-        description="Workflow type (benchmarking, on-demand, systematic). Default: `on-demand`.",
+        description="Priority to assign for processing on the Dask cluster.",
+        example=Priority.HIGH,
     )
 
-    input_products: list[dict[str, tuple[str, str]]] = Field(
-        description="List of input products for the processor, structured as follows: "
-        "`input_products.name, (stac item identifier, collection name)`. "
-        'Example: `[( "S1CADUS", ["S1A1234", "s01-cadip-session"])]`',
+    workflow_type: WorkflowType = Field(
+        title="Workflow Type",
+        default=WorkflowType.ON_DEMAND,
+        description="Type of workflow: ON_DEMAND, BENCHMARKING, SYSTEMATIC.",
+        example=WorkflowType.ON_DEMAND,
     )
-    generated_product_to_collection_identifier: list[dict[str, str | tuple[str, str]]] = Field(
-        description="List of output products for the processor, structured as follows: "
-        "`output_products.name, (product:type, collection name)` "
-        "or "
-        "`product:type`. "
-        "When the collection name is not specified, it is equal to `product:type`. "
-        'Example: `[( "SRAL0", "s03sral0_" ),( "MWRL0", "s03mwrl0", "my-collection" )]`',
+
+    input_products: list[InputProduct] = Field(
+        title="Input Products",
+        description=(
+            "List of input products for the processor. Each item specifies the product name, "
+            "the STAC item identifier, and the collection it belongs to."
+        ),
+        min_length=1,
+        example=[{"name": "rad_input", "stac_item_id": "rad123", "collection_name": "TEST_FLOW_INPUT"}],
     )
-    auxiliary_product_to_collection_identifier: dict[str, str] = Field(
-        default_factory=dict,
-        description="Collection name where to push each auxiliary file (in rs-catalog). "
-        "To apply the same treatment to all product types simultaneously, a `*` wildcard can be used. "
-        "By default (when no input is provided), the collection name is set to `<mission>-aux-<product:type>`",
+
+    generated_product_to_collection_identifier: list[GeneratedProduct] = Field(
+        title="Generated Products",
+        description=(
+            "List of generated products. Each item specifies a name, the product type, "
+            "and the collection where the output will be stored."
+        ),
+        min_length=1,
+        example=[{"name": "rad_output", "product_type": "processed", "collection_name": "TEST_FLOW_OUTPUT"}],
+    )
+
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] = Field(
+        title="Auxiliary Product Mapping",
+        description=(
+            "Mapping of auxiliary product types to collections. "
+            "Use '*' as a wildcard to map all other auxiliary products."
+        ),
+        min_length=1,
+        example=[
+            {"product_type": "temperature", "collection_name": "TEST_FLOW_AUXIP"},
+            {"product_type": "*", "collection_name": "TEST_FLOW_AUXIP"},
+        ],
     )
 
     processing_mode: list[ProcessingMode] = Field(
+        title="Processing Modes",
         default_factory=list,
-        description="List of modes to be applied when calling the DPR processor.",
-    )
-    start_datetime: datetime | None = Field(
-        default=None,
-        description="Date that can be used to retrieve auxiliary data on the right time frame.",
-    )
-    end_datetime: datetime | None = Field(
-        default=None,
-        description="Date that can be used to retrieve auxiliary data on the right time frame.",
-    )
-    satellite: SentinelSatellite | str | None = Field(
-        default=None,
-        description="In certain CQL2 queries from task tables, the `<satellite>` parameter must be provided, "
-        "as some auxiliary files depend on the satellite.",
+        description="List of processing modes that control DPR behavior, e.g., ALWAYS, CONDITIONAL.",
+        example=[ProcessingMode.ALWAYS],
     )
 
+    start_datetime: datetime | None = Field(
+        title="Start Datetime",
+        default=None,
+        description="Start datetime for retrieving auxiliary data. ISO format.",
+        example=datetime(2014, 1, 1, 11, 0, 0),
+    )
+
+    end_datetime: datetime | None = Field(
+        title="End Datetime",
+        default=None,
+        description="End datetime for retrieving auxiliary data. ISO format.",
+        example=datetime(2025, 10, 3, 11, 0, 0),
+    )
+
+    satellite: str | SentinelSatellite | None = Field(
+        title="Satellite",
+        default=None,
+        description="Satellite identifier used in certain queries. Can be a string or SentinelSatellite enum.",
+        example="Sentinel-2",
+    )
+
+    # Validators
     @field_validator("processor_name", mode="before")
     @classmethod
     def normalize_processor_name(cls, v):
-        """Normalize the processor name to a string."""
-        return v.value if isinstance(v, DprProcessor) else v
+        """Normalize processor name to string."""
+        return v.value if hasattr(v, "value") else v
 
     @field_validator("satellite", mode="before")
     @classmethod
     def normalize_satellite_name(cls, v):
-        """Normalize the satellite name to a string."""
-        return v.value if isinstance(v, SentinelSatellite) else v
+        """Normalize satellite name to string."""
+        return v.value if hasattr(v, "value") else v
 
     @model_validator(mode="after")
     def check_model(self):
-        """
-        Ensure required inputs are not empty and that exactly one of 'pipeline' or 'unit' is provided.
-
-        The caller must specify either a pipeline or a unit, but not both
-        and not neither.
-        """
+        """Ensure mutual exclusivity between pipeline and unit."""
         has_pipeline = bool(self.pipeline)
         has_unit = bool(self.unit)
         if has_pipeline == has_unit:
             raise ValueError("Exactly one of 'pipeline' or 'unit' must be provided.")
-
-        if not self.input_products:
-            raise ValueError("'input_products' must contain at least one pystac.Item.")
-
-        if not self.generated_product_to_collection_identifier:
-            raise ValueError("'generated_product_to_collection_identifier' must not be empty.")
-
-        if not self.auxiliary_product_to_collection_identifier:
-            raise ValueError("'auxiliary_product_to_collection_identifier' must not be empty.")
-
         return self
 
 
