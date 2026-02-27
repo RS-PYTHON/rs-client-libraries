@@ -34,8 +34,11 @@ from rs_workflows import (
     on_demand_processing,
 )
 from rs_workflows.flow_utils import (
+    AuxiliaryProductMapping,
     DprProcessIn,
     FlowEnvArgs,
+    GeneratedProduct,
+    InputProduct,
     ProcessingMode,
 )
 from tests.conftest import (
@@ -57,8 +60,8 @@ JUPYTERHUB_API_TOKEN = "JUPYTERHUB_API_TOKEN"
 DASK_CLUSTER_LABEL = "DASK_CLUSTER_LABEL"
 
 MAP_PRODUCT_TO_COLLECTION = [
-    {"GRD": ("S1_GRD", "OUTPUT_GRD_COLLECTION")},
-    {"NTC": ("S2_NTC", "OUTPUT_NTC_COLLECTION")},
+    {"name": "GRD", "product_type": "S1_GRD", "collection_name": "OUTPUT_GRD_COLLECTION"},
+    {"name": "NTC", "product_type": "S2_NTC", "collection_name": "OUTPUT_NTC_COLLECTION"},
 ]
 
 ##################
@@ -154,9 +157,9 @@ async def test_dpr_processing(
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
-        input_products=[{"input_name": ("dummy_id", "dummy_collection")}],
+        input_products=[{"name": "input_name", "cadip_session": "dummy_id", "collection_name": "dummy_collection"}],
         generated_product_to_collection_identifier=MAP_PRODUCT_TO_COLLECTION,  # type: ignore
-        auxiliary_product_to_collection_identifier={"*": COLLECTION_ID},
+        auxiliary_product_to_collection_identifier=[{"product_type": "*", "collection_name": COLLECTION_ID}],
         processing_mode=[ProcessingMode.NRT],  # type: ignore[list-item]
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
@@ -265,9 +268,15 @@ async def test_dpr_processing_raises_on_unstaged_adf(
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
-        input_products=[{"input_name": ("stac_item_id", "collection_name")}],  # Item STAC
-        generated_product_to_collection_identifier=[{"output_folder": ("CATALOG_COLLECTION_ID")}],
-        auxiliary_product_to_collection_identifier={"*": "CATALOG_COLLECTION_ID"},
+        input_products=[
+            InputProduct(name="input_name", cadip_session="stac_item_id", collection_name="collection_name"),
+        ],
+        generated_product_to_collection_identifier=[
+            GeneratedProduct(name="output_folder", product_type="AUX_MOCK", collection_name="CATALOG_COLLECTION_ID"),
+        ],
+        auxiliary_product_to_collection_identifier=[
+            AuxiliaryProductMapping(product_type="*", collection_name=COLLECTION_ID),
+        ],
         processing_mode=["nrt"],  # type: ignore[list-item]
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
@@ -366,7 +375,9 @@ async def test_publish_skips_when_no_matching_output_collection(
     env = FlowEnvArgs(owner_id=OWNER_ID)
     spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
 
-    catalog_collection_identifier = [{"INVALID": ("INVALID", "COLL_GRD")}]
+    catalog_collection_identifier = [
+        GeneratedProduct(name="INVALID", product_type="INVALID", collection_name="COLL_GRD"),
+    ]
 
     items = [
         {

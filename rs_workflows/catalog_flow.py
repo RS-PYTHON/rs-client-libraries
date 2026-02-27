@@ -15,12 +15,13 @@
 """Catalog flow implementation"""
 
 import json
+from collections.abc import Iterable
 
 from prefect import flow, get_run_logger, task
 from pystac import Item, ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, GeneratedProduct
 
 #################
 # Catalog flows #
@@ -166,47 +167,54 @@ async def get_item(
 def resolve_collection(product_type: str, target_collections) -> str:
     """Resolve the target collection for a given product type.
 
-    Supports input values as strings or tuples (product_type, collection),
-    and input as dict or list of dicts.
-
-    Args:
-        product_type: STAC product type.
-        target_collections: Dict or list of dicts with target collections.
+    Supports:
+    - dict with tuple/string values (legacy)
+    - list of dicts (legacy)
+    - GeneratedProduct or iterable of GeneratedProduct (new)
 
     Returns:
-        The resolved target collection.
+        The resolved target collection name.
 
     Raises:
         ValueError: If the product type cannot be resolved.
     """
-    collections = {}
     logger = get_run_logger()
     logger.info(
         f"Resolving target collection for product type '{product_type}' "
         f"with target_collections: {target_collections}",
     )
 
-    if isinstance(target_collections, dict):
-        # normalize dict input
-        for value in target_collections.values():
-            if isinstance(value, tuple):
-                key, collection = value
-                collections[key] = collection
-            else:  # string case
-                collections[value] = value
-    else:
-        # normalize list of dicts input
-        for d in target_collections:
-            for value in d.values():
+    collections = {}
+
+    # -------- NEW FORMAT: GeneratedProduct --------
+    if isinstance(target_collections, Iterable) and not isinstance(target_collections, (dict, str, bytes)):
+        first = next(iter(target_collections), None)
+
+        if first and hasattr(first, "product_type") and hasattr(first, "collection_name"):
+            collections = {product.product_type: product.collection_name for product in target_collections}
+
+    # -------- LEGACY FORMAT --------
+    if not collections:
+        if isinstance(target_collections, dict):
+            for value in target_collections.values():
                 if isinstance(value, tuple):
                     key, collection = value
                     collections[key] = collection
-                else:  # string case
+                else:
                     collections[value] = value
+        else:
+            for d in target_collections:
+                for value in d.values():
+                    if isinstance(value, tuple):
+                        key, collection = value
+                        collections[key] = collection
+                    else:
+                        collections[value] = value
 
-    # lookup product_type
     logger.info(f"Collections found: {collections}")
-    target_collection = collections.get(product_type, collections.get("*"))
+
+    target_collection = collections.get(product_type) or collections.get("*")
+
     if not target_collection:
         raise ValueError(f"Product type unknown: {product_type}")
 

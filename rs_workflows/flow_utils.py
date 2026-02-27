@@ -178,7 +178,7 @@ class InputProduct(BaseModel):
     """Represents one input product for the processor."""
 
     name: str = Field(description="Input product name.")
-    stac_item_id: str = Field(description="STAC item identifier.")
+    cadip_session: str = Field(description="STAC item identifier.")
     collection_name: str = Field(description="Collection name.")
 
 
