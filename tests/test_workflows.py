@@ -130,7 +130,7 @@ async def test_dpr_processing(
     mocker.patch.object(on_demand_processing, "acreate_markdown_artifact", artifact_mock)
 
     # Mock posting of the items in the catalog
-    item_collections = [list(col.values())[0][1] for col in MAP_PRODUCT_TO_COLLECTION]
+    item_collections = [col["collection_name"] for col in MAP_PRODUCT_TO_COLLECTION]
     for result_collection_id in item_collections:
         responses.post(
             f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{result_collection_id}/items",
@@ -200,7 +200,7 @@ async def test_dpr_processing(
         result_collection_ids.append(result_collection_id)
         result_items[result_item.id] = result_item.to_dict()
 
-    assert sorted(result_collection_ids) == sorted([list(p.values())[0][1] for p in MAP_PRODUCT_TO_COLLECTION])
+    assert sorted(result_collection_ids) == sorted([col["collection_name"] for col in MAP_PRODUCT_TO_COLLECTION])
     assert result_items == expected_items
 
     # --- verify s3_upload_file was called with the expected destination (second arg) ---

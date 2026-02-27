@@ -207,107 +207,55 @@ class DprProcessIn(BaseModel):
     This model defines all the configuration needed to run a DPR processor,
     including input datasets, generated outputs, auxiliary data mapping,
     processing modes, and scheduling parameters.
-
-    Example:
-
-    ```python
-    dpr_input = DprProcessIn(
-        env=FlowEnvArgs(owner_id="user"),
-        processor_name="my_processor",
-        processor_version="v1.0.0",
-        dask_cluster_label="dask-l0",
-        s3_payload_file="s3://my-bucket/payload.json",
-        pipeline="radiometry",
-        priority=Priority.HIGH,
-        workflow_type=WorkflowType.ON_DEMAND,
-        input_products=[
-            InputProduct(
-                name="rad_input",
-                stac_item_id="rad123",
-                collection_name="TEST_FLOW_INPUT"
-            )
-        ],
-        generated_product_to_collection_identifier=[
-            GeneratedProduct(
-                name="rad_output",
-                product_type="processed",
-                collection_name="TEST_FLOW_OUTPUT"
-            )
-        ],
-        auxiliary_product_to_collection_identifier=[
-            AuxiliaryProductMapping(
-                product_type="temperature",
-                collection_name="TEST_FLOW_AUXIP"
-            ),
-            AuxiliaryProductMapping(
-                product_type="*",
-                collection_name="TEST_FLOW_AUXIP"
-            )
-        ],
-        processing_mode=[ProcessingMode.ALWAYS],
-        start_datetime=datetime(2014, 1, 1, 11, 0, 0),
-        end_datetime=datetime(2025, 10, 3, 11, 0, 0),
-        satellite="Sentinel-2"
-    )
-    ```
     """
 
     env: FlowEnvArgs = Field(
         title="Flow Environment",
         description="Environment configuration for Prefect flow. Includes identifiers like owner_id.",
-        example={"owner_id": "user"},
     )
 
     processor_name: str | DprProcessor = Field(
         title="DPR Processor Name",
         description="Name of the DPR processor to run. Can be a string or DprProcessor enum.",
-        example="my_processor",
     )
 
     processor_version: str = Field(
         title="Processor Version",
         description="Version of the processor. If not relevant, can be empty string.",
-        example="v1.0.0",
     )
 
     dask_cluster_label: str = Field(
         title="Dask Cluster Label",
         description='Label of the Dask cluster to use, e.g. "dask-l0" for local testing.',
-        example="dask-l0",
     )
 
     s3_payload_file: str = Field(
         title="S3 Payload File",
         description="S3 path where the processor payload (JSON) will be written for execution.",
-        example="s3://my-bucket/payload.json",
     )
 
     pipeline: str | DprPipeline | None = Field(
-        title="Pipeline Name",
         default=None,
+        title="Pipeline Name",
         description="Name of the processing pipeline. Must be provided if `unit` is not set.",
-        example="radiometry",
     )
 
     unit: str | None = Field(
-        title="Unit Name",
         default=None,
+        title="Unit Name",
         description="Processing unit name. Must be provided if `pipeline` is not set.",
-        example=None,
     )
 
     priority: Priority = Field(
-        title="Processing Priority",
         default=Priority.LOW,
+        title="Processing Priority",
         description="Priority to assign for processing on the Dask cluster.",
-        example=Priority.HIGH,
     )
 
     workflow_type: WorkflowType = Field(
-        title="Workflow Type",
         default=WorkflowType.ON_DEMAND,
+        title="Workflow Type",
         description="Type of workflow: ON_DEMAND, BENCHMARKING, SYSTEMATIC.",
-        example=WorkflowType.ON_DEMAND,
     )
 
     input_products: list[InputProduct] = Field(
@@ -317,7 +265,6 @@ class DprProcessIn(BaseModel):
             "the STAC item identifier, and the collection it belongs to."
         ),
         min_length=1,
-        example=[{"name": "rad_input", "stac_item_id": "rad123", "collection_name": "TEST_FLOW_INPUT"}],
     )
 
     generated_product_to_collection_identifier: list[GeneratedProduct] = Field(
@@ -327,7 +274,6 @@ class DprProcessIn(BaseModel):
             "and the collection where the output will be stored."
         ),
         min_length=1,
-        example=[{"name": "rad_output", "product_type": "processed", "collection_name": "TEST_FLOW_OUTPUT"}],
     )
 
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] = Field(
@@ -337,41 +283,36 @@ class DprProcessIn(BaseModel):
             "Use '*' as a wildcard to map all other auxiliary products."
         ),
         min_length=1,
-        example=[
-            {"product_type": "temperature", "collection_name": "TEST_FLOW_AUXIP"},
-            {"product_type": "*", "collection_name": "TEST_FLOW_AUXIP"},
-        ],
     )
 
     processing_mode: list[ProcessingMode] = Field(
-        title="Processing Modes",
         default_factory=list,
+        title="Processing Modes",
         description="List of processing modes that control DPR behavior, e.g., ALWAYS, CONDITIONAL.",
-        example=[ProcessingMode.ALWAYS],
     )
 
     start_datetime: datetime | None = Field(
-        title="Start Datetime",
         default=None,
+        title="Start Datetime",
         description="Start datetime for retrieving auxiliary data. ISO format.",
-        example=datetime(2014, 1, 1, 11, 0, 0),
     )
 
     end_datetime: datetime | None = Field(
-        title="End Datetime",
         default=None,
+        title="End Datetime",
         description="End datetime for retrieving auxiliary data. ISO format.",
-        example=datetime(2025, 10, 3, 11, 0, 0),
     )
 
     satellite: str | SentinelSatellite | None = Field(
-        title="Satellite",
         default=None,
+        title="Satellite",
         description="Satellite identifier used in certain queries. Can be a string or SentinelSatellite enum.",
-        example="Sentinel-2",
     )
 
+    # -----------------------
     # Validators
+    # -----------------------
+
     @field_validator("processor_name", mode="before")
     @classmethod
     def normalize_processor_name(cls, v):
@@ -389,9 +330,58 @@ class DprProcessIn(BaseModel):
         """Ensure mutual exclusivity between pipeline and unit."""
         has_pipeline = bool(self.pipeline)
         has_unit = bool(self.unit)
+
         if has_pipeline == has_unit:
             raise ValueError("Exactly one of 'pipeline' or 'unit' must be provided.")
+
         return self
+
+    # -----------------------
+    # OpenAPI example (Pydantic v2 compliant)
+    # -----------------------
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "env": {"owner_id": "user"},
+                "processor_name": "my_processor",
+                "processor_version": "v1.0.0",
+                "dask_cluster_label": "dask-l0",
+                "s3_payload_file": "s3://my-bucket/payload.json",
+                "pipeline": "radiometry",
+                "priority": "HIGH",
+                "workflow_type": "ON_DEMAND",
+                "input_products": [
+                    {
+                        "name": "rad_input",
+                        "stac_item_id": "rad123",
+                        "collection_name": "TEST_FLOW_INPUT",
+                    },
+                ],
+                "generated_product_to_collection_identifier": [
+                    {
+                        "name": "rad_output",
+                        "product_type": "processed",
+                        "collection_name": "TEST_FLOW_OUTPUT",
+                    },
+                ],
+                "auxiliary_product_to_collection_identifier": [
+                    {
+                        "product_type": "temperature",
+                        "collection_name": "TEST_FLOW_AUXIP",
+                    },
+                    {
+                        "product_type": "*",
+                        "collection_name": "TEST_FLOW_AUXIP",
+                    },
+                ],
+                "processing_mode": ["ALWAYS"],
+                "start_datetime": "2014-01-01T11:00:00",
+                "end_datetime": "2025-10-03T11:00:00",
+                "satellite": "Sentinel-2",
+            },
+        },
+    }
 
 
 @dataclass

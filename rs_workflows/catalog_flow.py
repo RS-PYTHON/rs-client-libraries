@@ -21,7 +21,7 @@ from prefect import flow, get_run_logger, task
 from pystac import Item, ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, GeneratedProduct
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 #################
 # Catalog flows #
