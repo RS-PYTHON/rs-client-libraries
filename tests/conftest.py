@@ -29,6 +29,7 @@ import json
 import logging
 import os
 import tempfile
+import uuid
 from unittest.mock import MagicMock, mock_open
 
 import boto3
@@ -937,6 +938,18 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
     mock_future.result.return_value = mock_item
     mocker.patch("rs_workflows.dpr_flow.catalog_flow.get_item.submit", return_value=mock_future)
 
+    # use fixed UUIDs for testing mockup results, to match the ones generated in payload_generator.py
+    # we need at least 2 since build_mockup_payload generates 2 output products.
+    fixed_uuids = [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+    ]
+    # patch it in payload_generator where it's used to generate output paths
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid4",
+        side_effect=[uuid.UUID(u) for u in fixed_uuids],
+    )
+
     def mock_zattrs_data(item_id: str, product_type: str):
         """Mock .zattrs contents returned by the DPR processor."""
         return {
@@ -959,19 +972,31 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
 
     mocked_s3.create_bucket(Bucket=RSPY_TEMP_BUCKET)
     expected_items = {}
-    s3_path = f"dpr_mockup_results/{OWNER_ID}/TEST_FLOW_OUTPUT"
+    base_s3_path = f"dpr_mockup_results/{OWNER_ID}/TEST_FLOW_OUTPUT"
 
-    # For each product
-    for product_name, zattrs_data in zattrs_products.items():
+    # for each product
+    for i, (product_name, zattrs_data) in enumerate(zattrs_products.items()):
+        product_uuid = fixed_uuids[i]
+        product_s3_path = f"{base_s3_path}/{product_uuid}"
 
-        # Upload .zattrs file
+        # upload .zattrs file to both locations to support both old and new tests
+        # 1. New nested location (for test_dpr_processing)
         mocked_s3.put_object(
             Body=json.dumps(zattrs_data),
             Bucket=RSPY_TEMP_BUCKET,
-            Key=f"{s3_path}/{product_name}/.zattrs",
+            Key=f"{product_s3_path}/{product_name}/.zattrs",
+        )
+        # 2. Old flat location (for test_update_eopf_assets_happy_path)
+        mocked_s3.put_object(
+            Body=json.dumps(zattrs_data),
+            Bucket=RSPY_TEMP_BUCKET,
+            Key=f"{base_s3_path}/{product_name}/.zattrs",
         )
 
-        # Build the item that we expect to be passed to catalog_client.CatalogClient.add_item
+        # build the item that we expect to be passed to
+        # catalog_client.CatalogClient.add_item
+        # default to flat path for compatibility with other tests.
+        # test_dpr_processing will update this with UUIDs.
         stac_data = zattrs_data["stac_discovery"]
         expected_item = Item(
             id=product_name,
@@ -982,7 +1007,7 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
             stac_extensions=[],
             assets={
                 product_name: Asset(
-                    href=f"s3://{RSPY_TEMP_BUCKET}/{s3_path}/{product_name}",
+                    href=f"s3://{RSPY_TEMP_BUCKET}/{base_s3_path}/{product_name}",
                     title=product_name,
                     media_type="application/vnd+zarr",
                     roles=["data", "metadata"],
@@ -991,7 +1016,7 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
         )
         expected_items[product_name] = expected_item.to_dict()
 
-    return s3_path, expected_items
+    return base_s3_path, expected_items
 
 
 @pytest.fixture(name="mock_store_params")

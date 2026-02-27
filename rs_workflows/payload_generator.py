@@ -16,9 +16,9 @@
 
 import fnmatch
 import os
-import uuid
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
+from uuid import uuid4
 
 import requests
 from prefect import get_run_logger, task
@@ -389,7 +389,7 @@ def build_output_products(
             raise RuntimeError(f"Invalid output_products definition for '{product_name}'")
 
         bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
-        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid.uuid4()))
+        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
         if not store_name:
@@ -529,7 +529,14 @@ def build_mockup_payload(owner_id):
     output_products = [
         OutputProduct(
             id=outp,
-            path=f"s3://{RSPY_TEMP_BUCKET}/dpr_mockup_results/{owner_id}/TEST_FLOW_OUTPUT/",
+            path=os.path.join(
+                "s3://",
+                RSPY_TEMP_BUCKET,
+                "dpr_mockup_results",
+                owner_id,
+                "TEST_FLOW_OUTPUT",
+                str(uuid4()),
+            ),
             store_type="zarr",
             type="folder",
             store_params=None,

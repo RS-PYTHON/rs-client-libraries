@@ -112,12 +112,12 @@ async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: st
             "filter": {
                 "op": "t_intersects",
                 "args": [
-                    {"property": "datetime"},
+                    {"property": "published"},
                     {"interval": [start_str, end_str]},
                 ],
             },
             "limit": limit,
-            "sortby": [{"field": "datetime", "direction": "desc"}],
+            "sortby": [{"field": "published", "direction": "desc"}],
         }
 
         # Log query for debugging
