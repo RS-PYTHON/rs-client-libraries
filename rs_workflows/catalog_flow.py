@@ -185,8 +185,10 @@ def resolve_collection(product_type: str, target_collections) -> str:
 
     collections = {}
 
-    if all(isinstance(i, GeneratedProduct) for i in target_collections):
-        collections = {product.product_type: product.collection_name for product in target_collections}
+    for item in target_collections:
+        data = item.model_dump() if isinstance(item, GeneratedProduct) else item
+        if (ptype := data.get("product_type")) and (collection := data.get("collection_name")):
+            collections[ptype] = collection
 
     target_collection = collections.get(product_type) or collections.get("*")
 

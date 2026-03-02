@@ -79,7 +79,7 @@ def test_resolve_collection_generated_product(mocker):
 
     input_collections = [
         GeneratedProduct(name="product_name_1", product_type="product_type_1", collection_name="collection_1"),
-        GeneratedProduct(name="product_name_2", product_type="product_type_2", collection_name="collection_2"),
+        {"name": "product_name_2", "product_type": "product_type_2", "collection_name": "collection_2"},
     ]
 
     assert resolve_collection("product_type_1", input_collections) == "collection_1"
