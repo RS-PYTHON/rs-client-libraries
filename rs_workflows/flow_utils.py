@@ -336,53 +336,6 @@ class DprProcessIn(BaseModel):
 
         return self
 
-    # -----------------------
-    # OpenAPI example (Pydantic v2 compliant)
-    # -----------------------
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "env": {"owner_id": "user"},
-                "processor_name": "my_processor",
-                "processor_version": "v1.0.0",
-                "dask_cluster_label": "dask-l0",
-                "s3_payload_file": "s3://my-bucket/payload.json",
-                "pipeline": "radiometry",
-                "priority": "HIGH",
-                "workflow_type": "ON_DEMAND",
-                "input_products": [
-                    {
-                        "name": "rad_input",
-                        "stac_item_id": "rad123",
-                        "collection_name": "TEST_FLOW_INPUT",
-                    },
-                ],
-                "generated_product_to_collection_identifier": [
-                    {
-                        "name": "rad_output",
-                        "product_type": "processed",
-                        "collection_name": "TEST_FLOW_OUTPUT",
-                    },
-                ],
-                "auxiliary_product_to_collection_identifier": [
-                    {
-                        "product_type": "temperature",
-                        "collection_name": "TEST_FLOW_AUXIP",
-                    },
-                    {
-                        "product_type": "*",
-                        "collection_name": "TEST_FLOW_AUXIP",
-                    },
-                ],
-                "processing_mode": ["ALWAYS"],
-                "start_datetime": "2014-01-01T11:00:00",
-                "end_datetime": "2025-10-03T11:00:00",
-                "satellite": "Sentinel-2",
-            },
-        },
-    }
-
 
 @dataclass
 class DprProcessOut:
