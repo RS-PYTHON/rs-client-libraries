@@ -15,13 +15,12 @@
 """Catalog flow implementation"""
 
 import json
-from collections.abc import Iterable
 
 from prefect import flow, get_run_logger, task
 from pystac import Item, ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, GeneratedProduct
 
 #################
 # Catalog flows #
@@ -187,11 +186,8 @@ def resolve_collection(product_type: str, target_collections) -> str:
     collections = {}
 
     # -------- NEW FORMAT: GeneratedProduct --------
-    if isinstance(target_collections, Iterable) and not isinstance(target_collections, (dict, str, bytes)):
-        first = next(iter(target_collections), None)
-
-        if first and hasattr(first, "product_type") and hasattr(first, "collection_name"):
-            collections = {product.product_type: product.collection_name for product in target_collections}
+    if all(isinstance(i, GeneratedProduct) for i in target_collections):
+        collections = {product.product_type: product.collection_name for product in target_collections}
 
     # -------- LEGACY FORMAT --------
     if not collections:
