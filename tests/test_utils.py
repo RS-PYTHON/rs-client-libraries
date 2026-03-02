@@ -77,7 +77,7 @@ def test_resolve_collection_generated_product(mocker):
     """Check resolve_collection works with a list of GeneratedProduct instances."""
     mocker.patch("rs_workflows.catalog_flow.get_run_logger")
 
-    input_collections = [
+    input_collections: list[GeneratedProduct | dict] = [
         GeneratedProduct(name="product_name_1", product_type="product_type_1", collection_name="collection_1"),
         {"name": "product_name_2", "product_type": "product_type_2", "collection_name": "collection_2"},
     ]

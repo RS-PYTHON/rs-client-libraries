@@ -163,11 +163,10 @@ async def get_item(
     return catalog_client.get_item(target_collection, item)
 
 
-def resolve_collection(product_type: str, target_collections) -> str:
+def resolve_collection(product_type: str, target_collections: list[GeneratedProduct | dict]) -> str:
     """Resolve the target collection for a given product type.
 
     Supports:
-    - dict with tuple/string values (legacy)
     - list of dicts (legacy)
     - GeneratedProduct or iterable of GeneratedProduct (new)
 
