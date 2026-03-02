@@ -185,29 +185,8 @@ def resolve_collection(product_type: str, target_collections) -> str:
 
     collections = {}
 
-    # -------- NEW FORMAT: GeneratedProduct --------
     if all(isinstance(i, GeneratedProduct) for i in target_collections):
         collections = {product.product_type: product.collection_name for product in target_collections}
-
-    # -------- LEGACY FORMAT --------
-    if not collections:
-        if isinstance(target_collections, dict):
-            for value in target_collections.values():
-                if isinstance(value, tuple):
-                    key, collection = value
-                    collections[key] = collection
-                else:
-                    collections[value] = value
-        else:
-            for d in target_collections:
-                for value in d.values():
-                    if isinstance(value, tuple):
-                        key, collection = value
-                        collections[key] = collection
-                    else:
-                        collections[value] = value
-
-    logger.info(f"Collections found: {collections}")
 
     target_collection = collections.get(product_type) or collections.get("*")
 
