@@ -1,4 +1,4 @@
-# Copyright 2025 CS Group
+# Copyright 2023-2026 Airbus, CS Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """DPR flow implementation"""
-
 
 import datetime
 import glob
@@ -229,7 +228,10 @@ def create_stac_item(
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
-    eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
+    if dpr_processor.lower() == "mockup":
+        eopf_origin_datetime = "2026-01-01T00:00:00Z"
+    else:
+        eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
 
     item = build_item(
         eopf_feature,
@@ -299,7 +301,7 @@ def update_eopf_assets(
         logger.info(f"Product {prod.id} has been added to the list and will be published to the catalog.")
 
     # List & extract
-    logger.info(f"Found {len(zattrs_list)} .zattrs files under path.")
+    logger.info(f"Found {len(zattrs_list)} .zattrs files under path. The list: {zattrs_list}")
 
     stac_items = []
     eopf_types = []
@@ -363,6 +365,9 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
     """
     logger = get_run_logger()
     items = []
+    if not input_products:
+        logger.error("No valid input products found to compute eopf:origin_datetime. Exit")
+        raise RuntimeError("No valid input products found to compute eopf:origin_datetime")
 
     for input_product in input_products:
         for _, (item_id, collection_id) in input_product.items():
@@ -372,17 +377,21 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
                     collection_id,
                     item_id,
                 )
+                if not future.result():
+                    logger.error(
+                        f"Expected valid input product item {item_id} was not found"
+                        " to compute eopf:origin_datetime. Exit",
+                    )
+                    raise RuntimeError(
+                        f"Expected valid input product item {item_id} was not found" " to compute eopf:origin_datetime",
+                    )
+
                 items.append(future.result())
             except RuntimeError as rte:
                 logger.exception(f"Failed to get item '{item_id}' from collection '{collection_id}'")
                 raise RuntimeError("No valid items found to compute eopf:origin_datetime") from rte
 
     logger.info(f"Items matching input found in catalog: {len(items)}")
-
-    if not items:
-        # error maybe?
-        logger.error("No valid items found to compute eopf:origin_datetime. Exit")
-        raise RuntimeError("No valid items found to compute eopf:origin_datetime")
 
     max_eopf_datetime = max(
         datetime.datetime.fromisoformat(

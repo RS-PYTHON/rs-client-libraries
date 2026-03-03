@@ -1,5 +1,5 @@
 # pylint: disable=too-many-lines
-# Copyright 2024 CS Group
+# Copyright 2023-2026 Airbus, CS Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ The conftest.py file serves as a means of providing fixtures for an entire direc
 Fixtures defined in a conftest.py can be used by any test in that package without needing to import them
 (pytest will automatically discover them).
 """
+
 import copy
 import datetime
 import json
@@ -28,6 +29,7 @@ import json
 import logging
 import os
 import tempfile
+import uuid
 from unittest.mock import MagicMock, mock_open
 
 import boto3
@@ -46,7 +48,7 @@ from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from rs_common.utils import env_bool
 from rs_workflows import init_pi_db_flow
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, GeneratedProduct, InputProduct
 from rs_workflows.payload_generator import RSPY_TEMP_BUCKET
 from rs_workflows.payload_template import (  # StoreOptionsWrapper,
     StorageOptions,
@@ -60,6 +62,8 @@ S3_ACCESSKEY = "testing"
 S3_SECRETKEY = "testing"
 S3_REGION = "us-east-1"
 S3_ENDPOINT = "https://localhost:5000"
+AWS_SECURITY_TOKEN = "testing"
+AWS_SESSION_TOKEN = "testing"
 MOCKED_BUCKET = "test-bucket"
 
 RSPY_UAC_CHECK_URL = "https://www.rspy-uac-manager.com"
@@ -217,14 +221,6 @@ def before_and_after(session_mocker):
         "opentelemetry.exporter.otlp.proto.grpc.exporter.OTLPExporterMixin",
     )._export.return_value = True
 
-    # Standard AWS environment variables that moto expects to be set to avoid
-    # looking for real credentials or hitting real AWS endpoints.
-    os.environ["AWS_ACCESS_KEY_ID"] = S3_ACCESSKEY
-    os.environ["AWS_SECRET_ACCESS_KEY"] = S3_SECRETKEY
-    os.environ["AWS_SECURITY_TOKEN"] = "testing"
-    os.environ["AWS_SESSION_TOKEN"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = S3_REGION
-
     yield
 
     ###################
@@ -256,8 +252,8 @@ def _mocked_s3(monkeypatch):
     # Standard AWS environment variables
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", S3_ACCESSKEY)
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", S3_SECRETKEY)
-    monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
-    monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
+    monkeypatch.setenv("AWS_SECURITY_TOKEN", AWS_SECURITY_TOKEN)
+    monkeypatch.setenv("AWS_SESSION_TOKEN", AWS_SESSION_TOKEN)
     monkeypatch.setenv("AWS_DEFAULT_REGION", S3_REGION)
     with mock_aws():
         client = boto3.client(
@@ -886,20 +882,17 @@ def _mock_dpr_process_in():
     mock = MagicMock()
 
     # input_products: list[dict[product_id, (stac_item_name_of_cadip_session, collection_id)]]
+    # After UI update, input_products = list(InputProduct(name=..., cadip_session=..., collection_name=...))
     mock.input_products = [
-        {"S1CADUS": ("cadip_session", "COLLECTION_CADIP_TEST")},
-        {"S3CADUS": ("another_cadip_session", "COLLECTION_S3")},
+        InputProduct(name="S1CADUS", cadip_session="cadip_session", collection_name="COLLECTION_CADIP_TEST"),
+        InputProduct(name="S3CADUS", cadip_session="another_cadip_session", collection_name="COLLECTION_S3"),
     ]
 
     # generated_product_to_collection_identifier:
     # list[dict[output_key, product_type | (product_type, output_collection)]]
     mock.generated_product_to_collection_identifier = [
-        {
-            "output1": "S1A_IW_GRDH_1S",  # product type (string)
-        },
-        {
-            "output2": ("product_type", "OUTPUT_COLLECTION_GRDH"),  # (origin, collection)
-        },
+        GeneratedProduct(name="output1", product_type="S1A_IW_GRDH_1S"),
+        GeneratedProduct(name="output2", product_type="product_type", collection_name="OUTPUT_COLLECTION_GRDH"),
     ]
 
     # s3_payload_file: final payload S3 path
@@ -942,6 +935,18 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
     mock_future.result.return_value = mock_item
     mocker.patch("rs_workflows.dpr_flow.catalog_flow.get_item.submit", return_value=mock_future)
 
+    # use fixed UUIDs for testing mockup results, to match the ones generated in payload_generator.py
+    # we need at least 2 since build_mockup_payload generates 2 output products.
+    fixed_uuids = [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+    ]
+    # patch it in payload_generator where it's used to generate output paths
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid4",
+        side_effect=[uuid.UUID(u) for u in fixed_uuids],
+    )
+
     def mock_zattrs_data(item_id: str, product_type: str):
         """Mock .zattrs contents returned by the DPR processor."""
         return {
@@ -964,19 +969,31 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
 
     mocked_s3.create_bucket(Bucket=RSPY_TEMP_BUCKET)
     expected_items = {}
-    s3_path = f"dpr_mockup_results/{OWNER_ID}/TEST_FLOW_OUTPUT"
+    base_s3_path = f"dpr_mockup_results/{OWNER_ID}/TEST_FLOW_OUTPUT"
 
-    # For each product
-    for product_name, zattrs_data in zattrs_products.items():
+    # for each product
+    for i, (product_name, zattrs_data) in enumerate(zattrs_products.items()):
+        product_uuid = fixed_uuids[i]
+        product_s3_path = f"{base_s3_path}/{product_uuid}"
 
-        # Upload .zattrs file
+        # upload .zattrs file to both locations to support both old and new tests
+        # 1. New nested location (for test_dpr_processing)
         mocked_s3.put_object(
             Body=json.dumps(zattrs_data),
             Bucket=RSPY_TEMP_BUCKET,
-            Key=f"{s3_path}/{product_name}/.zattrs",
+            Key=f"{product_s3_path}/{product_name}/.zattrs",
+        )
+        # 2. Old flat location (for test_update_eopf_assets_happy_path)
+        mocked_s3.put_object(
+            Body=json.dumps(zattrs_data),
+            Bucket=RSPY_TEMP_BUCKET,
+            Key=f"{base_s3_path}/{product_name}/.zattrs",
         )
 
-        # Build the item that we expect to be passed to catalog_client.CatalogClient.add_item
+        # build the item that we expect to be passed to
+        # catalog_client.CatalogClient.add_item
+        # default to flat path for compatibility with other tests.
+        # test_dpr_processing will update this with UUIDs.
         stac_data = zattrs_data["stac_discovery"]
         expected_item = Item(
             id=product_name,
@@ -987,7 +1004,7 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
             stac_extensions=[],
             assets={
                 product_name: Asset(
-                    href=f"s3://{RSPY_TEMP_BUCKET}/{s3_path}/{product_name}",
+                    href=f"s3://{RSPY_TEMP_BUCKET}/{base_s3_path}/{product_name}",
                     title=product_name,
                     media_type="application/vnd+zarr",
                     roles=["data", "metadata"],
@@ -996,7 +1013,7 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
         )
         expected_items[product_name] = expected_item.to_dict()
 
-    return s3_path, expected_items
+    return base_s3_path, expected_items
 
 
 @pytest.fixture(name="mock_store_params")

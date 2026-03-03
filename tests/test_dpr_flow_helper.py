@@ -1,4 +1,4 @@
-# Copyright 2025 CS Group
+# Copyright 2023-2026 Airbus, CS Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """test of helper functions for dpr_flow.py"""
+
 import datetime
 import json
 import typing
@@ -338,6 +339,37 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
     assert {result_item.id: result_item.to_dict() for result_item in result_items} == expected_items
 
 
+def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
+    """
+    Verify that update_eopf_assets raises RuntimeError when a .zattrs file
+    cannot be read (e.g., read_zattrs_sync returns None).
+    """
+    env = mocker.Mock()
+    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+
+    # Mock extract_products_and_zattrs to return one product
+    mocker.patch(
+        "rs_workflows.dpr_flow.extract_products_and_zattrs",
+        return_value=[("prod1", "s3://bucket/prod1/.zattrs")],
+    )
+    # Mock s3_list to avoid actual S3 calls
+    mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=[])
+
+    # Mock read_zattrs_sync to return None, triggering the error
+    mocker.patch("rs_workflows.dpr_flow.read_zattrs_sync", return_value=None)
+
+    payload = mocker.Mock()
+    payload.io.output_products = [mocker.Mock(path="s3://bucket/path")]
+
+    with pytest.raises(RuntimeError, match="Could not read .zattrs file s3://bucket/prod1/.zattrs. Exiting."):
+        update_eopf_assets.fn(
+            env=env,
+            input_products=[{"input": ("id", "coll")}],
+            payload=payload,
+            dpr_processor=DprProcessor.S1L0,
+        )
+
+
 def test_update_eopf_assets_skips_non_final_products(mocker):
     """
     Verify that update_eopf_assets processes only final products.
@@ -423,13 +455,6 @@ async def test_run_processor_filters_non_final_products(
     # Mock Prefect logger
     mock_logger = mocker.Mock()
     mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mock_logger)
-
-    # # Mock FlowEnv and its dependencies
-    # mock_flow_env = mocker.Mock()
-    # mock_span = mocker.Mock()
-    # mock_span.__enter__ = mocker.Mock(return_value=mock_span)
-    # mock_span.__exit__ = mocker.Mock(return_value=False)
-    # mock_flow_env.start_span.return_value = mock_span
 
     # Spy DPR client
     spy_run_process = mocker.spy(dpr_client.DprClient, "run_process")
@@ -596,8 +621,41 @@ def test_compute_eopf_origin_datetime_multiple_items_returns_max(mocker):
     )
 
     result = compute_eopf_origin_datetime(env, input_products)
-
     assert result == "2024-02-01T00:00:00+00:00"
+
+
+def test_compute_eopf_origin_datetime_raises_on_missing_item(mocker):
+    """
+    Verify that compute_eopf_origin_datetime raises RuntimeError when an
+    input item cannot be found in the catalog.
+    """
+    env = mocker.Mock()
+    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+
+    # Mock catalog_flow.get_item.submit to return a future whose result() is None
+    mock_future = mocker.Mock()
+    mock_future.result.return_value = None
+    mocker.patch("rs_workflows.dpr_flow.catalog_flow.get_item.submit", return_value=mock_future)
+
+    input_products = [{"input": ("missing_id", "some_coll")}]
+
+    with pytest.raises(RuntimeError, match="No valid items found to compute eopf:origin_datetime") as excinfo:
+        compute_eopf_origin_datetime(env, input_products)
+
+    # Verify the original cause contains the specific message requested by the user
+    assert "Expected valid input product item missing_id was not found" in str(excinfo.value.__cause__)
+
+
+def test_compute_eopf_origin_datetime_raises_on_empty_input(mocker):
+    """
+    Verify that compute_eopf_origin_datetime raises RuntimeError when
+    input_products is empty.
+    """
+    env = mocker.Mock()
+    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+
+    with pytest.raises(RuntimeError, match="No valid input products found to compute eopf:origin_datetime"):
+        compute_eopf_origin_datetime(env, [])
 
 
 def test_compute_eopf_origin_datetime_raises_on_catalog_error(mocker):

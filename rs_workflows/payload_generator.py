@@ -1,4 +1,4 @@
-# Copyright 2025 CS Group
+# Copyright 2023-2026 Airbus, CS Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,11 +13,12 @@
 # limitations under the License.
 
 """This module contains functions to generate DPR payloads for RS-Server."""
+
 import fnmatch
 import os
-import uuid
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
+from uuid import uuid4
 
 import requests
 from prefect import get_run_logger, task
@@ -304,14 +305,24 @@ def build_input_products(
     """
     inputs = []
     for input_product in dpr_process_in.input_products:
-        product_name = next(iter(input_product))
-        mapping = next((inp for inp in unit.get("input_products", []) if inp["name"] == product_name), None)
+        product_name = input_product.name
+
+        mapping = next(
+            (inp for inp in unit.get("input_products", []) if inp["name"] == product_name),
+            None,
+        )
 
         if not mapping:
             raise RuntimeError(f"Couldn't find any input for task table entry '{product_name}'")
 
-        stac_item_identifier, collection = input_product[product_name]
-        stac_item_path = resolve_stac_input_path(catalog_client, collection, stac_item_identifier)
+        stac_item_identifier = input_product.cadip_session
+        collection = input_product.collection_name
+
+        stac_item_path = resolve_stac_input_path(
+            catalog_client,
+            collection,
+            stac_item_identifier,
+        )
 
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
@@ -374,23 +385,24 @@ def build_output_products(
     processed_products = set()
 
     for output_product in dpr_process_in.generated_product_to_collection_identifier:
-        product_name = next(iter(output_product))
+        product_name = output_product.name
         mapping = next((outp for outp in unit.get("output_products", []) if outp["name"] == product_name), None)
 
         if not mapping:
             raise RuntimeError(f"Couldn't find any output for task table entry '{product_name}'")
 
+        product_type = output_product.product_type
+
+        if not product_type:
+            raise RuntimeError(f"Invalid output_products definition for '{output_product.name}'")
+        
         processed_products.add(product_name)
-        product_type_and_collection = output_product[product_name]
-        if isinstance(product_type_and_collection, tuple):
-            product_type, output_collection = product_type_and_collection
-        elif isinstance(product_type_and_collection, str):
-            product_type = output_collection = product_type_and_collection
-        else:
-            raise RuntimeError(f"Invalid output_products definition for '{product_name}'")
+        output_collection = (
+            output_product.collection_name if output_product.collection_name is not None else product_type
+        )
 
         bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
-        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid.uuid4()))
+        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
         if not store_name:
@@ -536,7 +548,14 @@ def build_mockup_payload(owner_id):
     output_products = [
         OutputProduct(
             id=outp,
-            path=f"s3://{RSPY_TEMP_BUCKET}/dpr_mockup_results/{owner_id}/TEST_FLOW_OUTPUT/",
+            path=os.path.join(
+                "s3://",
+                RSPY_TEMP_BUCKET,
+                "dpr_mockup_results",
+                owner_id,
+                "TEST_FLOW_OUTPUT",
+                str(uuid4()),
+            ),
             store_type="zarr",
             type="folder",
             store_params=None,

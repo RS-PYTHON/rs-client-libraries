@@ -1,4 +1,4 @@
-# Copyright 2025 CS Group
+# Copyright 2023-2026 Airbus, CS Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Prefect flows and tasks for on-demand processing"""
+
 # pylint: disable=W0101  # ignore 'unreachable code' (temporar)
 
 import datetime
@@ -63,9 +64,20 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
             # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
             product_type = parameters.get("product_type", "*")
             default_aux_collection = f"{dpr_input.satellite}-aux-{product_type}"
-            collection = dpr_input.auxiliary_product_to_collection_identifier.get(
-                product_type,
-                dpr_input.auxiliary_product_to_collection_identifier.get("*", default_aux_collection),
+            collection = next(
+                (
+                    p.collection_name
+                    for p in dpr_input.auxiliary_product_to_collection_identifier
+                    if p.product_type == product_type
+                ),
+                next(
+                    (
+                        p.collection_name
+                        for p in dpr_input.auxiliary_product_to_collection_identifier
+                        if p.product_type == "*"
+                    ),
+                    default_aux_collection,
+                ),
             )
             # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
             auxip_items = auxip_flow.auxip_staging_task.submit(

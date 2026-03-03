@@ -1,4 +1,4 @@
-# Copyright 2025 Airbus defence And Space
+# Copyright 2023-2026 Airbus, CS Group
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -112,12 +112,12 @@ async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: st
             "filter": {
                 "op": "t_intersects",
                 "args": [
-                    {"property": "datetime"},
+                    {"property": "published"},
                     {"interval": [start_str, end_str]},
                 ],
             },
             "limit": limit,
-            "sortby": [{"field": "datetime", "direction": "desc"}],
+            "sortby": [{"field": "published", "direction": "desc"}],
         }
 
         # Log query for debugging
