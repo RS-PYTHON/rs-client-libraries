@@ -454,11 +454,12 @@ async def run_processor(
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
         start_time = time.time()
         s3_payload_dir = osp.dirname(s3_payload_run)
+        s3_payload_filename = osp.basename(s3_payload_run)
         job_status = dpr_client.run_process(
             process=processor,
             cluster_info=cluster_info,
             s3_config_dir=s3_payload_dir,
-            payload_subpath=osp.basename(s3_payload_run),
+            payload_subpath=s3_payload_filename,
             s3_report_dir=s3_payload_dir,
         )
         try:
@@ -470,14 +471,20 @@ async def run_processor(
             with tempfile.TemporaryDirectory() as tmpdir:
                 await prefect_utils.s3_download_dir(s3_payload_dir, tmpdir)
 
-                # Display here the logs from eopf
-                local_log_files = glob.glob(osp.join(tmpdir, "**/*.processor.log"), recursive=True)
-                if local_log_files:
-                    local_log_file = local_log_files[0]
+                # Display here the log from eopf processors if it exists in the reports folder.
+                # We look for a log file with the same name as the payload file but with the suffix ".processor.log"
+                # This is to be aligned with the current implementation of rs-dpr-service that creates a subfolder named
+                # 'reports' inside thde same folder as the payload file. The filename of the processor log is the filename 
+                # of the payload file but with the suffix ".processor.log".
+                local_log_file = osp.join(tmpdir,
+                                          "reports",
+                                          Path(s3_payload_filename).with_suffix(".processor.log").name
+                                          )
+                try:                    
                     async with await anyio.open_file(local_log_file, encoding="utf-8") as opened:
                         s3_log_file = osp.join(s3_payload_dir, osp.relpath(local_log_file, tmpdir))
                         logger.info(f"Log file {s3_log_file!r}:\n{await opened.read()}")
-                else:
+                except FileNotFoundError:
                     logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
 
         eopf_stac_items, eopf_types = update_eopf_assets(flow_env, input_products, payload, processor)
