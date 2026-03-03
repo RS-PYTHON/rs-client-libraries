@@ -475,6 +475,13 @@ async def run_processor(
                 # This is to be aligned with the current implementation of rs-dpr-service that creates a subfolder
                 # named 'reports' inside thde same folder as the payload file. The filename of the processor
                 # log is the filename of the payload file but with the suffix ".processor.log".
+
+                # We search for a log file that shares the same name as the payload file, but
+                # has the suffix ".processor.log". This approach is consistent with the current implementation
+                # of the rs-dpr-service, which creates a subfolder named "reports" in the same directory as
+                # the payload file. The processor log filename will be built by the rs-dpr-service
+                # by using the same base name as the payload file, but with the addition of the
+                # ".processor.log" suffix instead of ".yaml".
                 local_log_file = osp.join(
                     tmpdir,
                     "reports",
