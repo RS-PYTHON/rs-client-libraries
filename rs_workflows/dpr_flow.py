@@ -15,7 +15,6 @@
 """DPR flow implementation"""
 
 import datetime
-import glob
 import json
 import tempfile
 import time
@@ -473,14 +472,15 @@ async def run_processor(
 
                 # Display here the log from eopf processors if it exists in the reports folder.
                 # We look for a log file with the same name as the payload file but with the suffix ".processor.log"
-                # This is to be aligned with the current implementation of rs-dpr-service that creates a subfolder named
-                # 'reports' inside thde same folder as the payload file. The filename of the processor log is the filename 
-                # of the payload file but with the suffix ".processor.log".
-                local_log_file = osp.join(tmpdir,
-                                          "reports",
-                                          Path(s3_payload_filename).with_suffix(".processor.log").name
-                                          )
-                try:                    
+                # This is to be aligned with the current implementation of rs-dpr-service that creates a subfolder
+                # named 'reports' inside thde same folder as the payload file. The filename of the processor
+                # log is the filename of the payload file but with the suffix ".processor.log".
+                local_log_file = osp.join(
+                    tmpdir,
+                    "reports",
+                    Path(s3_payload_filename).with_suffix(".processor.log").name,
+                )
+                try:
                     async with await anyio.open_file(local_log_file, encoding="utf-8") as opened:
                         s3_log_file = osp.join(s3_payload_dir, osp.relpath(local_log_file, tmpdir))
                         logger.info(f"Log file {s3_log_file!r}:\n{await opened.read()}")
