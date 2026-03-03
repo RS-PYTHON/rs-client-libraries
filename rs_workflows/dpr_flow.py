@@ -471,11 +471,6 @@ async def run_processor(
                 await prefect_utils.s3_download_dir(s3_payload_dir, tmpdir)
 
                 # Display here the log from eopf processors if it exists in the reports folder.
-                # We look for a log file with the same name as the payload file but with the suffix ".processor.log"
-                # This is to be aligned with the current implementation of rs-dpr-service that creates a subfolder
-                # named 'reports' inside thde same folder as the payload file. The filename of the processor
-                # log is the filename of the payload file but with the suffix ".processor.log".
-
                 # We search for a log file that shares the same name as the payload file, but
                 # has the suffix ".processor.log". This approach is consistent with the current implementation
                 # of the rs-dpr-service, which creates a subfolder named "reports" in the same directory as
