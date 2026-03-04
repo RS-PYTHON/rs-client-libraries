@@ -380,7 +380,7 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
         return
     eopf_type_dict = []
 
-    if dpr_processor_name in ["s3_l0", "mockup"]:
+    if dpr_processor_name in ["s3_l0"]:
         eopf_type_dict = [
             ("S03DORDOP", 1, 1),
             ("S03DORNAV", 1, 1),
