@@ -724,14 +724,14 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
     mock_storage.get_store_params.return_value = mock_store_params
 
     # sample_unit has "output1" and "output2"
-    # We provide only "output1" in generated_product_to_collection_identifier
+    # We provide only "output1" in generated_product_to_collection_identifier, so "output2" should trigger the error
     mock_dpr_process_in.generated_product_to_collection_identifier = [
-        {"output1": "OUT_COLL"},
+        FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
     ]
 
     mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
     mocker.patch(
-        "rs_workflows.payload_generator.uuid.uuid4",
+        "rs_workflows.payload_generator.uuid4",
         return_value="00000000-0000-0000-0000-000000000000",
     )
 
