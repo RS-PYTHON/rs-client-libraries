@@ -395,7 +395,7 @@ def build_output_products(
 
         if not product_type:
             raise RuntimeError(f"Invalid output_products definition for '{output_product.name}'")
-        
+
         processed_products.add(product_name)
         output_collection = (
             output_product.collection_name if output_product.collection_name is not None else product_type
