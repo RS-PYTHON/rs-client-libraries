@@ -32,6 +32,8 @@ from requests.models import PreparedRequest
 from rs_client.rs_client import TIMEOUT, RsClient
 from rs_common.utils import get_href_service
 
+MAX_RETRIES_NUMBER_FOR_GETTING_JOB_STATUS = 20
+
 
 class OgcValidationException(Exception):
     """
@@ -279,9 +281,20 @@ class OgcApiClient(RsClient):
             previous_status: dict[str, str] = {}
             # We use previous_status to remove log when the status remains unchanged.
             # This way we reduce the number of useless information
-
+            retries_number = MAX_RETRIES_NUMBER_FOR_GETTING_JOB_STATUS
             while True:
-                job_status = self.get_job_info(job_identifier)
+                try:
+                    job_status = self.get_job_info(job_identifier)
+                except TimeoutError:
+                    retries_number -= 1
+                    if retries_number <= 0:
+                        raise
+                    time.sleep(2)
+                    logger.warning(
+                        f"Timeout while waiting for {job_name} job {job_identifier!r} status. "
+                        f"Retries left: {retries_number}",
+                    )
+                    continue
                 to_be_logged = previous_status != job_status
                 previous_status = job_status
 
