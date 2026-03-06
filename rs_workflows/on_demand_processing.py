@@ -120,8 +120,18 @@ async def dpr_processing(
             cluster_label=dpr_input.dask_cluster_label,
         )
 
-        # read tasktable and construct list of processing units
+        # Read task table (and optional metadata) from DPR service.
         task_table = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name, cluster_info)
+        dask_dashboard_url = ""
+        if isinstance(task_table, dict):
+            dask_dashboard_url = str(task_table.pop("dask_dashboard_url", "") or "")
+
+        if dask_dashboard_url:
+            logger.info("Dask cluster dashboard URL: %s", dask_dashboard_url)
+
+        md = "# Task table\n\n```json\n" + json.dumps(task_table, indent=2) + "\n```"
+        await acreate_markdown_artifact(key="task-table", markdown=md, description="DPR task table")
+
         processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
         out = build_unit_list(
             tasktable=task_table,
