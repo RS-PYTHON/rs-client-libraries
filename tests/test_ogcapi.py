@@ -24,7 +24,10 @@ import responses
 from starlette import status
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient
-from rs_client.ogcapi.ogcapi_client import OgcValidationException
+from rs_client.ogcapi.ogcapi_client import (
+    MAX_RETRIES_NUMBER_FOR_GETTING_JOB_STATUS,
+    OgcValidationException,
+)
 from rs_client.rs_client import RsClient
 from rs_common.logging import Logging
 from tests.conftest import MOCKED_RSPY_WEBSITE
@@ -634,6 +637,80 @@ class TestOgcApi:
         with pytest.raises(Exception) as exc_info:
             client.wait_for_job({"jobID": "jobID"})
         assert "FAILED" in str(exc_info.getrepr())
+
+    def test_wait_for_job_timeout_retry(self, client, mocker):
+        """Test the wait_for_job function with retrials on TimeoutError"""
+
+        # Mock time.sleep to make the test faster
+        mocker.patch("time.sleep", return_value=None)
+
+        job_id = "job_id_retry"
+        job_status_initial = {"jobID": job_id, "status": "accepted"}
+
+        # Define a side effect that raises TimeoutError once, then returns success
+        responses_list = [
+            TimeoutError("Mocked timeout"),
+            {"jobID": job_id, "status": "successful", "message": '{"result": "ok"}'},
+        ]
+
+        # Use side_effect to return items from the list one by one
+        mock_get_job_info = mocker.patch.object(
+            client,
+            "get_job_info",
+            side_effect=responses_list,
+        )
+
+        # Test nominal case with one retry
+        # We need to mock logger to capture warning
+        mock_logger = mocker.Mock()
+
+        result = client.wait_for_job(
+            job_status_initial,
+            logger=mock_logger,
+            job_name="test_retry_job",
+            poll_interval=0.1,
+        )
+
+        if isinstance(client, DprClient):
+            assert result == {"result": "ok"}
+        else:
+            assert result["status"] == "successful"
+
+        assert mock_get_job_info.call_count == 2
+        # For DprClient, there's an additional warning about how to cancel the job
+        if isinstance(client, DprClient):
+            assert mock_logger.warning.call_count == 2
+            # The retry warning should be the second one
+            assert (
+                "Timeout while waiting for test_retry_job job 'job_id_retry' status. Retries left: 19"
+                in mock_logger.warning.call_args_list[1][0][0]
+            )
+        else:
+            mock_logger.warning.assert_called_once()
+            assert (
+                "Timeout while waiting for test_retry_job job 'job_id_retry' status. Retries left: 19"
+                in mock_logger.warning.call_args[0][0]
+            )
+
+        # Test exhaustive retries
+        mock_get_job_info.reset_mock()
+        mock_get_job_info.side_effect = TimeoutError("Persistent Timeout")
+
+        # We want to check it raises TimeoutError after MAX_RETRIES_NUMBER_FOR_GETTING_JOB_STATUS
+        mock_logger.reset_mock()
+        with pytest.raises(TimeoutError):
+            client.wait_for_job(
+                job_status_initial,
+                logger=mock_logger,
+                job_name="test_retry_job_exhausted",
+                poll_interval=0.1,
+            )
+
+        assert mock_get_job_info.call_count == MAX_RETRIES_NUMBER_FOR_GETTING_JOB_STATUS
+        expected_warning_count = MAX_RETRIES_NUMBER_FOR_GETTING_JOB_STATUS - 1
+        if isinstance(client, DprClient):
+            expected_warning_count += 1
+        assert mock_logger.warning.call_count == expected_warning_count
 
     def test_run_conv_safe_zarr(self, client, mocker):
         """Test the run_conv_safe_zarr function"""
