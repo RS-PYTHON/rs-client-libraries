@@ -51,10 +51,8 @@ include = [
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.15"
-opentelemetry-distro = "^0.60b1" # then run 'poetry run opentelemetry-bootstrap -a install'
-opentelemetry-instrumentation-aws-lambda = "^0.60b1"
-opentelemetry-test-utils = "^0.60b1"
-opentelemetry-exporter-otlp = "^1.39.1"
+opentelemetry-distro = "^0.61b0" # then run 'poetry run opentelemetry-bootstrap -a install'
+opentelemetry-exporter-otlp = "^1.40.0"
 protobuf = ">=5.29.5"
 cachetools = ">=5.5.2"
 pystac = "^1.13.0"
