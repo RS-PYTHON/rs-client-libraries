@@ -194,8 +194,8 @@ def create_stac_item(
 
         return Item(
             id=product_name,
-            geometry=feature_dict["geometry"],
-            bbox=feature_dict["bbox"],
+            geometry=feature_dict.get("geometry"),
+            bbox=feature_dict.get("bbox"),
             datetime=datetime.datetime.fromisoformat(feature_dict["properties"]["datetime"]),
             properties=feature_dict["properties"],
             stac_extensions=stac_extensions,
