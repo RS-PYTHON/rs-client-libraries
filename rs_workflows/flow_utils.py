@@ -183,6 +183,7 @@ class DprProcessIn(BaseModel):  # pylint: disable=too-many-instance-attributes
         processor_name: DPR processor name
         processor_version: DPR processor version
         dask_cluster_label: Dask cluster label e.g. "dask-l0"
+        dask_cluster_instance: Optional Dask cluster instance ID used to build a direct dashboard URL.
         s3_payload_file: S3 path where the processor payload will be written
         pipeline: Processor pipeline name. The task table propose one or several pipelines.
           Mandatory if unit is not provided.
@@ -215,6 +216,10 @@ class DprProcessIn(BaseModel):  # pylint: disable=too-many-instance-attributes
     processor_name: DprProcessor | str = Field(description="DPR processor name")
     processor_version: str = Field(description="DPR processor version")
     dask_cluster_label: str = Field(description='Dask cluster label e.g. "dask-l0"')
+    dask_cluster_instance: str | None = Field(
+        default=None,
+        description="Optional Dask cluster instance ID used to build a public dashboard URL.",
+    )
     s3_payload_file: str = Field(description="S3 path where the processor payload will be written")
     # 'pipeline' or 'unit' must be provided
     pipeline: DprPipeline | str | None = Field(
