@@ -46,8 +46,8 @@ def build_dask_dashboard_url(cluster_label: str, cluster_instance: str | None) -
     if not cluster_instance:
         return ""
 
-    # Local demo environments expose different public gateway URLs depending on the
-    # processor family, so we match the cluster label prefix to the corresponding env var.
+    # Different processor families can use different public gateway URLs, so match
+    # the cluster label prefix to the corresponding environment variable.
     public_env_by_prefix = (
         ("dask-eopf-mockup", "DASK_GATEWAY_EOPF_MOCKUP_PUBLIC"),
         ("dask-l0", "DASK_GATEWAY_L0_PUBLIC"),
@@ -69,7 +69,7 @@ def build_dask_dashboard_url(cluster_label: str, cluster_instance: str | None) -
     if not public_base:
         return ""
 
-    # Build the same dashboard path shape as the one printed by the demo notebooks.
+    # Build the public dashboard URL from the selected gateway base and cluster instance.
     return f"{public_base.rstrip('/')}/clusters/{cluster_instance}/status"
 
 
@@ -164,7 +164,7 @@ async def dpr_processing(
             cluster_instance=dpr_input.dask_cluster_instance or "",
         )
 
-        # Read the task table from DPR service.
+        # read tasktable and construct list of processing units
         task_table = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name, cluster_info)
 
         # Persist the full task table as a Prefect artifact for later investigation.
