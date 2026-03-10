@@ -19,10 +19,24 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from urllib.parse import urlencode, urlparse
 
-from prefect import apause_flow_run, flow, get_run_logger, task
-from prefect.artifacts import acreate_link_artifact, acreate_markdown_artifact
-from pydantic import BaseModel, Field
-from pystac import ItemCollection
+from prefect import (  # pylint: disable=import-error
+    apause_flow_run,
+    flow,
+    get_run_logger,
+    task,
+)
+from prefect.artifacts import (  # pylint: disable=import-error
+    acreate_link_artifact,
+    acreate_markdown_artifact,
+)
+from pydantic import BaseModel, Field  # pylint: disable=import-error
+from pystac import (  # pylint: disable=import-error
+    Collection,
+    Extent,
+    ItemCollection,
+    SpatialExtent,
+    TemporalExtent,
+)
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
@@ -259,7 +273,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
         session_enum = make_session_enum(session_list)
 
         # Pydantic model for Prefect pause input
-        class SessionSelection(BaseModel):
+        class SessionSelection(BaseModel):  # type: ignore # pylint: disable=too-few-public-methods
             """
 
             Args:
@@ -364,6 +378,25 @@ async def stage_session_common(
     # Build catalog collection name based on CADIP collection
     sat = cadip_collection[1]
     catalog_cadip_collection = f"s0{sat}-cadip-session"
+
+    # Check that the collection exists. Otherwise create it.
+    catalog_client = flow_env.rs_client.get_catalog_client()
+    try:
+        catalog_client.search(collections=[catalog_cadip_collection])
+    except RuntimeError:
+        spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
+        date_strings = ["2000-02-01T00:00:00Z", "2100-02-12T00:00:00Z"]
+        date_objects: list[datetime | None] = [
+            datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ") for date_str in date_strings
+        ]
+        temporal = TemporalExtent(intervals=date_objects)
+        extent = Extent(spatial=spatial, temporal=temporal)
+        new_collection = Collection(
+            id=catalog_cadip_collection,
+            description=f"{catalog_cadip_collection} collection",
+            extent=extent,
+        )
+        catalog_client.add_collection(new_collection)
 
     # URL to search the STAC ItemCollection
     cadip_client = flow_env.rs_client.get_cadip_client()
