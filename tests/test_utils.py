@@ -26,6 +26,7 @@ from pydantic import SecretStr
 from rs_common import prefect_utils
 from rs_common.utils import get_href_service, read_response_error
 from rs_workflows.catalog_flow import resolve_collection
+from rs_workflows.flow_utils import GeneratedProduct
 from tests.conftest import (
     MOCKED_RSPY_WEBSITE,
     OWNER_ID,
@@ -72,40 +73,17 @@ def test_get_href_service(
     assert get_href_service(rs_server_href, "RSPY_HOST_UNKNWON") == rs_server_href.rstrip("/")
 
 
-def test_resolve_collection_tuple(mocker):
-    """Check resolve_collection works with tuple (product_type, collection) values."""
+def test_resolve_collection_generated_product(mocker):
+    """Check resolve_collection works with a list of GeneratedProduct instances."""
     mocker.patch("rs_workflows.catalog_flow.get_run_logger")
-    input_collections = [
-        {"output_folder1": ("product_type_1", "collection_1")},
-        {"output_folder2": ("product_type_2", "collection_2")},
+
+    input_collections: list[GeneratedProduct | dict] = [
+        GeneratedProduct(name="product_name_1", product_type="product_type_1", collection_name="collection_1"),
+        {"name": "product_name_2", "product_type": "product_type_2", "collection_name": "collection_2"},
     ]
+
     assert resolve_collection("product_type_1", input_collections) == "collection_1"
     assert resolve_collection("product_type_2", input_collections) == "collection_2"
-    with pytest.raises(ValueError):
-        resolve_collection("tip_42", input_collections)
-
-
-def test_resolve_collection_string(mocker):
-    """Check resolve_collection works with string values as product types."""
-    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
-    input_collections = [{"output_folder1": "product_type_1"}, {"output_folder2": "product_type_2"}]
-    assert resolve_collection("product_type_1", input_collections) == "product_type_1"
-    assert resolve_collection("product_type_2", input_collections) == "product_type_2"
-    with pytest.raises(ValueError):
-        # Not found in input_collections
-        resolve_collection("tip_42", input_collections)
-
-
-def test_resolve_collection_dict_mixed(mocker):
-    """Check resolve_collection works with mixed dict: tuple and string values."""
-    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
-    input_collections = {"output_folder1": ("product_type_1", "collection_1"), "output_folder2": "product_type_2"}
-
-    # Tuple case: returns collection part
-    assert resolve_collection("product_type_1", input_collections) == "collection_1"
-
-    # String case: returns the string itself
-    assert resolve_collection("product_type_2", input_collections) == "product_type_2"
 
     # Unknown product type should raise
     with pytest.raises(ValueError):
