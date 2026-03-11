@@ -148,7 +148,12 @@ async def test_dpr_processing(
     ################
 
     # Save env vars in prefect secret blocks
-    await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN})
+    await setup_worklow_test_env(
+        {
+            "JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN,
+            "DASK_GATEWAY_PUBLIC": "http://localhost:8703",
+        },
+    )
 
     # build realistic input
     dpr_input = DprProcessIn(
@@ -157,6 +162,7 @@ async def test_dpr_processing(
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
+        dask_cluster_instance="dask-gateway.test-cluster-instance",
         input_products=[{"name": "input_name", "cadip_session": "dummy_id", "collection_name": "dummy_collection"}],
         generated_product_to_collection_identifier=MAP_PRODUCT_TO_COLLECTION,  # type: ignore
         auxiliary_product_to_collection_identifier=[{"product_type": "*", "collection_name": COLLECTION_ID}],
@@ -260,7 +266,12 @@ async def test_dpr_processing_raises_on_unstaged_adf(
     # Init and run #
     ################
 
-    await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN})
+    await setup_worklow_test_env(
+        {
+            "JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN,
+            "DASK_GATEWAY_PUBLIC": "http://localhost:8703",
+        },
+    )
 
     dpr_input = DprProcessIn(
         env=FlowEnvArgs(owner_id=OWNER_ID),
@@ -268,6 +279,7 @@ async def test_dpr_processing_raises_on_unstaged_adf(
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
+        dask_cluster_instance="dask-gateway.test-cluster-instance",
         input_products=[
             FlowInputProduct(name="input_name", cadip_session="stac_item_id", collection_name="collection_name"),
         ],
