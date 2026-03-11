@@ -68,6 +68,7 @@ async def s1l0_processing(
             item_col = await cadip_session_search_by_name(flow_env, session)
             count = len(item_col)
             found = False
+            cadip_station = ""
             if count == 1:
                 collection_links = [link for link in item_col[0].links if link.rel == "collection"]
                 if collection_links:
@@ -76,6 +77,9 @@ async def s1l0_processing(
                     found = True
                     logger.info(f"The session '{session}' is available at station {cadip_station}")
 
+            # Stage the session
+            if found:
+                await stage_session_common(flow_env, cadip_station, session)
 
 @task(name="Cadip session search by name")
 async def cadip_session_search_by_name(env: FlowEnv, session: str) -> ItemCollection:

@@ -350,9 +350,10 @@ async def stage_latest_session(
             await report_verbose.push_report("test-report", "Step by step results")
 
 
+@task(name="stage CADIP session")
 async def stage_session_common(
     flow_env: FlowEnv,
-    cadip_collection: CadipCollections,
+    cadip_collection: CadipCollections | str,
     selected_session: str,
     report_verbose: ReportManager | None = None,
 ):
