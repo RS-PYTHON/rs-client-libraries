@@ -13,40 +13,45 @@
 # limitations under the License.
 
 """sentinel 1 Level-0 processing."""
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from prefect import flow, task
-from rs_client.stac.catalog_client import CatalogClient
-from pystac import Item, ItemCollection
+
 import json
+
+from prefect import flow, get_run_logger, task
+from pystac import Item, ItemCollection
+
+from rs_client.stac.catalog_client import CatalogClient
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
 @flow(name="process a sentinel-1 sessions")
 async def s1l0_processing(
     session: str,
-    collection : str = "s01-cadip-session",
+    collection: str = "s01-cadip-session",
     owner_identifier: str = "copernicus",
     verbose: bool = False,
 ):
+    logger = get_run_logger()
+
     # Check S1 session name format
-    if not session.startswith("S1"): 
+    if not session.startswith("S1"):
+        logger.error("Bad sentinel-1 session name.")
         raise ValueError(f"Invalid session name : {session} does not start with 'S1'")
-    if len(session) < 4 or session[3] != "_": 
+    if len(session) < 4 or session[3] != "_":
+        logger.error("Bad sentinel-1 session name.")
         raise ValueError(f"The 4th character of '{session}' is not '_'")
+    logger.info("Sentinel-1 session name is correct. ")
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
     with flow_env.start_span(__name__, "cadip-search"):
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
 
         # Try to retrieve the session on the collection
-        item_collection = catalog_client.search(
-            method="POST",
-            collections=[collection],
-            ids= [session]
-        )
+        logger.info("Search session on the rs-catalog.")
+        item_collection = catalog_client.search(method="POST", collections=[collection], ids=[session])
         count = len(item_collection.items)
-        if count==1:
+        if count == 1:
             print(f"The session '{session}' has been found on the collection '{collection}'.")
         else:
             print(f"The session '{session}' has NOT been found on the collection '{collection}'.")
             print("Try to stage it from all S1 stations.")
-        #print(json.dumps(item_collection.to_dict(), indent=2))
+        # print(json.dumps(item_collection.to_dict(), indent=2))
