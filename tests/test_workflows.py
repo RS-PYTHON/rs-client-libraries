@@ -58,6 +58,7 @@ CONFIG_DIR = Path(__file__).parent / "resources"
 
 JUPYTERHUB_API_TOKEN = "JUPYTERHUB_API_TOKEN"
 DASK_CLUSTER_LABEL = "DASK_CLUSTER_LABEL"
+DASK_CLUSTER_INSTANCE = "dask-gateway.test-cluster-instance"
 
 MAP_PRODUCT_TO_COLLECTION = [
     {"name": "GRD", "product_type": "S1_GRD", "collection_name": "OUTPUT_GRD_COLLECTION"},
@@ -75,7 +76,8 @@ def _mocked_tasktable():
     with open(CONFIG_DIR / "tasktable.json", encoding="utf-8") as f:
         responses.get(
             url=f"{MOCKED_RSPY_WEBSITE}/dpr/processes/mockup?"
-            f"jupyter_token={JUPYTERHUB_API_TOKEN}&cluster_label={DASK_CLUSTER_LABEL}&cluster_instance=",
+            f"jupyter_token={JUPYTERHUB_API_TOKEN}&cluster_label={DASK_CLUSTER_LABEL}"
+            f"&cluster_instance={DASK_CLUSTER_INSTANCE}",
             json=json.load(f),
             status=status.HTTP_200_OK,
         )
@@ -162,7 +164,7 @@ async def test_dpr_processing(
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
-        dask_cluster_instance="dask-gateway.test-cluster-instance",
+        dask_cluster_instance=DASK_CLUSTER_INSTANCE,
         input_products=[{"name": "input_name", "cadip_session": "dummy_id", "collection_name": "dummy_collection"}],
         generated_product_to_collection_identifier=MAP_PRODUCT_TO_COLLECTION,  # type: ignore
         auxiliary_product_to_collection_identifier=[{"product_type": "*", "collection_name": COLLECTION_ID}],
@@ -279,7 +281,7 @@ async def test_dpr_processing_raises_on_unstaged_adf(
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
-        dask_cluster_instance="dask-gateway.test-cluster-instance",
+        dask_cluster_instance=DASK_CLUSTER_INSTANCE,
         input_products=[
             FlowInputProduct(name="input_name", cadip_session="stac_item_id", collection_name="collection_name"),
         ],
