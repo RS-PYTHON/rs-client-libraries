@@ -48,7 +48,12 @@ from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from rs_common.utils import env_bool
 from rs_workflows import init_pi_db_flow
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, GeneratedProduct, InputProduct
+from rs_workflows.flow_utils import (
+    FlowEnv,
+    FlowEnvArgs,
+    FlowGeneratedProduct,
+    FlowInputProduct,
+)
 from rs_workflows.payload_generator import RSPY_TEMP_BUCKET
 from rs_workflows.payload_template import (  # StoreOptionsWrapper,
     StorageOptions,
@@ -884,15 +889,15 @@ def _mock_dpr_process_in():
     # input_products: list[dict[product_id, (stac_item_name_of_cadip_session, collection_id)]]
     # After UI update, input_products = list(InputProduct(name=..., cadip_session=..., collection_name=...))
     mock.input_products = [
-        InputProduct(name="S1CADUS", cadip_session="cadip_session", collection_name="COLLECTION_CADIP_TEST"),
-        InputProduct(name="S3CADUS", cadip_session="another_cadip_session", collection_name="COLLECTION_S3"),
+        FlowInputProduct(name="S1CADUS", cadip_session="cadip_session", collection_name="COLLECTION_CADIP_TEST"),
+        FlowInputProduct(name="S3CADUS", cadip_session="another_cadip_session", collection_name="COLLECTION_S3"),
     ]
 
     # generated_product_to_collection_identifier:
     # list[dict[output_key, product_type | (product_type, output_collection)]]
     mock.generated_product_to_collection_identifier = [
-        GeneratedProduct(name="output1", product_type="S1A_IW_GRDH_1S"),
-        GeneratedProduct(name="output2", product_type="product_type", collection_name="OUTPUT_COLLECTION_GRDH"),
+        FlowGeneratedProduct(name="output1", product_type="S1A_IW_GRDH_1S"),
+        FlowGeneratedProduct(name="output2", product_type="product_type", collection_name="OUTPUT_COLLECTION_GRDH"),
     ]
 
     # s3_payload_file: final payload S3 path

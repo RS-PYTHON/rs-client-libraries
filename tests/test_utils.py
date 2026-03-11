@@ -26,7 +26,7 @@ from pydantic import SecretStr
 from rs_common import prefect_utils
 from rs_common.utils import get_href_service, read_response_error
 from rs_workflows.catalog_flow import resolve_collection
-from rs_workflows.flow_utils import GeneratedProduct
+from rs_workflows.flow_utils import FlowGeneratedProduct
 from tests.conftest import (
     MOCKED_RSPY_WEBSITE,
     OWNER_ID,
@@ -74,11 +74,11 @@ def test_get_href_service(
 
 
 def test_resolve_collection_generated_product(mocker):
-    """Check resolve_collection works with a list of GeneratedProduct instances."""
+    """Check resolve_collection works with a list of FlowGeneratedProduct instances."""
     mocker.patch("rs_workflows.catalog_flow.get_run_logger")
 
-    input_collections: list[GeneratedProduct | dict] = [
-        GeneratedProduct(name="product_name_1", product_type="product_type_1", collection_name="collection_1"),
+    input_collections: list[FlowGeneratedProduct | dict] = [
+        FlowGeneratedProduct(name="product_name_1", product_type="product_type_1", collection_name="collection_1"),
         {"name": "product_name_2", "product_type": "product_type_2", "collection_name": "collection_2"},
     ]
 
