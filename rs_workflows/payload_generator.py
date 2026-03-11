@@ -383,6 +383,7 @@ def build_output_products(
 
     outputs = []
     processed_products = set()
+    common_uuid = str(uuid4())
 
     for output_product in dpr_process_in.generated_product_to_collection_identifier:
         product_name = output_product.name
@@ -392,17 +393,19 @@ def build_output_products(
             raise RuntimeError(f"Couldn't find any output for task table entry '{product_name}'")
 
         product_type = output_product.product_type
-
-        if not product_type:
-            raise RuntimeError(f"Invalid output_products definition for '{output_product.name}'")
-
         processed_products.add(product_name)
         output_collection = (
             output_product.collection_name if output_product.collection_name is not None else product_type
         )
+        # When using * for product_type, the collection name becomes mandatory.
+        if output_collection == "*":
+            raise RuntimeError(
+                "The product type in generated_product_to_collection_identifier "
+                f"cannot be '*' if the collection name is not specified for product '{product_name}'",
+            )
 
         bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
-        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
+        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, common_uuid)
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
         if not store_name:

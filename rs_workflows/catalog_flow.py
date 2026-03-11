@@ -20,7 +20,7 @@ from prefect import flow, get_run_logger, task
 from pystac import Item, ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, GeneratedProduct
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowGeneratedProduct
 
 #################
 # Catalog flows #
@@ -165,12 +165,12 @@ async def get_item(
     return catalog_client.get_item(target_collection, item)
 
 
-def resolve_collection(product_type: str, target_collections: list[GeneratedProduct | dict]) -> str:
+def resolve_collection(product_type: str, target_collections: list[FlowGeneratedProduct | dict]) -> str:
     """Resolve the target collection for a given product type.
 
     Supports:
     - list of dicts (legacy)
-    - GeneratedProduct or iterable of GeneratedProduct (new)
+    - FlowGeneratedProduct or iterable of FlowGeneratedProduct (new)
 
     Returns:
         The resolved target collection name.
@@ -187,7 +187,7 @@ def resolve_collection(product_type: str, target_collections: list[GeneratedProd
     collections = {}
 
     for item in target_collections:
-        data = item.model_dump() if isinstance(item, GeneratedProduct) else item
+        data = item.model_dump() if isinstance(item, FlowGeneratedProduct) else item
         if (ptype := data.get("product_type")) and (collection := data.get("collection_name")):
             collections[ptype] = collection
 

@@ -21,8 +21,10 @@ import pytest
 from pystac import Asset, Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
-from rs_workflows.flow_utils import GeneratedProduct as FlowGeneratedProduct
-from rs_workflows.flow_utils import InputProduct as FlowInputProduct
+from rs_workflows.flow_utils import (
+    FlowGeneratedProduct,
+    FlowInputProduct,
+)
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
     build_input_products,
     build_output_products,
@@ -738,3 +740,38 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
     # This should raise RuntimeError with the proposed change
     with pytest.raises(RuntimeError, match="Couldn't find any relation for output product 'output2'"):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+def test_build_output_products_missing_mapping_raises(sample_unit, mock_dpr_process_in):
+    """
+    Test that build_output_products raises an error if an output product
+    in dpr_process_in is missing from the unit's output_products.
+    """
+    # "UNKNOWN" is in dpr_process_in but NOT in sample_unit.output_products
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="UNKNOWN", product_type="type", collection_name="COLL"),
+    ]
+
+    with pytest.raises(RuntimeError, match="Couldn't find any output for task table entry 'UNKNOWN'"):
+        build_output_products(sample_unit, mock_dpr_process_in, MagicMock(), "test-owner", [])
+
+
+def test_build_output_products_wildcard_collection_raises(sample_unit, mock_dpr_process_in):
+    """
+    Test that build_output_products raises an error if the resolved output_collection is '*'.
+    """
+    # Ensure "output1" is in dpr_process_in and its collection_name resolves to '*'
+    # In build_output_products: output_collection = output_product.collection_name if ... else product_type
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="*"),
+    ]
+    # We also need to mock output2 in the unit to not trigger the "missing relation" error at the end,
+    # OR we provide both. But output1 is enough to trigger the '*' error first.
+
+    # Mock output2 to satisfy the final check if we reach it (but we shouldn't)
+    mock_dpr_process_in.generated_product_to_collection_identifier.append(
+        FlowGeneratedProduct(name="output2", product_type="type2", collection_name="COLL2"),
+    )
+
+    with pytest.raises(RuntimeError, match="cannot be '\\*' if the collection name is not specified"):
+        build_output_products(sample_unit, mock_dpr_process_in, MagicMock(), "test-owner", [])
