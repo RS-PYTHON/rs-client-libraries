@@ -19,18 +19,18 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from urllib.parse import urlencode, urlparse
 
-from prefect import (  # pylint: disable=import-error
+from prefect import (
     apause_flow_run,
     flow,
     get_run_logger,
     task,
 )
-from prefect.artifacts import (  # pylint: disable=import-error
+from prefect.artifacts import (
     acreate_link_artifact,
     acreate_markdown_artifact,
 )
-from pydantic import BaseModel, Field  # pylint: disable=import-error
-from pystac import (  # pylint: disable=import-error
+from pydantic import BaseModel, Field
+from pystac import (
     Collection,
     Extent,
     ItemCollection,
@@ -273,7 +273,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
         session_enum = make_session_enum(session_list)
 
         # Pydantic model for Prefect pause input
-        class SessionSelection(BaseModel):  # type: ignore # pylint: disable=too-few-public-methods
+        class SessionSelection(BaseModel):
             """
 
             Args:
