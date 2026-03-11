@@ -41,9 +41,16 @@ from rs_workflows.payload_generator import generate_payload
 from rs_workflows.staging_flow import staging_task
 
 
-def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
+def build_dask_dashboard_url_message(cluster_label: str, cluster_instance: str | None) -> str:
     """Build the Dask dashboard log message from the configured public gateway endpoint."""
     public_base = os.getenv("DASK_GATEWAY_PUBLIC", "")
+
+    # Local mode exposes cluster-specific public gateway variables instead of the generic one.
+    if not public_base:
+        cluster_family = cluster_label.split(".", maxsplit=1)[0]
+        if cluster_family.startswith("dask-"):
+            env_var = f"DASK_GATEWAY_{cluster_family.removeprefix('dask-').replace('-', '_').upper()}_PUBLIC"
+            public_base = os.getenv(env_var, "")
 
     if not public_base or not cluster_instance:
         return "Dask cluster dashboard URL is unavailable"
@@ -150,7 +157,7 @@ async def dpr_processing(
         md = "# Task table\n\n```json\n" + json.dumps(task_table, indent=2) + "\n```"
         await acreate_markdown_artifact(key="task-table", markdown=md, description="DPR task table")
         # Log the public Dask dashboard URL when the flow input provides the cluster instance.
-        logger.info(build_dask_dashboard_url_message(cluster_info.cluster_instance))
+        logger.info(build_dask_dashboard_url_message(cluster_info.cluster_label, cluster_info.cluster_instance))
         logger.info("DASK_GATEWAY_PUBLIC=%r", os.getenv("DASK_GATEWAY_PUBLIC"))
         logger.info("DASK_GATEWAY_EOPF_MOCKUP_PUBLIC=%r", os.getenv("DASK_GATEWAY_EOPF_MOCKUP_PUBLIC"))
         logger.info("DASK_GATEWAY_L0_PUBLIC=%r", os.getenv("DASK_GATEWAY_L0_PUBLIC"))
