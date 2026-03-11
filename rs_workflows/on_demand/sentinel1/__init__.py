@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""systematic flow module."""
+"""sentinel 1 flows module."""
 
 # Set automatically by running `poetry dynamic-versioning`
 __version__ = "0.0.0"

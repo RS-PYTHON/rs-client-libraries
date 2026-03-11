@@ -83,7 +83,7 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
 
 
 @task(name="Cadip session search")
-async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: str, limit: int = 10) -> ItemCollection:
+async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: list[str], limit: int = 10) -> ItemCollection:
     """
     Search for CADIP sessions within a given time interval.
 
@@ -255,7 +255,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
         # Search for CADIP sessions in the given time window
         session_found = cadip_session_search.submit(
             flow_env.serialize(),
-            cadip_collection_identifier=cadip_collection,
+            cadip_collection_identifier=[cadip_collection],
         ).result()
 
         if not session_found:
@@ -324,7 +324,7 @@ async def stage_latest_session(
         # Search for CADIP sessions in the given time window
         session_found = cadip_session_search.submit(
             flow_env.serialize(),
-            cadip_collection_identifier=cadip_collection,
+            cadip_collection_identifier=[cadip_collection],
             limit=1,
         ).result()
 
