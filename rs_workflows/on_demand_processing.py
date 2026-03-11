@@ -151,6 +151,12 @@ async def dpr_processing(
         await acreate_markdown_artifact(key="task-table", markdown=md, description="DPR task table")
         # Log the public Dask dashboard URL when the flow input provides the cluster instance.
         logger.info(build_dask_dashboard_url_message(cluster_info.cluster_instance))
+        logger.info("DASK_GATEWAY_PUBLIC=%r", os.getenv("DASK_GATEWAY_PUBLIC"))
+        logger.info("DASK_GATEWAY_EOPF_MOCKUP_PUBLIC=%r", os.getenv("DASK_GATEWAY_EOPF_MOCKUP_PUBLIC"))
+        logger.info("DASK_GATEWAY_L0_PUBLIC=%r", os.getenv("DASK_GATEWAY_L0_PUBLIC"))
+        logger.info("DASK_GATEWAY_S1ARD_PUBLIC=%r", os.getenv("DASK_GATEWAY_S1ARD_PUBLIC"))
+        logger.info("DASK_GATEWAY_STAGING_PUBLIC=%r", os.getenv("DASK_GATEWAY_STAGING_PUBLIC"))
+        logger.info("DASK_GATEWAY_EOPF_PUBLIC=%r", os.getenv("DASK_GATEWAY_EOPF_PUBLIC"))
 
         processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
         out = build_unit_list(
