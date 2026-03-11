@@ -37,8 +37,8 @@ from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
     DprProcessIn,
     FlowEnvArgs,
-    GeneratedProduct,
-    InputProduct,
+    FlowGeneratedProduct,
+    FlowInputProduct,
     ProcessingMode,
 )
 from tests.conftest import (
@@ -269,10 +269,14 @@ async def test_dpr_processing_raises_on_unstaged_adf(
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
         input_products=[
-            InputProduct(name="input_name", cadip_session="stac_item_id", collection_name="collection_name"),
+            FlowInputProduct(name="input_name", cadip_session="stac_item_id", collection_name="collection_name"),
         ],
         generated_product_to_collection_identifier=[
-            GeneratedProduct(name="output_folder", product_type="AUX_MOCK", collection_name="CATALOG_COLLECTION_ID"),
+            FlowGeneratedProduct(
+                name="output_folder",
+                product_type="AUX_MOCK",
+                collection_name="CATALOG_COLLECTION_ID",
+            ),
         ],
         auxiliary_product_to_collection_identifier=[
             AuxiliaryProductMapping(product_type="*", collection_name=COLLECTION_ID),
@@ -376,7 +380,7 @@ async def test_publish_skips_when_no_matching_output_collection(
     spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
 
     catalog_collection_identifier = [
-        GeneratedProduct(name="INVALID", product_type="INVALID", collection_name="COLL_GRD"),
+        FlowGeneratedProduct(name="INVALID", product_type="INVALID", collection_name="COLL_GRD"),
     ]
 
     items = [

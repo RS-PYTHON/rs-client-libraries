@@ -174,7 +174,7 @@ class FlowEnv:
             yield span
 
 
-class InputProduct(BaseModel):
+class FlowInputProduct(BaseModel):
     """Represents one input product for the processor."""
 
     name: str = Field(description="Input product name.")
@@ -182,7 +182,7 @@ class InputProduct(BaseModel):
     collection_name: str = Field(description="Collection name.")
 
 
-class GeneratedProduct(BaseModel):
+class FlowGeneratedProduct(BaseModel):
     """Represents one generated output product."""
 
     name: str = Field(description="Output product name.")
@@ -258,7 +258,7 @@ class DprProcessIn(BaseModel):
         description="Type of workflow: ON_DEMAND, BENCHMARKING, SYSTEMATIC.",
     )
 
-    input_products: list[InputProduct] = Field(
+    input_products: list[FlowInputProduct] = Field(
         title="Input Products",
         description=(
             "List of input products for the processor. Each item specifies the product name, "
@@ -267,7 +267,7 @@ class DprProcessIn(BaseModel):
         min_length=1,
     )
 
-    generated_product_to_collection_identifier: list[GeneratedProduct] = Field(
+    generated_product_to_collection_identifier: list[FlowGeneratedProduct] = Field(
         title="Generated Products",
         description=(
             "List of generated products. Each item specifies a name, the product type, "
