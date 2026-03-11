@@ -33,7 +33,7 @@ from rs_workflows.dpr_flow import (
     update_eopf_assets,
 )
 from rs_workflows.flow_utils import FlowEnvArgs
-from rs_workflows.payload_generator import RSPY_TEMP_BUCKET
+from rs_workflows.payload_generator import RSPY_CATALOG_BUCKET
 from tests.conftest import MOCKED_BUCKET, OWNER_ID
 from tests.test_utils import setup_worklow_test_env
 
@@ -321,7 +321,7 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
 
     payload = mocker.Mock()
     payload.io.output_products = [
-        mocker.Mock(path=f"s3://{RSPY_TEMP_BUCKET}/{s3_path}/"),
+        mocker.Mock(path=f"s3://{RSPY_CATALOG_BUCKET}/{s3_path}/"),
     ]
 
     # Call method
