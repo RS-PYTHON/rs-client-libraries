@@ -14,6 +14,8 @@
 
 """sentinel 1 Level-0 processing."""
 
+import json
+
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
@@ -26,12 +28,12 @@ from rs_workflows.on_demand.stage_last_sessions import stage_session_common
 @flow(name="process a sentinel-1 sessions")
 async def s1l0_processing(
     session: str,
-    collection: str = "s01-cadip-session",
     owner_identifier: str = "copernicus",
     verbose: bool = False,
 ):
     logger = get_run_logger()
     logger.info(f"Mode verbose is set to {verbose}")
+    collection: str = "s01-cadip-session"
 
     # Check S1 session name format
     if not session.startswith("S1"):
@@ -48,18 +50,26 @@ async def s1l0_processing(
 
         # Try to retrieve the session on the collection
         logger.info("Search session on the rs-catalog.")
-        item_collection = catalog_client.search(method="POST", collections=[collection], ids=[session],         limit=1,)
+        item_collection = catalog_client.search(method="POST", collections=[collection], ids=[session], limit=1)
+        item_session = None
+
         if item_collection is not None:
             count = len(item_collection.items)
         else:
             count = 0
         if count == 1:
+            # The session was found on the rs-catalog
             logger.info(f"The session '{session}' has been found on the rs-catalog collection '{collection}'.")
+            item_session = item_collection.items[0]
+            start = item_session.properties.get("start_datetime")
+            print(start)
+
         else:
+            # The session was not found on the rs-catalog
             logger.info(f"The session '{session}' has NOT been found on the rs-catalog collection '{collection}'.")
             logger.info("Try to stage it from all S1 stations.")
 
-            # Find a cadip station that has got this session available
+            # Try to find a cadip station with this session available
             item_col = await cadip_session_search_by_name(flow_env, session)
             count = len(item_col)
             found = False
@@ -75,6 +85,10 @@ async def s1l0_processing(
             # Stage the session
             if found:
                 await stage_session_common(flow_env, cadip_station, session)
+                item_collection = catalog_client.search(method="POST", collections=[collection], ids=[session], limit=1)
+                item_session = item_collection.items[0]
+
+    logger.info(json.dumps(item_session.to_dict(), indent=2, ensure_ascii=False))
 
 
 @task(name="Cadip session search by name")
