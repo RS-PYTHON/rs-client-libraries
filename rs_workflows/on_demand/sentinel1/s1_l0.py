@@ -14,16 +14,13 @@
 
 """sentinel 1 Level-0 processing."""
 
-import json
-
 from prefect import flow, get_run_logger, task
-from pystac import Item, ItemCollection
+from pystac import ItemCollection
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.on_demand.stage_last_sessions import stage_session_common
-from rs_workflows.utils.artifact_verbose import ReportManager
 
 
 @flow(name="process a sentinel-1 sessions")
@@ -34,6 +31,7 @@ async def s1l0_processing(
     verbose: bool = False,
 ):
     logger = get_run_logger()
+    logger.info(f"Mode verbose is set to {verbose}")
 
     # Check S1 session name format
     if not session.startswith("S1"):
@@ -50,7 +48,7 @@ async def s1l0_processing(
 
         # Try to retrieve the session on the collection
         logger.info("Search session on the rs-catalog.")
-        item_collection = catalog_client.search(method="POST", collections=[collection], ids=[session])
+        item_collection = catalog_client.search(method="POST", collections=[collection], ids=[session],         limit=1,)
         if item_collection is not None:
             count = len(item_collection.items)
         else:
