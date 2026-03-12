@@ -40,6 +40,15 @@ from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload
 from rs_workflows.staging_flow import staging_task
 
+# Local mode exposes a different public Dask gateway URL for each cluster family.
+CLUSTER_PUBLIC_ENV_BY_PREFIX = {
+    "dask-eopf-mockup": "DASK_GATEWAY_EOPF_MOCKUP_PUBLIC",
+    "dask-l0": "DASK_GATEWAY_L0_PUBLIC",
+    "dask-s1ard": "DASK_GATEWAY_S1ARD_PUBLIC",
+    "dask-staging": "DASK_GATEWAY_STAGING_PUBLIC",
+    "dask-eopf": "DASK_GATEWAY_EOPF_PUBLIC",
+}
+
 
 def build_dask_dashboard_url_message(cluster_label: str, cluster_instance: str | None) -> str:
     """Build the Dask dashboard log message from the configured public gateway endpoint."""
@@ -47,10 +56,10 @@ def build_dask_dashboard_url_message(cluster_label: str, cluster_instance: str |
 
     # Local mode exposes cluster-specific public gateway variables instead of the generic one.
     if not public_base:
-        cluster_family = cluster_label.split(".", maxsplit=1)[0]
-        if cluster_family.startswith("dask-"):
-            env_var = f"DASK_GATEWAY_{cluster_family.removeprefix('dask-').replace('-', '_').upper()}_PUBLIC"
-            public_base = os.getenv(env_var, "")
+        for cluster_label_prefix, env_var in CLUSTER_PUBLIC_ENV_BY_PREFIX.items():
+            if cluster_label.startswith(cluster_label_prefix):
+                public_base = os.getenv(env_var, "")
+                break
 
     if not public_base or not cluster_instance:
         return "Dask cluster dashboard URL is unavailable"
