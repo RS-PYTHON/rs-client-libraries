@@ -22,10 +22,7 @@ from pystac import Item, ItemCollection
 from rs_client.stac.cadip_client import CadipClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from rs_workflows.on_demand.stage_last_sessions import (
-    cadip_session_search,
-    stage_session_common,
-)
+from rs_workflows.on_demand.stage_last_sessions import stage_session_common
 from rs_workflows.utils.artifact_verbose import ReportManager
 
 
@@ -80,6 +77,7 @@ async def s1l0_processing(
             # Stage the session
             if found:
                 await stage_session_common(flow_env, cadip_station, session)
+
 
 @task(name="Cadip session search by name")
 async def cadip_session_search_by_name(env: FlowEnv, session: str) -> ItemCollection:
