@@ -44,7 +44,7 @@ from rs_workflows.storage_configuration import StorageConfig
 
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
 DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
-RSPY_TEMP_BUCKET = "rs-dev-cluster-temp"
+RSPY_CATALOG_BUCKET = "rs-dev-cluster-catalog"
 
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
@@ -305,14 +305,24 @@ def build_input_products(
     """
     inputs = []
     for input_product in dpr_process_in.input_products:
-        product_name = next(iter(input_product))
-        mapping = next((inp for inp in unit.get("input_products", []) if inp["name"] == product_name), None)
+        product_name = input_product.name
+
+        mapping = next(
+            (inp for inp in unit.get("input_products", []) if inp["name"] == product_name),
+            None,
+        )
 
         if not mapping:
             raise RuntimeError(f"Couldn't find any input for task table entry '{product_name}'")
 
-        stac_item_identifier, collection = input_product[product_name]
-        stac_item_path = resolve_stac_input_path(catalog_client, collection, stac_item_identifier)
+        stac_item_identifier = input_product.cadip_session
+        collection = input_product.collection_name
+
+        stac_item_path = resolve_stac_input_path(
+            catalog_client,
+            collection,
+            stac_item_identifier,
+        )
 
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
@@ -372,24 +382,30 @@ def build_output_products(
     """
 
     outputs = []
+    processed_products = set()
+    common_uuid = str(uuid4())
 
     for output_product in dpr_process_in.generated_product_to_collection_identifier:
-        product_name = next(iter(output_product))
+        product_name = output_product.name
         mapping = next((outp for outp in unit.get("output_products", []) if outp["name"] == product_name), None)
 
         if not mapping:
             raise RuntimeError(f"Couldn't find any output for task table entry '{product_name}'")
 
-        product_type_and_collection = output_product[product_name]
-        if isinstance(product_type_and_collection, tuple):
-            product_type, output_collection = product_type_and_collection
-        elif isinstance(product_type_and_collection, str):
-            product_type = output_collection = product_type_and_collection
-        else:
-            raise RuntimeError(f"Invalid output_products definition for '{product_name}'")
+        product_type = output_product.product_type
+        processed_products.add(product_name)
+        output_collection = (
+            output_product.collection_name if output_product.collection_name is not None else product_type
+        )
+        # When using * for product_type, the collection name becomes mandatory.
+        if output_collection == "*":
+            raise RuntimeError(
+                "The product type in generated_product_to_collection_identifier "
+                f"cannot be '*' if the collection name is not specified for product '{product_name}'",
+            )
 
         bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
-        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
+        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, common_uuid)
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
         if not store_name:
@@ -416,6 +432,12 @@ def build_output_products(
                 final_product=mapping.get("final_product", True),
             ),
         )
+
+    # ensure that all keys from unit["output_products"] are present into
+    # dpr_process_in.generated_product_to_collection_identifier
+    for unit_output in unit.get("output_products", []):
+        if unit_output["name"] not in processed_products:
+            raise RuntimeError(f"Couldn't find any relation for output product '{unit_output['name']}'")
 
     return outputs
 
@@ -531,7 +553,7 @@ def build_mockup_payload(owner_id):
             id=outp,
             path=os.path.join(
                 "s3://",
-                RSPY_TEMP_BUCKET,
+                RSPY_CATALOG_BUCKET,
                 "dpr_mockup_results",
                 owner_id,
                 "TEST_FLOW_OUTPUT",

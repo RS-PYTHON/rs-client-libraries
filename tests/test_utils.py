@@ -26,6 +26,11 @@ from pydantic import SecretStr
 from rs_common import prefect_utils
 from rs_common.utils import get_href_service, read_response_error
 from rs_workflows.catalog_flow import resolve_collection
+from rs_workflows.flow_utils import (
+    AuxiliaryProductMapping,
+    FlowGeneratedProduct,
+    FlowInputProduct,
+)
 from tests.conftest import (
     MOCKED_RSPY_WEBSITE,
     OWNER_ID,
@@ -72,40 +77,17 @@ def test_get_href_service(
     assert get_href_service(rs_server_href, "RSPY_HOST_UNKNWON") == rs_server_href.rstrip("/")
 
 
-def test_resolve_collection_tuple(mocker):
-    """Check resolve_collection works with tuple (product_type, collection) values."""
+def test_resolve_collection_generated_product(mocker):
+    """Check resolve_collection works with a list of FlowGeneratedProduct instances."""
     mocker.patch("rs_workflows.catalog_flow.get_run_logger")
-    input_collections = [
-        {"output_folder1": ("product_type_1", "collection_1")},
-        {"output_folder2": ("product_type_2", "collection_2")},
+
+    input_collections: list[FlowGeneratedProduct | dict] = [
+        FlowGeneratedProduct(name="product_name_1", product_type="product_type_1", collection_name="collection_1"),
+        {"name": "product_name_2", "product_type": "product_type_2", "collection_name": "collection_2"},
     ]
+
     assert resolve_collection("product_type_1", input_collections) == "collection_1"
     assert resolve_collection("product_type_2", input_collections) == "collection_2"
-    with pytest.raises(ValueError):
-        resolve_collection("tip_42", input_collections)
-
-
-def test_resolve_collection_string(mocker):
-    """Check resolve_collection works with string values as product types."""
-    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
-    input_collections = [{"output_folder1": "product_type_1"}, {"output_folder2": "product_type_2"}]
-    assert resolve_collection("product_type_1", input_collections) == "product_type_1"
-    assert resolve_collection("product_type_2", input_collections) == "product_type_2"
-    with pytest.raises(ValueError):
-        # Not found in input_collections
-        resolve_collection("tip_42", input_collections)
-
-
-def test_resolve_collection_dict_mixed(mocker):
-    """Check resolve_collection works with mixed dict: tuple and string values."""
-    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
-    input_collections = {"output_folder1": ("product_type_1", "collection_1"), "output_folder2": "product_type_2"}
-
-    # Tuple case: returns collection part
-    assert resolve_collection("product_type_1", input_collections) == "collection_1"
-
-    # String case: returns the string itself
-    assert resolve_collection("product_type_2", input_collections) == "product_type_2"
 
     # Unknown product type should raise
     with pytest.raises(ValueError):
@@ -150,3 +132,60 @@ async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):
             "S3_ENDPOINT": S3_ENDPOINT,
         },
     ).save(user_block_name, overwrite=True)
+
+
+def test_flow_input_product_items():
+    """Test that the items method of FlowInputProduct returns the correct items."""
+    product = FlowInputProduct(
+        name="input1",
+        cadip_session="session123",
+        collection_name="collectionA",
+    )
+
+    items = dict(product.items())
+
+    assert items["name"] == "input1"
+    assert items["cadip_session"] == "session123"
+    assert items["collection_name"] == "collectionA"
+
+
+def test_flow_generated_product_items_with_collection():
+    """Test that the items() of FlowGeneratedProduct returns the correct items when collection_name is provided."""
+    product = FlowGeneratedProduct(
+        name="output1",
+        product_type="TYPE_A",
+        collection_name="collectionB",
+    )
+
+    items = dict(product.items())
+
+    assert items["name"] == "output1"
+    assert items["product_type"] == "TYPE_A"
+    assert items["collection_name"] == "collectionB"
+
+
+def test_flow_generated_product_items_without_collection():
+    """Test that the items() of FlowGeneratedProduct returns the correct items when collection_name is not provided."""
+    product = FlowGeneratedProduct(
+        name="output2",
+        product_type="TYPE_B",
+    )
+
+    items = dict(product.items())
+
+    assert items["name"] == "output2"
+    assert items["product_type"] == "TYPE_B"
+    assert items["collection_name"] is None
+
+
+def test_auxiliary_product_mapping_items():
+    """Test that the items() of AuxiliaryProductMapping returns the correct items."""
+    mapping = AuxiliaryProductMapping(
+        product_type="*",
+        collection_name="aux_collection",
+    )
+
+    items = dict(mapping.items())
+
+    assert items["product_type"] == "*"
+    assert items["collection_name"] == "aux_collection"

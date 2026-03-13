@@ -21,6 +21,10 @@ import pytest
 from pystac import Asset, Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
+from rs_workflows.flow_utils import (
+    FlowGeneratedProduct,
+    FlowInputProduct,
+)
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
     build_input_products,
     build_output_products,
@@ -477,8 +481,7 @@ def test_build_input_products_success(sample_unit, mock_store_params, mocker):
     )
 
     mock_dpr = MagicMock()
-    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
-
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", cadip_session="item_id", collection_name="coll_id")]
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
@@ -498,7 +501,7 @@ def test_build_input_products_missing_mapping(sample_unit):
     """
     mock_dpr = MagicMock()
     # "UNKNOWN" is not in sample_unit's input_products
-    mock_dpr.input_products = [{"UNKNOWN": ("item_id", "coll_id")}]
+    mock_dpr.input_products = [FlowInputProduct(name="UNKNOWN", cadip_session="item_id", collection_name="coll_id")]
 
     with pytest.raises(RuntimeError, match="Couldn't find any input"):
         build_input_products(sample_unit, mock_dpr, MagicMock(), MagicMock())
@@ -514,7 +517,7 @@ def test_build_input_products_missing_storage(sample_unit, mocker):
     )
 
     mock_dpr = MagicMock()
-    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", cadip_session="item_id", collection_name="coll_id")]
     # clear flags to avoid fallbacks triggering if checked before specific storage
     mock_dpr.unit = False
     mock_dpr.pipeline = False
@@ -539,7 +542,7 @@ def test_build_input_products_fallback_storage_unit(sample_unit, mock_store_para
     )
 
     mock_dpr = MagicMock()
-    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", cadip_session="item_id", collection_name="coll_id")]
     mock_dpr.unit = True  # Enable unit fallback
     mock_dpr.pipeline = False
 
@@ -565,7 +568,7 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
     )
 
     mock_dpr = MagicMock()
-    mock_dpr.input_products = [{"S1CADUS": ("item_id", "coll_id")}]
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", cadip_session="item_id", collection_name="coll_id")]
     mock_dpr.unit = False
     mock_dpr.pipeline = True  # Enable pipeline fallback
 
@@ -605,8 +608,8 @@ def test_build_output_products_specific_storage(
 
     # Provide mappings for BOTH output1 and output2
     mock_dpr_process_in.generated_product_to_collection_identifier = [
-        {"output1": "OUT_COLL"},
-        {"output2": "OUT_COLL"},
+        FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="output2_type", collection_name="OUT_COLL"),
     ]
 
     mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
@@ -644,8 +647,8 @@ def test_build_output_products_fallback_unit(
     mock_storage.get_store_params.return_value = mock_store_params
 
     mock_dpr_process_in.generated_product_to_collection_identifier = [
-        {"output1": "OUT_COLL"},
-        {"output2": "OUT_COLL"},
+        FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="output2_type", collection_name="OUT_COLL"),
     ]
     mock_dpr_process_in.unit = True
     mock_dpr_process_in.pipeline = False
@@ -674,8 +677,8 @@ def test_build_output_products_fallback_pipeline(
     mock_storage.get_store_params.return_value = mock_store_params
 
     mock_dpr_process_in.generated_product_to_collection_identifier = [
-        {"output1": "OUT_COLL"},
-        {"output2": "OUT_COLL"},
+        FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="output2_type", collection_name="OUT_COLL"),
     ]
     mock_dpr_process_in.unit = False
     mock_dpr_process_in.pipeline = True
@@ -703,11 +706,72 @@ def test_build_output_products_error_no_storage(
 
     # Even with two mappings, error is raised if no storage config
     mock_dpr_process_in.generated_product_to_collection_identifier = [
-        {"output1": "OUT_COLL"},
-        {"output2": "OUT_COLL"},
+        FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="output2_type", collection_name="OUT_COLL"),
     ]
     mock_dpr_process_in.unit = False
     mock_dpr_process_in.pipeline = False
 
     with pytest.raises(RuntimeError, match="Unable to determine the output bucket"):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_process_in, mock_store_params, mocker):
+    """
+    Test that build_output_products raises an error if an output product
+    defined in the unit is missing from dpr_process_in.generated_product_to_collection_identifier.
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    # sample_unit has "output1" and "output2"
+    # We provide only "output1" in generated_product_to_collection_identifier, so "output2" should trigger the error
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
+    ]
+
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid4",
+        return_value="00000000-0000-0000-0000-000000000000",
+    )
+
+    # This should raise RuntimeError with the proposed change
+    with pytest.raises(RuntimeError, match="Couldn't find any relation for output product 'output2'"):
+        build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+def test_build_output_products_missing_mapping_raises(sample_unit, mock_dpr_process_in):
+    """
+    Test that build_output_products raises an error if an output product
+    in dpr_process_in is missing from the unit's output_products.
+    """
+    # "UNKNOWN" is in dpr_process_in but NOT in sample_unit.output_products
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="UNKNOWN", product_type="type", collection_name="COLL"),
+    ]
+
+    with pytest.raises(RuntimeError, match="Couldn't find any output for task table entry 'UNKNOWN'"):
+        build_output_products(sample_unit, mock_dpr_process_in, MagicMock(), "test-owner", [])
+
+
+def test_build_output_products_wildcard_collection_raises(sample_unit, mock_dpr_process_in):
+    """
+    Test that build_output_products raises an error if the resolved output_collection is '*'.
+    """
+    # Ensure "output1" is in dpr_process_in and its collection_name resolves to '*'
+    # In build_output_products: output_collection = output_product.collection_name if ... else product_type
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="*"),
+    ]
+    # We also need to mock output2 in the unit to not trigger the "missing relation" error at the end,
+    # OR we provide both. But output1 is enough to trigger the '*' error first.
+
+    # Mock output2 to satisfy the final check if we reach it (but we shouldn't)
+    mock_dpr_process_in.generated_product_to_collection_identifier.append(
+        FlowGeneratedProduct(name="output2", product_type="type2", collection_name="COLL2"),
+    )
+
+    with pytest.raises(RuntimeError, match="cannot be '\\*' if the collection name is not specified"):
+        build_output_products(sample_unit, mock_dpr_process_in, MagicMock(), "test-owner", [])
