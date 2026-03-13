@@ -15,25 +15,33 @@
 """sentinel 1 Level-0 processing."""
 
 import json
-
+import time
+from faker import Faker
 from prefect import flow, get_run_logger, task
-from pystac import ItemCollection
+from pystac import ItemCollection, Item
+from datetime import datetime, timedelta
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.on_demand.stage_last_sessions import stage_session_common
 
+from datetime import datetime
+from rs_workflows.flow_utils import DprProcessIn, Priority, WorkflowType, ProcessingMode, InputProduct, GeneratedProduct, AuxiliaryProductMapping
+from rs_client.ogcapi.dpr_client import DprProcessor, DprPipeline
+
+COLLECTION_S1_SESSION = "s01-cadip-session"
+
 
 @flow(name="process a sentinel-1 sessions")
 async def s1l0_processing(
     session: str,
     owner_identifier: str = "copernicus",
+    dask_cluster_label: str = "dask-cluster-gateway-small",
     verbose: bool = False,
 ):
     logger = get_run_logger()
     logger.info(f"Mode verbose is set to {verbose}")
-    collection: str = "s01-cadip-session"
 
     # Check S1 session name format
     if not session.startswith("S1"):
@@ -50,8 +58,8 @@ async def s1l0_processing(
 
         # Try to retrieve the session on the collection
         logger.info("Search session on the rs-catalog.")
-        item_collection = catalog_client.search(method="POST", collections=[collection], ids=[session], limit=1)
-        item_session = None
+        item_collection: ItemCollection = catalog_client.search(method="POST", collections=[COLLECTION_S1_SESSION], ids=[session], limit=1)
+        item_session: Item = None
 
         if item_collection is not None:
             count = len(item_collection.items)
@@ -59,14 +67,12 @@ async def s1l0_processing(
             count = 0
         if count == 1:
             # The session was found on the rs-catalog
-            logger.info(f"The session '{session}' has been found on the rs-catalog collection '{collection}'.")
+            logger.info(f"The session '{session}' has been found on the rs-catalog collection '{COLLECTION_S1_SESSION}'.")
             item_session = item_collection.items[0]
-            start = item_session.properties.get("start_datetime")
-            print(start)
 
         else:
             # The session was not found on the rs-catalog
-            logger.info(f"The session '{session}' has NOT been found on the rs-catalog collection '{collection}'.")
+            logger.info(f"The session '{session}' has NOT been found on the rs-catalog collection '{COLLECTION_S1_SESSION}'.")
             logger.info("Try to stage it from all S1 stations.")
 
             # Try to find a cadip station with this session available
@@ -77,19 +83,102 @@ async def s1l0_processing(
             if count == 1:
                 collection_links = [link for link in item_col[0].links if link.rel == "collection"]
                 if collection_links:
+                    found = True
                     href = collection_links[0].href
                     cadip_station = href.rstrip("/").split("/")[-1]
-                    found = True
                     logger.info(f"The session '{session}' is available at station {cadip_station}")
 
             # Stage the session
             if found:
                 await stage_session_common(flow_env, cadip_station, session)
-                item_collection = catalog_client.search(method="POST", collections=[collection], ids=[session], limit=1)
+                item_collection = catalog_client.search(method="POST", collections=[COLLECTION_S1_SESSION], ids=[session], limit=1)
                 item_session = item_collection.items[0]
 
-    logger.info(json.dumps(item_session.to_dict(), indent=2, ensure_ascii=False))
 
+    logger.info(json.dumps(item_session.to_dict(), indent=2, ensure_ascii=False))
+    # The satellite name can be retrieved from the 3 first caracters of the session name
+    satellite_identifier = session[:3].upper() 
+    print(satellite_identifier)
+    end_datetime = datetime.fromisoformat(item_session.properties.get("published"))   
+    print(end_datetime)
+    start_datetime = end_datetime- timedelta(hours=12)
+    print(start_datetime)
+    call_dpr_flow(owner_identifier, dask_cluster_label, item_session, start_datetime, end_datetime, satellite_identifier)
+
+
+def call_dpr_flow(owner_id: str, dask_cluster_label: str, item_session: Item, start_datetime:datetime, end_datetime:datetime, satellite_identifier:str)-> None:
+    """
+    Compute common arguments for S1 L0 Processing.
+    
+    Args:
+        owner_id (str): _description_
+        dask_cluster_label (str): _description_
+        item_session (Item): _description_
+    """    
+    # TODO : use a local path on the share disk
+    fake = Faker()
+    s3_payload = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}-{fake.word().lower()}-{fake.word().lower()}"
+    
+    a_process_s1l0 = DprProcessIn(
+        env=FlowEnvArgs(owner_id=owner_id),
+        processor_name=DprProcessor.S1L0,
+        processor_version="1.4.0",  # TODO: retrieve automatically
+        dask_cluster_label=dask_cluster_label,
+        s3_payload_file=f"{s3_payload}/payload_s1l0.yaml",
+        pipeline=DprPipeline.S1L0FULL,
+        unit=None,
+        priority=Priority.LOW,  # TODO: expose priority
+        workflow_type=WorkflowType.ON_DEMAND,
+        
+        input_products=[
+            InputProduct(
+                name="S1CADUS",
+                cadip_session=item_session,
+                collection_name=COLLECTION_S1_SESSION,
+            )
+        ],
+
+        generated_product_to_collection_identifier=[
+            GeneratedProduct(
+                name="S01SARRAW",
+                product_type="*",
+                collection_name="s01sarraw",
+            ),
+            GeneratedProduct(
+                name="S01GPSRAW",
+                product_type="*",
+                collection_name="s01gpsraw",
+            ),
+            GeneratedProduct(
+                name="S01HKMRAW",
+                product_type="*",
+                collection_name="allproductions",
+            ),
+            GeneratedProduct(
+                name="S01AISRAW",
+                product_type="*",
+                collection_name="allproductions",
+            ),
+        ],
+
+        auxiliary_product_to_collection_identifier=[
+            AuxiliaryProductMapping(
+                product_type="MPL_ORBPRE",
+                collection_name="s01-aux-mpl_orbpre",
+            ),
+            AuxiliaryProductMapping(
+                product_type="MPL_ORBSCT",
+                collection_name="s01-aux-mpl_orbpre",
+            ),
+        ],
+
+        processing_mode=[ProcessingMode.ALWAYS],
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
+        satellite=satellite_identifier
+    )
+    print(json.dumps(a_process_s1l0.model_dump(), indent=2))
+    
 
 @task(name="Cadip session search by name")
 async def cadip_session_search_by_name(env: FlowEnv, session: str) -> ItemCollection:
