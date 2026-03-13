@@ -54,7 +54,7 @@ from rs_workflows.flow_utils import (
     FlowGeneratedProduct,
     FlowInputProduct,
 )
-from rs_workflows.payload_generator import RSPY_TEMP_BUCKET
+from rs_workflows.payload_generator import RSPY_CATALOG_BUCKET
 from rs_workflows.payload_template import (  # StoreOptionsWrapper,
     StorageOptions,
     StoreParams,
@@ -972,7 +972,7 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
         "NTC": mock_zattrs_data("S2A_20240101_NTC", "S2_NTC"),
     }
 
-    mocked_s3.create_bucket(Bucket=RSPY_TEMP_BUCKET)
+    mocked_s3.create_bucket(Bucket=RSPY_CATALOG_BUCKET)
     expected_items = {}
     base_s3_path = f"dpr_mockup_results/{OWNER_ID}/TEST_FLOW_OUTPUT"
 
@@ -985,13 +985,13 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
         # 1. New nested location (for test_dpr_processing)
         mocked_s3.put_object(
             Body=json.dumps(zattrs_data),
-            Bucket=RSPY_TEMP_BUCKET,
+            Bucket=RSPY_CATALOG_BUCKET,
             Key=f"{product_s3_path}/{product_name}/.zattrs",
         )
         # 2. Old flat location (for test_update_eopf_assets_happy_path)
         mocked_s3.put_object(
             Body=json.dumps(zattrs_data),
-            Bucket=RSPY_TEMP_BUCKET,
+            Bucket=RSPY_CATALOG_BUCKET,
             Key=f"{base_s3_path}/{product_name}/.zattrs",
         )
 
@@ -1009,7 +1009,7 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
             stac_extensions=[],
             assets={
                 product_name: Asset(
-                    href=f"s3://{RSPY_TEMP_BUCKET}/{base_s3_path}/{product_name}",
+                    href=f"s3://{RSPY_CATALOG_BUCKET}/{base_s3_path}/{product_name}",
                     title=product_name,
                     media_type="application/vnd+zarr",
                     roles=["data", "metadata"],
