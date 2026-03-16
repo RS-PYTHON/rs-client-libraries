@@ -19,17 +19,20 @@ import os
 import time
 from datetime import datetime, timedelta
 from enum import Enum
+from pprint import pprint
 
+from dask_gateway import Gateway
+from dask_gateway.auth import JupyterHubAuth
 from faker import Faker
 from prefect import flow, get_run_logger, task
 from pystac import Item, ItemCollection
-from dask_gateway import Gateway
-from dask_gateway.auth import JupyterHubAuth
-from pprint import pprint
 
-from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
-
-from rs_client.ogcapi.dpr_client import DprPipeline, DprProcessor, ClusterInfo
+from rs_client.ogcapi.dpr_client import (
+    ClusterInfo,
+    DprClient,
+    DprPipeline,
+    DprProcessor,
+)
 from rs_client.stac.cadip_client import CadipClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import (
@@ -70,32 +73,36 @@ async def s1l0_processing(
         raise ValueError(f"The 4th character of '{session}' is not '_'")
     logger.info("Sentinel-1 session name is correct. ")
 
-
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
     with flow_env.start_span(__name__, "sentinel1-level0"):
         # Check dask_cluster_label
         gateway = Gateway(
-                address=os.environ["DASK_GATEWAY_ADDRESS"],
-                auth=JupyterHubAuth(api_token=os.environ["JUPYTERHUB_API_TOKEN"]),
-            )
-        clusters = gateway.list_clusters()        
-        print (clusters)
-        if dask_cluster_label in clusters:
-            logger.info(f"{dask_cluster_label} is part of deployed dask clusters.")
-        else:
-            logger.error(f"{dask_cluster_label} is not part of deployed dask clusters.")
+            address=os.environ["DASK_GATEWAY_ADDRESS"],
+            auth=JupyterHubAuth(api_token=os.environ["JUPYTERHUB_API_TOKEN"]),
+        )
+
+        clusters = gateway.list_clusters()
+        cluster_id = None
+        cluster_list_name: str = ""
+        for cluster in clusters:
+            cluster_name = cluster.options.get("cluster_name")
+            cluster_list_name += " '" + cluster_name + "'"
+            if cluster_name == dask_cluster_label:
+                cluster_id = cluster
+        logger.info(f"Here is the list of deployed dask clusters:{cluster_list_name}.")
+
+        # Provide information on the cluster
+        if cluster_id is None:
+            logger.error(f"'{dask_cluster_label}' is not part of deployed dask clusters.")
             raise ValueError(f"Unknown '{dask_cluster_label}''.")
-            
-        cluster = gateway.get_cluster(dask_cluster_label)
-        info = cluster.scheduler_info()
-        nb_workers = len(info["workers"])
-        logger.info(f"The cluster {dask_cluster_label} have got {nb_workers} worker(s).")
-        
-        for worker_id, worker_info in info["workers"].items():
-            print(f"\nWorker ID : {worker_id}")
-            pprint(worker_info)
-                
-        
+        else:
+            logger.info(f"'{dask_cluster_label}' is part of deployed dask clusters.")
+            status_map = {0: "UNKNOWN", 1: "PENDING", 2: "RUNNING", 3: "STOPPING", 4: "STOPPED", 5: "FAILED"}
+            print(f"Cluster status = {cluster_id.status} ({status_map.get(cluster_id.status)})")
+            print("options :")
+            print(json.dumps(cluster_id.options, indent=2))
+            print("dashboard_link :", cluster_id.dashboard_link)
+
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
 
         # Try to retrieve the session on the collection
@@ -150,7 +157,6 @@ async def s1l0_processing(
                 )
                 item_session = item_collection.items[0]
 
-    logger.info(json.dumps(item_session.to_dict(), indent=2, ensure_ascii=False))
     # The satellite name can be retrieved from the 3 first caracters of the session name
     satellite_identifier = session[:3].upper()
     print(satellite_identifier)
