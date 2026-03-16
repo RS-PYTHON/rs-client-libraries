@@ -41,6 +41,17 @@ from rs_workflows.payload_generator import generate_payload
 from rs_workflows.staging_flow import staging_task
 
 
+def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
+    """Build the Dask dashboard log message from the configured public gateway endpoint."""
+    public_base = os.getenv("DASK_GATEWAY_PUBLIC", "")
+
+    if not public_base or not cluster_instance:
+        return "Dask cluster dashboard URL is unavailable"
+
+    dashboard_url = f"{public_base.rstrip('/')}/clusters/{cluster_instance}/status"
+    return f"Dask cluster dashboard URL: {dashboard_url}"
+
+
 @task(name="Process input ADFS")
 async def process_input_adfs(input_adfs, dpr_input, task_table):
     """
@@ -129,10 +140,18 @@ async def dpr_processing(
         cluster_info = ClusterInfo(
             jupyter_token=os.environ["JUPYTERHUB_API_TOKEN"] if prefect_utils.cluster_mode else "",
             cluster_label=dpr_input.dask_cluster_label,
+            cluster_instance=dpr_input.dask_cluster_instance or "",
         )
 
         # read tasktable and construct list of processing units
         task_table = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name, cluster_info)
+
+        # Persist the full task table as a Prefect artifact for later investigation.
+        md = "# Task table\n\n```json\n" + json.dumps(task_table, indent=2) + "\n```"
+        await acreate_markdown_artifact(key="task-table", markdown=md, description="DPR task table")
+        # Log the public Dask dashboard URL when the flow input provides the cluster instance.
+        logger.info(build_dask_dashboard_url_message(cluster_info.cluster_instance))
+
         processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
         out = build_unit_list(
             tasktable=task_table,

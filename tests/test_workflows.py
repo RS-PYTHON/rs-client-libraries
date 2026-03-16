@@ -58,6 +58,8 @@ CONFIG_DIR = Path(__file__).parent / "resources"
 
 JUPYTERHUB_API_TOKEN = "JUPYTERHUB_API_TOKEN"
 DASK_CLUSTER_LABEL = "DASK_CLUSTER_LABEL"
+DASK_CLUSTER_INSTANCE = "dask-gateway.test-cluster-instance"
+DASK_GATEWAY_PUBLIC = "http://test-dask-gateway-public"
 
 MAP_PRODUCT_TO_COLLECTION = [
     {"name": "GRD", "product_type": "S1_GRD", "collection_name": "OUTPUT_GRD_COLLECTION"},
@@ -75,7 +77,8 @@ def _mocked_tasktable():
     with open(CONFIG_DIR / "tasktable.json", encoding="utf-8") as f:
         responses.get(
             url=f"{MOCKED_RSPY_WEBSITE}/dpr/processes/mockup?"
-            f"jupyter_token={JUPYTERHUB_API_TOKEN}&cluster_label={DASK_CLUSTER_LABEL}&cluster_instance=",
+            f"jupyter_token={JUPYTERHUB_API_TOKEN}&cluster_label={DASK_CLUSTER_LABEL}"
+            f"&cluster_instance={DASK_CLUSTER_INSTANCE}",
             json=json.load(f),
             status=status.HTTP_200_OK,
         )
@@ -148,7 +151,12 @@ async def test_dpr_processing(
     ################
 
     # Save env vars in prefect secret blocks
-    await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN})
+    await setup_worklow_test_env(
+        {
+            "JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN,
+            "DASK_GATEWAY_PUBLIC": DASK_GATEWAY_PUBLIC,
+        },
+    )
 
     # build realistic input
     dpr_input = DprProcessIn(
@@ -157,6 +165,7 @@ async def test_dpr_processing(
         processor_version="1.0",
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
+        dask_cluster_instance=DASK_CLUSTER_INSTANCE,
         input_products=[{"name": "input_name", "cadip_session": "dummy_id", "collection_name": "dummy_collection"}],
         generated_product_to_collection_identifier=MAP_PRODUCT_TO_COLLECTION,  # type: ignore
         auxiliary_product_to_collection_identifier=[{"product_type": "*", "collection_name": COLLECTION_ID}],
@@ -218,8 +227,8 @@ async def test_dpr_processing(
 
     # Verify the two artifact calls use the correct keys
     keys = [c.kwargs.get("key") for c in artifact_mock.await_args_list]
-    assert artifact_mock.await_count == 4
-    assert keys == ["processing-unit-list", "auxip-cql2", "auxip-cql2", "dpr-payload-file"]
+    assert artifact_mock.await_count == 5
+    assert keys == ["task-table", "processing-unit-list", "auxip-cql2", "auxip-cql2", "dpr-payload-file"]
 
 
 async def test_dpr_processing_raises_on_unstaged_adf(
@@ -260,14 +269,29 @@ async def test_dpr_processing_raises_on_unstaged_adf(
     # Init and run #
     ################
 
-    await setup_worklow_test_env({"JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN})
+    with open(CONFIG_DIR / "tasktable.json", encoding="utf-8") as f:
+        responses.get(
+            url=f"{MOCKED_RSPY_WEBSITE}/dpr/processes/mockup?"
+            f"jupyter_token={JUPYTERHUB_API_TOKEN}&cluster_label=dask-eopf-mockup"
+            f"&cluster_instance={DASK_CLUSTER_INSTANCE}",
+            json=json.load(f),
+            status=status.HTTP_200_OK,
+        )
+
+    await setup_worklow_test_env(
+        {
+            "JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN,
+            "DASK_GATEWAY_EOPF_MOCKUP_PUBLIC": DASK_GATEWAY_PUBLIC,
+        },
+    )
 
     dpr_input = DprProcessIn(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         processor_name="mockup",
         processor_version="1.0",
         pipeline="mockup_full",
-        dask_cluster_label=DASK_CLUSTER_LABEL,
+        dask_cluster_label="dask-eopf-mockup",
+        dask_cluster_instance=DASK_CLUSTER_INSTANCE,
         input_products=[
             FlowInputProduct(name="input_name", cadip_session="stac_item_id", collection_name="collection_name"),
         ],

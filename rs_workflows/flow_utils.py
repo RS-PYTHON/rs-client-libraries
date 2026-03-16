@@ -241,6 +241,12 @@ class DprProcessIn(BaseModel):
         description='Label of the Dask cluster to use, e.g. "dask-l0" for local testing.',
     )
 
+    dask_cluster_instance: str | None = Field(
+        default=None,
+        title="Dask Cluster Instance",
+        description="Optional Dask cluster instance ID used to build a direct dashboard URL.",
+    )
+
     s3_payload_file: str = Field(
         title="S3 Payload File",
         description="S3 path where the processor payload (JSON) will be written for execution.",
