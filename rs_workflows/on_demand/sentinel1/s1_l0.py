@@ -15,6 +15,7 @@
 """sentinel 1 Level-0 processing."""
 
 import json
+import os
 import time
 from datetime import datetime, timedelta
 from enum import Enum
@@ -22,8 +23,13 @@ from enum import Enum
 from faker import Faker
 from prefect import flow, get_run_logger, task
 from pystac import Item, ItemCollection
+from dask_gateway import Gateway
+from dask_gateway.auth import JupyterHubAuth
+from pprint import pprint
 
-from rs_client.ogcapi.dpr_client import DprPipeline, DprProcessor
+from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
+
+from rs_client.ogcapi.dpr_client import DprPipeline, DprProcessor, ClusterInfo
 from rs_client.stac.cadip_client import CadipClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import (
@@ -64,8 +70,32 @@ async def s1l0_processing(
         raise ValueError(f"The 4th character of '{session}' is not '_'")
     logger.info("Sentinel-1 session name is correct. ")
 
+
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
     with flow_env.start_span(__name__, "sentinel1-level0"):
+        # Check dask_cluster_label
+        gateway = Gateway(
+                address=os.environ["DASK_GATEWAY_ADDRESS"],
+                auth=JupyterHubAuth(api_token=os.environ["JUPYTERHUB_API_TOKEN"]),
+            )
+        clusters = gateway.list_clusters()        
+        print (clusters)
+        if dask_cluster_label in clusters:
+            logger.info(f"{dask_cluster_label} is part of deployed dask clusters.")
+        else:
+            logger.error(f"{dask_cluster_label} is not part of deployed dask clusters.")
+            raise ValueError(f"Unknown '{dask_cluster_label}''.")
+            
+        cluster = gateway.get_cluster(dask_cluster_label)
+        info = cluster.scheduler_info()
+        nb_workers = len(info["workers"])
+        logger.info(f"The cluster {dask_cluster_label} have got {nb_workers} worker(s).")
+        
+        for worker_id, worker_info in info["workers"].items():
+            print(f"\nWorker ID : {worker_id}")
+            pprint(worker_info)
+                
+        
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
 
         # Try to retrieve the session on the collection
