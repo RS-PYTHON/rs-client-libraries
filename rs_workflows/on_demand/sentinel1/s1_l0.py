@@ -20,6 +20,7 @@ import time
 from datetime import datetime, timedelta
 from enum import Enum
 from pprint import pprint
+from prefect.artifacts import acreate_markdown_artifact
 
 from dask_gateway import Gateway
 from dask_gateway.auth import JupyterHubAuth
@@ -75,7 +76,7 @@ async def s1l0_processing(
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
     with flow_env.start_span(__name__, "sentinel1-level0"):
-        # Check dask_cluster_label
+        # Check that the chosen dask_cluster_label is deployed
         gateway = Gateway(
             address=os.environ["DASK_GATEWAY_ADDRESS"],
             auth=JupyterHubAuth(api_token=os.environ["JUPYTERHUB_API_TOKEN"]),
@@ -98,14 +99,20 @@ async def s1l0_processing(
         else:
             logger.info(f"'{dask_cluster_label}' is part of deployed dask clusters.")
             status_map = {0: "UNKNOWN", 1: "PENDING", 2: "RUNNING", 3: "STOPPING", 4: "STOPPED", 5: "FAILED"}
-            print(f"Cluster status = {cluster_id.status} ({status_map.get(cluster_id.status)})")
-            print("options :")
-            print(json.dumps(cluster_id.options, indent=2))
-            print("dashboard_link :", cluster_id.dashboard_link)
-
-        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+            if cluster_id.status != 2:
+                logger.warning(f"Cluster status = {cluster_id.status} ({status_map.get(cluster_id.status)})")
+            await acreate_markdown_artifact(
+                markdown=f"{json.dumps(cluster_id.options, indent=2)}",
+                key="dask-cluster-options",
+                description="Auxiliary files added to catalog."
+                )
+            logger.info(
+                        "You can monitor the execution from dask dashboard: "
+                        f"{os.environ["DASK_GATEWAY_PUBLIC"]}/clusters/{cluster_id}/status",
+                    )
 
         # Try to retrieve the session on the collection
+        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
         logger.info("Search session on the rs-catalog.")
         item_collection: ItemCollection = catalog_client.search(
             method="POST",
