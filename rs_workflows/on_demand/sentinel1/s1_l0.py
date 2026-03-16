@@ -166,11 +166,8 @@ async def s1l0_processing(
 
     # The satellite name can be retrieved from the 3 first caracters of the session name
     satellite_identifier = session[:3].upper()
-    print(satellite_identifier)
     end_datetime = datetime.fromisoformat(item_session.properties.get("published"))
-    print(end_datetime)
     start_datetime = end_datetime - timedelta(hours=12)
-    print(start_datetime)
     await call_dpr_flow(
         owner_identifier,
         dask_cluster_label,
