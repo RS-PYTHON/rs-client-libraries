@@ -181,6 +181,10 @@ class FlowInputProduct(BaseModel):
     cadip_session: str = Field(description="STAC item identifier.")
     collection_name: str = Field(description="Collection name.")
 
+    def items(self):
+        """Helper method to return the model fields as items, useful for logging."""
+        return self.model_dump().items()
+
 
 class FlowGeneratedProduct(BaseModel):
     """Represents one generated output product."""
@@ -192,12 +196,20 @@ class FlowGeneratedProduct(BaseModel):
         description="Collection name. If not provided, it defaults to product_type.",
     )
 
+    def items(self):
+        """Helper method to return the model fields as items, useful for logging."""
+        return self.model_dump().items()
+
 
 class AuxiliaryProductMapping(BaseModel):
     """Represents mapping for auxiliary products."""
 
     product_type: str = Field(description="Product type or '*' wildcard.")
     collection_name: str = Field(description="Collection name.")
+
+    def items(self):
+        """Helper method to return the model fields as items, useful for logging."""
+        return self.model_dump().items()
 
 
 class DprProcessIn(BaseModel):
