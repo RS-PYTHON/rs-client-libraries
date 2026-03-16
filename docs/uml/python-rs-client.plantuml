@@ -22,7 +22,6 @@ Class RsClient {
 + __init__ (api_key:UUID, href: str, owner_id:str)
 + get_catalog_client() -> CatalogClient
 + get_cadip_client() -> CadipClient
-+ get_edrs_client() -> EdrsClient
 + get_auxip_client() -> AuxipClient
 + get_staging_client() -> StagingClient
 }
@@ -67,15 +66,6 @@ Class AuxipClient {
 }
 
 Class CadipClient {
-- rs_server_api_key : UUID
-- rs_server_href : str
-- owner_id : str
-- stac_href : str
-==
-+ __init__ (api_key:UUID, href:str, owner_id:str, stac_href:str)
-}
-
-Class EdrsClient {
 - rs_server_api_key : UUID
 - rs_server_href : str
 - owner_id : str
@@ -149,7 +139,6 @@ Class StacApiIO {
 RsClient <|-- StacBase
 RsClient <|-- StagingClient
 StacBase <|-- CadipClient
-StacBase <|-- EdrsClient
 StacBase <|-- CatalogClient
 StacBase <|-- AuxipClient
 StacBase "1" *-- "1" pystac_client

@@ -650,7 +650,7 @@ def mocked_rspy_landing_pages_():
     """Mock responses to the RSPY STAC service landing pages made with the "requests" library."""
     # This is the returned content when calling a real STAC catalog service with:
     # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-    for service in "auxip", "cadip", "catalog", "edrs", "prip":
+    for service in "auxip", "cadip", "catalog", "prip":
         json_landing_page = common.json_landing_page(
             MOCKED_RSPY_WEBSITE,
             f"{OWNER_ID}:{COLLECTION_ID}",
@@ -674,7 +674,6 @@ def set_db_env_var_fixture(monkeypatch):
         "RSPY_HOST_AUXIP": "https://dummy-auxip/auxip/",
         "RSPY_HOST_PRIP": "https://dummy-prip/prip/",
         "RSPY_HOST_STAGING": "https://dummy-staging/staging/",
-        "RSPY_HOST_EDRS": "https://dummy-edrs/edrs/",
     }
     for key, val in envvars.items():
         monkeypatch.setenv(key, val)
@@ -698,12 +697,6 @@ def auxip_client_(generic_rs_client):
 def cadip_client_(generic_rs_client):
     """Return a generic CadipClient instance for testing."""
     yield generic_rs_client.get_cadip_client()
-
-
-@pytest.fixture(name="edrs_client")
-def edrs_client_(generic_rs_client):
-    """Return a generic EdrsClient instance for testing."""
-    yield generic_rs_client.get_edrs_client()
 
 
 @pytest.fixture(name="prip_client")

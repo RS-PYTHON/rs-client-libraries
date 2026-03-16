@@ -43,7 +43,6 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
     - rs-server-cadip
     - rs-server-auxip
     - rs-server-prip
-    - rs-server-edrs
     - rs-server-catalog
 
     This class provides methods to authenticate and interact with RS-Server,
@@ -261,16 +260,6 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
         )
 
         return CadipClient(self.rs_server_href, self.rs_server_api_key, self.logger, **kwargs)
-
-    def get_edrs_client(self, **kwargs) -> "EdrsClient":  # type: ignore # noqa: F821
-        """
-        Return an instance of the child class EdrsClient, with the same attributes as this "self" instance.
-        """
-        from rs_client.stac.edrs_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
-            EdrsClient,
-        )
-
-        return EdrsClient(self.rs_server_href, self.rs_server_api_key, self.logger, **kwargs)
 
     def get_catalog_client(self, **kwargs) -> "CatalogClient":  # type: ignore # noqa: F821
         """
