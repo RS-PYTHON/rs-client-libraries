@@ -46,12 +46,14 @@ async def is_dask_cluster_running(
             cluster_name = cluster.options.get("cluster_name")
             if cluster_name == dask_cluster_label:
                 cluster_id = cluster
+        cluster_names = [c.options.get("cluster_name", "<unknown>") for c in clusters]
+
 
         # Provide information on the cluster
         if cluster_id is None:
-            logger.error(f"❌ '{dask_cluster_label}' is not part of deployed dask clusters ({", ".join(map(str, clusters))}).")
+            logger.error(f"❌ '{dask_cluster_label}' is not part of deployed dask clusters ({cluster_names}).")
         else:
-            logger.info(f"✔️ '{dask_cluster_label}' is part of deployed dask clusters ({", ".join(map(str, clusters))}).")
+            logger.info(f"✔️ '{dask_cluster_label}' is part of deployed dask clusters ({cluster_names}).")
             status_map = {0: "UNKNOWN", 1: "PENDING", 2: "RUNNING", 3: "STOPPING", 4: "STOPPED", 5: "FAILED"}
             if cluster_id.status == 2:
                 result = True
