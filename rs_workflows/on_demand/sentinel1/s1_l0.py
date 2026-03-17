@@ -20,12 +20,12 @@ import time
 from datetime import datetime, timedelta
 from enum import Enum
 from pprint import pprint
-from prefect.artifacts import acreate_markdown_artifact
 
 from dask_gateway import Gateway
 from dask_gateway.auth import JupyterHubAuth
 from faker import Faker
 from prefect import flow, get_run_logger, task
+from prefect.artifacts import acreate_markdown_artifact
 from pystac import Item, ItemCollection
 
 from rs_client.ogcapi.dpr_client import (
@@ -101,15 +101,17 @@ async def s1l0_processing(
             status_map = {0: "UNKNOWN", 1: "PENDING", 2: "RUNNING", 3: "STOPPING", 4: "STOPPED", 5: "FAILED"}
             if cluster_id.status != 2:
                 logger.warning(f"Cluster status = {cluster_id.status} ({status_map.get(cluster_id.status)})")
+
+            md = "# List of processing units\n\n```json\n" + json.dumps(cluster_id.options, indent=2) + "\n```"
             await acreate_markdown_artifact(
-                markdown=f"{json.dumps(cluster_id.options, indent=2)}",
+                markdown=md,
                 key="dask-cluster-options",
-                description="Auxiliary files added to catalog."
-                )
+                description="Auxiliary files added to catalog.",
+            )
             logger.info(
-                        "You can monitor the execution from dask dashboard: "
-                        f"{os.environ["DASK_GATEWAY_PUBLIC"]}/clusters/{cluster_id}/status",
-                    )
+                "You can monitor the execution from dask dashboard: "
+                f"{os.environ["DASK_GATEWAY_PUBLIC"]}/clusters/{cluster_id}/status",
+            )
 
         # Try to retrieve the session on the collection
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
@@ -168,6 +170,9 @@ async def s1l0_processing(
     satellite_identifier = session[:3].upper()
     end_datetime = datetime.fromisoformat(item_session.properties.get("published"))
     start_datetime = end_datetime - timedelta(hours=12)
+
+    # raise SystemExit("TEMP - STOP here")
+
     await call_dpr_flow(
         owner_identifier,
         dask_cluster_label,
@@ -216,11 +221,11 @@ async def call_dpr_flow(
             ),
         ],
         generated_product_to_collection_identifier=[
-            # GeneratedProduct(
-            #    name="S01SARRAW",
-            #    product_type="*",
-            #    collection_name="s01sarraw",
-            # ),
+            GeneratedProduct(
+                name="S01SARRAW",
+                product_type="*",
+                collection_name="s01sarraw",
+            ),
             GeneratedProduct(
                 name="S01GPSRAW",
                 product_type="*",
@@ -231,11 +236,11 @@ async def call_dpr_flow(
                 product_type="*",
                 collection_name="allproductions",
             ),
-            # GeneratedProduct(
-            #    name="S01AISRAW",
-            #    product_type="*",
-            #    collection_name="allproductions",
-            # ),
+            GeneratedProduct(
+                name="S01AISRAW",
+                product_type="*",
+                collection_name="allproductions",
+            ),
         ],
         auxiliary_product_to_collection_identifier=[
             AuxiliaryProductMapping(
