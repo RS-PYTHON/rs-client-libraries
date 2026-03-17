@@ -47,7 +47,7 @@ from rs_workflows.on_demand.stage_last_sessions import stage_session_common
 from rs_workflows.on_demand_processing import dpr_processing
 from rs_workflows.utils.dask import is_dask_cluster_running
 from rs_workflows.utils.catalog import get_single_catalog_item
-
+from rs_workflows.utils.cadip import get_cadip_station
 
 class Collection(str, Enum):
     S1_SESSION = "s01-cadip-session"
@@ -79,29 +79,20 @@ async def s1l0_processing(
             raise ValueError(f"❌ '{dask_cluster_label}' is unknown or not ready.")
 
         # Try to retrieve the session on the collection
-        item_session = await get_single_catalog_item(flow_env, session, [Collection.S1_SESSION.value])
+        item_session: Item = await get_single_catalog_item(flow_env, session, [Collection.S1_SESSION.value])
 
+        # If the session is not on the rs-catalog, we will try to stage it
         if item_session is None:
             logger.info("Try to stage it from all S1 stations.")
 
             # Try to find a cadip station with this session available
-            item_col = await cadip_session_search_by_name(flow_env, session)
-            count = len(item_col)
-            found = False
-            cadip_station = ""
-            if count == 1:
-                collection_links = [link for link in item_col[0].links if link.rel == "collection"]
-                if collection_links:
-                    found = True
-                    href = collection_links[0].href
-                    cadip_station = href.rstrip("/").split("/")[-1]
-                    logger.info(f"The session '{session}' is available at station {cadip_station}")
-
-            # Stage the session
-            if found:
-                await stage_session_common(flow_env, cadip_station, session)
+            station = await get_cadip_station(flow_env, session, ["s1_ins", "s1_kse", "s1_mps", "s1_mti", "s1_nsg", "s1_sgs"])
+                    
+            # If a station has got the session, we will stage the session
+            if station is not None:
+                await stage_session_common(flow_env, station, session)
                 catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-                item_collection = catalog_client.search(
+                item_collection: ItemCollection = catalog_client.search(
                     method="POST",
                     collections=[Collection.S1_SESSION.value],
                     ids=[session],
@@ -204,27 +195,7 @@ async def call_dpr_flow(
     await dpr_processing_task(a_process_s1l0)
 
 
-@task(name="Cadip session search by name")
-async def cadip_session_search_by_name(env: FlowEnv, session: str) -> ItemCollection:
-    """ """
-    logger = get_run_logger()
 
-    # Initialize flow environment and telemetry span
-    cadip_client: CadipClient = env.rs_client.get_cadip_client()
-
-    # Log query for debugging
-    logger.info("Start request on all S1 CADIP stations")
-
-    # Execute search request
-    found = cadip_client.search(
-        method="GET",
-        ids=[session],
-        collections=["s1_ins", "s1_kse", "s1_mps", "s1_mti", "s1_nsg", "s1_sgs"],
-        max_items=1,
-        limit=1,
-    )
-
-    return found
 
 
 @task(name="dpr processing")
