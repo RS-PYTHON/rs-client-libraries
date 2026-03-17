@@ -56,6 +56,8 @@ async def call_dpr_flow(
     end_datetime: datetime,
     satellite_identifier: str,
     prefect_settings: str,
+    processor_name: str="",
+    processor_version: str=""
 ) -> None:
     """_summary_
 
@@ -68,12 +70,18 @@ async def call_dpr_flow(
         satellite_identifier (str): _description_
     """
     s3_payload: str = generate_payload_path(owner_id)
+    
+    # Apply default configuration for unset parameters
     settings: dict = await read_prefect_variable(prefect_settings)
+    processor_name = processor_name or settings["processor"]["name"]
+    processor_version = processor_version or settings["processor"]["version"]
+
+
 
     a_process_s1l0: DprProcessIn = DprProcessIn(
         env=FlowEnvArgs(owner_id=owner_id),
-        processor_name=DprProcessor.S1L0,
-        processor_version="1.4.0",  # TODO: retrieve automatically
+        processor_name=processor_name,
+        processor_version=processor_version,
         dask_cluster_label=dask_cluster_label,
         s3_payload_file=f"{s3_payload}/payload.yaml",
         pipeline=DprPipeline.S1L0FULL,
