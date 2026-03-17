@@ -132,7 +132,7 @@ async def call_dpr_flow(
                 collection_name="s01-aux-mpl_orbpre",
             ),
         ],
-        processing_mode=[ProcessingMode(processing_mode)],
+        processing_mode=processing_mode,
         start_datetime=start_datetime,
         end_datetime=end_datetime,
         satellite=satellite_identifier,
