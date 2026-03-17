@@ -14,10 +14,19 @@
 
 """Helper task to interact with the DPR as a service."""
 
+import json
 import time
-from rs_workflows.on_demand_processing import dpr_processing
-from rs_workflows.flow_utils import FlowEnv
+from datetime import datetime
+
+from faker import Faker
 from prefect import get_run_logger, task
+from prefect.variables import Variable
+from pystac import Item, ItemCollection
+
+from rs_client.ogcapi.dpr_client import (
+    DprPipeline,
+    DprProcessor,
+)
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
     DprProcessIn,
@@ -29,22 +38,15 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
     WorkflowType,
 )
-from rs_client.ogcapi.dpr_client import (
-    DprPipeline,
-    DprProcessor,
-)
-from datetime import datetime
-from pystac import Item, ItemCollection
-from prefect.client import get_client
-import json
+from rs_workflows.on_demand_processing import dpr_processing
 
 
-def generate_payload_path(owner_id:str)->str:
+def generate_payload_path(owner_id: str) -> str:
     # TODO : use a local path on the share disk
     fake = Faker()
-    s3_payload = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}-{fake.word().lower()}-{fake.word().lower()}"    
+    s3_payload = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}-{fake.word().lower()}-{fake.word().lower()}"
     return s3_payload
-    
+
 
 async def call_dpr_flow(
     owner_id: str,
@@ -54,7 +56,6 @@ async def call_dpr_flow(
     end_datetime: datetime,
     satellite_identifier: str,
     prefect_settings: str,
-    
 ) -> None:
     """_summary_
 
@@ -66,10 +67,10 @@ async def call_dpr_flow(
         end_datetime (datetime): _description_
         satellite_identifier (str): _description_
     """
-    s3_payload:str = generate_payload_path(owner_id)
-    settings:dict = await read_prefect_variable(prefect_settings)
-    
-    a_process_s1l0:DprProcessIn = DprProcessIn(
+    s3_payload: str = generate_payload_path(owner_id)
+    settings: dict = await read_prefect_variable(prefect_settings)
+
+    a_process_s1l0: DprProcessIn = DprProcessIn(
         env=FlowEnvArgs(owner_id=owner_id),
         processor_name=DprProcessor.S1L0,
         processor_version="1.4.0",  # TODO: retrieve automatically
@@ -118,7 +119,7 @@ async def call_dpr_flow(
         satellite=satellite_identifier,
     )
     print(a_process_s1l0.model_dump_json(indent=2))
-    
+
     # await dpr_processing_task(a_process_s1l0)
 
 
@@ -129,13 +130,5 @@ async def dpr_processing_task(*args, **kwargs) -> tuple[bool, ItemCollection | N
 
 
 @task(name="retrieve prefect variable")
-async def read_prefect_variable(prefect_variable:str)->dict:
-    logger = get_run_logger()
-    async with get_client() as client:
-        raw = await client.read_variable(prefect_variable)
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        logger.error(f"Variable {prefect_variable} is not valid JSON.")
-        raise
-    return data
+async def read_prefect_variable(prefect_variable: str) -> dict:
+    return await Variable.get(prefect_variable)
