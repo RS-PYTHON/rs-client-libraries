@@ -62,7 +62,9 @@ async def call_dpr_flow(
     unit: str="",
     priority: str="",
     processing_mode: list[ProcessingMode]= [],
-    workflow: str=""
+    workflow: str="",
+    generated_product_to_collection_identifier:list[GeneratedProduct] = [],
+    auxiliary_product_to_collection_identifier:list[AuxiliaryProductMapping] = []
 ) -> None:
     """_summary_
 
@@ -87,7 +89,10 @@ async def call_dpr_flow(
         processing_mode = settings["processing_mode"]
     workflow = workflow or settings["workflow"]
     dask_cluster_label = dask_cluster_label or settings["dask_cluster_label"]
-
+    if generated_product_to_collection_identifier == []:
+        generated_product_to_collection_identifier= settings["generated_product_to_collection_identifier"]
+    if auxiliary_product_to_collection_identifier == []:
+        auxiliary_product_to_collection_identifier= settings["auxiliary_product_to_collection_identifier"]
 
     a_process: DprProcessIn = DprProcessIn(
         env=env,
@@ -100,38 +105,8 @@ async def call_dpr_flow(
         priority=Priority(priority),
         workflow_type=WorkflowType(workflow),
         input_products=input_products,
-        generated_product_to_collection_identifier=[
-            GeneratedProduct(
-                name="S01SARRAW",
-                product_type="*",
-                collection_name="s01sarraw",
-            ),
-            GeneratedProduct(
-                name="S01GPSRAW",
-                product_type="*",
-                collection_name="s01gpsraw",
-            ),
-            GeneratedProduct(
-                name="S01HKMRAW",
-                product_type="*",
-                collection_name="allproductions",
-            ),
-            GeneratedProduct(
-                name="S01AISRAW",
-                product_type="*",
-                collection_name="allproductions",
-            ),
-        ],
-        auxiliary_product_to_collection_identifier=[
-            AuxiliaryProductMapping(
-                product_type="MPL_ORBPRE",
-                collection_name="s01-aux-mpl_orbpre",
-            ),
-            AuxiliaryProductMapping(
-                product_type="MPL_ORBSCT",
-                collection_name="s01-aux-mpl_orbpre",
-            ),
-        ],
+        generated_product_to_collection_identifier=generated_product_to_collection_identifier,
+        auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
         processing_mode=processing_mode,
         start_datetime=start_datetime,
         end_datetime=end_datetime,
