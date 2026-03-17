@@ -318,36 +318,35 @@ async def stage_latest_session(
     report_verbose = ReportManager() if verbose else None
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
-    with flow_env.start_span(__name__, "stage_selected_session"):
-        logger = get_run_logger()
+    logger = get_run_logger()
 
-        # Search for CADIP sessions in the given time window
-        session_found = cadip_session_search.submit(
-            flow_env.serialize(),
-            cadip_collection_identifier=[cadip_collection],
-            limit=1,
-        ).result()
+    # Search for CADIP sessions in the given time window
+    session_found = cadip_session_search.submit(
+        flow_env.serialize(),
+        cadip_collection_identifier=[cadip_collection],
+        limit=1,
+    ).result()
 
-        if not session_found:
-            if report_verbose is not None:
-                report_verbose.failed_step(1, "No session has been found.")
-            raise ValueError(
-                "No Cadip session found.",
-            )
-
-        selected_session: str = session_found[0].id  # type: ignore
-        if selected_session is not None:
-            if report_verbose is not None:
-                report_verbose.success_step(1, f"Session {selected_session} has been found.")
-            logger.info(f"Session to be stagged: {selected_session}")
-            # Build catalog collection name based on CADIP collection
-            await stage_session_common(flow_env, cadip_collection, selected_session, report_verbose)
-        else:
-            logger.info("No session has been found.")
-            if report_verbose is not None:
-                report_verbose.failed_step(1, "No session has been found.")
+    if not session_found:
         if report_verbose is not None:
-            await report_verbose.push_report("test-report", "Step by step results")
+            report_verbose.failed_step(1, "No session has been found.")
+        raise ValueError(
+            "No Cadip session found.",
+        )
+
+    selected_session: str = session_found[0].id  # type: ignore
+    if selected_session is not None:
+        if report_verbose is not None:
+            report_verbose.success_step(1, f"Session {selected_session} has been found.")
+        logger.info(f"Session to be stagged: {selected_session}")
+        # Build catalog collection name based on CADIP collection
+        await stage_session_common(flow_env, cadip_collection, selected_session, report_verbose)
+    else:
+        logger.info("No session has been found.")
+        if report_verbose is not None:
+            report_verbose.failed_step(1, "No session has been found.")
+    if report_verbose is not None:
+        await report_verbose.push_report("test-report", "Step by step results")
 
 
 @task(name="stage CADIP session")

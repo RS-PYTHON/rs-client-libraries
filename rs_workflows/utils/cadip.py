@@ -33,7 +33,7 @@ async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections :
     cadip_client: CadipClient = flow_env.rs_client.get_cadip_client()
 
     # Log query for debugging
-    logger.info(f"Search a Cadip station {', '.join(cadip_collections)} looking for the session'{session}'")
+    logger.info(f"Search a cadip station between [{', '.join(cadip_collections)}] looking for the session'{session}'")
 
     # Execute search request
     item_col:ItemCollection = cadip_client.search(
@@ -52,6 +52,6 @@ async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections :
             result = href.rstrip("/").split("/")[-1]
             logger.info(f"✔️ The session '{session}' is available at station {result}")
     if result is None:
-        logger.info(f"❌ The session '{session}' can not be found on stations {', '.join(cadip_collections)}")
+        logger.info(f"❌ The session '{session}' can not be found on stations [{', '.join(cadip_collections)}]")
 
     return result

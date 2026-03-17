@@ -16,8 +16,6 @@
 
 from rs_workflows.flow_utils import FlowEnv
 from prefect import get_run_logger, task
-import os
-import json
 from pystac import Item, ItemCollection
 from rs_client.stac.catalog_client import CatalogClient
 
@@ -55,4 +53,4 @@ async def get_single_catalog_item(
             f"❌ The STAC item 🧊 '{id}' was not found on the rs-catalog collections {', '.join(collections)}.",
         )
         
-    return result
+    return result  
