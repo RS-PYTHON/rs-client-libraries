@@ -76,7 +76,7 @@ async def s1l0_processing(
     
     with flow_env.start_span(__name__, "sentinel1-level0"):
         # Check that the chosen dask_cluster_label is deployed
-        if await is_dask_cluster_running(flow_env, dask_cluster_label)==False :
+        if await is_dask_cluster_running(dask_cluster_label)==False :
             raise ValueError(f"❌ '{dask_cluster_label}' is unknown or not ready.")
 
         # Try to retrieve the session on the collection
