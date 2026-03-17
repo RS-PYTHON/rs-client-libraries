@@ -180,8 +180,7 @@ def resolve_collection(product_type: str, target_collections: list[FlowGenerated
     collections = {}
 
     for item in target_collections:
-        data = item.model_dump()
-        if (ptype := data.get("product_type")) and (collection := data.get("collection_name")):
+        if (ptype := item.product_type) and (collection := item.collection_name):
             collections[ptype] = collection
 
     target_collection = collections.get(product_type) or collections.get("*")
