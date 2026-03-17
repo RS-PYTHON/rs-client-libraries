@@ -57,7 +57,12 @@ async def call_dpr_flow(
     satellite_identifier: str,
     prefect_settings: str,
     processor_name: str="",
-    processor_version: str=""
+    processor_version: str="",
+    pipeline: str="",
+    unit: str="",
+    priority: str="",
+    processing_mode: str="",
+    workflow: str="",
 ) -> None:
     """_summary_
 
@@ -75,19 +80,23 @@ async def call_dpr_flow(
     settings: dict = await read_prefect_variable(prefect_settings)
     processor_name = processor_name or settings["processor"]["name"]
     processor_version = processor_version or settings["processor"]["version"]
-
+    if pipeline=="" and unit=="":
+        pipeline = settings["pipeline"]
+    priority = priority or settings["priority"]
+    processing_mode = processing_mode or settings["processing_mode"]
+    workflow = workflow or settings["workflow"]
 
 
     a_process_s1l0: DprProcessIn = DprProcessIn(
         env=FlowEnvArgs(owner_id=owner_id),
-        processor_name=processor_name,
+        processor_name=DprProcessor(processor_name),
         processor_version=processor_version,
         dask_cluster_label=dask_cluster_label,
-        s3_payload_file=f"{s3_payload}/payload.yaml",
-        pipeline=DprPipeline.S1L0FULL,
-        unit=None,
-        priority=Priority.LOW,  # TODO: expose priority
-        workflow_type=WorkflowType.ON_DEMAND,
+        s3_payload_file=f"{s3_payload}/payload_{processor_name}.yaml",
+        pipeline=DprPipeline(pipeline),
+        unit=unit,
+        priority=Priority(priority),
+        workflow_type=WorkflowType(workflow),
         input_products=input_products,
         generated_product_to_collection_identifier=[
             GeneratedProduct(
