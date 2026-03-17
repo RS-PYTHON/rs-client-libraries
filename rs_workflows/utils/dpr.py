@@ -49,20 +49,20 @@ def generate_payload_path(owner_id: str) -> str:
 
 
 async def call_dpr_flow(
-    owner_id: str,
-    dask_cluster_label: str,
+    env: FlowEnvArgs,
     input_products: list[InputProduct],
     start_datetime: datetime,
     end_datetime: datetime,
     satellite_identifier: str,
     prefect_settings: str,
+    dask_cluster_label: str="",
     processor_name: str="",
     processor_version: str="",
     pipeline: str="",
     unit: str="",
     priority: str="",
-    processing_mode: str="",
-    workflow: str="",
+    processing_mode: list[ProcessingMode]= [],
+    workflow: str=""
 ) -> None:
     """_summary_
 
@@ -74,7 +74,7 @@ async def call_dpr_flow(
         end_datetime (datetime): _description_
         satellite_identifier (str): _description_
     """
-    s3_payload: str = generate_payload_path(owner_id)
+    s3_payload: str = generate_payload_path(env.owner_id)
     
     # Apply default configuration for unset parameters
     settings: dict = await read_prefect_variable(prefect_settings)
@@ -83,12 +83,14 @@ async def call_dpr_flow(
     if pipeline=="" and unit=="":
         pipeline = settings["pipeline"]
     priority = priority or settings["priority"]
-    processing_mode = processing_mode or settings["processing_mode"]
+    if processing_mode ==[]:
+        processing_mode = settings["processing_mode"]
     workflow = workflow or settings["workflow"]
+    dask_cluster_label = dask_cluster_label or settings["dask_cluster_label"]
 
 
-    a_process_s1l0: DprProcessIn = DprProcessIn(
-        env=FlowEnvArgs(owner_id=owner_id),
+    a_process: DprProcessIn = DprProcessIn(
+        env=env,
         processor_name=DprProcessor(processor_name),
         processor_version=processor_version,
         dask_cluster_label=dask_cluster_label,
@@ -130,14 +132,14 @@ async def call_dpr_flow(
                 collection_name="s01-aux-mpl_orbpre",
             ),
         ],
-        processing_mode=[ProcessingMode.ALWAYS],
+        processing_mode=[ProcessingMode(processing_mode)],
         start_datetime=start_datetime,
         end_datetime=end_datetime,
         satellite=satellite_identifier,
     )
-    print(a_process_s1l0.model_dump_json(indent=2))
 
-    # await dpr_processing_task(a_process_s1l0)
+    print(a_process.model_dump_json(indent=2))
+    # await dpr_processing_task(a_process)
 
 
 @task(name="dpr processing")

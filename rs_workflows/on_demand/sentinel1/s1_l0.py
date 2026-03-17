@@ -91,7 +91,6 @@ async def s1l0_processing(
     satellite_identifier = session[:3].upper()
     end_datetime = datetime.fromisoformat(item_session.properties.get("published"))
     start_datetime = end_datetime - timedelta(hours=12)
-
     input_products: list[InputProduct] = [
         InputProduct(
             name="S1CADUS",
@@ -101,7 +100,7 @@ async def s1l0_processing(
     ]
 
     await call_dpr_flow(
-        owner_id=owner_identifier,
+        FlowEnvArgs(owner_id=owner_identifier),
         prefect_settings=DEFAULT_CONFIGURATION,
         dask_cluster_label=dask_cluster_label,
         input_products=input_products,
