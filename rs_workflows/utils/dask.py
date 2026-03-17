@@ -66,7 +66,7 @@ async def is_dask_cluster_running(
         )
         logger.info(
             "📈 You can monitor the execution from dask dashboard: "
-            f"{os.environ["DASK_GATEWAY_PUBLIC"]}/clusters/{cluster_id}/status",
+            f"{os.environ["DASK_GATEWAY_PUBLIC"]}/clusters/{cluster_id.name}/status",
         )
             
     return result
