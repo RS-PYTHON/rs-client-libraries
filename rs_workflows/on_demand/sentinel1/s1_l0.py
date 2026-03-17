@@ -21,16 +21,12 @@ from datetime import datetime, timedelta
 from enum import Enum
 from pprint import pprint
 
-from dask_gateway import Gateway
-from dask_gateway.auth import JupyterHubAuth
 from faker import Faker
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
 from pystac import Item, ItemCollection
 
 from rs_client.ogcapi.dpr_client import (
-    ClusterInfo,
-    DprClient,
     DprPipeline,
     DprProcessor,
 )
@@ -49,6 +45,7 @@ from rs_workflows.flow_utils import (
 )
 from rs_workflows.on_demand.stage_last_sessions import stage_session_common
 from rs_workflows.on_demand_processing import dpr_processing
+from rs_workflows.utils.dask import is_dask_cluster_running
 
 
 class Collection(str, Enum):
@@ -75,43 +72,12 @@ async def s1l0_processing(
     logger.info("Sentinel-1 session name is correct. ")
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
+    
+    
     with flow_env.start_span(__name__, "sentinel1-level0"):
         # Check that the chosen dask_cluster_label is deployed
-        gateway = Gateway(
-            address=os.environ["DASK_GATEWAY_ADDRESS"],
-            auth=JupyterHubAuth(api_token=os.environ["JUPYTERHUB_API_TOKEN"]),
-        )
-
-        clusters = gateway.list_clusters()
-        cluster_id = None
-        cluster_list_name: str = ""
-        for cluster in clusters:
-            cluster_name = cluster.options.get("cluster_name")
-            cluster_list_name += " '" + cluster_name + "'"
-            if cluster_name == dask_cluster_label:
-                cluster_id = cluster
-        logger.info(f"Here is the list of deployed dask clusters:{cluster_list_name}.")
-
-        # Provide information on the cluster
-        if cluster_id is None:
-            logger.error(f"'{dask_cluster_label}' is not part of deployed dask clusters.")
-            raise ValueError(f"Unknown '{dask_cluster_label}''.")
-        else:
-            logger.info(f"'{dask_cluster_label}' is part of deployed dask clusters.")
-            status_map = {0: "UNKNOWN", 1: "PENDING", 2: "RUNNING", 3: "STOPPING", 4: "STOPPED", 5: "FAILED"}
-            if cluster_id.status != 2:
-                logger.warning(f"Cluster status = {cluster_id.status} ({status_map.get(cluster_id.status)})")
-
-            md = "# List of processing units\n\n```json\n" + json.dumps(cluster_id.options, indent=2) + "\n```"
-            await acreate_markdown_artifact(
-                markdown=md,
-                key="dask-cluster-options",
-                description="Auxiliary files added to catalog.",
-            )
-            logger.info(
-                "You can monitor the execution from dask dashboard: "
-                f"{os.environ["DASK_GATEWAY_PUBLIC"]}/clusters/{cluster_id}/status",
-            )
+        if await is_dask_cluster_running(flow_env, dask_cluster_label)==False :
+            raise ValueError(f"❌ '{dask_cluster_label}' is unknown or not ready.")
 
         # Try to retrieve the session on the collection
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
@@ -171,7 +137,7 @@ async def s1l0_processing(
     end_datetime = datetime.fromisoformat(item_session.properties.get("published"))
     start_datetime = end_datetime - timedelta(hours=12)
 
-    # raise SystemExit("TEMP - STOP here")
+    raise SystemExit("TEMP - STOP here")
 
     await call_dpr_flow(
         owner_identifier,
