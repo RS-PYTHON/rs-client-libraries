@@ -34,7 +34,7 @@ from rs_client.ogcapi.dpr_client import (
     DprProcessor,
 )
 from datetime import datetime
-from pystac import Item
+from pystac import Item, ItemCollection
 from prefect.client import get_client
 import json
 
