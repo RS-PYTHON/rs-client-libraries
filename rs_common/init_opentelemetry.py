@@ -23,6 +23,7 @@ from collections.abc import Iterator
 from threading import Lock
 
 import opentelemetry.instrumentation
+import requests
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
@@ -80,43 +81,51 @@ def parse_data(data) -> str:
     except Exception:  # pylint: disable=broad-exception-caught # nosec
         pass
 
-    # If we have a dict, try to format it as json
+    # If we have a dict
     if isinstance(data, dict):
+
+        # Decode bytes
+        data = {
+            key.decode("utf-8") if isinstance(key, bytes) else key: (
+                value.decode("utf-8") if isinstance(value, bytes) else value
+            )
+            for key, value in data.items()
+        }
+
+        # Convert to strings
+        data = {str(key): str(value) for key, value in data.items()}
+
+        # Apply json formatting
         data = json.dumps(data, indent=2)
 
     return data or ""
 
 
-def request_hook(span, request):
+def requests_hook(span: Span, request: requests.PreparedRequest, response: requests.Response | None = None):
     """
-    HTTP requests intrumentation
+    Callback function invoked by RequestsInstrumentor. It implements the hooks:
+
+      - request_hook: invoked right after a span is created.
+      - response_hook: invoked right before the span has finished processing a response.
+
+    See: https://opentelemetry-python-contrib.readthedocs.io/en/latest/instrumentation/requests/requests.html
     """
-    if not span:
+    if not (span and span.is_recording()):
         return
 
-    # Copy the http.url attribute into _url so it appears at the
-    # top in the grafana UI, it's more readable
-    span.set_attribute("_url", span.attributes.get("http.url"))
+    # Copy this attribute by adding a '_' prefix to the name,
+    # so it appears at the top in the grafana UI, it's more readable
+    span.set_attribute("_url", span.attributes.get("http.url"))  # type: ignore
 
     if trace_headers():
         span.set_attribute("http.request.headers", parse_data(request.headers))
+        if response:
+            span.set_attribute("http.response.headers", parse_data(response.headers))
 
     if trace_body():
         span.set_attribute("http.request.body", parse_data(request.body))
-
-
-def response_hook(span, request, response):  # pylint: disable=W0613
-    """
-    HTTP responses intrumentation
-    """
-    if not span:
-        return
-
-    if trace_headers():
-        span.set_attribute("http.response.headers", parse_data(response.headers))
-
-    if trace_body():
-        span.set_attribute("http.response.content", parse_data(response.content))
+        if response:
+            span.set_attribute("http.response.content", parse_data(response.content))
 
 
 def init_traces(service_name: str, logger=None):
@@ -127,6 +136,7 @@ def init_traces(service_name: str, logger=None):
         service_name (str): service name
         logger: non-default logger to user
     """
+
     # See: https://github.com/softwarebloat/python-tracing-demo/tree/main
 
     # No concurrent threads
@@ -196,18 +206,23 @@ def init_traces(service_name: str, logger=None):
                 # If the "instrument" method exists, call it
                 _instrument = getattr(_class, "instrument", None)
                 if callable(_instrument):
-
                     _class_instance = _class()
+                    if _class_instance.is_instrumented_by_opentelemetry:
+                        continue
+                    # name = f"{module_str}.{_class.__name__}".removeprefix(prefix)
+                    # logger.debug(f"OpenTelemetry instrumentation of {name!r}")
+
+                    # Handle specific hooks
                     if _class == RequestsInstrumentor and (trace_headers() or trace_body()):
                         _class_instance.instrument(
                             tracer_provider=otel_tracer,
-                            request_hook=request_hook,
-                            response_hook=response_hook,
+                            request_hook=requests_hook,
+                            response_hook=requests_hook,
                         )
-                    elif not _class_instance.is_instrumented_by_opentelemetry:
+
+                    # General case (no hooks)
+                    else:
                         _class_instance.instrument(tracer_provider=otel_tracer)
-                    # name = f"{module_str}.{_class.__name__}".removeprefix(prefix)
-                    # logger.debug(f"OpenTelemetry instrumentation of {name!r}")
 
 
 @_agnosticcontextmanager
