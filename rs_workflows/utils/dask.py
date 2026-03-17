@@ -31,7 +31,7 @@ async def is_dask_cluster_running(
     result = False
     logger = get_run_logger()
 
-    # Check that the chosen dask_cluster_label is deployed
+    # Connect to the dask gateway
     gateway = Gateway(
         address=os.environ["DASK_GATEWAY_ADDRESS"],
         auth=JupyterHubAuth(api_token=os.environ["JUPYTERHUB_API_TOKEN"]),
@@ -47,7 +47,7 @@ async def is_dask_cluster_running(
     cluster_names = [c.options.get("cluster_name", "<unknown>") for c in clusters]
 
 
-    # Provide information on the cluster
+    # Check status 
     if cluster_id is None:
         logger.error(f"❌ '{dask_cluster_label}' is not part of deployed dask clusters {cluster_names}.")
     else:
@@ -58,7 +58,8 @@ async def is_dask_cluster_running(
         else:
             logger.warning(f"⚠️ Cluster status = {cluster_id.status} ({status_map.get(cluster_id.status)})")
 
-        md = "# List of processing units\n\n```json\n" + json.dumps(cluster_id.options, indent=2) + "\n```"
+        # Save artifact
+        md = f"# Dask cluster option for {dask_cluster_label}\n\n```json\n" + json.dumps(cluster_id.options, indent=2) + "\n```"
         await acreate_markdown_artifact(
             markdown=md,
             key="dask-cluster-options",

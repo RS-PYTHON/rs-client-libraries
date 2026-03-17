@@ -46,6 +46,7 @@ from rs_workflows.flow_utils import (
 from rs_workflows.on_demand.stage_last_sessions import stage_session_common
 from rs_workflows.on_demand_processing import dpr_processing
 from rs_workflows.utils.dask import is_dask_cluster_running
+from rs_workflows.utils.catalog import get_single_catalog_item
 
 
 class Collection(str, Enum):
@@ -72,40 +73,15 @@ async def s1l0_processing(
     logger.info("Sentinel-1 session name is correct. ")
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
-    
-    
     with flow_env.start_span(__name__, "sentinel1-level0"):
         # Check that the chosen dask_cluster_label is deployed
         if await is_dask_cluster_running(dask_cluster_label)==False :
             raise ValueError(f"❌ '{dask_cluster_label}' is unknown or not ready.")
 
         # Try to retrieve the session on the collection
-        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-        logger.info("Search session on the rs-catalog.")
-        item_collection: ItemCollection = catalog_client.search(
-            method="POST",
-            collections=[Collection.S1_SESSION.value],
-            ids=[session],
-            limit=1,
-        )
-        item_session: Item = None
+        item_session = await get_single_catalog_item(flow_env, session, [Collection.S1_SESSION.value])
 
-        if item_collection is not None:
-            count = len(item_collection.items)
-        else:
-            count = 0
-        if count == 1:
-            # The session was found on the rs-catalog
-            logger.info(
-                f"The session '{session}' has been found on the rs-catalog collection '{Collection.S1_SESSION.value}'.",
-            )
-            item_session = item_collection.items[0]
-
-        else:
-            # The session was not found on the rs-catalog
-            logger.info(
-                f"The session '{session}' has NOT been found on the rs-catalog collection '{Collection.S1_SESSION.value}'.",
-            )
+        if item_session is None:
             logger.info("Try to stage it from all S1 stations.")
 
             # Try to find a cadip station with this session available
@@ -124,6 +100,7 @@ async def s1l0_processing(
             # Stage the session
             if found:
                 await stage_session_common(flow_env, cadip_station, session)
+                catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
                 item_collection = catalog_client.search(
                     method="POST",
                     collections=[Collection.S1_SESSION.value],
