@@ -384,12 +384,15 @@ async def test_publish_skips_when_no_matching_output_collection(
     ]
 
     items = [
-        {
-            "id": "item1",
-            "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
-            "geometry": None,
-            "bbox": None,
-        },
+        Item(
+            **{  # type: ignore
+                "id": "item1",
+                "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
+                "datetime": datetime(2024, 1, 1, tzinfo=timezone.utc),
+                "geometry": None,
+                "bbox": None,
+            },
+        ),
     ]
 
     with pytest.raises(RuntimeError) as error:
