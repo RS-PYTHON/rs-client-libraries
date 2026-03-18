@@ -248,7 +248,7 @@ def update_eopf_assets(
     input_products: list[dict],
     payload: PayloadSchema,
     dpr_processor: str,
-) -> tuple[Any, Any]:
+) -> tuple[list[Item], list[str]]:
     """Update EOPF assets by extracting metadata and creating STAC items.
 
     This Prefect task processes output products from a DPR (Data Processing Request)
@@ -303,7 +303,7 @@ def update_eopf_assets(
     logger.info(f"Found {len(zattrs_list)} .zattrs files under path. The list: {zattrs_list}")
 
     stac_items = []
-    eopf_types = []
+    product_types = []
     for product_name, zattrs_s3_location in zattrs_list:
         logger.info(f"Product = {product_name} | zattrs = {zattrs_s3_location}")
         # Read metadata
@@ -318,9 +318,9 @@ def update_eopf_assets(
             logger.error(f".zattrs file {zattrs_s3_location} does not contain EOPF discovery metadata. Exiting.")
             raise RuntimeError(f".zattrs file {zattrs_s3_location} does not contain EOPF discovery metadata. Exiting.")
 
-        eopf_type = zattrs_data["stac_discovery"]["properties"].get("product:type", None)
-        logger.info(f"Extracted EOPF product type: {eopf_type}")
-        eopf_types.append(eopf_type)
+        product_type = zattrs_data["stac_discovery"]["properties"].get("product:type", None)
+        logger.info(f"Extracted EOPF product type: {product_type}")
+        product_types.append(product_type)
 
         eopf_item = zattrs_data["stac_discovery"]
         logger.debug(f"EOPF discovery metadata extracted: {eopf_item}")
@@ -331,7 +331,7 @@ def update_eopf_assets(
         )
         logger.info(f"Added one stac item to the already existing list. Length: {len(stac_items)}.")
 
-    return stac_items, eopf_types
+    return stac_items, product_types
 
 
 def compute_eopf_origin_datetime(env, input_products) -> str:
@@ -412,7 +412,7 @@ async def run_processor(
     cluster_info: ClusterInfo,
     s3_payload_run: str,
     input_products: list[dict],
-) -> list[dict]:
+) -> list[Item]:
     """
     Run the DPR processor.
 

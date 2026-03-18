@@ -81,9 +81,9 @@ def test_resolve_collection_generated_product(mocker):
     """Check resolve_collection works with a list of FlowGeneratedProduct instances."""
     mocker.patch("rs_workflows.catalog_flow.get_run_logger")
 
-    input_collections: list[FlowGeneratedProduct | dict] = [
+    input_collections: list[FlowGeneratedProduct] = [
         FlowGeneratedProduct(name="product_name_1", product_type="product_type_1", collection_name="collection_1"),
-        {"name": "product_name_2", "product_type": "product_type_2", "collection_name": "collection_2"},
+        FlowGeneratedProduct(name="product_name_2", product_type="product_type_2", collection_name="collection_2"),
     ]
 
     assert resolve_collection("product_type_1", input_collections) == "collection_1"
