@@ -16,7 +16,7 @@
 
 import re
 
-from prefect import flow, get_run_logger, Field
+from prefect import flow, get_run_logger
 from pystac import Item
 
 from rs_workflows.flow_utils import (
@@ -33,7 +33,6 @@ from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
 from rs_workflows.utils.cadip import get_cadip_station
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dask import is_dask_cluster_running
-from pydantic import Field
 
 
 @flow(name="process level-0")
