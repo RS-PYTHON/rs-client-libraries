@@ -39,11 +39,7 @@ from pydantic import Field
 @flow(name="process level-0")
 async def process_l0(
     session: str,
-    flow_params: dict = Field(
-        default_factory=dict,
-        title="Level-0 Flow Parameters",
-        description="Configuration for the Level-0 processing pipeline."
-    ),
+    flow_params: Level0FlowParams = Level0FlowParams(),
     verbose: bool = False,
 ) -> None:
     """
@@ -68,8 +64,7 @@ async def process_l0(
     logger.info(f"✔️ Sentinel-{mission} session name is correct.")
 
     # Override of some parameters with default configuration
-    params = Level0FlowParams(**flow_params)
-    p = await params.resolve(mission, level="1")
+    p = await flow_params.resolve(mission, level="1")
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
     with flow_env.start_span(__name__, "level0-processing"):
