@@ -16,7 +16,7 @@
 
 import re
 
-from prefect import flow, get_run_logger
+from prefect import flow, get_run_logger, Parameter
 from pystac import Item
 
 from rs_workflows.flow_utils import (
@@ -38,7 +38,7 @@ from rs_workflows.utils.dask import is_dask_cluster_running
 @flow(name="process level-0")
 async def process_l0(
     session: str,
-    flow_params: Level0FlowParams | None = None,
+    flow_params: Level0FlowParams = Parameter(default=None),
     verbose: bool = False,
 ) -> None:
     """
