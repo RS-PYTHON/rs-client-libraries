@@ -87,6 +87,7 @@ class FlowEnvArgs(BaseModel):
         from the right Prefect block. NOTE: may be useless after each user has their own prefect
         server because there will be only one block.
         calling_span (tuple): Serialized OpenTelemetry span of the calling flow, if any.
+        service_name: OpenTelemetry service name
     """
 
     owner_id: str = Field(
@@ -96,6 +97,7 @@ class FlowEnvArgs(BaseModel):
         default=None,
         description="Serialized OpenTelemetry span of the calling flow, if any",
     )
+    service_name: str = Field(default="rs.workflows", description="OpenTelemetry service name")
 
 
 class FlowEnv:
@@ -123,7 +125,7 @@ class FlowEnv:
         prefect_utils.read_prefect_blocks(self.owner_id, _sync=True)  # type: ignore
 
         # Init opentelemetry traces
-        init_opentelemetry.init_traces("rs.client")
+        init_opentelemetry.init_traces(args.service_name)
 
         # Init the RsClient instance from the env vars
         self.rs_client = RsClient(
