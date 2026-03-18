@@ -58,17 +58,16 @@ async def call_dpr_flow(
     start_datetime: datetime,
     end_datetime: datetime,
     satellite_identifier: str,
-    prefect_settings: str,
-    dask_cluster_label: str="",
-    processor_name: str="",
-    processor_version: str="",
-    pipeline: Optional[DprPipeline]=None,
-    unit: str="",
-    priority: Optional[Priority] = None,
-    processing_mode: list[ProcessingMode]= [],
-    workflow: Optional[WorkflowType] = None,
-    generated_product_to_collection_identifier:list[GeneratedProduct] = [],
-    auxiliary_product_to_collection_identifier:list[AuxiliaryProductMapping] = []
+    dask_cluster_label: str,
+    processor_name: str,
+    processor_version: str,
+    pipeline: Optional[DprPipeline],
+    unit: str,
+    priority: Optional[Priority],
+    processing_mode: list[ProcessingMode],
+    workflow: Optional[WorkflowType],
+    generated_product_to_collection_identifier:list[GeneratedProduct],
+    auxiliary_product_to_collection_identifier:list[AuxiliaryProductMapping]
 ) -> None:
     """
     Call any DPR processing flow with a set of default parameters.
@@ -76,22 +75,6 @@ async def call_dpr_flow(
     """
     s3_payload: str = generate_payload_path(env.owner_id)
     
-    # Apply default configuration for unset parameters
-    settings: dict = await Variable.get(prefect_settings)
-    processor_name = processor_name or settings["processor"]["name"]
-    processor_version = processor_version or settings["processor"]["version"]
-    if pipeline=="" and unit=="":
-        pipeline = settings["pipeline"]
-    priority = priority or settings["priority"]
-    if processing_mode ==[]:
-        processing_mode = settings["processing_mode"]
-    workflow = workflow or settings["workflow"]
-    dask_cluster_label = dask_cluster_label or settings["dask_cluster_label"]
-    if generated_product_to_collection_identifier == []:
-        generated_product_to_collection_identifier= settings["generated_product_to_collection_identifier"]
-    if auxiliary_product_to_collection_identifier == []:
-        auxiliary_product_to_collection_identifier= settings["auxiliary_product_to_collection_identifier"]
-
     a_process: DprProcessIn = DprProcessIn(
         env=env,
         processor_name=DprProcessor(processor_name),
