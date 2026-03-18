@@ -95,7 +95,7 @@ async def call_dpr_flow(
     )
 
     print(a_process.model_dump_json(indent=2))
-    # await dpr_processing_task(a_process)
+    await dpr_processing_task(a_process)
 
 
 @task(name="dpr processing")
