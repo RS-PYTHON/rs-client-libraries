@@ -31,6 +31,15 @@ from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
+def get_first_eviction_datetime(stac: dict) -> str | None:
+    for feature in stac.get("features", []):
+        assets = feature.get("assets", {})
+        for asset in assets.values():
+            if "eviction_datetime" in asset:
+                return asset["eviction_datetime"]
+    return None
+
+
 @task(name="Search the cadip station that has got a session")
 async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections : list[str]) -> str|None:
     """ """
@@ -50,15 +59,22 @@ async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections :
         collections=cadip_collections,
         max_items=1,
         limit=1,
-    )
+    )    
 
-    cadip_station = ""
     if len(item_col) == 1:
-        collection_links = [link for link in item_col[0].links if link.rel == "collection"]
-        if collection_links:
-            href = collection_links[0].href
-            result = href.rstrip("/").split("/")[-1]
-            logger.info(f"✔️ The session '{session}' is available at station {result}")
+        # Check that the session has not been evicted
+        eviction_date_str = get_first_eviction_datetime(item_col[0])
+        eviction_date:datetime = datetime.fromisoformat(eviction_date_str.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        if eviction_date <= now:
+            logger.error(f"❌ The session '{session}' has been evicted (evicition date = {eviction_date_str}) ")
+        else:        
+            # Extract of the station name
+            collection_links = [link for link in item_col[0].links if link.rel == "collection"]
+            if collection_links:
+                href = collection_links[0].href
+                result = href.rstrip("/").split("/")[-1]
+                logger.info(f"✔️ The session '{session}' is available at station {result}")
     if result is None:
         logger.info(f"❌ The session '{session}' can not be found on stations [{', '.join(cadip_collections)}]")
 
