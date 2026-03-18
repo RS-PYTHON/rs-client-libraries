@@ -68,6 +68,8 @@ async def process_l0(
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
     with flow_env.start_span(__name__, "level0-processing"):
+        found = False
+        
         # Check that the chosen dask_cluster_label is deployed
         if await is_dask_cluster_running(p.dask_cluster_label) == False:
             raise ValueError(f"❌ '{p.dask_cluster_label}' is unknown or not ready.")
@@ -76,7 +78,9 @@ async def process_l0(
         item_session: Item = await get_single_catalog_item(flow_env, session, [p.session_collection])
 
         # If the session is not on the rs-catalog, we will try to stage it
-        if item_session is None:
+        if item_session:
+            found = True
+        else:
             logger.info(f"Try to stage session  {session} from {mission} stations :{p.cadip_collections}")
             station = await get_cadip_station(
                 flow_env,
@@ -84,13 +88,13 @@ async def process_l0(
                 p.cadip_collections,
             )
             if station is not None:
-                await stage_session_common(flow_env, station, session)
+                found = await stage_session_common(flow_env, station, session)
 
         # The session is stagged at this step.
         # We can call the flow
         logger.info(f"We start Sentinel-{mission} processing.")
-        if item_session:
-            match mission:
+        if found:
+            match int(mission):
                 case 1:
                     await process_s1l0(session, p, verbose)
                 case 3:
