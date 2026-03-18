@@ -42,6 +42,10 @@ from rs_workflows.on_demand_processing import dpr_processing
 
 
 def generate_payload_path(owner_id: str) -> str:
+    """_summary_
+    Generate an hard coded path to store the payload.
+    This is a workaroud, waiting for share disk solution.
+    """    
     # TODO : use a local path on the share disk
     fake = Faker()
     s3_payload = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}-{fake.word().lower()}-{fake.word().lower()}"
@@ -66,15 +70,9 @@ async def call_dpr_flow(
     generated_product_to_collection_identifier:list[GeneratedProduct] = [],
     auxiliary_product_to_collection_identifier:list[AuxiliaryProductMapping] = []
 ) -> None:
-    """_summary_
-
-    Args:
-        owner_id (str): _description_
-        dask_cluster_label (str): _description_
-        item_session (Item): _description_
-        start_datetime (datetime): _description_
-        end_datetime (datetime): _description_
-        satellite_identifier (str): _description_
+    """
+    Call any DPR processing flow with a set of default parameters.
+    In case an optional parameter is not set, its value is get from Prefect Variable named 'prefect_settings'
     """
     s3_payload: str = generate_payload_path(env.owner_id)
     

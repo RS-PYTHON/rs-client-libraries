@@ -16,11 +16,19 @@
 
 from rs_workflows.flow_utils import FlowEnv
 from prefect import get_run_logger, task
-import os
 import json
-from pystac import Item, ItemCollection
-from rs_client.stac.catalog_client import CatalogClient
+from pystac import ItemCollection
 from rs_client.stac.cadip_client import CadipClient
+import json
+from datetime import datetime, timedelta, timezone
+
+from prefect import (
+    get_run_logger,
+    task,
+)
+
+from rs_client.stac.cadip_client import CadipClient
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
 @task(name="Search the cadip station that has got a session")
@@ -55,3 +63,73 @@ async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections :
         logger.info(f"❌ The session '{session}' can not be found on stations [{', '.join(cadip_collections)}]")
 
     return result
+
+
+
+@task(name="Cadip session search")
+async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: list[str], limit: int = 10) -> ItemCollection:
+    """
+    Search for CADIP sessions within a given time interval.
+
+    Parameters:
+        env:
+            Flow environment arguments (e.g., owner_id, credentials).
+        cadip_collection_identifier:
+            CADIP collection identifier (e.g., "s1_sgs") to specify the station.
+        limit:
+            Number maximum of STAC items to be retrieved
+
+    Returns:
+        ItemCollection:
+            A pystac ItemCollection containing the sessions found.
+    """
+    logger = get_run_logger()
+
+    # Initialize flow environment and telemetry span
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "cadip-search"):
+
+        cadip_client: CadipClient = flow_env.rs_client.get_cadip_client()
+
+        # Current time in UTC
+        end_datetime: datetime = datetime.now(timezone.utc)
+
+        # Go back 10 hours
+        start_datetime: datetime = end_datetime - timedelta(hours=10)
+
+        # Format timestamps in ISO 8601 with Z suffix
+        start_str = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        end_str = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+        # Validate input datetimes
+        if not start_str or not end_str:
+            raise ValueError("start_datetime or end_datetime is not set properly")
+
+        # Build CQL2 query for temporal intersection
+        cadip_cql2_query = {
+            "filter": {
+                "op": "t_intersects",
+                "args": [
+                    {"property": "published"},
+                    {"interval": [start_str, end_str]},
+                ],
+            },
+            "limit": limit,
+            "sortby": [{"field": "published", "direction": "desc"}],
+        }
+
+        # Log query for debugging
+        logger.info(f"CQL2 query={json.dumps(cadip_cql2_query, indent=2)}")
+        logger.info("Start request on CADIP station")
+
+        # Execute search request
+        found = cadip_client.search(
+            method="POST",
+            collections=[cadip_collection_identifier],
+            stac_filter=cadip_cql2_query.get("filter"),
+            max_items=cadip_cql2_query.get("limit"),
+            sortby=cadip_cql2_query.get("sortby"),
+        )
+
+        return found
+

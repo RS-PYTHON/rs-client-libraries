@@ -1,4 +1,4 @@
-# Copyright 2023-2026 Airbus, CS Group
+# Copyright 2023-2026 Airbus
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Staging flow implementation"""
+"""staging flows."""
 
-import json
+from rs_workflows.flow_utils import FlowEnv
+from prefect import get_run_logger, task
+from pystac import Item, ItemCollection
+from rs_client.stac.catalog_client import CatalogClient
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from urllib.parse import urlencode, urlparse
+from rs_workflows.utils.cadip import cadip_session_search
 
 from prefect import (
     apause_flow_run,
@@ -80,74 +84,6 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
     # Build the encoded URL
     url = f"{base_url}?{urlencode(params)}"
     await acreate_link_artifact(key="grafana-dashboard", link=url, description="# see session item from the catalog")
-
-
-@task(name="Cadip session search")
-async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: list[str], limit: int = 10) -> ItemCollection:
-    """
-    Search for CADIP sessions within a given time interval.
-
-    Parameters:
-        env:
-            Flow environment arguments (e.g., owner_id, credentials).
-        cadip_collection_identifier:
-            CADIP collection identifier (e.g., "s1_sgs") to specify the station.
-        limit:
-            Number maximum of STAC items to be retrieved
-
-    Returns:
-        ItemCollection:
-            A pystac ItemCollection containing the sessions found.
-    """
-    logger = get_run_logger()
-
-    # Initialize flow environment and telemetry span
-    flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "cadip-search"):
-
-        cadip_client: CadipClient = flow_env.rs_client.get_cadip_client()
-
-        # Current time in UTC
-        end_datetime: datetime = datetime.now(timezone.utc)
-
-        # Go back 10 hours
-        start_datetime: datetime = end_datetime - timedelta(hours=10)
-
-        # Format timestamps in ISO 8601 with Z suffix
-        start_str = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-        end_str = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-
-        # Validate input datetimes
-        if not start_str or not end_str:
-            raise ValueError("start_datetime or end_datetime is not set properly")
-
-        # Build CQL2 query for temporal intersection
-        cadip_cql2_query = {
-            "filter": {
-                "op": "t_intersects",
-                "args": [
-                    {"property": "published"},
-                    {"interval": [start_str, end_str]},
-                ],
-            },
-            "limit": limit,
-            "sortby": [{"field": "published", "direction": "desc"}],
-        }
-
-        # Log query for debugging
-        logger.info(f"CQL2 query={json.dumps(cadip_cql2_query, indent=2)}")
-        logger.info("Start request on CADIP station")
-
-        # Execute search request
-        found = cadip_client.search(
-            method="POST",
-            collections=[cadip_collection_identifier],
-            stac_filter=cadip_cql2_query.get("filter"),
-            max_items=cadip_cql2_query.get("limit"),
-            sortby=cadip_cql2_query.get("sortby"),
-        )
-
-        return found
 
 
 @task(name="Cadip session stage")
@@ -380,10 +316,11 @@ async def stage_session_common(
     catalog_cadip_collection = f"s0{sat}-cadip-session"
 
     # Check that the collection exists. Otherwise create it.
-    catalog_client = flow_env.rs_client.get_catalog_client()
+    catalog_client:CatalogClient = flow_env.rs_client.get_catalog_client()
     try:
         catalog_client.search(collections=[catalog_cadip_collection])
     except RuntimeError:
+        # The collection is missing, we will create it
         spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
         date_strings = ["2000-02-01T00:00:00Z", "2100-02-12T00:00:00Z"]
         date_objects: list[datetime | None] = [
@@ -414,10 +351,10 @@ async def stage_session_common(
     result_artifact.result()  # type: ignore[unused-coroutine]
 
     if status == "successful":
-        logger.info(f"Session {selected_session} staged successfully.")
+        logger.info(f"✔️ Session {selected_session} staged successfully.")
         if report_verbose is not None:
             report_verbose.success_step(2, "Staging completed successfully.")
     else:
-        logger.error(f"Session {selected_session} staged failed (status is '{status}').")
+        logger.error(f"❌ Session {selected_session} staged failed (status is '{status}').")
         if report_verbose is not None:
             report_verbose.failed_step(2, "Staging failed (status is '{status}').")
