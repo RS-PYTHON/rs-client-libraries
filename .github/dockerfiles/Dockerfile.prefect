@@ -40,6 +40,7 @@ RUN pip install -U pip && \
         prefect-aws=="${PREFECT_AWS_TAG}" \
         s3fs \
         boto3 \
+        dask-gateway \
     && layer-cleanup.sh
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
