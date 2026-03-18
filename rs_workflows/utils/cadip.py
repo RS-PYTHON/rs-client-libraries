@@ -31,13 +31,12 @@ from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
-def get_first_eviction_datetime(stac: dict) -> str | None:
-    for feature in stac.get("features", []):
-        assets = feature.get("assets", {})
-        for asset in assets.values():
-            if "eviction_datetime" in asset:
-                return asset["eviction_datetime"]
+def get_first_eviction_datetime(item) -> str | None:
+    for asset in item.assets.values():
+        if "eviction_datetime" in asset.extra_fields:
+            return asset.extra_fields["eviction_datetime"]
     return None
+
 
 
 @task(name="Search the cadip station that has got a session")
