@@ -58,7 +58,7 @@ class Level0FlowParams(BaseModel):
             session_collection=self.session_collection or settings.get("session_collection", ""),
             processor_name=self.processor_name or settings.get("processor", {}).get("name", ""),
             processor_version=self.processor_version or settings.get("processor", {}).get("version", ""),
-            pipeline=self.pipeline,
+            pipeline=self.pipeline or settings.get("pipeline", ""),
             unit=self.unit or settings.get("unit", ""),
             priority=self.priority or settings.get("priority"),
             processing_mode=self.processing_mode or settings.get("processing_mode", []),
