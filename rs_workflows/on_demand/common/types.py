@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" common types and class """
+"""common types and class"""
 
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
@@ -26,8 +26,8 @@ from rs_workflows.flow_utils import (
     WorkflowType,
 )
 
-
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
+
 
 class Level0FlowParams(BaseModel):
     owner_identifier: str = ""
@@ -45,7 +45,9 @@ class Level0FlowParams(BaseModel):
     cadip_collections: list[str] = Field(default_factory=list)  # ajouté car tu l'utilises
 
     async def resolve(self, mission: str, level: str = "0") -> "Level0FlowParams":
-        settings = await Variable.get(DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level))
+        print(f"mission={mission}")
+        settings: dict = await Variable.get(DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level))
+        print(settings)
         return Level0FlowParams(
             owner_identifier=self.owner_identifier or settings.get("owner_identifier", ""),
             dask_cluster_label=self.dask_cluster_label or settings.get("dask_cluster_name", ""),

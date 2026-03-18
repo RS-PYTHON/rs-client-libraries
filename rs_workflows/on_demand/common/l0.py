@@ -15,6 +15,7 @@
 """common Level-0 processing."""
 
 import re
+
 from prefect import flow, get_run_logger
 from pystac import Item
 
@@ -23,8 +24,10 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
 )
 from rs_workflows.on_demand.common.staging import stage_session_common
-from rs_workflows.on_demand.common.types import DEFAULT_PREFECT_CONFIGURATION
-from rs_workflows.on_demand.common.types import Level0FlowParams
+from rs_workflows.on_demand.common.types import (
+    DEFAULT_PREFECT_CONFIGURATION,
+    Level0FlowParams,
+)
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
 from rs_workflows.utils.cadip import get_cadip_station
@@ -56,7 +59,7 @@ async def process_l0(
         raise ValueError(f"Invalid session name: '{session}'")
 
     # We detect the mission
-    mission: str = session[2]
+    mission: str = session[1]
     logger.info(f"✔️ Sentinel-{mission} session name is correct.")
 
     # Override of some parameters with default configuration
