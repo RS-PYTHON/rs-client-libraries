@@ -16,7 +16,7 @@
 
 import re
 
-from prefect import flow, get_run_logger
+from prefect import flow, get_run_logger, Field
 from pystac import Item
 
 from rs_workflows.flow_utils import (
@@ -33,12 +33,17 @@ from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
 from rs_workflows.utils.cadip import get_cadip_station
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dask import is_dask_cluster_running
+from pydantic import Field
 
 
 @flow(name="process level-0")
 async def process_l0(
     session: str,
-    flow_params: Level0FlowParams = Level0FlowParams(),
+    flow_params: dict = Field(
+        default_factory=dict,
+        title="Level-0 Flow Parameters",
+        description="Configuration for the Level-0 processing pipeline."
+    ),
     verbose: bool = False,
 ) -> None:
     """
@@ -63,8 +68,8 @@ async def process_l0(
     logger.info(f"✔️ Sentinel-{mission} session name is correct.")
 
     # Override of some parameters with default configuration
-    flow_params = flow_params or Level0FlowParams()
-    p = await flow_params.resolve(mission, level="0")
+    params = Level0FlowParams(**flow_params)
+    p = await params.resolve(mission, level="1")
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
     with flow_env.start_span(__name__, "level0-processing"):
