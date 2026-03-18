@@ -291,7 +291,7 @@ async def stage_session_common(
     cadip_collection: CadipCollections | str,
     selected_session: str,
     report_verbose: ReportManager | None = None,
-):
+)-> bool:
     """
     Stage a CADIP session by searching and staging it in the catalog.
     This asynchronous function stages a selected CADIP session by:
@@ -308,7 +308,6 @@ async def stage_session_common(
         - Staging duration is calculated and included in the result artifact.
         - Requires an active logger context (from get_run_logger()).
     """
-
     logger = get_run_logger()
 
     # Build catalog collection name based on CADIP collection
@@ -354,7 +353,9 @@ async def stage_session_common(
         logger.info(f"✔️ Session {selected_session} staged successfully.")
         if report_verbose is not None:
             report_verbose.success_step(2, "Staging completed successfully.")
+        return True
     else:
         logger.error(f"❌ Session {selected_session} staged failed (status is '{status}').")
         if report_verbose is not None:
             report_verbose.failed_step(2, "Staging failed (status is '{status}').")
+        return False
