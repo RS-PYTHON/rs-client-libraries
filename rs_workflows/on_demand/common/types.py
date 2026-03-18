@@ -45,9 +45,13 @@ class Level0FlowParams(BaseModel):
     cadip_collections: list[str] = Field(default_factory=list)  # ajouté car tu l'utilises
 
     async def resolve(self, mission: str, level: str = "0") -> "Level0FlowParams":
-        print(f"mission={mission}")
-        settings: dict = await Variable.get(DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level))
-        print(settings)
+        settings: dict = await Variable.get(DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level))    
+
+        if settings is None:
+            raise ValueError(
+                f"❌ Prefect variable '{DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)}' not found"
+            )
+        
         return Level0FlowParams(
             owner_identifier=self.owner_identifier or settings.get("owner_identifier", ""),
             dask_cluster_label=self.dask_cluster_label or settings.get("dask_cluster_name", ""),
