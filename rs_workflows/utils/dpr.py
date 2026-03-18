@@ -18,7 +18,6 @@ import json
 import time
 from datetime import datetime
 
-from faker import Faker
 from prefect import get_run_logger, task
 from prefect.variables import Variable
 from pystac import Item, ItemCollection
@@ -47,8 +46,7 @@ def generate_payload_path(owner_id: str) -> str:
     This is a workaroud, waiting for share disk solution.
     """    
     # TODO : use a local path on the share disk
-    fake = Faker()
-    s3_payload = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}-{fake.word().lower()}-{fake.word().lower()}"
+    s3_payload = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}"
     return s3_payload
 
 
