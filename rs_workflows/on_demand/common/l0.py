@@ -38,7 +38,7 @@ from rs_workflows.utils.dask import is_dask_cluster_running
 @flow(name="process level-0")
 async def process_l0(
     session: str,
-    flow_params: Level0FlowParams = Parameter(default=None),
+    flow_params: Level0FlowParams = Level0FlowParams(),
     verbose: bool = False,
 ) -> None:
     """
