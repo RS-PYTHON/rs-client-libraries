@@ -50,7 +50,7 @@ async def process_s1l0(
         if item_session:
             # Prepare the input for the Sentinel-1
             # The satellite name can be retrieved from the 3 first caracters of the session name
-            satellite_identifier = session[:3].upper()
+            satellite_identifier = f"sentinel-1{session[:3].lower()}"
             end_datetime = datetime.fromisoformat(item_session.properties.get("published"))
             start_datetime = end_datetime
             input_products: list[InputProduct] = [
