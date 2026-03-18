@@ -16,7 +16,7 @@
 
 import re
 
-from prefect import flow, get_run_logger, Parameter
+from prefect import flow, get_run_logger
 from pystac import Item
 
 from rs_workflows.flow_utils import (
