@@ -22,6 +22,7 @@ from faker import Faker
 from prefect import get_run_logger, task
 from prefect.variables import Variable
 from pystac import Item, ItemCollection
+from typing import Optional
 
 from rs_client.ogcapi.dpr_client import (
     DprPipeline,
@@ -30,7 +31,6 @@ from rs_client.ogcapi.dpr_client import (
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
     DprProcessIn,
-    FlowEnv,
     FlowEnvArgs,
     GeneratedProduct,
     InputProduct,
@@ -62,11 +62,11 @@ async def call_dpr_flow(
     dask_cluster_label: str="",
     processor_name: str="",
     processor_version: str="",
-    pipeline: str="",
+    pipeline: Optional[DprPipeline]=None,
     unit: str="",
-    priority: str="",
+    priority: Optional[Priority] = None,
     processing_mode: list[ProcessingMode]= [],
-    workflow: str="",
+    workflow: Optional[WorkflowType] = None,
     generated_product_to_collection_identifier:list[GeneratedProduct] = [],
     auxiliary_product_to_collection_identifier:list[AuxiliaryProductMapping] = []
 ) -> None:
@@ -77,7 +77,7 @@ async def call_dpr_flow(
     s3_payload: str = generate_payload_path(env.owner_id)
     
     # Apply default configuration for unset parameters
-    settings: dict = await read_prefect_variable(prefect_settings)
+    settings: dict = await Variable.get(prefect_settings)
     processor_name = processor_name or settings["processor"]["name"]
     processor_version = processor_version or settings["processor"]["version"]
     if pipeline=="" and unit=="":
@@ -119,8 +119,3 @@ async def call_dpr_flow(
 async def dpr_processing_task(*args, **kwargs) -> tuple[bool, ItemCollection | None]:
     """See: dpr_processing"""
     return await dpr_processing.fn(*args, **kwargs)
-
-
-@task(name="retrieve prefect variable")
-async def read_prefect_variable(prefect_variable: str) -> dict:
-    return await Variable.get(prefect_variable)
