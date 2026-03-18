@@ -16,7 +16,6 @@
 
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
-from pystac import Item
 
 from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import (

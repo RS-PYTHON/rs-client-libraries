@@ -36,6 +36,4 @@ from rs_workflows.utils.dask import is_dask_cluster_running
 from rs_workflows.utils.dpr import call_dpr_flow, read_prefect_variable
 
 
-DEFAULT_CONFIGURATION: str = "s3-l0-default-setting"
-
 
