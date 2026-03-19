@@ -22,6 +22,7 @@ from pystac import Item
 from rs_workflows.flow_utils import (
     FlowEnv,
     FlowEnvArgs,
+    DprProcessIn
 )
 from rs_workflows.on_demand.common.staging import stage_session_common
 from rs_workflows.on_demand.common.types import (
@@ -37,10 +38,10 @@ from rs_workflows.utils.dask import is_dask_cluster_running
 
 
 @flow(name="test param")
-async def test_param(param3:testBaseM):
+async def test_param(param3:DprProcessIn):
     logger = get_run_logger()
     logger.info("test")
-    logger.info(f"param1.field1 {param3.field1}")
+    
 
 
 @flow(name="process level-0")
