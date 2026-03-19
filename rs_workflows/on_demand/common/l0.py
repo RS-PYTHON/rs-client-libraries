@@ -57,7 +57,8 @@ def test_param(
     content: EmailContent,
     test_mode: bool = False,
 ):
-
+    logger = get_run_logger()
+    logger.info("test")   
     
 
 
