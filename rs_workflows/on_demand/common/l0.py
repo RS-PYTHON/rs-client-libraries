@@ -39,7 +39,7 @@ from rs_workflows.utils.dask import is_dask_cluster_running
 
 
 @flow(name="test param")
-async def test_param(param3:DprProcessIn2):
+async def test_param(param3:DprProcessIn):
     logger = get_run_logger()
     logger.info("test")
     
