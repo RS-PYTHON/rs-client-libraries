@@ -163,20 +163,10 @@ class Level0FlowParams(BaseModel):
         )
 
 
-@flow(name="test param")
-async def test_param(
-    session: str,
-    flow_params: Level0FlowParams | None = None,
-    verbose2: bool = False,
-):
-    logger = get_run_logger()
-    logger.info("test")
-
-
 @flow(name="process level-0")
 async def process_l0(
     session: str,
-    flow_params: Level0FlowParams,
+    flow_params : Optional[Level0FlowParams] = None,
     verbose: bool = False,
 ) -> None:
     """
