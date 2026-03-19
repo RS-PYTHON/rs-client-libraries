@@ -15,12 +15,15 @@
 """Helper task to interact with the rs-cadip."""
 
 from rs_workflows.flow_utils import FlowEnv
+from rs_workflows.utils.catalog import is_evicted, is_published
+
 from prefect import get_run_logger, task
 import json
 from pystac import ItemCollection
 from rs_client.stac.cadip_client import CadipClient
 import json
 from datetime import datetime, timedelta, timezone
+
 
 from prefect import (
     get_run_logger,
@@ -31,15 +34,7 @@ from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
-def get_first_eviction_datetime(item) -> str | None:
-    for asset in item.assets.values():
-        if "eviction_datetime" in asset.extra_fields:
-            return asset.extra_fields["eviction_datetime"]
-    return None
-
-
-
-@task(name="Search the cadip station that has got a session")
+@task(name="Search the cadip station that owns the session")
 async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections : list[str]) -> str|None:
     """ """
     logger = get_run_logger()
@@ -62,18 +57,19 @@ async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections :
 
     if len(item_col) == 1:
         # Check that the session has not been evicted
-        eviction_date_str = get_first_eviction_datetime(item_col[0])
-        eviction_date:datetime = datetime.fromisoformat(eviction_date_str.replace("Z", "+00:00"))
-        now = datetime.now(timezone.utc)
-        if eviction_date <= now:
-            logger.error(f"❌ The session '{session}' has been evicted (evicition date = {eviction_date_str}) ")
+        evicted, eviction_date = is_evicted(item_col[0])
+        if evicted:
+            logger.error(f"❌ The session '{session}' has been evicted (eviction date = {eviction_date}) ")
         else:        
-            # Extract of the station name
-            collection_links = [link for link in item_col[0].links if link.rel == "collection"]
-            if collection_links:
-                href = collection_links[0].href
-                result = href.rstrip("/").split("/")[-1]
-                logger.info(f"✔️ The session '{session}' is available at station {result}")
+            if is_published(item_col[0]):
+                # Extract of the station name
+                collection_links = [link for link in item_col[0].links if link.rel == "collection"]
+                if collection_links:
+                    href = collection_links[0].href
+                    result = href.rstrip("/").split("/")[-1]
+                    logger.info(f"✔️ The session '{session}' is available at station {result}")
+            else:
+                logger.error(f"❌ The session '{session}' has not been published yet.")
     if result is None:
         logger.info(f"❌ The session '{session}' can not be found on stations [{', '.join(cadip_collections)}]")
 
