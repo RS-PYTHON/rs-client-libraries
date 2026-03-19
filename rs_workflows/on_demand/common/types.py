@@ -39,34 +39,6 @@ from rs_workflows.flow_utils import (
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
 
-
-    
-class testBaseM(BaseModel):
-    """
-    Parameters for testing Prefect BaseModel rendering.
-    """
-
-    model_config = {
-        "json_schema_extra": {
-            "title": "Test Parameters",
-            "description": "Simple model to test Prefect UI rendering."
-        }
-    }
-
-    field1: str = Field(
-        title="Field 1",
-        description="First field.",
-    )
-
-    field2: str | DprPipeline | None = Field(
-        default=None,
-        title="Field 2",
-        description="Second field.",
-    )
-
-
-
-
 class Level0FlowParams(BaseModel):
     owner_identifier: str = Field(
         default="",
