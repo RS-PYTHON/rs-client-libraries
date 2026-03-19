@@ -32,20 +32,23 @@ DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
 
 class testBaseM(BaseModel):
+    model_config = {
+        "json_schema_extra": {
+            "title": "Test Parameters",
+            "description": "Structured parameters for the test flow"
+        }
+    }
+
     field1: str = Field(
         title="Processor Version",
-        description="Version of the processor. If not relevant, can be empty string.",
+        description="Version of the processor."
     )
     field2: str | DprPipeline | None = Field(
         default=None,
-        title="Processor Version",
-        description="Version of the processor. If not relevant, can be empty string.",
+        title="Processor Mode",
+        description="Mode of the processor."
     )
-    
-    @model_validator(mode="after")
-    def check_model(self):
-        """Ensure mutual exclusivity between pipeline and unit."""
-        return self
+
 
 
 class Level0FlowParams(BaseModel):
