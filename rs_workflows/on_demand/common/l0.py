@@ -23,10 +23,7 @@ from pydantic import BaseModel, Field
 from pystac import Item
 
 from rs_client.ogcapi.dpr_client import DprPipeline
-from rs_workflows.flow_utils import (
-    FlowEnv,
-    FlowEnvArgs
-)
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.on_demand.common.staging import stage_session_common
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
@@ -40,7 +37,7 @@ from .types import DEFAULT_PREFECT_CONFIGURATION, Level0FlowParams
 @flow(name="process level-0")
 async def process_l0(
     session: str,
-    flow_params : Level0FlowParams = Level0FlowParams(),
+    flow_params: Level0FlowParams = Level0FlowParams(),
     verbose: bool = False,
 ) -> None:
     """
@@ -65,7 +62,7 @@ async def process_l0(
     logger.info(f"✔️ Sentinel-{mission} session name is correct.")
 
     # Override of some parameters with default configuration
-    p:Level0FlowParams = await flow_params.resolve(mission, level="0")
+    p: Level0FlowParams = await flow_params.resolve(mission, level="0")
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
     with flow_env.start_span(__name__, "level0-processing"):
@@ -94,6 +91,9 @@ async def process_l0(
         # The session is stagged at this step.
         # We can call the flow
         logger.info(f"We start Sentinel-{mission} processing.")
+        print(session)
+        print(verbose)
+        print(p)
         if found:
             match int(mission):
                 case 1:
