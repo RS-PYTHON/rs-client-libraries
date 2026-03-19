@@ -18,6 +18,9 @@ from rs_workflows.flow_utils import FlowEnv
 from prefect import get_run_logger, task
 from pystac import Item, ItemCollection
 from rs_client.stac.catalog_client import CatalogClient
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Tuple
+
 
 
 @task(name="Retrieve rs-catalog item from collection")
@@ -53,4 +56,29 @@ async def get_single_catalog_item(
             f"❌ The STAC item 🧊 '{id}' was not found on the rs-catalog collections {', '.join(collections)}.",
         )
         
-    return result  
+    return result
+
+
+
+def is_evicted(item) -> Tuple[bool, Optional[datetime]]:
+    eviction_date_str: str = ""
+
+    for asset in item.assets.values():
+        if "eviction_datetime" in asset.extra_fields:
+            eviction_date_str = asset.extra_fields["eviction_datetime"]
+            break
+
+    if eviction_date_str:
+        eviction_date = datetime.fromisoformat(eviction_date_str.replace("Z", "+00:00"))
+        return eviction_date <= datetime.now(timezone.utc), eviction_date
+
+    return False, None
+
+
+def is_published(item) -> bool:    
+    published_date_str = item["properties"]["published"]
+    if published_date_str:
+        return datetime.fromisoformat(published_date_str.replace("Z", "+00:00")) <= datetime.now(timezone.utc)
+    
+    return False
+    
