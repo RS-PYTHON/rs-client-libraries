@@ -57,22 +57,28 @@ class DprProcessIn2(BaseModel):
     )
     
 class testBaseM(BaseModel):
+    """
+    Parameters for testing Prefect BaseModel rendering.
+    """
+
     model_config = {
         "json_schema_extra": {
             "title": "Test Parameters",
-            "description": "Structured parameters for the test flow"
+            "description": "Simple model to test Prefect UI rendering."
         }
     }
 
     field1: str = Field(
-        title="Processor Version",
-        description="Version of the processor."
+        title="Field 1",
+        description="First field.",
     )
+
     field2: str | DprPipeline | None = Field(
         default=None,
-        title="Processor Mode",
-        description="Mode of the processor."
+        title="Field 2",
+        description="Second field.",
     )
+
 
 
 
