@@ -238,7 +238,7 @@ class Level0FlowParams2(BaseModel):
 @flow(name="test param")
 async def test_param(
     session: str,
-    flow_params: Level0FlowParams2,
+    flow_params: Level0FlowParams,
     verbose: bool = False,
 ):
     logger = get_run_logger()
