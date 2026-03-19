@@ -16,7 +16,7 @@
 
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Annotated
 
 
 from rs_client.ogcapi.dpr_client import DprPipeline
@@ -30,6 +30,9 @@ from rs_workflows.flow_utils import (
 
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
+class testBaseM(BaseModel):
+    field1:Annotated[str, Field(description="Some field 1. Example: `value1, value2`")] = "default value of field 1"
+    field2: Annotated[int, Field(description="Some field 2")]
 
 class Level0FlowParams(BaseModel):
     owner_identifier: str = Field(
