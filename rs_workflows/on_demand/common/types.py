@@ -27,10 +27,35 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
     WorkflowType,
 )
+from rs_client.ogcapi.dpr_client import DprPipeline, DprProcessor
+
+from rs_workflows.flow_utils import (
+    DprProcessIn,
+    FlowEnv,
+    FlowEnvArgs,
+)
 
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
+class DprProcessIn2(BaseModel):
+    """
+    Input parameters for executing the 'dpr-process' flow.
 
+    This model defines all the configuration needed to run a DPR processor,
+    including input datasets, generated outputs, auxiliary data mapping,
+    processing modes, and scheduling parameters.
+    """
+
+    env: FlowEnvArgs = Field(
+        title="Flow Environment",
+        description="Environment configuration for Prefect flow. Includes identifiers like owner_id.",
+    )
+
+    processor_name: str | DprProcessor = Field(
+        title="DPR Processor Name",
+        description="Name of the DPR processor to run. Can be a string or DprProcessor enum.",
+    )
+    
 class testBaseM(BaseModel):
     model_config = {
         "json_schema_extra": {
