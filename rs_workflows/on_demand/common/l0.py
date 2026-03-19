@@ -54,9 +54,6 @@ class MailingList(Enum):
     BETA_TESTERS = "beta-testers"
 
 class EmailContent(BaseModel):
-    subject: str = Field(max_length=30)
-    body: str = Field(default=...)
-    attachments: list[str] = Field(default_factory=list, max_length=5)
     owner_identifier: str = Field(
         default="",
         title="Owner Identifier",
@@ -92,9 +89,7 @@ class EmailContent(BaseModel):
 
 @flow(name="test param")
 async def test_param(
-    mailing_lists: list[MailingList],
     content: EmailContent,
-    test_mode: bool = False,
 ):
     logger = get_run_logger()
     logger.info("test")   
