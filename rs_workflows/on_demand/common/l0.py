@@ -27,8 +27,7 @@ from rs_workflows.flow_utils import (
 from rs_workflows.on_demand.common.staging import stage_session_common
 from rs_workflows.on_demand.common.types import (
     DEFAULT_PREFECT_CONFIGURATION,
-    Level0FlowParams,
-    testBaseM
+    Level0FlowParams
 )
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
@@ -84,6 +83,11 @@ class EmailContent(BaseModel):
         description="Version of the processor used for Level-0 processing."
     )
 
+    pipeline: Optional[DprPipeline] = Field(
+        default=None,
+        title="Pipeline",
+        description="DPR pipeline to use for processing."
+    )
     
 
 
