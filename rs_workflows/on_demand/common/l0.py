@@ -99,6 +99,17 @@ class EmailContent(BaseModel):
         title="Priority",
         description="Processing priority (low, normal, high)."
     )
+    processing_mode: List[ProcessingMode] = Field(
+        default_factory=list,
+        title="Processing Mode",
+        description="List of processing modes to apply."
+    )
+
+    workflow: Optional[WorkflowType] = Field(
+        default=None,
+        title="Workflow Type",
+        description="Workflow type to execute (on-demand, scheduled, etc.)."
+    )
 
 
 
