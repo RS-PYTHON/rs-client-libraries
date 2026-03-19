@@ -14,9 +14,9 @@
 
 """common Level-0 processing."""
 
+import json
 import re
 from typing import List, Optional
-import json
 
 from prefect import flow, get_run_logger
 from prefect.variables import Variable
@@ -38,7 +38,7 @@ from .types import DEFAULT_PREFECT_CONFIGURATION, Level0FlowParams
 @flow(name="process level-0")
 async def process_l0(
     session: str,
-    flow_params: Level0FlowParams = Field(default_factory=Level0FlowParams),
+    flow_params: Level0FlowParams = Level0FlowParams(),
     verbose: bool = False,
 ) -> None:
     """
