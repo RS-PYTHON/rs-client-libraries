@@ -49,6 +49,17 @@ class EmailContent(BaseModel):
     subject: str = Field(max_length=30)
     body: str = Field(default=...)
     attachments: list[str] = Field(default_factory=list, max_length=5)
+    owner_identifier: str = Field(
+        default="",
+        title="Owner Identifier",
+        description="Identifier of the data owner used for processing and configuration."
+    )
+
+    dask_cluster_label: str = Field(
+        default="",
+        title="Dask Cluster Label",
+        description="Name of the Dask cluster used for distributed execution."
+    )
 
 
 @flow(name="test param")
