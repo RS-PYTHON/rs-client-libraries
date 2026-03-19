@@ -16,6 +16,7 @@
 
 import re
 from typing import List, Optional
+import json
 
 from prefect import flow, get_run_logger
 from prefect.variables import Variable
@@ -94,9 +95,13 @@ async def process_l0(
         print(session)
         print(verbose)
         print(p)
+        print(p.model_dump_json(indent=2))
+        for field, value in p.model_dump().items():
+            print(f"{field}: {value} (type={type(value)})")
+        print(json.dumps(p.model_json_schema(), indent=2))
         if found:
             match int(mission):
                 case 1:
-                    await process_s1l0.submit(session=session, flow_params=p, verbose=verbose)
+                    await process_s1l0(session=session, flow_params=p, verbose=verbose)
                 case 3:
                     await process_s3l0(session, p, verbose)
