@@ -97,6 +97,6 @@ async def process_l0(
         if found:
             match int(mission):
                 case 1:
-                    await process_s1l0(session, p, verbose)
+                    await process_s1l0.submit(session=session, flow_params=p, verbose=verbose)
                 case 3:
                     await process_s3l0(session, p, verbose)
