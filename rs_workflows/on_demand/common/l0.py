@@ -116,6 +116,7 @@ class TestModel(BaseModel):
 @flow(name="test param")
 async def test_param(
     content: TestModel,
+    a:List[GeneratedProduct]
 ):
     logger = get_run_logger()
     logger.info("test")   
