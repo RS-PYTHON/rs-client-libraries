@@ -106,14 +106,11 @@ class TestModel(BaseModel):
         title="Workflow Type",
         description="Workflow type to execute (on-demand, scheduled, etc.)."
     )
-    generated_product_to_collection_identifier: Optional[list[GeneratedProduct]] = Field(
-        title="Generated Products",
-        description=(
-            "List of generated products. Each item specifies a name, the product type, "
-            "and the collection where the output will be stored."
-        )
+    auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
+        default_factory=list,
+        title="Auxiliary Product Mapping",
+        description="List of auxiliary products and their target collections."
     )
-
 
 
 
