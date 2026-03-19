@@ -15,9 +15,10 @@
 """common Level-0 processing."""
 
 import re
+from typing import List, Optional
 
-from prefect.variables import Variable
 from prefect import flow, get_run_logger
+from prefect.variables import Variable
 from pydantic import BaseModel, Field
 from pystac import Item
 
@@ -27,21 +28,16 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
     Priority,
     ProcessingMode,
-    WorkflowType
+    WorkflowType,
 )
-
+from rs_workflows.on_demand.common.staging import stage_session_common
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
-
-from rs_workflows.on_demand.common.staging import stage_session_common
-from .types import (
-    DEFAULT_PREFECT_CONFIGURATION
-)
 from rs_workflows.utils.cadip import get_cadip_station
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dask import is_dask_cluster_running
-from typing import Optional, List
 
+from .types import DEFAULT_PREFECT_CONFIGURATION
 
 
 class GeneratedProduct(BaseModel):
@@ -54,6 +50,7 @@ class GeneratedProduct(BaseModel):
         description="Collection name. If not provided, it defaults to product_type.",
     )
 
+
 class AuxiliaryProductMapping(BaseModel):
     """Represents mapping for auxiliary products."""
 
@@ -65,79 +62,75 @@ class Level0FlowParams(BaseModel):
     owner_identifier: str = Field(
         default="",
         title="Owner Identifier",
-        description="Identifier of the data owner used for processing and configuration."
+        description="Identifier of the data owner used for processing and configuration.",
     )
 
     dask_cluster_label: str = Field(
         default="",
         title="Dask Cluster Label",
-        description="Name of the Dask cluster used for distributed execution."
+        description="Name of the Dask cluster used for distributed execution.",
     )
 
     session_collection: str = Field(
         default="",
         title="Session Collection",
-        description="CADIP collection name containing the Sentinel session."
+        description="CADIP collection name containing the Sentinel session.",
     )
 
     processor_name: str = Field(
         default="",
         title="Processor Name",
-        description="Name of the processor used for Level-0 processing."
+        description="Name of the processor used for Level-0 processing.",
     )
 
     processor_version: str = Field(
         default="",
         title="Processor Version",
-        description="Version of the processor used for Level-0 processing."
+        description="Version of the processor used for Level-0 processing.",
     )
 
-    pipeline: Optional[DprPipeline] = Field(
+    pipeline: DprPipeline | None = Field(
         default=None,
         title="Pipeline",
-        description="DPR pipeline to use for processing."
+        description="DPR pipeline to use for processing.",
     )
 
-    unit: str = Field(
-        default="",
-        title="Unit",
-        description="Processing unit or internal identifier."
-    )
+    unit: str = Field(default="", title="Unit", description="Processing unit or internal identifier.")
 
-    priority: Optional[Priority] = Field(
+    priority: Priority | None = Field(
         default=None,
         title="Priority",
-        description="Processing priority (low, normal, high)."
+        description="Processing priority (low, normal, high).",
     )
 
-    processing_mode: List[ProcessingMode] = Field(
+    processing_mode: list[ProcessingMode] = Field(
         default_factory=list,
         title="Processing Mode",
-        description="List of processing modes to apply."
+        description="List of processing modes to apply.",
     )
 
-    workflow: Optional[WorkflowType] = Field(
+    workflow: WorkflowType | None = Field(
         default=None,
         title="Workflow Type",
-        description="Workflow type to execute (on-demand, scheduled, etc.)."
+        description="Workflow type to execute (on-demand, scheduled, etc.).",
     )
 
-    generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
+    generated_product_to_collection_identifier: list[GeneratedProduct] = Field(
         default_factory=list,
         title="Generated Product Mapping",
-        description="List of generated products and their target collections."
+        description="List of generated products and their target collections.",
     )
 
-    auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] = Field(
         default_factory=list,
         title="Auxiliary Product Mapping",
-        description="List of auxiliary products and their target collections."
+        description="List of auxiliary products and their target collections.",
     )
 
-    cadip_collections: List[str] = Field(
+    cadip_collections: list[str] = Field(
         default_factory=list,
         title="CADIP Collections",
-        description="List of CADIP collections to query for session retrieval."
+        description="List of CADIP collections to query for session retrieval.",
     )
 
     async def resolve(self, mission: str, level: str = "0") -> "Level0FlowParams":
@@ -170,11 +163,10 @@ class Level0FlowParams(BaseModel):
         )
 
 
-
 @flow(name="test param")
 async def test_param(
     session: str,
-    flow_params: Level0FlowParams,
+    flow_params: Level0FlowParams | None = None,
     verbose2: bool = False,
 ):
     logger = get_run_logger()
@@ -244,6 +236,3 @@ async def process_l0(
                     await process_s1l0(session, p, verbose)
                 case 3:
                     await process_s3l0(session, p, verbose)
-
-
-
