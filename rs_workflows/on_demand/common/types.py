@@ -28,7 +28,6 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
     WorkflowType,
 )
-from rs_client.ogcapi.dpr_client import DprPipeline, DprProcessor
 
 from rs_workflows.flow_utils import (
     DprProcessIn,
