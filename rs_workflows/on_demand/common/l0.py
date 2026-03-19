@@ -52,7 +52,7 @@ class EmailContent(BaseModel):
 
 
 @flow(name="test param")
-def test_param(
+async def test_param(
     mailing_lists: list[MailingList],
     content: EmailContent,
     test_mode: bool = False,
