@@ -15,7 +15,7 @@
 """common types and class"""
 
 from prefect.variables import Variable
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List, Annotated
 
 
@@ -41,6 +41,11 @@ class testBaseM(BaseModel):
         title="Processor Version",
         description="Version of the processor. If not relevant, can be empty string.",
     )
+    
+    @model_validator(mode="after")
+    def check_model(self):
+        """Ensure mutual exclusivity between pipeline and unit."""
+        return self
 
 
 class Level0FlowParams(BaseModel):
