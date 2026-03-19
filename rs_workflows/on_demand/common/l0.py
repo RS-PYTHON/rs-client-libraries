@@ -125,7 +125,7 @@ class TestModel(BaseModel):
         title="CADIP Collections",
         description="List of CADIP collections to query for session retrieval."
     )
-    generated_product_to_collection_identifier: List[GeneratedProductTEST] = Field(
+    generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
         title="Generated Product Mapping",
         description="List of generated products and their target collections."
     )
