@@ -28,7 +28,11 @@ from rs_workflows.flow_utils import (
     Priority,
     ProcessingMode,
     WorkflowType,
+    GeneratedProduct,
+ 
 )
+
+
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
 
@@ -104,11 +108,11 @@ class Level0FlowParams(BaseModel):
         description="Workflow type to execute (on-demand, scheduled, etc.)."
     )
 
-    #generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
-    #    default_factory=list,
-    #    title="Generated Product Mapping",
-    #    description="List of generated products and their target collections."
-    #)
+    generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
+        default_factory=list,
+        title="Generated Product Mapping",
+        description="List of generated products and their target collections."
+    )
 
     #auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
     #    default_factory=list,
