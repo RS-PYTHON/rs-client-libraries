@@ -39,10 +39,6 @@ from rs_workflows.flow_utils import (
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
 
-class EmailContent(BaseModel):
-    subject: str = Field(max_length=30)
-    body: str = Field(default=...)
-    attachments: list[str] = Field(default_factory=list, max_length=5)
 
     
 class testBaseM(BaseModel):
