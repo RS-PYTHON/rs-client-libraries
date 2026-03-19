@@ -106,7 +106,13 @@ class TestModel(BaseModel):
         title="Workflow Type",
         description="Workflow type to execute (on-demand, scheduled, etc.)."
     )
-    
+    generated_product_to_collection_identifier: list[GeneratedProduct] = Field(
+        title="Generated Products",
+        description=(
+            "List of generated products. Each item specifies a name, the product type, "
+            "and the collection where the output will be stored."
+        )
+    )
 
 
 
