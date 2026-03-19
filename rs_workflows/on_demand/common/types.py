@@ -92,14 +92,14 @@ class Level0FlowParams(BaseModel):
         description="Workflow type to execute (on-demand, scheduled, etc.)."
     )
 
-    generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
-        default_factory=list,
+    generated_product_to_collection_identifier: List[GeneratedProduct]|None = Field(
+        default=None,
         title="Generated Product Mapping",
         description="List of generated products and their target collections."
     )
 
-    auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
-        default_factory=list,
+    auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping]|None = Field(
+        default=None,
         title="Auxiliary Product Mapping",
         description="List of auxiliary products and their target collections."
     )
