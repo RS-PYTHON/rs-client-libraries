@@ -38,6 +38,7 @@ DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
 
 class Level0FlowParams(BaseModel):
+    model_config = {"title": "Level 0 Flow Parameters"}
     owner_identifier: str = Field(
         default="",
         title="Owner Identifier",
