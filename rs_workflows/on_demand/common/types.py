@@ -99,17 +99,17 @@ class Level0FlowParams(BaseModel):
         description="Workflow type to execute (on-demand, scheduled, etc.)."
     )
 
-    generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
-        default_factory=list,
-        title="Generated Product Mapping",
-        description="List of generated products and their target collections."
-    )
+    #generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
+    #    default_factory=list,
+    #    title="Generated Product Mapping",
+    #    description="List of generated products and their target collections."
+    #)
 
-    auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
-        default_factory=list,
-        title="Auxiliary Product Mapping",
-        description="List of auxiliary products and their target collections."
-    )
+    #auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
+    #    default_factory=list,
+    #    title="Auxiliary Product Mapping",
+    #    description="List of auxiliary products and their target collections."
+    #)
 
     cadip_collections: List[str] = Field(
         default_factory=list,

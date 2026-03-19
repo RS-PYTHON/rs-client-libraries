@@ -42,7 +42,7 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
     WorkflowType,
 )
-from rs_client.ogcapi.dpr_client import DprPipeline, DprProcessor
+from rs_client.ogcapi.dpr_client import DprPipeline
 from typing import Optional, List
 
 from enum import Enum
@@ -120,7 +120,7 @@ class TestModel(BaseModel):
         title="CADIP Collections",
         description="List of CADIP collections to query for session retrieval."
     )
-    generated_product_to_collection_identifier: List[GeneratedProductTest] = Field(
+    generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
         title="Generated Product Mapping",
         description="List of generated products and their target collections."
     )
@@ -128,7 +128,9 @@ class TestModel(BaseModel):
 
 @flow(name="test param")
 async def test_param(
-    content: TestModel
+    session: str,
+    flow_params: Level0FlowParams,
+    verbose: bool = False,
 ):
     logger = get_run_logger()
     logger.info("test")   
@@ -137,7 +139,7 @@ async def test_param(
 @flow(name="process level-0")
 async def process_l0(
     session: str,
-    flow_params: Level0FlowParams = Level0FlowParams(),
+    flow_params: Level0FlowParams,
     verbose: bool = False,
 ) -> None:
     """
