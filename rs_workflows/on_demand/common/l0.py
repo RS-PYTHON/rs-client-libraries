@@ -51,7 +51,7 @@ class EmailContent(BaseModel):
     attachments: list[str] = Field(default_factory=list, max_length=5)
 
 
-@flow
+@flow(name="test param")
 def test_param(
     mailing_lists: list[MailingList],
     content: EmailContent,
@@ -60,7 +60,6 @@ def test_param(
     logger = get_run_logger()
     logger.info("test")   
     
-
 
 @flow(name="process level-0")
 async def process_l0(
