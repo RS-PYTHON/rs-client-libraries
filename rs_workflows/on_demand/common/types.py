@@ -15,9 +15,8 @@
 """common types and class"""
 
 from prefect.variables import Variable
-from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional, List, Annotated
-from datetime import datetime
+from pydantic import BaseModel, Field
+from typing import Optional, List
 
 
 from rs_client.ogcapi.dpr_client import DprPipeline

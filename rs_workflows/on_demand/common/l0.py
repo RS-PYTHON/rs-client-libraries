@@ -15,20 +15,15 @@
 """common Level-0 processing."""
 
 import re
-from enum import Enum
-from typing import List, Optional
 
 from prefect import flow, get_run_logger
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field
 from pystac import Item
 
 from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import (
-    AuxiliaryProductMapping,
-    DprProcessIn,
     FlowEnv,
     FlowEnvArgs,
-    GeneratedProduct,
     Priority,
     ProcessingMode,
     WorkflowType,
@@ -43,82 +38,6 @@ from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
 from rs_workflows.utils.cadip import get_cadip_station
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dask import is_dask_cluster_running
-
-
-class GeneratedProductTest(BaseModel):
-    """Represents one generated output product."""
-
-    name: str = Field(description="Output product name.")
-    product_type: str = Field(description="Product type.")
-    collection_name: str | None = Field(
-        default=None,
-        description="Collection name. If not provided, it defaults to product_type.",
-    )
-
-
-class TestModel(BaseModel):
-    owner_identifier: str = Field(
-        default="",
-        title="Owner Identifier",
-        description="Identifier of the data owner used for processing and configuration.",
-    )
-
-    dask_cluster_label: str = Field(
-        default="",
-        title="Dask Cluster Label",
-        description="Name of the Dask cluster used for distributed execution.",
-    )
-
-    session_collection: str = Field(
-        default="",
-        title="Session Collection",
-        description="CADIP collection name containing the Sentinel session.",
-    )
-
-    processor_name: str = Field(
-        default="",
-        title="Processor Name",
-        description="Name of the processor used for Level-0 processing.",
-    )
-
-    processor_version: str = Field(
-        default="",
-        title="Processor Version",
-        description="Version of the processor used for Level-0 processing.",
-    )
-
-    pipeline: DprPipeline | None = Field(
-        default=None,
-        title="Pipeline",
-        description="DPR pipeline to use for processing.",
-    )
-    unit: str = Field(default="", title="Unit", description="Processing unit or internal identifier.")
-
-    priority: Priority | None = Field(
-        default=None,
-        title="Priority",
-        description="Processing priority (low, normal, high).",
-    )
-    processing_mode: list[ProcessingMode] = Field(
-        default_factory=list,
-        title="Processing Mode",
-        description="List of processing modes to apply.",
-    )
-
-    workflow: WorkflowType | None = Field(
-        default=None,
-        title="Workflow Type",
-        description="Workflow type to execute (on-demand, scheduled, etc.).",
-    )
-    cadip_collections: list[str] = Field(
-        default_factory=list,
-        title="CADIP Collections",
-        description="List of CADIP collections to query for session retrieval.",
-    )
-    generated_product_to_collection_identifier: list[GeneratedProduct] = Field(
-        title="Generated Product Mapping",
-        description="List of generated products and their target collections.",
-    )
 
 
 class Level0FlowParams2(BaseModel):
