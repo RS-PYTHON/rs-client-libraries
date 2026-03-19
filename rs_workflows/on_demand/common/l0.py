@@ -26,8 +26,8 @@ from pystac import Item
 from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.on_demand.common.staging import stage_session_common
-from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
-from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
+from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0_task
+from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0_task
 from rs_workflows.utils.cadip import get_cadip_station
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dask import is_dask_cluster_running
@@ -102,6 +102,6 @@ async def process_l0(
         if found:
             match int(mission):
                 case 1:
-                    await process_s1l0(session=session, flow_params=p, verbose=verbose)
+                    await process_s1l0_task(session=session, flow_params=p, verbose=verbose)
                 case 3:
-                    await process_s3l0(session, p, verbose)
+                    await process_s3l0_task(session=session, flow_params=p, verbose=verbose)
