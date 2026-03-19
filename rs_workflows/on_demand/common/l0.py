@@ -47,12 +47,8 @@ from typing import Optional, List
 
 from enum import Enum
 
-class MailingList(Enum):
-    NEWSLETTER = "newsletter"
-    CUSTOMERS = "customers"
-    BETA_TESTERS = "beta-testers"
 
-class EmailContent(BaseModel):
+class TestModel(BaseModel):
     owner_identifier: str = Field(
         default="",
         title="Owner Identifier",
@@ -124,7 +120,7 @@ class EmailContent(BaseModel):
 
 @flow(name="test param")
 async def test_param(
-    content: EmailContent,
+    content: TestModel,
 ):
     logger = get_run_logger()
     logger.info("test")   
