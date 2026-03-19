@@ -106,6 +106,11 @@ class TestModel(BaseModel):
         title="Workflow Type",
         description="Workflow type to execute (on-demand, scheduled, etc.)."
     )
+    cadip_collections: List[str] = Field(
+        default_factory=list,
+        title="CADIP Collections",
+        description="List of CADIP collections to query for session retrieval."
+    )
 
 
 @flow(name="test param")
