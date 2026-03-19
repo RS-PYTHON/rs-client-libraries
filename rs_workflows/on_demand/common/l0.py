@@ -47,6 +47,16 @@ from typing import Optional, List
 
 from enum import Enum
 
+class GeneratedProductTEST(BaseModel):
+    """Represents one generated output product."""
+
+    name: str = Field(description="Output product name.")
+    product_type: str = Field(description="Product type.")
+    #collection_name: str | None = Field(
+    #    default=None,
+    #    description="Collection name. If not provided, it defaults to product_type.",
+    #)
+
 
 class TestModel(BaseModel):
     owner_identifier: str = Field(
@@ -111,19 +121,7 @@ class TestModel(BaseModel):
         title="CADIP Collections",
         description="List of CADIP collections to query for session retrieval."
     )
-    generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
-        default=[
-            {
-                "name": "S03ISPS",
-                "product_type": "*",
-                "collection_name": "s3_production_isps_s3l0"
-                },
-            {
-                "name": "S03CACHE",
-                "product_type": "*",
-                "collection_name": "s3_production_cache_s3l0"
-                }
-            ],
+    generated_product_to_collection_identifier: List[GeneratedProductTEST] = Field(
         title="Generated Product Mapping",
         description="List of generated products and their target collections."
     )
