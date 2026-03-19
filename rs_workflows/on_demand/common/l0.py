@@ -87,54 +87,6 @@ class EmailContent(BaseModel):
         description="Version of the processor used for Level-0 processing."
     )
 
-    pipeline: Optional[DprPipeline] = Field(
-        default=None,
-        title="Pipeline",
-        description="DPR pipeline to use for processing."
-    )
-
-    unit: str = Field(
-        default="",
-        title="Unit",
-        description="Processing unit or internal identifier."
-    )
-
-    priority: Optional[Priority] = Field(
-        default=None,
-        title="Priority",
-        description="Processing priority (low, normal, high)."
-    )
-
-    processing_mode: List[ProcessingMode] = Field(
-        default_factory=list,
-        title="Processing Mode",
-        description="List of processing modes to apply."
-    )
-
-    workflow: Optional[WorkflowType] = Field(
-        default=None,
-        title="Workflow Type",
-        description="Workflow type to execute (on-demand, scheduled, etc.)."
-    )
-
-    generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
-        default_factory=list,
-        title="Generated Product Mapping",
-        description="List of generated products and their target collections."
-    )
-
-    auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
-        default_factory=list,
-        title="Auxiliary Product Mapping",
-        description="List of auxiliary products and their target collections."
-    )
-
-    cadip_collections: List[str] = Field(
-        default_factory=list,
-        title="CADIP Collections",
-        description="List of CADIP collections to query for session retrieval."
-    )
-
     
 
 
