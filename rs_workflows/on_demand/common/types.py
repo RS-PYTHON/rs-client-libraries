@@ -32,8 +32,16 @@ DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
 
 class testBaseM(BaseModel):
-    field1: Annotated[str, Field(description="Some field 1. Example: `value1, value2`")] = "default value of field 1"
-    field2: Annotated[int, Field(description="Some field 2")]
+    field1: str = Field(
+        title="Processor Version",
+        description="Version of the processor. If not relevant, can be empty string.",
+    )
+    field2: str | DprPipeline | None = Field(
+        default=None,
+        title="Processor Version",
+        description="Version of the processor. If not relevant, can be empty string.",
+    )
+
 
 class Level0FlowParams(BaseModel):
     owner_identifier: str = Field(
