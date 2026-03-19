@@ -27,12 +27,23 @@ from rs_workflows.on_demand.common.staging import stage_session_common
 from rs_workflows.on_demand.common.types import (
     DEFAULT_PREFECT_CONFIGURATION,
     Level0FlowParams,
+    testBaseM
 )
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
 from rs_workflows.utils.cadip import get_cadip_station
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dask import is_dask_cluster_running
+
+
+@flow(name="test param")
+async def test_param( session:str, param1:testBaseM):
+    logger = get_run_logger()
+    logger.info("test")
+    logger.info(f"session {session}")
+    logger.info(f"param1.field1 {param1.field1}")
+    logger.info(f"param1.field2 {param1.field2}")
+    logger.info(f"param1 {param1}")
 
 
 @flow(name="process level-0")
