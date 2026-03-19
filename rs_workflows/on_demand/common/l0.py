@@ -88,7 +88,18 @@ class EmailContent(BaseModel):
         title="Pipeline",
         description="DPR pipeline to use for processing."
     )
-    
+    unit: str = Field(
+        default="",
+        title="Unit",
+        description="Processing unit or internal identifier."
+    )
+
+    priority: Optional[Priority] = Field(
+        default=None,
+        title="Priority",
+        description="Processing priority (low, normal, high)."
+    )
+
 
 
 @flow(name="test param")
