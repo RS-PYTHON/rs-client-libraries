@@ -29,7 +29,7 @@ from rs_workflows.on_demand.common.types import (
     DEFAULT_PREFECT_CONFIGURATION,
     Level0FlowParams,
     testBaseM,
-    DprProcessIn2
+    EmailContent
 )
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
@@ -39,7 +39,7 @@ from rs_workflows.utils.dask import is_dask_cluster_running
 
 
 @flow(name="test param")
-async def test_param(param4:DprProcessIn2):
+async def test_param(param4:EmailContent):
     logger = get_run_logger()
     logger.info("test")
     
