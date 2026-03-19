@@ -52,6 +52,9 @@ class GeneratedProductTEST(BaseModel):
 
     name: str = Field(description="Output product name.")
     product_type: str = Field(description="Product type.")
+    collection_name: str = Field(
+        description="Collection name. If not provided, it defaults to product_type.",
+    )
     #collection_name: str | None = Field(
     #    default=None,
     #    description="Collection name. If not provided, it defaults to product_type.",
