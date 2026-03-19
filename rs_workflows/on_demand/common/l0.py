@@ -36,7 +36,15 @@ from rs_workflows.utils.cadip import get_cadip_station
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dask import is_dask_cluster_running
 from pydantic import BaseModel, Field, field_validator, model_validator
-
+from rs_workflows.flow_utils import (
+    AuxiliaryProductMapping,
+    GeneratedProduct,
+    Priority,
+    ProcessingMode,
+    WorkflowType,
+)
+from rs_client.ogcapi.dpr_client import DprPipeline, DprProcessor
+from typing import Optional, List
 
 from enum import Enum
 
@@ -60,6 +68,74 @@ class EmailContent(BaseModel):
         title="Dask Cluster Label",
         description="Name of the Dask cluster used for distributed execution."
     )
+    
+    session_collection: str = Field(
+        default="",
+        title="Session Collection",
+        description="CADIP collection name containing the Sentinel session."
+    )
+
+    processor_name: str = Field(
+        default="",
+        title="Processor Name",
+        description="Name of the processor used for Level-0 processing."
+    )
+
+    processor_version: str = Field(
+        default="",
+        title="Processor Version",
+        description="Version of the processor used for Level-0 processing."
+    )
+
+    pipeline: Optional[DprPipeline] = Field(
+        default=None,
+        title="Pipeline",
+        description="DPR pipeline to use for processing."
+    )
+
+    unit: str = Field(
+        default="",
+        title="Unit",
+        description="Processing unit or internal identifier."
+    )
+
+    priority: Optional[Priority] = Field(
+        default=None,
+        title="Priority",
+        description="Processing priority (low, normal, high)."
+    )
+
+    processing_mode: List[ProcessingMode] = Field(
+        default_factory=list,
+        title="Processing Mode",
+        description="List of processing modes to apply."
+    )
+
+    workflow: Optional[WorkflowType] = Field(
+        default=None,
+        title="Workflow Type",
+        description="Workflow type to execute (on-demand, scheduled, etc.)."
+    )
+
+    generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
+        default_factory=list,
+        title="Generated Product Mapping",
+        description="List of generated products and their target collections."
+    )
+
+    auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
+        default_factory=list,
+        title="Auxiliary Product Mapping",
+        description="List of auxiliary products and their target collections."
+    )
+
+    cadip_collections: List[str] = Field(
+        default_factory=list,
+        title="CADIP Collections",
+        description="List of CADIP collections to query for session retrieval."
+    )
+
+    
 
 
 @flow(name="test param")
