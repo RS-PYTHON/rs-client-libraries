@@ -209,7 +209,7 @@ async def process_l0(
     logger.info(f"✔️ Sentinel-{mission} session name is correct.")
 
     # Override of some parameters with default configuration
-    p = await flow_params.resolve(mission, level="1")
+    p = await flow_params.resolve(mission, level="0")
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
     with flow_env.start_span(__name__, "level0-processing"):
