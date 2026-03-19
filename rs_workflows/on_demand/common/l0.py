@@ -27,19 +27,15 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
     Priority,
     ProcessingMode,
-    WorkflowType,
-    GeneratedProduct,
- 
+    WorkflowType
 )
-
 
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
 
 from rs_workflows.on_demand.common.staging import stage_session_common
 from .types import (
-    DEFAULT_PREFECT_CONFIGURATION,
-    Level0FlowParams,
+    DEFAULT_PREFECT_CONFIGURATION
 )
 from rs_workflows.utils.cadip import get_cadip_station
 from rs_workflows.utils.catalog import get_single_catalog_item
@@ -47,7 +43,25 @@ from rs_workflows.utils.dask import is_dask_cluster_running
 from typing import Optional, List
 
 
-class Level0FlowParams2(BaseModel):
+
+class GeneratedProduct(BaseModel):
+    """Represents one generated output product."""
+
+    name: str = Field(description="Output product name.")
+    product_type: str = Field(description="Product type.")
+    collection_name: str | None = Field(
+        default=None,
+        description="Collection name. If not provided, it defaults to product_type.",
+    )
+
+class AuxiliaryProductMapping(BaseModel):
+    """Represents mapping for auxiliary products."""
+
+    product_type: str = Field(description="Product type or '*' wildcard.")
+    collection_name: str = Field(description="Collection name.")
+
+
+class Level0FlowParams(BaseModel):
     owner_identifier: str = Field(
         default="",
         title="Owner Identifier",
@@ -114,11 +128,11 @@ class Level0FlowParams2(BaseModel):
         description="List of generated products and their target collections."
     )
 
-    #auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
-    #    default_factory=list,
-    #    title="Auxiliary Product Mapping",
-    #    description="List of auxiliary products and their target collections."
-    #)
+    auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
+        default_factory=list,
+        title="Auxiliary Product Mapping",
+        description="List of auxiliary products and their target collections."
+    )
 
     cadip_collections: List[str] = Field(
         default_factory=list,
@@ -230,3 +244,6 @@ async def process_l0(
                     await process_s1l0(session, p, verbose)
                 case 3:
                     await process_s3l0(session, p, verbose)
+
+
+
