@@ -112,7 +112,6 @@ class TestModel(BaseModel):
         description="List of CADIP collections to query for session retrieval."
     )
     generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
-        default_factory=list,
         default=[
             {
                 "name": "S03ISPS",
