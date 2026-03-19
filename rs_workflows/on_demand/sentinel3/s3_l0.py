@@ -34,7 +34,7 @@ from rs_workflows.on_demand.common.types import (
 @flow(name="process sentinel-3 level-0")
 async def process_s3l0(
     session: str,
-    flow_params : Optional[Level0FlowParams] = None,
+    flow_params : Level0FlowParams,
     verbose: bool = False
 ):
     logger = get_run_logger()
