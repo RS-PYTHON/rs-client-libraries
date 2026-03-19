@@ -111,7 +111,6 @@ class EmailContent(BaseModel):
         description="Workflow type to execute (on-demand, scheduled, etc.)."
     )
     generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
-        default_factory=list,
         title="Generated Product Mapping",
         description="List of generated products and their target collections."
     )
