@@ -106,12 +106,6 @@ class TestModel(BaseModel):
         title="Workflow Type",
         description="Workflow type to execute (on-demand, scheduled, etc.)."
     )
-    auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
-        default_factory=list,
-        title="Auxiliary Product Mapping",
-        description="List of auxiliary products and their target collections."
-    )
-
 
 
 @flow(name="test param")
