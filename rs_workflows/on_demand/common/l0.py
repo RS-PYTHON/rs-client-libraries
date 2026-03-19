@@ -29,7 +29,7 @@ from rs_workflows.on_demand.common.staging import stage_session_common
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0_task
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0_task
 from rs_workflows.utils.cadip import get_cadip_station
-from rs_workflows.utils.catalog import get_single_catalog_item
+from rs_workflows.utils.catalog import get_single_catalog_item, is_evicted, is_published
 from rs_workflows.utils.dask import is_dask_cluster_running
 
 from .types import DEFAULT_PREFECT_CONFIGURATION, Level0FlowParams
@@ -81,6 +81,13 @@ async def process_l0(
         # If the session is not on the rs-catalog, we will try to stage it
         if item_session:
             found = True
+            evicted, eviction_date = is_evicted(item_session)
+            if evicted:
+                logger.error(f"❌ The session '{session}' has been evicted (eviction date = {eviction_date}) ")
+                raise ValueError(f"'{session}' has been evicted")            
+            if is_published(item_session)==False:
+                logger.error(f"❌ The session '{session}' has not been published yet")
+                raise ValueError(f"'{session}' has not been publised")            
         else:
             logger.info(f"Try to stage session  {session} from {mission} stations :{p.cadip_collections}")
             station = await get_cadip_station(
