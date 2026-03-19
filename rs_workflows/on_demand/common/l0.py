@@ -40,7 +40,7 @@ from .types import DEFAULT_PREFECT_CONFIGURATION, Level0FlowParams
 @flow(name="process level-0")
 async def process_l0(
     session: str,
-    flow_params : Optional[Level0FlowParams] = Level0FlowParams(),
+    flow_params : Level0FlowParams = Level0FlowParams(),
     verbose: bool = False,
 ) -> None:
     """
@@ -65,7 +65,7 @@ async def process_l0(
     logger.info(f"✔️ Sentinel-{mission} session name is correct.")
 
     # Override of some parameters with default configuration
-    p = await flow_params.resolve(mission, level="0")
+    p:Level0FlowParams = await flow_params.resolve(mission, level="0")
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
     with flow_env.start_span(__name__, "level0-processing"):
