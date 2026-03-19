@@ -116,7 +116,11 @@ class TestModel(BaseModel):
 @flow(name="test param")
 async def test_param(
     content: TestModel,
-    a:List[GeneratedProduct]
+    a:List[GeneratedProduct] = Field(
+        default_factory=list,
+        title="Generated Product Mapping",
+        description="List of generated products and their target collections."
+    )
 ):
     logger = get_run_logger()
     logger.info("test")   
