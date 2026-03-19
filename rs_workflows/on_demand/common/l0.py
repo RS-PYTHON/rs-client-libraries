@@ -38,7 +38,7 @@ from .types import DEFAULT_PREFECT_CONFIGURATION, Level0FlowParams
 @flow(name="process level-0")
 async def process_l0(
     session: str,
-    flow_params: Level0FlowParams = Level0FlowParams(),
+    flow_params: Level0FlowParams = Field(default_factory=Level0FlowParams),
     verbose: bool = False,
 ) -> None:
     """
