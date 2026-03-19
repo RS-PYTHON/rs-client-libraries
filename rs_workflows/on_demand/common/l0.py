@@ -28,121 +28,17 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
     WorkflowType,
 )
+from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
+from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
+
 from rs_workflows.on_demand.common.staging import stage_session_common
 from rs_workflows.on_demand.common.types import (
     DEFAULT_PREFECT_CONFIGURATION,
     Level0FlowParams,
 )
-from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
-from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
 from rs_workflows.utils.cadip import get_cadip_station
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dask import is_dask_cluster_running
-
-
-class Level0FlowParams2(BaseModel):
-    owner_identifier: str = Field(
-        default="",
-        title="Owner Identifier",
-        description="Identifier of the data owner used for processing and configuration.",
-    )
-
-    dask_cluster_label: str = Field(
-        default="",
-        title="Dask Cluster Label",
-        description="Name of the Dask cluster used for distributed execution.",
-    )
-
-    session_collection: str = Field(
-        default="",
-        title="Session Collection",
-        description="CADIP collection name containing the Sentinel session.",
-    )
-
-    processor_name: str = Field(
-        default="",
-        title="Processor Name",
-        description="Name of the processor used for Level-0 processing.",
-    )
-
-    processor_version: str = Field(
-        default="",
-        title="Processor Version",
-        description="Version of the processor used for Level-0 processing.",
-    )
-
-    pipeline: DprPipeline | None = Field(
-        default=None,
-        title="Pipeline",
-        description="DPR pipeline to use for processing.",
-    )
-
-    unit: str = Field(default="", title="Unit", description="Processing unit or internal identifier.")
-
-    priority: Priority | None = Field(
-        default=None,
-        title="Priority",
-        description="Processing priority (low, normal, high).",
-    )
-
-    processing_mode: list[ProcessingMode] = Field(
-        default_factory=list,
-        title="Processing Mode",
-        description="List of processing modes to apply.",
-    )
-
-    workflow: WorkflowType | None = Field(
-        default=None,
-        title="Workflow Type",
-        description="Workflow type to execute (on-demand, scheduled, etc.).",
-    )
-
-    # generated_product_to_collection_identifier: List[GeneratedProduct] = Field(
-    #    default_factory=list,
-    #    title="Generated Product Mapping",
-    #    description="List of generated products and their target collections."
-    # )
-
-    # auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping] = Field(
-    #    default_factory=list,
-    #    title="Auxiliary Product Mapping",
-    #    description="List of auxiliary products and their target collections."
-    # )
-
-    cadip_collections: list[str] = Field(
-        default_factory=list,
-        title="CADIP Collections",
-        description="List of CADIP collections to query for session retrieval.",
-    )
-
-    async def resolve(self, mission: str, level: str = "0") -> "Level0FlowParams2":
-        var_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
-        settings: dict = await Variable.get(var_name)
-
-        if settings is None:
-            raise ValueError(f"❌ Prefect variable '{var_name}' not found")
-
-        return Level0FlowParams2(
-            owner_identifier=self.owner_identifier or settings.get("owner_identifier", ""),
-            dask_cluster_label=self.dask_cluster_label or settings.get("dask_cluster_name", ""),
-            session_collection=self.session_collection or settings.get("session_collection", ""),
-            processor_name=self.processor_name or settings.get("processor", {}).get("name", ""),
-            processor_version=self.processor_version or settings.get("processor", {}).get("version", ""),
-            pipeline=self.pipeline or settings.get("pipeline", None),
-            unit=self.unit or settings.get("unit", ""),
-            priority=self.priority or settings.get("priority"),
-            processing_mode=self.processing_mode or settings.get("processing_mode", []),
-            workflow=self.workflow or settings.get("workflow"),
-            generated_product_to_collection_identifier=(
-                self.generated_product_to_collection_identifier
-                or settings.get("generated_product_to_collection_identifier", [])
-            ),
-            auxiliary_product_to_collection_identifier=(
-                self.auxiliary_product_to_collection_identifier
-                or settings.get("auxiliary_product_to_collection_identifier", [])
-            ),
-            cadip_collections=settings.get("cadip_collections", []),
-        )
 
 
 @flow(name="test param")

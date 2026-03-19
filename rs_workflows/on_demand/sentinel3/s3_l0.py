@@ -24,10 +24,12 @@ from rs_workflows.flow_utils import (
 )
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dpr import call_dpr_flow
-from rs_workflows.on_demand.common.types import DEFAULT_PREFECT_CONFIGURATION
 from typing import Optional
 from rs_workflows.flow_utils import FlowEnvArgs
-from rs_workflows.on_demand.common.types import Level0FlowParams
+from rs_workflows.on_demand.common.types import (
+    DEFAULT_PREFECT_CONFIGURATION,
+    Level0FlowParams,
+)
 
 @flow(name="process sentinel-3 level-0")
 async def process_s3l0(
