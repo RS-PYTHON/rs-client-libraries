@@ -60,7 +60,7 @@ async def get_single_catalog_item(
 
 
 
-def is_evicted(item) -> Tuple[bool, Optional[datetime]]:
+def is_evicted(item:Item) -> Tuple[bool, Optional[datetime]]:
     eviction_date_str: str = ""
 
     for asset in item.assets.values():
@@ -75,10 +75,15 @@ def is_evicted(item) -> Tuple[bool, Optional[datetime]]:
     return False, None
 
 
-def is_published(item) -> bool:    
-    published_date_str = item["properties"]["published"]
+def is_published(item: Item) -> bool:
+    published_date_str = item.properties.get("published")
+
     if published_date_str:
-        return datetime.fromisoformat(published_date_str.replace("Z", "+00:00")) <= datetime.now(timezone.utc)
-    
+        published_date = datetime.fromisoformat(
+            published_date_str.replace("Z", "+00:00")
+        )
+        return published_date <= datetime.now(timezone.utc)
+
     return False
+
     
