@@ -92,13 +92,6 @@ async def process_l0(
         # The session is stagged at this step.
         # We can call the flow
         logger.info(f"We start Sentinel-{mission} processing.")
-        print(session)
-        print(verbose)
-        print(p)
-        print(p.model_dump_json(indent=2))
-        for field, value in p.model_dump().items():
-            print(f"{field}: {value} (type={type(value)})")
-        print(json.dumps(p.model_json_schema(), indent=2))
         if found:
             match int(mission):
                 case 1:
