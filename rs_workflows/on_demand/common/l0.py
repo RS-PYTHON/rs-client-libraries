@@ -14,16 +14,11 @@
 
 """common Level-0 processing."""
 
-import json
 import re
-from typing import List, Optional
 
 from prefect import flow, get_run_logger
-from prefect.variables import Variable
-from pydantic import BaseModel, Field
 from pystac import Item
 
-from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.on_demand.common.staging import stage_session_common
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0_task

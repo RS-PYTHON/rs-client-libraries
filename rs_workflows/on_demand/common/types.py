@@ -21,7 +21,7 @@ from typing import Optional, List
 from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
-    GeneratedProduct,
+    FlowGeneratedProduct,
     Priority,
     ProcessingMode,
     WorkflowType,
@@ -109,7 +109,7 @@ class Level0FlowParams(BaseModel):
         json_schema_extra={"order": 10}
     )
 
-    generated_product_to_collection_identifier: List[GeneratedProduct]|None = Field(
+    generated_product_to_collection_identifier: List[FlowGeneratedProduct]|None = Field(
         default=None,
         title="Generated Product Mapping",
         description="List of generated products and their target collections.",
