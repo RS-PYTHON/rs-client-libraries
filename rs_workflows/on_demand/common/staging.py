@@ -320,6 +320,7 @@ async def stage_session_common(
         catalog_client.search(collections=[catalog_cadip_collection])
     except RuntimeError:
         # The collection is missing, we will create it
+        logger.info(f"The collection {catalog_cadip_collection} is missing; it will be created.")
         spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
         date_strings = ["2000-02-01T00:00:00Z", "2100-02-12T00:00:00Z"]
         date_objects: list[datetime | None] = [
