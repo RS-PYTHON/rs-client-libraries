@@ -43,10 +43,11 @@ async def process_l0(
 ) -> None:
     """
     This is the generic l0 processing flow.
-    It will call process_s1l0, process_s2l0 or process_s3l0
+    It perform common L0 task like retrieving session from catalog an staging it from cadip if needed.
+    It call process_s1l0, process_s2l0 or process_s3l0
 
     Only session parameter is mandatory.
-    All other parameters can get their default values from Prefect variable.
+    All other parameters get their default values from Prefect variable but can be overriden on demand.
 
     """
     logger = get_run_logger()

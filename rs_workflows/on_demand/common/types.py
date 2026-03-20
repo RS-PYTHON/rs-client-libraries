@@ -16,8 +16,8 @@
 
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
-from typing import Optional, List
-
+from typing import Optional, List, Any, Dict
+from collections import OrderedDict
 
 from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import (
@@ -30,84 +30,143 @@ from rs_workflows.flow_utils import (
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
 
-class Level0FlowParams(BaseModel):
-    model_config = {"title": "Level 0 Flow Parameters"}
+class OrderedModel(BaseModel):
+
+    def model_dump(self, **kwargs) -> Dict[str, Any]:
+        data = super().model_dump(**kwargs)
+
+        # Récupération des ordres déclarés dans les champs
+        ordered_fields = sorted(
+            self.model_fields.items(),
+            key=lambda item: item[1].json_schema_extra.get("order", 9999)
+        )
+
+        # Construction d'un OrderedDict
+        return OrderedDict(
+            (name, data[name]) for name, field in ordered_fields
+        )
+
+    @classmethod
+    def model_json_schema(cls, **kwargs):
+        schema = super().model_json_schema(**kwargs)
+
+        # Ajout d'un ordre dans le schéma (si ton UI interne le lit)
+        ordered_props = sorted(
+            cls.model_fields.items(),
+            key=lambda item: item[1].json_schema_extra.get("order", 9999)
+        )
+
+        schema["x-order"] = [name for name, _ in ordered_props]
+        return schema
+
+class Level0FlowParams(OrderedModel):
+    model_config = {
+        "title": "override default values",
+        "json_schema_extra": {
+            "description": (
+                "These parameters override default Prefect variable 'sx-l0-default-setting'."
+            ),
+            "examples": [
+                {
+                    "owner_identifier": "dupont",
+                    "pipeline": "my_pipeline"
+                }
+            ]
+        }
+    }
+
     owner_identifier: str = Field(
         default="",
         title="Owner Identifier",
-        description="Identifier of the data owner used for processing and configuration."
+        description="Identifier of the user that run the flow",
+        json_schema_extra={"order": 1}
     )
+
 
     dask_cluster_label: str = Field(
         default="",
         title="Dask Cluster Label",
-        description="Name of the Dask cluster used for distributed execution."
-    )
-
-    session_collection: str = Field(
-        default="",
-        title="Session Collection",
-        description="CADIP collection name containing the Sentinel session."
-    )
-
-    processor_name: str = Field(
-        default="",
-        title="Processor Name",
-        description="Name of the processor used for Level-0 processing."
-    )
-
-    processor_version: str = Field(
-        default="",
-        title="Processor Version",
-        description="Version of the processor used for Level-0 processing."
+        description="Name of the Dask cluster used for distributed execution.",
+        json_schema_extra={"order": 2}
     )
 
     pipeline: Optional[DprPipeline] = Field(
         default=None,
         title="Pipeline",
-        description="DPR pipeline to use for processing."
+        description="DPR pipeline to use for processing.",
+        json_schema_extra={"order": 3}
     )
+    
+    session_collection: str = Field(
+        default="",
+        title="Session Collection",
+        description="CADIP collection name containing the Sentinel session.",
+        json_schema_extra={"order": 4}
+
+    )
+
+    processor_name: str = Field(
+        default="",
+        title="Processor Name",
+        description="Name of the processor used for Level-0 processing.",
+        json_schema_extra={"order": 5}
+    )
+
+    processor_version: str = Field(
+        default="",
+        title="Processor Version",
+        description="Version of the processor used for Level-0 processing.",
+        json_schema_extra={"order": 6}
+    )
+
 
     unit: str = Field(
         default="",
         title="Unit",
-        description="Processing unit or internal identifier."
+        description="Processing unit or internal identifier.",
+        json_schema_extra={"order": 7}
     )
 
     priority: Optional[Priority] = Field(
         default=None,
         title="Priority",
-        description="Processing priority (low, normal, high)."
+        description="Processing priority (low, normal, high).",
+        json_schema_extra={"order": 8}
     )
 
     processing_mode: List[ProcessingMode] = Field(
         default_factory=list,
         title="Processing Mode",
-        description="List of processing modes to apply."
+        description="List of processing modes to apply.",
+        json_schema_extra={"order": 9}
     )
 
     workflow: Optional[WorkflowType] = Field(
         default=None,
         title="Workflow Type",
-        description="Workflow type to execute (on-demand, scheduled, etc.)."
+        description="Workflow type to execute (on-demand, scheduled, etc.).",
+        json_schema_extra={"order": 10}
     )
 
     generated_product_to_collection_identifier: List[GeneratedProduct]|None = Field(
         default=None,
         title="Generated Product Mapping",
-        description="List of generated products and their target collections."
+        description="List of generated products and their target collections.",
+        json_schema_extra={"order": 10}
     )
 
     auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping]|None = Field(
         default=None,
         title="Auxiliary Product Mapping",
-        description="List of auxiliary products and their target collections."
+        description="List of auxiliary products and their target collections.",
+        json_schema_extra={"order": 11}
     )
 
     cadip_collections: List[str] = Field(
         default_factory=list,
         title="CADIP Collections",
-        description="List of CADIP collections to query for session retrieval."
+        description="List of CADIP collections to query for session retrieval.",
+        json_schema_extra={"order": 12}
     )
 
     async def resolve(self, mission: str, level: str = "0") -> "Level0FlowParams":
