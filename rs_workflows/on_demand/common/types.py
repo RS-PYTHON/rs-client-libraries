@@ -16,8 +16,7 @@
 
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
-from typing import Optional, List, Any, Dict
-from collections import OrderedDict
+from typing import Optional, List
 
 from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import (
@@ -30,50 +29,13 @@ from rs_workflows.flow_utils import (
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
 
-class OrderedModel(BaseModel):
+class Level0FlowParams(BaseModel):
+    """
+    Parameters to override default Prefect variable 'sx-l0-default-setting'..
 
-    def model_dump(self, **kwargs) -> Dict[str, Any]:
-        data = super().model_dump(**kwargs)
-
-        # Récupération des ordres déclarés dans les champs
-        ordered_fields = sorted(
-            self.model_fields.items(),
-            key=lambda item: item[1].json_schema_extra.get("order", 9999)
-        )
-
-        # Construction d'un OrderedDict
-        return OrderedDict(
-            (name, data[name]) for name, field in ordered_fields
-        )
-
-    @classmethod
-    def model_json_schema(cls, **kwargs):
-        schema = super().model_json_schema(**kwargs)
-
-        # Ajout d'un ordre dans le schéma (si ton UI interne le lit)
-        ordered_props = sorted(
-            cls.model_fields.items(),
-            key=lambda item: item[1].json_schema_extra.get("order", 9999)
-        )
-
-        schema["x-order"] = [name for name, _ in ordered_props]
-        return schema
-
-class Level0FlowParams(OrderedModel):
-    model_config = {
-        "title": "override default values",
-        "json_schema_extra": {
-            "description": (
-                "These parameters override default Prefect variable 'sx-l0-default-setting'."
-            ),
-            "examples": [
-                {
-                    "owner_identifier": "dupont",
-                    "pipeline": "my_pipeline"
-                }
-            ]
-        }
-    }
+    There is no need to set all of them. 
+    Only the ones you want to override from default settings.
+    """
 
     owner_identifier: str = Field(
         default="",
@@ -81,7 +43,6 @@ class Level0FlowParams(OrderedModel):
         description="Identifier of the user that run the flow",
         json_schema_extra={"order": 1}
     )
-
 
     dask_cluster_label: str = Field(
         default="",
