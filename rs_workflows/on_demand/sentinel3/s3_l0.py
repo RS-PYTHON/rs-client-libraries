@@ -20,7 +20,7 @@ from pystac import Item
 from rs_workflows.flow_utils import (
     FlowEnv,
     FlowEnvArgs,
-    InputProduct,
+    FlowInputProduct,
 )
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dpr import call_dpr_flow
@@ -54,8 +54,8 @@ async def process_s3l0(
             satellite_identifier = f"sentinel-3{session[:3].lower()}"
             end_datetime = datetime.fromisoformat(item_session.properties.get("published"))
             start_datetime = end_datetime
-            input_products: list[InputProduct] = [
-                InputProduct(
+            input_products: list[FlowInputProduct] = [
+                FlowInputProduct(
                     name="S3ACADUS",
                     cadip_session=item_session.id,
                     collection_name=p.session_collection,

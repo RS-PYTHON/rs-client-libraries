@@ -21,11 +21,10 @@ from pystac import Item
 from rs_workflows.flow_utils import (
     FlowEnv,
     FlowEnvArgs,
-    InputProduct,
+    FlowInputProduct,
 )
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dpr import call_dpr_flow
-from typing import Optional
 from rs_workflows.flow_utils import FlowEnvArgs
 from rs_workflows.on_demand.common.types import (
     DEFAULT_PREFECT_CONFIGURATION,
@@ -56,13 +55,14 @@ async def process_s1l0(
             satellite_identifier = f"sentinel-1{session[:3].lower()}"
             end_datetime = datetime.fromisoformat(item_session.properties.get("published"))
             start_datetime = end_datetime
-            input_products: list[InputProduct] = [
-                InputProduct(
+            input_products: list[FlowInputProduct] = [
+                FlowInputProduct(
                     name="S1CADUS",
                     cadip_session=item_session.id,
                     collection_name=p.session_collection,
                 ),
             ]
+            
             await call_dpr_flow(
                 FlowEnvArgs(owner_id=p.owner_identifier),                
                 input_products=input_products,

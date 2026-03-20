@@ -31,8 +31,8 @@ from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
     DprProcessIn,
     FlowEnvArgs,
-    GeneratedProduct,
-    InputProduct,
+    FlowGeneratedProduct,
+    FlowInputProduct,
     Priority,
     ProcessingMode,
     WorkflowType,
@@ -52,7 +52,7 @@ def generate_payload_path(owner_id: str) -> str:
 
 async def call_dpr_flow(
     env: FlowEnvArgs,
-    input_products: list[InputProduct],
+    input_products: list[FlowInputProduct],
     start_datetime: datetime,
     end_datetime: datetime,
     satellite_identifier: str,
@@ -64,7 +64,7 @@ async def call_dpr_flow(
     priority: Optional[Priority],
     processing_mode: list[ProcessingMode],
     workflow: Optional[WorkflowType],
-    generated_product_to_collection_identifier:list[GeneratedProduct],
+    generated_product_to_collection_identifier:list[FlowGeneratedProduct],
     auxiliary_product_to_collection_identifier:list[AuxiliaryProductMapping]
 ) -> None:
     """
