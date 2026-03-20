@@ -43,7 +43,7 @@ async def process_l0(
 ) -> None:
     """
     This is the generic l0 processing flow.
-    It perform common L0 task like retrieving session from catalog an staging it from cadip if needed.
+    It performs common L0 task like retrieving session from catalog an staging it from cadip if needed.
     It call process_s1l0, process_s2l0 or process_s3l0
 
     Only session parameter is mandatory.
@@ -64,8 +64,8 @@ async def process_l0(
     logger.info(f"✔️ Sentinel-{mission} session name is correct.")
 
     # Override of some parameters with default configuration
-    if flow_params==None:
-        flow_params=Level0FlowParams()
+    if flow_params == None:
+        flow_params = Level0FlowParams()
     p: Level0FlowParams = await flow_params.resolve(mission, level="0")
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
@@ -85,10 +85,10 @@ async def process_l0(
             evicted, eviction_date = is_evicted(item_session)
             if evicted:
                 logger.error(f"❌ The session '{session}' has been evicted (eviction date = {eviction_date}) ")
-                raise ValueError(f"'{session}' has been evicted")            
-            if is_published(item_session)==False:
+                raise ValueError(f"'{session}' has been evicted")
+            if is_published(item_session) == False:
                 logger.error(f"❌ The session '{session}' has not been published yet")
-                raise ValueError(f"'{session}' has not been publised")            
+                raise ValueError(f"'{session}' has not been publised")
         else:
             logger.info(f"Try to stage session  {session} from {mission} stations :{p.cadip_collections}")
             station = await get_cadip_station(
