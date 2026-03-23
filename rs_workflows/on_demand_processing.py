@@ -199,9 +199,9 @@ async def dpr_processing(
         adfs = []
         for name, (status, item_collection) in auxip_items:
             for item in item_collection.items:
-                if status:
+                if status: # type: ignore
                     asset = next(iter(item.assets.values()))
-                    adfs.append((name, asset.href))
+                    adfs.append((name, asset.href)) # type: ignore
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
         # generate the dpr payload file
