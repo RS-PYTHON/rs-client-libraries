@@ -23,6 +23,8 @@ from rs_workflows.flow_utils import (
     FlowEnv,
     FlowEnvArgs,
     FlowInputProduct,
+    FlowGeneratedProduct,
+    AuxiliaryProductMapping,
 )
 from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.utils.catalog import get_single_catalog_item
@@ -51,7 +53,11 @@ async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: boo
             # Prepare the input for the Sentinel-1
             # The satellite name can be retrieved from the 3 first caracters of the session name
             satellite_identifier = f"sentinel-3{session[:3].lower()}"
-            end_datetime = datetime.fromisoformat(item_session.properties.get("published"))
+            published = item_session.properties.get("published")
+            if not isinstance(published, str):
+                raise ValueError("Missing or invalid 'published' property in item_session")
+            end_datetime = datetime.fromisoformat(published)
+
             start_datetime = end_datetime
             input_products: list[FlowInputProduct] = [
                 FlowInputProduct(
@@ -60,6 +66,13 @@ async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: boo
                     collection_name=p.session_collection,
                 ),
             ]
+            generated_product: list[FlowGeneratedProduct]
+            if p.generated_product_to_collection_identifier is not None:
+                generated_product = p.generated_product_to_collection_identifier
+            aux_product: list[AuxiliaryProductMapping]
+            if p.auxiliary_product_to_collection_identifier is not None:
+                aux_product = p.auxiliary_product_to_collection_identifier
+            
             await call_dpr_flow(
                 FlowEnvArgs(owner_id=p.owner_identifier),
                 input_products=input_products,
@@ -74,8 +87,8 @@ async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: boo
                 priority=p.priority,
                 processing_mode=p.processing_mode,
                 workflow=p.workflow,
-                generated_product_to_collection_identifier=p.generated_product_to_collection_identifier,
-                auxiliary_product_to_collection_identifier=p.auxiliary_product_to_collection_identifier,
+                generated_product_to_collection_identifier=generated_product,
+                auxiliary_product_to_collection_identifier=aux_product,
             )
         else:
             logger.error("❌ The processing cannot be launched.")

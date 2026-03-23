@@ -24,17 +24,17 @@ from rs_workflows.flow_utils import FlowEnv
 
 
 @task(name="Retrieve rs-catalog item from collection")
-async def get_single_catalog_item(flow_env: FlowEnv, item_id: str, collections: list[str]) -> Item:
+async def get_single_catalog_item(flow_env: FlowEnv, item_id: str, collections: list[str]) -> Item | None:
     """
     Get an item from a set of rs-catalog collections
     """
     logger = get_run_logger()
-    result: Item = None
+    result: None
 
     # Try to retrieve the session on the collection
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
     logger.info(f"Search item {item_id} on the collections {', '.join(collections)} from the  rs-catalog.")
-    item_collection: ItemCollection = catalog_client.search(
+    item_collection: ItemCollection | None = catalog_client.search(
         method="POST",
         collections=collections,
         ids=[item_id],
