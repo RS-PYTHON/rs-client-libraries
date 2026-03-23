@@ -14,14 +14,9 @@
 
 """staging flows."""
 
-from rs_workflows.flow_utils import FlowEnv
-from prefect import get_run_logger, task
-from pystac import Item, ItemCollection
-from rs_client.stac.catalog_client import CatalogClient
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from urllib.parse import urlencode, urlparse
-from rs_workflows.utils.cadip import cadip_session_search
 
 from prefect import (
     apause_flow_run,
@@ -37,14 +32,17 @@ from pydantic import BaseModel, Field
 from pystac import (
     Collection,
     Extent,
+    Item,
     ItemCollection,
     SpatialExtent,
     TemporalExtent,
 )
 
 from rs_client.stac.cadip_client import CadipClient
+from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.utils.artifact_verbose import ReportManager
+from rs_workflows.utils.cadip import cadip_session_search
 
 
 @task(name="create result artifact")
@@ -291,7 +289,7 @@ async def stage_session_common(
     cadip_collection: CadipCollections | str,
     selected_session: str,
     report_verbose: ReportManager | None = None,
-)-> bool:
+) -> bool:
     """
     Stage a CADIP session by searching and staging it in the catalog.
     This asynchronous function stages a selected CADIP session by:
@@ -315,7 +313,7 @@ async def stage_session_common(
     catalog_cadip_collection = f"s0{sat}-cadip-session"
 
     # Check that the collection exists. Otherwise create it.
-    catalog_client:CatalogClient = flow_env.rs_client.get_catalog_client()
+    catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
     try:
         catalog_client.search(collections=[catalog_cadip_collection])
     except RuntimeError:
