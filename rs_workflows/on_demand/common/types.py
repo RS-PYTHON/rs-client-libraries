@@ -134,10 +134,10 @@ class Level0FlowParams(BaseModel):
         Merge data from Prefect variable and parameters called.
         """
         var_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
-        settings: dict | None = Variable.get(var_name)
-
-        if settings is None:
-            raise ValueError(f"❌ Prefect variable '{var_name}' not found.")
+        raw = Variable.get(var_name)
+        if raw is not None and not isinstance(raw, dict):
+            raise TypeError(f"Variable '{var_name}' must be a dict, got {type(raw)}")
+        settings: dict | None = raw
 
         return Level0FlowParams(
             owner_identifier=self.owner_identifier or settings.get("owner_identifier", ""),

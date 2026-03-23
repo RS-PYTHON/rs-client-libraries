@@ -18,8 +18,8 @@ from prefect import flow, task
 from rs_workflows.flow_utils import (
     FlowInputProduct,
 )
-from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.on_demand.common.l0 import process_l0_final_processing
+from rs_workflows.on_demand.common.types import Level0FlowParams
 
 
 @flow(name="process sentinel-3 level-0")
@@ -33,8 +33,8 @@ async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: boo
         FlowInputProduct(
             name="S3ACADUS",
             cadip_session=session,
-            collection_name=flow_params.session_collection if flow_params else None,
-        )
+            collection_name=flow_params.session_collection,
+        ),
     ]
 
     await process_l0_final_processing(
@@ -44,6 +44,7 @@ async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: boo
         input_products=input_products,
         verbose=verbose,
     )
+
 
 @task(name="process sentinel-3 level-0")
 async def process_s3l0_task(*args, **kwargs) -> None:

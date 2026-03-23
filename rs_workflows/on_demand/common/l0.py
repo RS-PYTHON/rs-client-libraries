@@ -19,19 +19,18 @@ import re
 from prefect import flow, get_run_logger
 from pystac import Item
 
+from rs_workflows.flow_utils import (
+     FlowEnv,
+     FlowEnvArgs,
+     FlowInputProduct,
+ )
 from rs_workflows.on_demand.common.staging import stage_session_common
+from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0_task
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0_task
 from rs_workflows.utils.cadip import get_cadip_station
 from rs_workflows.utils.catalog import get_single_catalog_item, is_evicted, is_published
 from rs_workflows.utils.dask import is_dask_cluster_running
-from datetime import datetime
-from rs_workflows.flow_utils import (
-    FlowEnv,
-    FlowEnvArgs,
-    FlowInputProduct,
-)
-from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.utils.dpr import call_dpr_flow
 
 
@@ -132,9 +131,7 @@ async def process_l0_final_processing(
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
 
     with flow_env.start_span(__name__, f"sentinel{mission}-level0-processing"):
-        item_session: Item | None = await get_single_catalog_item(
-            flow_env, session, [p.session_collection]
-        )
+        item_session: Item | None = await get_single_catalog_item(flow_env, session, [p.session_collection])
 
         if not item_session:
             logger.error("❌ The processing cannot be launched.")
