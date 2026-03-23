@@ -16,7 +16,6 @@
 
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
-from typing import Optional, List
 
 from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import (
@@ -33,7 +32,7 @@ class Level0FlowParams(BaseModel):
     """
     Parameters to override default Prefect variable 'sx-l0-default-setting'..
 
-    There is no need to set all of them. 
+    There is no need to set all of them.
     Only the ones you want to override from default settings.
     """
 
@@ -41,28 +40,28 @@ class Level0FlowParams(BaseModel):
         default="",
         title="Owner Identifier",
         description="Identifier of the user that run the flow",
-        json_schema_extra={"order": 1}
+        json_schema_extra={"order": 1},
     )
 
     dask_cluster_label: str = Field(
         default="",
         title="Dask Cluster Label",
         description="Name of the Dask cluster used for distributed execution.",
-        json_schema_extra={"order": 2}
+        json_schema_extra={"order": 2},
     )
 
-    pipeline: Optional[DprPipeline] = Field(
+    pipeline: DprPipeline | None = Field(
         default=None,
         title="Pipeline",
         description="DPR pipeline to use for processing.",
-        json_schema_extra={"order": 3}
+        json_schema_extra={"order": 3},
     )
     
     session_collection: str = Field(
         default="",
         title="Session Collection",
         description="CADIP collection name containing the Sentinel session.",
-        json_schema_extra={"order": 4}
+        json_schema_extra={"order": 4},
 
     )
 
@@ -70,64 +69,61 @@ class Level0FlowParams(BaseModel):
         default="",
         title="Processor Name",
         description="Name of the processor used for Level-0 processing.",
-        json_schema_extra={"order": 5}
+        json_schema_extra={"order": 5},
     )
 
     processor_version: str = Field(
         default="",
         title="Processor Version",
         description="Version of the processor used for Level-0 processing.",
-        json_schema_extra={"order": 6}
+        json_schema_extra={"order": 6},
     )
 
 
     unit: str = Field(
-        default="",
-        title="Unit",
-        description="Processing unit or internal identifier.",
-        json_schema_extra={"order": 7}
+        default="", title="Unit", description="Processing unit or internal identifier.", json_schema_extra={"order": 7},
     )
 
-    priority: Optional[Priority] = Field(
+    priority: Priority | None = Field(
         default=None,
         title="Priority",
         description="Processing priority (low, normal, high).",
-        json_schema_extra={"order": 8}
+        json_schema_extra={"order": 8},
     )
 
-    processing_mode: List[ProcessingMode] = Field(
+    processing_mode: list[ProcessingMode] = Field(
         default_factory=list,
         title="Processing Mode",
         description="List of processing modes to apply.",
-        json_schema_extra={"order": 9}
+        json_schema_extra={"order": 9},
     )
 
-    workflow: Optional[WorkflowType] = Field(
+    workflow: WorkflowType | None = Field(
         default=None,
         title="Workflow Type",
         description="Workflow type to execute (on-demand, scheduled, etc.).",
-        json_schema_extra={"order": 10}
+        json_schema_extra={"order": 10},
     )
 
-    generated_product_to_collection_identifier: List[FlowGeneratedProduct]|None = Field(
+    generated_product_to_collection_identifier: list[FlowGeneratedProduct] | None = Field(
         default=None,
         title="Generated Product Mapping",
         description="List of generated products and their target collections.",
-        json_schema_extra={"order": 10}
+        json_schema_extra={"order": 10},
     )
 
-    auxiliary_product_to_collection_identifier: List[AuxiliaryProductMapping]|None = Field(
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] | None = Field(
         default=None,
         title="Auxiliary Product Mapping",
         description="List of auxiliary products and their target collections.",
-        json_schema_extra={"order": 11}
+        json_schema_extra={"order": 11},
     )
 
-    cadip_collections: List[str] = Field(
+    cadip_collections: list[str] = Field(
         default_factory=list,
         title="CADIP Collections",
         description="List of CADIP collections to query for session retrieval.",
-        json_schema_extra={"order": 12}
+        json_schema_extra={"order": 12},
     )
 
     async def resolve(self, mission: str, level: str = "0") -> "Level0FlowParams":

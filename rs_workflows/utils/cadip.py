@@ -14,13 +14,6 @@
 
 """Helper task to interact with the rs-cadip."""
 
-from rs_workflows.flow_utils import FlowEnv
-from rs_workflows.utils.catalog import is_evicted, is_published
-
-from prefect import get_run_logger, task
-import json
-from pystac import ItemCollection
-from rs_client.stac.cadip_client import CadipClient
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -29,17 +22,19 @@ from prefect import (
     get_run_logger,
     task,
 )
+from pystac import ItemCollection
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.utils.catalog import is_evicted, is_published
 
 
 @task(name="Search the cadip station that owns the session")
-async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections : list[str]) -> str|None:
+async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections: list[str]) -> str | None:
     """ """
     logger = get_run_logger()
     result = None
-    
+
     # Initialize flow environment and telemetry span
     cadip_client: CadipClient = flow_env.rs_client.get_cadip_client()
 
@@ -47,13 +42,13 @@ async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections :
     logger.info(f"Search a cadip station between [{', '.join(cadip_collections)}] looking for the session'{session}'")
 
     # Execute search request
-    item_col:ItemCollection = cadip_client.search(
+    item_col: ItemCollection = cadip_client.search(
         method="GET",
         ids=[session],
         collections=cadip_collections,
         max_items=1,
         limit=1,
-    )    
+    )
 
     if len(item_col) == 1:
         # Check that the session has not been evicted
