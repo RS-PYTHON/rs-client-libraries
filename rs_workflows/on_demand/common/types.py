@@ -14,7 +14,6 @@
 
 """common types and class"""
 
-from typing import Any
 
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
@@ -27,6 +26,8 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
     WorkflowType,
 )
+
+from typing import Any, Awaitable, cast
 
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
@@ -136,7 +137,7 @@ class Level0FlowParams(BaseModel):
         Merge data from Prefect variable and parameters called.
         """
         var_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
-        raw = await Variable.get(var_name)
+        raw = await cast(Awaitable[Any], Variable.get(var_name))
         if raw is None:
             raise FileExistsError(f"Prefect variable '{var_name}' is missing.")
         if not isinstance(raw, dict):
