@@ -41,7 +41,7 @@ from rs_workflows.on_demand_processing import dpr_processing
 
 
 def generate_payload_path(owner_id: str) -> str:
-    """_summary_
+    """
     Generate an hard coded path to store the payload.
     This is a workaroud, waiting for share disk solution.
     """
