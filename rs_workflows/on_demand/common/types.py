@@ -15,7 +15,9 @@
 """common types and class"""
 
 
-from typing import Any, Awaitable, cast
+from typing import Any, cast
+from typing import Any, cast
+from collections.abc import Awaitable
 
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
