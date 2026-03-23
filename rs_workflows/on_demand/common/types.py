@@ -16,6 +16,7 @@
 
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
+from typing import Any
 
 from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import (
@@ -134,13 +135,14 @@ class Level0FlowParams(BaseModel):
         Merge data from Prefect variable and parameters called.
         """
         var_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
+        
         raw = Variable.get(var_name)
         if raw is None:
             raise FileExistsError(f"Prefect variable '{var_name}' is missing.")
         if not isinstance(raw, dict):
-            raise TypeError(f"Variable '{var_name}' must be a dict, got {type(raw)}")
-        settings: dict | None = raw
-
+            raw = {}
+        settings: dict[str, Any] = raw
+        
         return Level0FlowParams(
             owner_identifier=self.owner_identifier or settings.get("owner_identifier", ""),
             dask_cluster_label=self.dask_cluster_label or settings.get("dask_cluster_name", ""),
