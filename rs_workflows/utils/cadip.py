@@ -17,7 +17,6 @@
 import json
 from datetime import datetime, timedelta, timezone
 
-
 from prefect import (
     get_run_logger,
     task,
@@ -31,7 +30,9 @@ from rs_workflows.utils.catalog import is_evicted, is_published
 
 @task(name="Search the cadip station that owns the session")
 async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections: list[str]) -> str | None:
-    """ """
+    """
+    Retrieve a cadip station that owns the session.
+    """
     logger = get_run_logger()
     result = None
 
@@ -55,7 +56,7 @@ async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections: 
         evicted, eviction_date = is_evicted(item_col[0])
         if evicted:
             logger.error(f"❌ The session '{session}' has been evicted (eviction date = {eviction_date}) ")
-        else:        
+        else:
             if is_published(item_col[0]):
                 # Extract of the station name
                 collection_links = [link for link in item_col[0].links if link.rel == "collection"]
@@ -71,9 +72,12 @@ async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections: 
     return result
 
 
-
 @task(name="Cadip session search")
-async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: list[str], limit: int = 10) -> ItemCollection:
+async def cadip_session_search(
+    env: FlowEnvArgs,
+    cadip_collection_identifier: list[str],
+    limit: int = 10,
+) -> ItemCollection:
     """
     Search for CADIP sessions within a given time interval.
 
@@ -138,4 +142,3 @@ async def cadip_session_search(env: FlowEnvArgs, cadip_collection_identifier: li
         )
 
         return found
-

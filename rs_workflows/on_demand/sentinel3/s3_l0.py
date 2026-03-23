@@ -32,6 +32,11 @@ from rs_workflows.on_demand.common.types import (
 
 @flow(name="process sentinel-3 level-0")
 async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: bool = False):
+    """
+    Sentinel-3 L0 processing.
+    The session should have been staged before.
+    """
+
     logger = get_run_logger()
     logger.info(f"Mode verbose is set to {verbose}")
 

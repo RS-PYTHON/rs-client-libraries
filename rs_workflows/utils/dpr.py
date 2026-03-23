@@ -17,11 +17,11 @@
 import json
 import time
 from datetime import datetime
+from typing import Optional
 
 from prefect import get_run_logger, task
 from prefect.variables import Variable
 from pystac import Item, ItemCollection
-from typing import Optional
 
 from rs_client.ogcapi.dpr_client import (
     DprPipeline,
@@ -44,7 +44,7 @@ def generate_payload_path(owner_id: str) -> str:
     """_summary_
     Generate an hard coded path to store the payload.
     This is a workaroud, waiting for share disk solution.
-    """    
+    """
     # TODO : use a local path on the share disk
     s3_payload = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}"
     return s3_payload
@@ -59,20 +59,21 @@ async def call_dpr_flow(
     dask_cluster_label: str,
     processor_name: str,
     processor_version: str,
-    pipeline: Optional[DprPipeline],
+    pipeline: DprPipeline | None,
     unit: str,
-    priority: Optional[Priority],
+    priority: Priority | None,
     processing_mode: list[ProcessingMode],
-    workflow: Optional[WorkflowType],
-    generated_product_to_collection_identifier:list[FlowGeneratedProduct],
-    auxiliary_product_to_collection_identifier:list[AuxiliaryProductMapping]
+    workflow: WorkflowType | None,
+    generated_product_to_collection_identifier: list[FlowGeneratedProduct],
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
 ) -> None:
     """
     Call any DPR processing flow with a set of default parameters.
     In case an optional parameter is not set, its value is get from Prefect Variable named 'prefect_settings'
+    The payload is stored on a S3 bucket.
     """
     s3_payload: str = generate_payload_path(env.owner_id)
-    
+
     a_process: DprProcessIn = DprProcessIn(
         env=env,
         processor_name=DprProcessor(processor_name),

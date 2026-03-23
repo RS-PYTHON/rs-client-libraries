@@ -122,8 +122,6 @@ async def cadip_session_stage(env: FlowEnvArgs, cadip_search_url: str, catalog_c
 
 def make_session_enum(values: dict[str, str]) -> Enum:
     """
-    Create a dynamic Enum class from a dictionary of session values.
-
     This function takes a dictionary mapping session identifiers to display names
     and returns a new Enum class with the mapping inverted (values become enum names,
     keys become enum values).

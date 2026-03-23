@@ -25,6 +25,7 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
     WorkflowType,
 )
+
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
 
@@ -34,6 +35,7 @@ class Level0FlowParams(BaseModel):
 
     There is no need to set all of them.
     Only the ones you want to override from default settings.
+    optional type not used.
     """
 
     owner_identifier: str = Field(
@@ -56,13 +58,12 @@ class Level0FlowParams(BaseModel):
         description="DPR pipeline to use for processing.",
         json_schema_extra={"order": 3},
     )
-    
+
     session_collection: str = Field(
         default="",
         title="Session Collection",
         description="CADIP collection name containing the Sentinel session.",
         json_schema_extra={"order": 4},
-
     )
 
     processor_name: str = Field(
@@ -79,9 +80,11 @@ class Level0FlowParams(BaseModel):
         json_schema_extra={"order": 6},
     )
 
-
     unit: str = Field(
-        default="", title="Unit", description="Processing unit or internal identifier.", json_schema_extra={"order": 7},
+        default="",
+        title="Unit",
+        description="Processing unit or internal identifier.",
+        json_schema_extra={"order": 7},
     )
 
     priority: Priority | None = Field(
@@ -131,7 +134,7 @@ class Level0FlowParams(BaseModel):
         settings: dict = await Variable.get(var_name)
 
         if settings is None:
-            raise ValueError(f"❌ Prefect variable '{var_name}' not found")
+            raise ValueError(f"❌ Prefect variable '{var_name}' not found.")
 
         return Level0FlowParams(
             owner_identifier=self.owner_identifier or settings.get("owner_identifier", ""),
