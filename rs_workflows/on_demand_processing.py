@@ -121,7 +121,7 @@ async def process_input_adfs(
 @flow
 async def dpr_processing(
     dpr_input: DprProcessIn,
-    retry_config: RetryConfig = RetryConfig(), #type: ignore
+    retry_config: RetryConfig = RetryConfig(),  # type: ignore
 ):
     """
     Prefect flow for dpr-process.
@@ -328,7 +328,7 @@ async def on_demand_prip_staging(
     product_type: str,
     prip_collection: str,
     catalog_collection_identifier: str,
-    retry_config: RetryConfig = RetryConfig() # type: ignore
+    retry_config: RetryConfig = RetryConfig(),  # type: ignore
 ):
     """
     Flow to retrieve Prip files with the given time interval defined by
