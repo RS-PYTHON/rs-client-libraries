@@ -20,11 +20,11 @@ from prefect import flow, get_run_logger, task
 from pystac import Item
 
 from rs_workflows.flow_utils import (
+    AuxiliaryProductMapping,
     FlowEnv,
     FlowEnvArgs,
-    FlowInputProduct,
     FlowGeneratedProduct,
-    AuxiliaryProductMapping,
+    FlowInputProduct,
 )
 from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.utils.catalog import get_single_catalog_item
@@ -72,7 +72,7 @@ async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: boo
             aux_product: list[AuxiliaryProductMapping]
             if p.auxiliary_product_to_collection_identifier is not None:
                 aux_product = p.auxiliary_product_to_collection_identifier
-            
+
             await call_dpr_flow(
                 FlowEnvArgs(owner_id=p.owner_identifier),
                 input_products=input_products,

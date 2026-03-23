@@ -20,11 +20,11 @@ from prefect import flow, get_run_logger, task
 from pystac import Item
 
 from rs_workflows.flow_utils import (
+    AuxiliaryProductMapping,
     FlowEnv,
     FlowEnvArgs,
-    FlowInputProduct,
     FlowGeneratedProduct,
-    AuxiliaryProductMapping,
+    FlowInputProduct,
 )
 from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.utils.catalog import get_single_catalog_item
