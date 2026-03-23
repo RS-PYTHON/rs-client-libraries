@@ -53,7 +53,13 @@ def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
 
 
 @task(name="Process input ADFS")
-async def process_input_adfs(input_adfs, dpr_input, task_table):
+async def process_input_adfs(
+    input_adfs,
+    dpr_input,
+    task_table,
+    staging_retries: int = 3,
+    staging_retry_delay: int = 60,
+):
     """
     Stage ADFS files from the tasktable.
     """
@@ -91,12 +97,19 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
                 ),
             )
             # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
-            auxip_items = auxip_flow.auxip_staging_task.submit(
-                dpr_input.env,
-                auxip_cql2,
-                collection,
-                timeout if timeout else -1,
-            ).result()
+            auxip_items = (
+                auxip_flow.auxip_staging_task.with_options(
+                    retries=staging_retries,
+                    retry_delay_seconds=staging_retry_delay,
+                )
+                .submit(
+                    dpr_input.env,
+                    auxip_cql2,
+                    collection,
+                    timeout if timeout else -1,
+                )
+                .result()
+            )
             # 6. Return the first found result
             if auxip_items[1]:  # type: ignore
                 return input_adfs["name"], auxip_items
@@ -112,6 +125,8 @@ async def process_input_adfs(input_adfs, dpr_input, task_table):
 @flow(name="dpr-processing")
 async def dpr_processing(
     dpr_input: DprProcessIn,
+    staging_retries: int = 3,
+    staging_retry_delay: int = 60,
 ):
     """
     Prefect flow for dpr-process.
@@ -171,7 +186,9 @@ async def dpr_processing(
         for unit in unit_list:
             # For each input_adfs element computed on STEP 1
             for input_adfs in unit["input_adfs"]:
-                tasks.append(process_input_adfs.submit(input_adfs, dpr_input, task_table))
+                tasks.append(
+                    process_input_adfs.submit(input_adfs, dpr_input, task_table, staging_retries, staging_retry_delay),
+                )
 
         try:
             auxip_items = [t.result() for t in tasks]
@@ -258,6 +275,8 @@ async def on_demand_cadip_staging(
     cadip_collection_identifier: str,
     session_identifier: str,
     catalog_collection_identifier: str,
+    staging_retries: int = 3,
+    staging_retry_delay: int = 60,
 ):
     """
     Flow to retrieve a session, stage it and add the STAC item into the catalog.
@@ -275,7 +294,10 @@ async def on_demand_cadip_staging(
     with flow_env.start_span(__name__, "on-demand-cadip-staging"):
 
         # Search Cadip sessions
-        cadip_items = cadip_flow.search_task.submit(
+        cadip_items = cadip_flow.search_task.with_options(
+            retries=3,
+            retry_delay_seconds=60,
+        ).submit(
             flow_env.serialize(),
             cadip_collection_identifier,
             session_identifier,
@@ -283,7 +305,14 @@ async def on_demand_cadip_staging(
         )
 
         # Stage Cadip items.
-        staged = staging_task.submit(flow_env.serialize(), cadip_items, catalog_collection_identifier)
+        staged = staging_task.with_options(
+            retries=staging_retries,
+            retry_delay_seconds=staging_retry_delay,
+        ).submit(
+            flow_env.serialize(),
+            cadip_items,
+            catalog_collection_identifier,
+        )
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
@@ -298,6 +327,8 @@ async def on_demand_prip_staging(
     product_type: str,
     prip_collection: str,
     catalog_collection_identifier: str,
+    staging_retries: int = 3,
+    staging_retry_delay: int = 60,
 ):
     """
     Flow to retrieve Prip files with the given time interval defined by
@@ -323,7 +354,10 @@ async def on_demand_prip_staging(
         cql2_filter = create_valcover_filter(start_datetime, end_datetime, product_type)
 
         # Search Prip products
-        prip_items = prip_flow.search_task.submit(
+        prip_items = prip_flow.search_task.with_options(
+            retries=staging_retries,
+            retry_delay_seconds=staging_retry_delay,
+        ).submit(
             flow_env.serialize(),
             prip_cql2={"filter": cql2_filter},
             prip_collection=prip_collection,
@@ -331,7 +365,10 @@ async def on_demand_prip_staging(
         )
 
         # Stage Prip items
-        staged = staging_task.submit(
+        staged = staging_task.with_options(
+            retries=staging_retries,
+            retry_delay_seconds=staging_retry_delay,
+        ).submit(
             flow_env.serialize(),
             prip_items,
             catalog_collection_identifier,
