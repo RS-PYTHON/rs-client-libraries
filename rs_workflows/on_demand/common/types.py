@@ -15,6 +15,8 @@
 """common types and class"""
 
 
+from typing import Any, Awaitable, cast
+
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
 
@@ -26,8 +28,6 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
     WorkflowType,
 )
-
-from typing import Any, Awaitable, cast
 
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
