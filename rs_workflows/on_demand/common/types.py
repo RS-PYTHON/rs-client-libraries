@@ -136,7 +136,7 @@ class Level0FlowParams(BaseModel):
         Merge data from Prefect variable and parameters called.
         """
         var_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
-        raw = Variable.get(var_name)
+        raw = await Variable.get(var_name)
         if raw is None:
             raise FileExistsError(f"Prefect variable '{var_name}' is missing.")
         if not isinstance(raw, dict):
