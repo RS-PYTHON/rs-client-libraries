@@ -14,21 +14,12 @@
 
 """sentinel 3 Level-0 processing."""
 
-from datetime import datetime
-
-from prefect import flow, get_run_logger, task
-from pystac import Item
-
+from prefect import flow, task
 from rs_workflows.flow_utils import (
-    AuxiliaryProductMapping,
-    FlowEnv,
-    FlowEnvArgs,
-    FlowGeneratedProduct,
     FlowInputProduct,
 )
 from rs_workflows.on_demand.common.types import Level0FlowParams
-from rs_workflows.utils.catalog import get_single_catalog_item
-from rs_workflows.utils.dpr import call_dpr_flow
+from rs_workflows.on_demand.common.l0 import process_l0_final_processing
 
 
 @flow(name="process sentinel-3 level-0")
@@ -38,61 +29,21 @@ async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: boo
     The session should have been staged before.
     """
 
-    logger = get_run_logger()
-    logger.info(f"Mode verbose is set to {verbose}")
+    input_products = [
+        FlowInputProduct(
+            name="S3ACADUS",
+            cadip_session=session,
+            collection_name=flow_params.session_collection if flow_params else None,
+        )
+    ]
 
-    # Override of some parameters with default configuration
-    flow_params = flow_params or Level0FlowParams()
-    p = await flow_params.resolve(mission="3", level="0")
-
-    flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
-    with flow_env.start_span(__name__, "sentinel3-level0-processing"):
-        item_session: Item | None = await get_single_catalog_item(flow_env, session, [p.session_collection])
-
-        if item_session:
-            # Prepare the input for the Sentinel-1
-            # The satellite name can be retrieved from the 3 first caracters of the session name
-            satellite_identifier = f"sentinel-3{session[:3].lower()}"
-            published = item_session.properties.get("published")
-            if not isinstance(published, str):
-                raise ValueError("Missing or invalid 'published' property in item_session")
-            end_datetime = datetime.fromisoformat(published)
-
-            start_datetime = end_datetime
-            input_products: list[FlowInputProduct] = [
-                FlowInputProduct(
-                    name="S3ACADUS",
-                    cadip_session=item_session.id,
-                    collection_name=p.session_collection,
-                ),
-            ]
-            generated_product: list[FlowGeneratedProduct]
-            if p.generated_product_to_collection_identifier is not None:
-                generated_product = p.generated_product_to_collection_identifier
-            aux_product: list[AuxiliaryProductMapping]
-            if p.auxiliary_product_to_collection_identifier is not None:
-                aux_product = p.auxiliary_product_to_collection_identifier
-
-            await call_dpr_flow(
-                FlowEnvArgs(owner_id=p.owner_identifier),
-                input_products=input_products,
-                start_datetime=start_datetime,
-                end_datetime=end_datetime,
-                satellite_identifier=satellite_identifier,
-                dask_cluster_label=p.dask_cluster_label,
-                processor_name=p.processor_name,
-                processor_version=p.processor_version,
-                pipeline=p.pipeline,
-                unit=p.unit,
-                priority=p.priority,
-                processing_mode=p.processing_mode,
-                workflow=p.workflow,
-                generated_product_to_collection_identifier=generated_product,
-                auxiliary_product_to_collection_identifier=aux_product,
-            )
-        else:
-            logger.error("❌ The processing cannot be launched.")
-
+    await process_l0_final_processing(
+        mission="1",
+        session=session,
+        flow_params=flow_params,
+        input_products=input_products,
+        verbose=verbose,
+    )
 
 @task(name="process sentinel-3 level-0")
 async def process_s3l0_task(*args, **kwargs) -> None:
