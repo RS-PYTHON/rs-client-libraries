@@ -13,7 +13,9 @@
 # limitations under the License.
 
 """sentinel 3 Level-0 processing."""
+
 from datetime import datetime
+
 from prefect import flow, get_run_logger, task
 from pystac import Item
 
@@ -27,18 +29,19 @@ from rs_workflows.on_demand.common.types import (
     Level0FlowParams,
 )
 
+
 @flow(name="process sentinel-3 level-0")
 async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: bool = False):
     logger = get_run_logger()
     logger.info(f"Mode verbose is set to {verbose}")
-    
+
     # Override of some parameters with default configuration
     flow_params = flow_params or Level0FlowParams()
     p = await flow_params.resolve(mission="3", level="0")
-        
+
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
     with flow_env.start_span(__name__, "sentinel3-level0-processing"):
-        item_session:Item = await get_single_catalog_item(flow_env, session, [p.session_collection])
+        item_session: Item = await get_single_catalog_item(flow_env, session, [p.session_collection])
 
         if item_session:
             # Prepare the input for the Sentinel-1
@@ -60,22 +63,21 @@ async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: boo
                 end_datetime=end_datetime,
                 satellite_identifier=satellite_identifier,
                 dask_cluster_label=p.dask_cluster_label,
-                processor_name=p.processor_name,                
+                processor_name=p.processor_name,
                 processor_version=p.processor_version,
                 pipeline=p.pipeline,
                 unit=p.unit,
                 priority=p.priority,
                 processing_mode=p.processing_mode,
-                workflow=p.workflow,            
+                workflow=p.workflow,
                 generated_product_to_collection_identifier=p.generated_product_to_collection_identifier,
                 auxiliary_product_to_collection_identifier=p.auxiliary_product_to_collection_identifier,
             )
         else:
             logger.error(f"❌ The processing cannot be launched.")
 
+
 @task(name="process sentinel-3 level-0")
 async def process_s3l0_task(*args, **kwargs) -> None:
     """See: dpr_processing"""
     return await process_s3l0.fn(*args, **kwargs)
-    
-
