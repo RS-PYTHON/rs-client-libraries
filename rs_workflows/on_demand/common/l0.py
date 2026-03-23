@@ -20,10 +20,10 @@ from prefect import flow, get_run_logger
 from pystac import Item
 
 from rs_workflows.flow_utils import (
-     FlowEnv,
-     FlowEnvArgs,
-     FlowInputProduct,
- )
+    FlowEnv,
+    FlowEnvArgs,
+    FlowInputProduct,
+)
 from rs_workflows.on_demand.common.staging import stage_session_common
 from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0_task
