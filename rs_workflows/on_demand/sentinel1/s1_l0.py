@@ -15,11 +15,10 @@
 """sentinel 1 Level-0 processing."""
 
 from prefect import flow, task
-
 from rs_workflows.flow_utils import (
     FlowInputProduct,
 )
-from rs_workflows.on_demand.common.l0 import process_l0_final_processing
+from rs_workflows.on_demand.common.l0_last_steps import process_l0_last_steps
 from rs_workflows.on_demand.common.types import Level0FlowParams
 
 
@@ -38,7 +37,7 @@ async def process_s1l0(session: str, flow_params: Level0FlowParams, verbose: boo
         ),
     ]
 
-    await process_l0_final_processing(
+    await process_l0_last_steps(
         mission="1",
         session=session,
         flow_params=flow_params,

@@ -29,7 +29,7 @@ async def get_single_catalog_item(flow_env: FlowEnv, item_id: str, collections: 
     Get an item from a set of rs-catalog collections
     """
     logger = get_run_logger()
-    result: None
+    result: Item | None = None
 
     # Try to retrieve the session on the collection
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()

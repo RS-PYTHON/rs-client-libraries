@@ -135,7 +135,9 @@ class Level0FlowParams(BaseModel):
         """
         var_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
         raw = Variable.get(var_name)
-        if raw is not None and not isinstance(raw, dict):
+        if raw is None:
+            raise FileExistsError(f"Prefect variable '{var_name}' is missing.")
+        if not isinstance(raw, dict):
             raise TypeError(f"Variable '{var_name}' must be a dict, got {type(raw)}")
         settings: dict | None = raw
 
