@@ -72,7 +72,7 @@ async def process_l0(
             raise ValueError(f"❌ '{p.dask_cluster_label}' is unknown or not ready.")
 
         # Try to retrieve the session on the collection
-        item_session: Item = await get_single_catalog_item(flow_env, session, [p.session_collection])
+        item_session: Item | None = await get_single_catalog_item(flow_env, session, [p.session_collection])
 
         # If the session is not on the rs-catalog, we will try to stage it
         if item_session:

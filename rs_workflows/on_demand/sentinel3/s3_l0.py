@@ -47,7 +47,7 @@ async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: boo
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
     with flow_env.start_span(__name__, "sentinel3-level0-processing"):
-        item_session: Item = await get_single_catalog_item(flow_env, session, [p.session_collection])
+        item_session: Item | None = await get_single_catalog_item(flow_env, session, [p.session_collection])
 
         if item_session:
             # Prepare the input for the Sentinel-1
