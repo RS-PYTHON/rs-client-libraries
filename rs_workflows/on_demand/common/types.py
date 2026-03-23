@@ -130,6 +130,9 @@ class Level0FlowParams(BaseModel):
     )
 
     async def resolve(self, mission: str, level: str = "0") -> "Level0FlowParams":
+        """
+        Merge data from Prefect variable and parameters called.
+        """
         var_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
         settings: dict = await Variable.get(var_name)
 

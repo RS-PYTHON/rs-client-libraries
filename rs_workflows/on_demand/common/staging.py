@@ -348,8 +348,9 @@ async def stage_session_common(
         if report_verbose is not None:
             report_verbose.success_step(2, "Staging completed successfully.")
         return True
-    else:
-        logger.error(f"❌ Session {selected_session} staged failed (status is '{status}').")
-        if report_verbose is not None:
-            report_verbose.failed_step(2, "Staging failed (status is '{status}').")
-        return False
+
+    logger.error(f"❌ Session {selected_session} staged failed (status is '{status}').")
+    if report_verbose is not None:
+        report_verbose.failed_step(2, "Staging failed (status is '{status}').")
+    return False
+

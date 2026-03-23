@@ -24,7 +24,7 @@ from rs_workflows.flow_utils import FlowEnv
 
 
 @task(name="Retrieve rs-catalog item from collection")
-async def get_single_catalog_item(flow_env: FlowEnv, id: str, collections: list[str]) -> Item:
+async def get_single_catalog_item(flow_env: FlowEnv, item_id: str, collections: list[str]) -> Item:
     """
     Get an item from a set of rs-catalog collections
     """
@@ -33,11 +33,11 @@ async def get_single_catalog_item(flow_env: FlowEnv, id: str, collections: list[
 
     # Try to retrieve the session on the collection
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-    logger.info(f"Search item {id} on the collections {', '.join(collections)} from the  rs-catalog.")
+    logger.info(f"Search item {item_id} on the collections {', '.join(collections)} from the  rs-catalog.")
     item_collection: ItemCollection = catalog_client.search(
         method="POST",
         collections=collections,
-        ids=[id],
+        ids=[item_id],
         limit=1,
     )
 
@@ -46,12 +46,12 @@ async def get_single_catalog_item(flow_env: FlowEnv, id: str, collections: list[
     if count == 1:
         # One  item  was found on the rs-catalog
         logger.info(
-            f"✔️ The STAC item 🧊 '{id}' has been found on the rs-catalog collections {', '.join(collections)}.",
+            f"✔️ The STAC item 🧊 '{item_id}' has been found on the rs-catalog collections {', '.join(collections)}.",
         )
         result = item_collection.items[0]
     else:
         logger.warning(
-            f"❌ The STAC item 🧊 '{id}' was not found on the rs-catalog collections {', '.join(collections)}.",
+            f"❌ The STAC item 🧊 '{item_id}' was not found on the rs-catalog collections {', '.join(collections)}.",
         )
 
     return result

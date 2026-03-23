@@ -78,7 +78,7 @@ async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: boo
                 auxiliary_product_to_collection_identifier=p.auxiliary_product_to_collection_identifier,
             )
         else:
-            logger.error(f"❌ The processing cannot be launched.")
+            logger.error("❌ The processing cannot be launched.")
 
 
 @task(name="process sentinel-3 level-0")
