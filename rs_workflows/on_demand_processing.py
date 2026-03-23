@@ -31,11 +31,7 @@ from rs_common import prefect_utils
 from rs_common.utils import create_valcover_filter
 from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
 from rs_workflows.dpr_flow import run_processor
-from rs_workflows.flow_utils import (
-    DprProcessIn,
-    FlowEnv,
-    FlowEnvArgs,
-)
+from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs, RetryConfig
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload
 from rs_workflows.staging_flow import staging_task
@@ -122,11 +118,10 @@ async def process_input_adfs(
         ) from kerr
 
 
-@flow(name="dpr-processing")
+@flow
 async def dpr_processing(
     dpr_input: DprProcessIn,
-    staging_retries: int = 3,
-    staging_retry_delay: int = 60,
+    retry_config: RetryConfig = RetryConfig(), #type: ignore
 ):
     """
     Prefect flow for dpr-process.
@@ -187,7 +182,13 @@ async def dpr_processing(
             # For each input_adfs element computed on STEP 1
             for input_adfs in unit["input_adfs"]:
                 tasks.append(
-                    process_input_adfs.submit(input_adfs, dpr_input, task_table, staging_retries, staging_retry_delay),
+                    process_input_adfs.submit(
+                        input_adfs,
+                        dpr_input,
+                        task_table,
+                        retry_config.staging_retries,
+                        retry_config.staging_retry_delay,
+                    ),
                 )
 
         try:
@@ -327,8 +328,7 @@ async def on_demand_prip_staging(
     product_type: str,
     prip_collection: str,
     catalog_collection_identifier: str,
-    staging_retries: int = 3,
-    staging_retry_delay: int = 60,
+    retry_config: RetryConfig = RetryConfig() # type: ignore
 ):
     """
     Flow to retrieve Prip files with the given time interval defined by
@@ -355,8 +355,8 @@ async def on_demand_prip_staging(
 
         # Search Prip products
         prip_items = prip_flow.search_task.with_options(
-            retries=staging_retries,
-            retry_delay_seconds=staging_retry_delay,
+            retries=retry_config.staging_retries,
+            retry_delay_seconds=retry_config.staging_retry_delay,
         ).submit(
             flow_env.serialize(),
             prip_cql2={"filter": cql2_filter},
@@ -366,8 +366,8 @@ async def on_demand_prip_staging(
 
         # Stage Prip items
         staged = staging_task.with_options(
-            retries=staging_retries,
-            retry_delay_seconds=staging_retry_delay,
+            retries=retry_config.staging_retries,
+            retry_delay_seconds=retry_config.staging_retry_delay,
         ).submit(
             flow_env.serialize(),
             prip_items,
