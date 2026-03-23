@@ -27,7 +27,7 @@ from rs_workflows.utils.cadip import get_cadip_station
 from rs_workflows.utils.catalog import get_single_catalog_item, is_evicted, is_published
 from rs_workflows.utils.dask import is_dask_cluster_running
 
-from .types import DEFAULT_PREFECT_CONFIGURATION, Level0FlowParams
+from .types import Level0FlowParams
 
 
 @flow(name="process level-0")
@@ -59,7 +59,7 @@ async def process_l0(
     logger.info(f"✔️ Sentinel-{mission} session name is correct.")
 
     # Override of some parameters with default configuration
-    if flow_params == None:
+    if flow_params is None:
         flow_params = Level0FlowParams()
     p: Level0FlowParams = await flow_params.resolve(mission, level="0")
 
@@ -68,7 +68,7 @@ async def process_l0(
         found = False
 
         # Check that the chosen dask_cluster_label is deployed
-        if await is_dask_cluster_running(p.dask_cluster_label) == False:
+        if await is_dask_cluster_running(p.dask_cluster_label) is False:
             raise ValueError(f"❌ '{p.dask_cluster_label}' is unknown or not ready.")
 
         # Try to retrieve the session on the collection
@@ -81,7 +81,7 @@ async def process_l0(
             if evicted:
                 logger.error(f"❌ The session '{session}' has been evicted (eviction date = {eviction_date}) ")
                 raise ValueError(f"'{session}' has been evicted")
-            if is_published(item_session) == False:
+            if is_published(item_session) is False:
                 logger.error(f"❌ The session '{session}' has not been published yet")
                 raise ValueError(f"'{session}' has not been publised")
         else:

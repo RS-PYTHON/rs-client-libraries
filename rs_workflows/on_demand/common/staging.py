@@ -38,7 +38,6 @@ from pystac import (
     TemporalExtent,
 )
 
-from rs_client.stac.cadip_client import CadipClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.utils.artifact_verbose import ReportManager

@@ -14,14 +14,11 @@
 
 """Helper task to interact with the DPR as a service."""
 
-import json
 import time
 from datetime import datetime
-from typing import Optional
 
-from prefect import get_run_logger, task
-from prefect.variables import Variable
-from pystac import Item, ItemCollection
+from prefect import task
+from pystac import ItemCollection
 
 from rs_client.ogcapi.dpr_client import (
     DprPipeline,

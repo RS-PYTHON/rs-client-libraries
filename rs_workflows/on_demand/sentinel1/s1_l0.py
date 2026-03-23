@@ -20,13 +20,11 @@ from prefect import flow, get_run_logger, task
 from pystac import Item
 
 from rs_workflows.flow_utils import (
+    FlowEnv,
     FlowEnvArgs,
     FlowInputProduct,
 )
-from rs_workflows.on_demand.common.types import (
-    DEFAULT_PREFECT_CONFIGURATION,
-    Level0FlowParams,
-)
+from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dpr import call_dpr_flow
 
@@ -85,5 +83,7 @@ async def process_s1l0(session: str, flow_params: Level0FlowParams, verbose: boo
 
 @task(name="process sentinel-1 level-0")
 async def process_s1l0_task(*args, **kwargs) -> None:
-    """See: dpr_processing"""
+    """
+    Run flow as a task.
+    """
     return await process_s1l0.fn(*args, **kwargs)
