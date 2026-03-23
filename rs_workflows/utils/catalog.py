@@ -41,6 +41,7 @@ async def get_single_catalog_item(flow_env: FlowEnv, item_id: str, collections: 
         limit=1,
     )
 
+    count = 0
     if item_collection is not None:
         count = len(item_collection.items)
     if count == 1:
