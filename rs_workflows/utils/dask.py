@@ -22,8 +22,6 @@ from dask_gateway.auth import JupyterHubAuth
 from prefect import get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
 
-from rs_workflows.flow_utils import FlowEnv
-
 
 @task(name="Check dask cluster status")
 async def is_dask_cluster_running(dask_cluster_label: str) -> bool:

@@ -32,8 +32,6 @@ from pydantic import BaseModel, Field
 from pystac import (
     Collection,
     Extent,
-    Item,
-    ItemCollection,
     SpatialExtent,
     TemporalExtent,
 )

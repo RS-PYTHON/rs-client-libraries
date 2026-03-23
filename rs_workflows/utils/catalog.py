@@ -14,8 +14,7 @@
 
 """Helper task to interact with the rs-catalog."""
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple
+from datetime import datetime, timezone
 
 from prefect import get_run_logger, task
 from pystac import Item, ItemCollection
