@@ -14,20 +14,22 @@
 
 """Helper task to interact with the Dask cluster."""
 
+import json
+import os
+
 from dask_gateway import Gateway
 from dask_gateway.auth import JupyterHubAuth
-from prefect.artifacts import acreate_markdown_artifact
-from rs_workflows.flow_utils import FlowEnv
 from prefect import get_run_logger, task
-import os
-import json
+from prefect.artifacts import acreate_markdown_artifact
+
+from rs_workflows.flow_utils import FlowEnv
 
 
 @task(name="Check dask cluster status")
-async def is_dask_cluster_running(
-    dask_cluster_label: str
-)->bool:
-    
+async def is_dask_cluster_running(dask_cluster_label: str) -> bool:
+    """
+    Retrieve dask cluster status.
+    """
     result = False
     logger = get_run_logger()
 
@@ -46,8 +48,7 @@ async def is_dask_cluster_running(
             cluster_id = cluster
     cluster_names = [c.options.get("cluster_name", "<unknown>") for c in clusters]
 
-
-    # Check status 
+    # Check status
     if cluster_id is None:
         logger.error(f"❌ '{dask_cluster_label}' is not part of deployed dask clusters {cluster_names}.")
     else:
@@ -59,7 +60,11 @@ async def is_dask_cluster_running(
             logger.warning(f"⚠️ Cluster status = {cluster_id.status} ({status_map.get(cluster_id.status)})")
 
         # Save artifact
-        md = f"# Dask cluster option for {dask_cluster_label}\n\n```json\n" + json.dumps(cluster_id.options, indent=2) + "\n```"
+        md = (
+            f"# Dask cluster option for {dask_cluster_label}\n\n```json\n"
+            + json.dumps(cluster_id.options, indent=2)
+            + "\n```"
+        )
         await acreate_markdown_artifact(
             markdown=md,
             key="dask-cluster-options",
@@ -69,5 +74,5 @@ async def is_dask_cluster_running(
             "📈 You can monitor the execution from dask dashboard: "
             f"{os.environ["DASK_GATEWAY_PUBLIC"]}/clusters/{cluster_id.name}/status",
         )
-            
+
     return result

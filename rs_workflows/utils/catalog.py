@@ -14,25 +14,24 @@
 
 """Helper task to interact with the rs-catalog."""
 
-from rs_workflows.flow_utils import FlowEnv
-from prefect import get_run_logger, task
-from pystac import Item, ItemCollection
-from rs_client.stac.catalog_client import CatalogClient
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
+from prefect import get_run_logger, task
+from pystac import Item, ItemCollection
+
+from rs_client.stac.catalog_client import CatalogClient
+from rs_workflows.flow_utils import FlowEnv
 
 
 @task(name="Retrieve rs-catalog item from collection")
-async def get_single_catalog_item(
-    flow_env:FlowEnv,
-    id:str,
-    collections:list[str]
-)->Item:
-    
+async def get_single_catalog_item(flow_env: FlowEnv, id: str, collections: list[str]) -> Item:
+    """
+    Get an item from a set of rs-catalog collections
+    """
     logger = get_run_logger()
     result: Item = None
-    
+
     # Try to retrieve the session on the collection
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
     logger.info(f"Search item {id} on the collections {', '.join(collections)} from the  rs-catalog.")
@@ -42,7 +41,7 @@ async def get_single_catalog_item(
         ids=[id],
         limit=1,
     )
-    
+
     if item_collection is not None:
         count = len(item_collection.items)
     if count == 1:
@@ -55,12 +54,14 @@ async def get_single_catalog_item(
         logger.warning(
             f"❌ The STAC item 🧊 '{id}' was not found on the rs-catalog collections {', '.join(collections)}.",
         )
-        
+
     return result
 
 
-
-def is_evicted(item:Item) -> Tuple[bool, Optional[datetime]]:
+def is_evicted(item: Item) -> tuple[bool, datetime | None]:
+    """
+    Check if the item is evicted.
+    """
     eviction_date_str: str = ""
 
     for asset in item.assets.values():
@@ -76,14 +77,13 @@ def is_evicted(item:Item) -> Tuple[bool, Optional[datetime]]:
 
 
 def is_published(item: Item) -> bool:
+    """
+    Check if the item is published.
+    """
     published_date_str = item.properties.get("published")
 
     if published_date_str:
-        published_date = datetime.fromisoformat(
-            published_date_str.replace("Z", "+00:00")
-        )
+        published_date = datetime.fromisoformat(published_date_str.replace("Z", "+00:00"))
         return published_date <= datetime.now(timezone.utc)
 
     return False
-
-    
