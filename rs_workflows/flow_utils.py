@@ -369,11 +369,9 @@ class DprProcessOut:
 
 class RetryConfig(BaseModel):
     """
-    Retry settings for staging tasks.
-
-    staging_retries: Number of retry attempts.
-
-    staging_retry_delay: Delay (seconds) between retries.
+    Args:
+        staging_retries: Number of retry attempts for staging operations
+        staging_retry_delay: Delay in seconds between retry attempts.
     """
 
     staging_retries: int = Field(3, description="Number of retry attempts for staging operations.")
