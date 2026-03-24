@@ -365,3 +365,14 @@ class DprProcessOut:
 
     status: bool
     product_identifier: list[Item] = field(default_factory=list)
+
+
+class RetryConfig(BaseModel):
+    """
+    Args:
+        staging_retries: Number of retry attempts for staging operations
+        staging_retry_delay: Delay in seconds between retry attempts.
+    """
+
+    staging_retries: int = Field(3, description="Number of retry attempts for staging operations.")
+    staging_retry_delay: int = Field(60, description="Delay in seconds between retry attempts.")
