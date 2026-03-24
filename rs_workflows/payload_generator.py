@@ -240,6 +240,13 @@ def find_s3_output_bucket(
             if fallback_bucket is None:
                 fallback_bucket = bucket
                 logger.info(f"Configuration bucket: fallback_bucket: {fallback_bucket}")
+            else:
+                logger.warning(
+                    "Multiple default configurations found in the configuration map "
+                    "(rs-catalog-staging-configmap), expected only one. Using the first "
+                    f"one found ({fallback_bucket}), but please check your configuration table to avoid "
+                    "unexpected behaviors. There should be only one entry with the three first columns set to '*'",
+                )
 
     if fallback_bucket:
         logger.info(f"Configuration bucket: Return fallback_bucket: {fallback_bucket}")

@@ -32,7 +32,11 @@ from rs_workflows.dpr_flow import (
     s3_list,
     update_eopf_assets,
 )
-from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
+from rs_workflows.flow_utils import (
+    DprProcessedItemMetadata,
+    FlowEnvArgs,
+    FlowInputProduct,
+)
 from rs_workflows.payload_generator import RSPY_CATALOG_BUCKET
 from tests.conftest import MOCKED_BUCKET, OWNER_ID
 from tests.test_utils import setup_worklow_test_env
@@ -321,11 +325,11 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
 
     payload = mocker.Mock()
     payload.io.output_products = [
-        mocker.Mock(path=f"s3://{RSPY_CATALOG_BUCKET}/{s3_path}/"),
+        mocker.Mock(id="dummy_prod_id", path=f"s3://{RSPY_CATALOG_BUCKET}/{s3_path}/"),
     ]
 
     # Call method
-    result_items, result_eopf_types = update_eopf_assets.fn(
+    items_metadata = update_eopf_assets.fn(
         env=env,
         input_products=[
             FlowInputProduct(name="input_name", cadip_session="dummy_id", collection_name="dummy_collection"),
@@ -335,10 +339,12 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
     )
 
     # Check results
-    assert result_eopf_types == [
+    assert [asset.product_type for asset in items_metadata] == [
         expected_item["properties"]["product:type"] for expected_item in expected_items.values()
     ]
-    assert {result_item.id: result_item.to_dict() for result_item in result_items} == expected_items
+    assert {asset.stac_item.id: asset.stac_item.to_dict() for asset in items_metadata} == expected_items
+    for asset in items_metadata:
+        assert asset.output_product_id == "dummy_prod_id"
 
 
 def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
@@ -473,9 +479,19 @@ async def test_run_processor_filters_non_final_products(
     mocker.patch("rs_workflows.dpr_flow.record_performance_indicators")
 
     # Mock update_eopf_assets to return mock STAC items
-    mock_stac_items = [mocker.Mock(), mocker.Mock()]
-    mock_eopf_types = ["S03OLCL0_", "S03SLSL0_"]
-    mocker.patch("rs_workflows.dpr_flow.update_eopf_assets", return_value=(mock_stac_items, mock_eopf_types))
+    items_metadata = [
+        DprProcessedItemMetadata(
+            stac_item=mocker.Mock(),
+            product_type="S03OLCL0_",
+            output_product_id="product_final_1",
+        ),
+        DprProcessedItemMetadata(
+            stac_item=mocker.Mock(),
+            product_type="S03SLSL0_",
+            output_product_id="product_final_2",
+        ),
+    ]
+    mocker.patch("rs_workflows.dpr_flow.update_eopf_assets", return_value=items_metadata)
 
     # Run the function
     result = await run_processor.fn(
@@ -504,8 +520,8 @@ async def test_run_processor_filters_non_final_products(
     spy_run_process.assert_called_once()
     spy_wait_for_job.assert_called_once()
 
-    # Verify result is the STAC items from update_eopf_assets
-    assert result == mock_stac_items
+    # Verify result is the items metadata from update_eopf_assets
+    assert result == items_metadata
 
 
 @pytest.mark.asyncio

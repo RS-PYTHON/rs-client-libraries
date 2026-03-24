@@ -365,3 +365,12 @@ class DprProcessOut:
 
     status: bool
     product_identifier: list[Item] = field(default_factory=list)
+
+
+@dataclass
+class DprProcessedItemMetadata:
+    """Metadata for a DPR processed item."""
+
+    stac_item: Item
+    product_type: str | None
+    output_product_id: str

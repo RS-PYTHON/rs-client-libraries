@@ -32,7 +32,7 @@ from pystac import Asset, Item
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_common import prefect_utils
 from rs_workflows import catalog_flow
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.flow_utils import DprProcessedItemMetadata, FlowEnv, FlowEnvArgs
 from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
 
@@ -83,11 +83,11 @@ def extract_products_and_zattrs(files: list[str], base_path: str):
         if len(parts) != 2:
             continue
 
-        product_name = parts[0]
+        product_dirname = parts[0]
 
         # 1: base_path/product/.zattrs
         if parts[1] == ".zattrs":
-            dirs_and_attrs.append((product_name, file))
+            dirs_and_attrs.append((product_dirname, file))
 
     return dirs_and_attrs
 
@@ -248,7 +248,7 @@ def update_eopf_assets(
     input_products: list[dict],
     payload: PayloadSchema,
     dpr_processor: str,
-) -> tuple[list[Item], list[str]]:
+) -> list[DprProcessedItemMetadata]:
     """Update EOPF assets by extracting metadata and creating STAC items.
 
     This Prefect task processes output products from a DPR (Data Processing Request)
@@ -266,15 +266,15 @@ def update_eopf_assets(
         env: Environment configuration object containing runtime settings.
         input_products: List of dictionaries representing input product metadata.
         payload: PayloadSchema object containing I/O configuration, including
-            output product paths to scan for .zattrs files.
+            output_product paths to scan for .zattrs files.
         dpr_processor: str
             DPR processor name
 
     Returns:
-        A tuple containing:
-            - stac_items (list): List of STAC items created from EOPF metadata.
-            - eopf_types (list): List of product types extracted from the .zattrs
-              files (corresponds to stac_items by index).
+        A list of DprProcessedItemMetadata objects, each containing:
+            - stac_item (Item): STAC item created from EOPF metadata.
+            - product_type (str): Product type extracted from the .zattrs file.
+            - output_product_id (str): The ID of the original output product.
 
     Raises:
         RuntimeError: If any .zattrs file cannot be read or does not contain
@@ -288,7 +288,7 @@ def update_eopf_assets(
     logger = get_run_logger()
     logger.info("Starting EOPF asset update.")
     logger.info(f"Payload received: {payload}")
-    logger.info("Input products: %s", input_products)
+    logger.info(f"Input products: {input_products}")
 
     if payload.io is None:
         raise RuntimeError("Payload I/O configuration is missing.")
@@ -296,15 +296,20 @@ def update_eopf_assets(
     zattrs_list = []
     for prod in payload.io.output_products:
         path = prod.path
-        zattrs_list.extend(extract_products_and_zattrs(s3_list(path), path))
-        logger.info(f"Product {prod.id} has been added to the list and will be published to the catalog.")
+        # Keep track of which output product ID each .zattrs belongs to
+        new_zattrs = extract_products_and_zattrs(s3_list(path), path)
+        for name, loc in new_zattrs:
+            zattrs_list.append((name, loc, prod.id))
+        logger.info(
+            f"Product {prod.id} has been added to the list and will be published to the catalog."
+            f" The path is {path}",
+        )
 
     # List & extract
-    logger.info(f"Found {len(zattrs_list)} .zattrs files under path. The list: {zattrs_list}")
+    logger.info(f"Found {len(zattrs_list)} .zattrs files. The list: {zattrs_list}")
 
-    stac_items = []
-    product_types = []
-    for product_name, zattrs_s3_location in zattrs_list:
+    items_metadata = []
+    for product_name, zattrs_s3_location, output_product_id in zattrs_list:
         logger.info(f"Product = {product_name} | zattrs = {zattrs_s3_location}")
         # Read metadata
         zattrs_data = read_zattrs_sync(zattrs_s3_location)
@@ -320,18 +325,23 @@ def update_eopf_assets(
 
         product_type = zattrs_data["stac_discovery"]["properties"].get("product:type", None)
         logger.info(f"Extracted EOPF product type: {product_type}")
-        product_types.append(product_type)
 
         eopf_item = zattrs_data["stac_discovery"]
         logger.debug(f"EOPF discovery metadata extracted: {eopf_item}")
 
         # Build STAC items
-        stac_items.append(
-            create_stac_item(env, input_products, eopf_item, zattrs_s3_location, product_name, dpr_processor),
-        )
-        logger.info(f"Added one stac item to the already existing list. Length: {len(stac_items)}.")
+        stac_item = create_stac_item(env, input_products, eopf_item, zattrs_s3_location, product_name, dpr_processor)
 
-    return stac_items, product_types
+        items_metadata.append(
+            DprProcessedItemMetadata(
+                stac_item=stac_item,
+                product_type=product_type,
+                output_product_id=output_product_id,
+            ),
+        )
+        logger.info(f"Added one stac item metadata to the already existing list. Length: {len(items_metadata)}.")
+
+    return items_metadata
 
 
 def compute_eopf_origin_datetime(env, input_products) -> str:
@@ -412,7 +422,7 @@ async def run_processor(
     cluster_info: ClusterInfo,
     s3_payload_run: str,
     input_products: list[dict],
-) -> list[Item]:
+) -> list[DprProcessedItemMetadata]:
     """
     Run the DPR processor.
 
@@ -490,7 +500,10 @@ async def run_processor(
                 except FileNotFoundError:
                     logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
 
-        eopf_stac_items, eopf_types = update_eopf_assets(flow_env, input_products, payload, processor)
+        items_metadata = update_eopf_assets(flow_env, input_products, payload, processor)
+        eopf_stac_items = [asset.stac_item for asset in items_metadata]
+        eopf_types = [asset.product_type for asset in items_metadata]
+
         # Wait for the job to finish
         record_performance_indicators(  # type: ignore
             stop_date=datetime.datetime.now(),
@@ -500,4 +513,4 @@ async def run_processor(
             dpr_processor_name=processor,
             eopf_types=eopf_types,
         )
-        return eopf_stac_items
+        return items_metadata
