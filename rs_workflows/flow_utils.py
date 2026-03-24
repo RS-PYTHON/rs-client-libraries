@@ -374,7 +374,8 @@ class DprProcessedItemMetadata:
     stac_item: Item
     product_type: str | None
     output_product_id: str
-    
+
+
 class RetryConfig(BaseModel):
     """
     Args:
