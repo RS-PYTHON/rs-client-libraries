@@ -176,8 +176,7 @@ def resolve_collection(
 
     The matching logic uses both output_product_id and product_type from the
     DprProcessedItemMetadata to find the corresponding FlowGeneratedProduct.
-    Wildcards ('*') are supported for both name and product_type in
-    FlowGeneratedProduct.
+    Wildcards ('*') are supported for product_type in FlowGeneratedProduct.
 
     Returns:
         The resolved target collection name.
@@ -194,27 +193,33 @@ def resolve_collection(
     # We prioritize matches in the following order:
     # 1. Exact Name, Exact Type
     # 2. Exact Name, Wildcard Type (least specific)
-    # wildcards for name are NOT supported.
+    # wildcards for name are NOT supported, they don't make sense in this context as tasktable don't support them
 
-    # 1. Exact Name, Exact Type
+    target_collection = None
     for gen_prod in generated_product_to_collection_identifier:
-        if gen_prod.name == item_metadata.output_product_id and gen_prod.product_type == item_metadata.product_type:
+        if gen_prod.name != item_metadata.output_product_id:
+            continue
+        # 1. Exact Name, Exact Type
+        if item_metadata.product_type == gen_prod.product_type:
             target_collection = gen_prod.collection_name or gen_prod.product_type
             logger.info(f"Exact match (Name & Type) found: {gen_prod}, resolved collection: {target_collection}")
-            return target_collection
-
-    # 2. Exact Name, Wildcard Type
-    for gen_prod in generated_product_to_collection_identifier:
-        if gen_prod.name == item_metadata.output_product_id and gen_prod.product_type == "*":
+            break
+        # 2. Exact Name, Wildcard Type
+        if gen_prod.product_type == "*" and target_collection is None:
             target_collection = gen_prod.collection_name or gen_prod.product_type
-            # This protection is also set in build_output_products from payload_generator.py,
-            # but it's good to have it here as well for safety or a future change in logic.
-            if target_collection == "*":
-                raise RuntimeError(
-                    f"The product type in generated_product_to_collection_identifier cannot be '*' "
-                    f"if the collection name is not specified for product '{gen_prod.name}'",
-                )
-            logger.info(f"Match with Exact Name & Wildcard Type: {gen_prod}, resolved collection: {target_collection}")
-            return target_collection
+            logger.info(
+                f"Match with Exact Name & Wildcard Type: {gen_prod}, resolved collection: {target_collection}",
+            )
+
+    if target_collection:
+        # This protection is also set in build_output_products from payload_generator.py,
+        # but it's good to have it here as well for safety or a future change in logic.
+        if target_collection == "*":
+            raise RuntimeError(
+                f"The product type in generated_product_to_collection_identifier cannot be '*' "
+                f"if the collection name is not specified for product '{item_metadata.output_product_id}'",
+            )
+
+        return target_collection
 
     raise ValueError(f"Product unknown: {item_metadata}")
