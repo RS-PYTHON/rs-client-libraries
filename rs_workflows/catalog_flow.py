@@ -207,19 +207,18 @@ def resolve_collection(
         # 2. Exact Name, Wildcard Type
         if gen_prod.product_type == "*" and target_collection is None:
             target_collection = gen_prod.collection_name or gen_prod.product_type
+            # This protection is also set in build_output_products from payload_generator.py,
+            # but it's good to have it here as well for safety or a future change in logic.
+            if target_collection == "*":
+                raise RuntimeError(
+                    f"The product type in generated_product_to_collection_identifier cannot be '*' "
+                    f"if the collection name is not specified for product '{gen_prod.name}'",
+                )
             logger.info(
                 f"Match with Exact Name & Wildcard Type: {gen_prod}, resolved collection: {target_collection}",
             )
 
     if target_collection:
-        # This protection is also set in build_output_products from payload_generator.py,
-        # but it's good to have it here as well for safety or a future change in logic.
-        if target_collection == "*":
-            raise RuntimeError(
-                f"The product type in generated_product_to_collection_identifier cannot be '*' "
-                f"if the collection name is not specified for product '{item_metadata.output_product_id}'",
-            )
-
         return target_collection
 
     raise ValueError(f"Product unknown: {item_metadata}")
