@@ -86,6 +86,8 @@ def test_resolve_collection_generated_product(mocker):
         FlowGeneratedProduct(name="product_name_1", product_type="product_type_1", collection_name="collection_1"),
         FlowGeneratedProduct(name="product_name_2", product_type="product_type_2", collection_name="collection_2"),
         FlowGeneratedProduct(name="product_name_3", product_type="*", collection_name="collection_3"),
+        FlowGeneratedProduct(name="S01GPSRAW", product_type="*", collection_name="collection_GPS"),
+        FlowGeneratedProduct(name="S01HKMRAW", product_type="*", collection_name="collection_HKM"),
     ]
 
     # Exact match
@@ -103,6 +105,22 @@ def test_resolve_collection_generated_product(mocker):
         output_product_id="product_name_3",
     )
     assert resolve_collection(meta_3, input_collections) == "collection_3"
+
+    # According to user story 986, the wrong collection was picked (HKM instead of GPS)
+    meta_gps = DprProcessedItemMetadata(
+        stac_item=mocker.Mock(),
+        product_type="S01GPSRAW",
+        output_product_id="S01GPSRAW",
+    )
+    assert resolve_collection(meta_gps, input_collections) == "collection_GPS"
+
+    # According to user story 986, the wrong collection was picked (HKM instead of GPS)
+    meta_hkm = DprProcessedItemMetadata(
+        stac_item=mocker.Mock(),
+        product_type="S01HKMRAW",
+        output_product_id="S01HKMRAW",
+    )
+    assert resolve_collection(meta_hkm, input_collections) == "collection_HKM"
 
     # Wildcard name is NOT supported
     input_wildcard_name: list[FlowGeneratedProduct] = [

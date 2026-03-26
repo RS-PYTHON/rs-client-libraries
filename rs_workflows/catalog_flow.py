@@ -218,7 +218,7 @@ def resolve_collection(
                 f"Match with Exact Name & Wildcard Type: {gen_prod}, resolved collection: {target_collection}",
             )
 
-    if target_collection:
-        return target_collection
+    if not target_collection:
+        raise ValueError(f"Product unknown: {item_metadata}")
 
-    raise ValueError(f"Product unknown: {item_metadata}")
+    return target_collection
