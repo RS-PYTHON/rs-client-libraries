@@ -219,6 +219,10 @@ def resolve_collection(
             )
 
     if not target_collection:
-        raise ValueError(f"Product unknown: {item_metadata}")
+        raise ValueError(
+            f"No match for {item_metadata.output_product_id} in "
+            f"{generated_product_to_collection_identifier}. "
+            f"Could not find a collection to publish the stac_item from: {item_metadata}",
+        )
 
     return target_collection

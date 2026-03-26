@@ -431,4 +431,4 @@ async def test_publish_skips_when_no_matching_output_collection(
     with pytest.raises(RuntimeError) as error:
         await catalog_flow.publish.fn(env, catalog_collection_identifier, items)
         spy_add_item.assert_not_called()
-    assert "Product unknown" in str(error.value.__cause__)
+    assert "Could not find a collection to publish the stac_item from" in str(error.value.__cause__)
