@@ -22,4 +22,5 @@ uv pip install --no-deps -r <(POETRY_WARNINGS_EXPORT=false poetry export --witho
 # install the package itself
 uv pip install -e .
 # install opentelemetry instrumentation libraries
+uv run --active python -m ensurepip --upgrade
 uv run --active opentelemetry-bootstrap -a install
