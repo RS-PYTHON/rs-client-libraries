@@ -132,11 +132,24 @@ async def upload_folder_flat(local_folder: Path, prefix: str):
 
 async def process_asset(asset_href: str) -> str:
     """
-    Download, extract, normalize, and re-upload an AUXIP archive.
+    Process a zipped AUXIP asset stored in S3 and replace it with its extracted content.
 
-    The archive is downloaded locally, expanded recursively, and then uploaded
-    back to the original S3 prefix using flattened filenames. The returned href
-    is the prefix that now contains the extracted content.
+    If the asset href points to a `.zip` object in S3, the archive is downloaded to a
+    temporary local directory and extracted. If the extracted content contains nested
+    `.tar` or `.tgz` archives, those archives are also extracted in place.
+
+    The extracted payload is then uploaded back to the same S3 parent prefix using a
+    folder-like target derived from the original ZIP name. In this context,
+    "normalization" means replacing the original archive object with the extracted
+    directory content under its corresponding S3 prefix.
+
+    Example:
+    - input href: `s3://bucket/path/some_adfs.zip`
+    - extracted content: `file.xml` and `content.tgz`
+    - final S3 result: `s3://bucket/path/some_adfs/` containing `file.xml` and the
+    extracted content from `content.tgz`
+
+    The function returns the new S3 prefix pointing to the extracted content.
     """
     logger = get_run_logger()
     logger.info(f"Processing asset: {asset_href}")
@@ -348,9 +361,12 @@ async def on_demand_auxip_staging(
 @flow(name="Auxip unzip and decompress")
 async def auxip_unzip_decompress(auxip_item: Item) -> Item:
     """Prefect flow used to unzip and decompress ADFS."""
+    logger = get_run_logger()
     updated_assets = {}
 
     for asset_name, asset in auxip_item.assets.items():
+        # After normalisation (unzip / decompress) the href is changed with the new s3 path.
+        # Therefore asset name should also be updated. (TDB for other future extensions)
         if asset_name.endswith(".zip"):
             new_href = await process_asset(asset.href)
             asset.href = new_href
@@ -358,6 +374,7 @@ async def auxip_unzip_decompress(auxip_item: Item) -> Item:
         else:
             updated_assets[asset_name] = asset
 
+    logger.info(f"Updated the following asset {updated_assets} for item {auxip_item.id}")
     auxip_item.assets = updated_assets
     return auxip_item
 

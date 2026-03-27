@@ -134,7 +134,9 @@ async def process_input_adfs(
                 for idx, new_item in zip(indexed_items, results):
                     item_collection.items[idx] = new_item
 
-                logger.info(f"Processed ADFS ItemCollection: {item_collection.to_dict()}")
+                # info size, debug content
+                logger.info(f"Finished processing input ADFS, ItemCollection size: {len(item_collection.items)}")
+                logger.debug(f"Finished processing input ADFS, ItemCollection: {item_collection.to_dict()}")
 
                 # pack things again as before
                 auxip_items = (auxip_items[0], item_collection)  # type: ignore
