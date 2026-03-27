@@ -35,6 +35,7 @@ from rs_workflows import (
 )
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
+    DprProcessedItemMetadata,
     DprProcessIn,
     FlowEnvArgs,
     FlowGeneratedProduct,
@@ -62,8 +63,8 @@ DASK_CLUSTER_INSTANCE = "dask-gateway.test-cluster-instance"
 DASK_GATEWAY_PUBLIC = "http://test-dask-gateway-public"
 
 MAP_PRODUCT_TO_COLLECTION = [
-    {"name": "GRD", "product_type": "S1_GRD", "collection_name": "OUTPUT_GRD_COLLECTION"},
-    {"name": "NTC", "product_type": "S2_NTC", "collection_name": "OUTPUT_NTC_COLLECTION"},
+    {"name": "S03MWRL0_", "product_type": "S1_GRD", "collection_name": "OUTPUT_GRD_COLLECTION"},
+    {"name": "S03OLCL0_", "product_type": "S2_NTC", "collection_name": "OUTPUT_NTC_COLLECTION"},
 ]
 
 ##################
@@ -408,18 +409,26 @@ async def test_publish_skips_when_no_matching_output_collection(
     ]
 
     items = [
-        Item(
-            **{  # type: ignore
-                "id": "item1",
-                "properties": {"product:type": "S1_GRD", "datetime": "2024-01-01T00:00:00Z"},
-                "datetime": datetime(2024, 1, 1, tzinfo=timezone.utc),
-                "geometry": None,
-                "bbox": None,
-            },
+        DprProcessedItemMetadata(
+            stac_item=Item(
+                **{  # type: ignore
+                    "id": "item1",
+                    "properties": {
+                        "product:type": "S1_GRD",
+                        "datetime": "2024-01-01T00:00:00Z",
+                        "instruments": ["instrument1"],
+                    },
+                    "datetime": datetime(2024, 1, 1, tzinfo=timezone.utc),
+                    "geometry": None,
+                    "bbox": None,
+                },
+            ),
+            product_type="S1_GRD",
+            output_product_id="item1",
         ),
     ]
 
     with pytest.raises(RuntimeError) as error:
         await catalog_flow.publish.fn(env, catalog_collection_identifier, items)
         spy_add_item.assert_not_called()
-    assert str(error.value.__cause__) == "Product type unknown: S1_GRD"
+    assert "Could not find a collection to publish the stac_item from" in str(error.value.__cause__)

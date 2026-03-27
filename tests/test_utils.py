@@ -28,6 +28,7 @@ from rs_common.utils import get_href_service, read_response_error
 from rs_workflows.catalog_flow import resolve_collection
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
+    DprProcessedItemMetadata,
     FlowGeneratedProduct,
     FlowInputProduct,
 )
@@ -84,14 +85,78 @@ def test_resolve_collection_generated_product(mocker):
     input_collections: list[FlowGeneratedProduct] = [
         FlowGeneratedProduct(name="product_name_1", product_type="product_type_1", collection_name="collection_1"),
         FlowGeneratedProduct(name="product_name_2", product_type="product_type_2", collection_name="collection_2"),
+        FlowGeneratedProduct(name="product_name_3", product_type="*", collection_name="collection_3"),
+        FlowGeneratedProduct(name="S01GPSRAW", product_type="*", collection_name="collection_GPS"),
+        FlowGeneratedProduct(name="S01HKMRAW", product_type="*", collection_name="collection_HKM"),
     ]
 
-    assert resolve_collection("product_type_1", input_collections) == "collection_1"
-    assert resolve_collection("product_type_2", input_collections) == "collection_2"
+    # Exact match
+    meta_1 = DprProcessedItemMetadata(
+        stac_item=mocker.Mock(),
+        product_type="product_type_1",
+        output_product_id="product_name_1",
+    )
+    assert resolve_collection(meta_1, input_collections) == "collection_1"
 
-    # Unknown product type should raise
+    # Match with wildcard type
+    meta_3 = DprProcessedItemMetadata(
+        stac_item=mocker.Mock(),
+        product_type="any_type",
+        output_product_id="product_name_3",
+    )
+    assert resolve_collection(meta_3, input_collections) == "collection_3"
+
+    # According to user story 986, the wrong collection was picked (HKM instead of GPS)
+    meta_gps = DprProcessedItemMetadata(
+        stac_item=mocker.Mock(),
+        product_type="S01GPSRAW",
+        output_product_id="S01GPSRAW",
+    )
+    assert resolve_collection(meta_gps, input_collections) == "collection_GPS"
+
+    # According to user story 986, the wrong collection was picked (HKM instead of GPS)
+    meta_hkm = DprProcessedItemMetadata(
+        stac_item=mocker.Mock(),
+        product_type="S01HKMRAW",
+        output_product_id="S01HKMRAW",
+    )
+    assert resolve_collection(meta_hkm, input_collections) == "collection_HKM"
+
+    # Wildcard name is NOT supported
+    input_wildcard_name: list[FlowGeneratedProduct] = [
+        FlowGeneratedProduct(name="*", product_type="product_type_4", collection_name="collection_4"),
+    ]
+    meta_4 = DprProcessedItemMetadata(
+        stac_item=mocker.Mock(),
+        product_type="product_type_4",
+        output_product_id="any_name",
+    )
     with pytest.raises(ValueError):
-        resolve_collection("tip_42", input_collections)
+        resolve_collection(meta_4, input_wildcard_name)
+
+    # Priority: Exact type should be picked even if a wildcard match exists earlier for the same name
+    priority_collections: list[FlowGeneratedProduct] = [
+        FlowGeneratedProduct(name="exact_name", product_type="*", collection_name="wildcard_type"),
+        FlowGeneratedProduct(name="exact_name", product_type="exact_type", collection_name="exact_match"),
+    ]
+    meta_priority = DprProcessedItemMetadata(
+        stac_item=mocker.Mock(),
+        product_type="exact_type",
+        output_product_id="exact_name",
+    )
+    assert resolve_collection(meta_priority, priority_collections) == "exact_match"
+
+    # Protection: product_type="*" requires collection_name to be specified
+    invalid_wildcard: list[FlowGeneratedProduct] = [
+        FlowGeneratedProduct(name="product_name", product_type="*", collection_name=None),
+    ]
+    meta_wildcard = DprProcessedItemMetadata(
+        stac_item=mocker.Mock(),
+        product_type="any_type",
+        output_product_id="product_name",
+    )
+    with pytest.raises(RuntimeError, match=r"cannot be '\*' if the collection name is not specified"):
+        resolve_collection(meta_wildcard, invalid_wildcard)
 
 
 async def setup_worklow_test_env(env_vars: dict[str, str] | None = None):

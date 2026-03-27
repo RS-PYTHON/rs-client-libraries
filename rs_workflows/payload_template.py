@@ -281,10 +281,10 @@ class OutputProduct(BasePayloadModel):
     opening_mode: str | None = Field(default="CREATE")
     apply_eoqc: bool | None = Field(default=False)
     # Excluded from serialization by default
-    # This is because the concept of "final product" is present in tasktable only, and
-    # it is unknown for the processor. The processor simply fails if it finds an unknown
-    # field in the payload. So we need to exclude it from the payload, but we want to
-    # keep it in the model for internal use in run_processor task.
+    # This is because the "final product" concept exists only in the tasktable and
+    # is is not recognized by the processor. The processor simply fails if it finds an unknown
+    # field in the payload. So we need to exclude this field from the payload, but we want to
+    # keep it in the model for internal use in the run_processor task.
     final_product: bool | None = Field(default=True, exclude=True)
 
 

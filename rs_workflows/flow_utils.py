@@ -367,6 +367,15 @@ class DprProcessOut:
     product_identifier: list[Item] = field(default_factory=list)
 
 
+@dataclass
+class DprProcessedItemMetadata:
+    """Metadata for a DPR processed item."""
+
+    output_product_id: str
+    product_type: str | None
+    stac_item: Item
+
+
 class RetryConfig(BaseModel):
     """
     Args:
