@@ -19,6 +19,7 @@ from pystac import ItemCollection
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.staging_flow import staging_task
 
 
 @flow(name="Cadip search")
@@ -56,6 +57,56 @@ async def search(
             )
         logger.info(f"Cadip search found {len(found)} results: {found}")
         return found
+
+
+@flow(name="On-demand Cadip staging")
+async def on_demand_cadip_staging(
+    env: FlowEnvArgs,
+    cadip_collection_identifier: str,
+    session_identifier: str,
+    catalog_collection_identifier: str,
+    staging_retries: int = 3,
+    staging_retry_delay: int = 60,
+):
+    """
+    Flow to retrieve a session, stage it and add the STAC item into the catalog.
+
+    Args:
+        env: Prefect flow environment
+        cadip_collection_identifier: CADIP collection identifier that contains the mission and station
+            (e.g. s1_ins for Sentinel-1 sessions from the Inuvik station)
+        session_identifier: Session identifier
+        catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
+    """
+
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "on-demand-cadip-staging"):
+
+        # Search Cadip sessions
+        cadip_items = search_task.with_options(
+            retries=3,
+            retry_delay_seconds=60,
+        ).submit(
+            flow_env.serialize(),
+            cadip_collection_identifier,
+            session_identifier,
+            error_if_empty=True,
+        )
+
+        # Stage Cadip items.
+        staged = staging_task.with_options(
+            retries=staging_retries,
+            retry_delay_seconds=staging_retry_delay,
+        ).submit(
+            flow_env.serialize(),
+            cadip_items,
+            catalog_collection_identifier,
+        )
+
+        # Wait for last task to end.
+        # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
+        staged.result()  # type: ignore[unused-coroutine]
 
 
 ###########################
