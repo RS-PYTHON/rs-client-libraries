@@ -43,8 +43,8 @@ jobs:
         id: filter
         with:
           filters: |
-            code: ['**.py']
-            conf: ['**.lock', '**.json', '**.raw', '**.toml', '**.yaml', '**.yml']
+            code: ['**/*[dD]ockerfile*', '**.toml', '**.py', '**.yaml', '**.yml']
+            conf: ['**.lock', '**.json', '**.raw']
 
   check-format:
     runs-on: ubuntu-latest
@@ -296,13 +296,6 @@ jobs:
         with:
           name:
             run-all-pytests
-      - name: Get directory names
-        id: dir_names
-        run: |
-          echo sources=./rs_client,./rs_common,./rs_workflows >> $GITHUB_OUTPUT
-          echo exclusions=rs_workflows/on_demand/**,rs_workflows/operation/**,rs_workflows/utils/** >> $GITHUB_OUTPUT
-          echo tests=./tests >> $GITHUB_OUTPUT
-        shell: bash
 
       - name: Normalize coverage paths for SonarCloud
         run: |
@@ -323,9 +316,10 @@ jobs:
           args: >
             -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
             -Dsonar.organization=rs-python
-            -Dsonar.sources=${{ steps.dir_names.outputs.sources }}
-            -Dsonar.exclusions=${{ steps.dir_names.outputs.exclusions }}
-            -Dsonar.tests=${{ steps.dir_names.outputs.tests }}
+            -Dsonar.sources=.
+            -Dsonar.tests=./tests
+            -Dsonar.coverage.exclusions=tests,tests/**,**/tests/**,rs_workflows/on_demand/**,rs_workflows/operation/**,rs_workflows/utils/**
+            -Dsonar.exclusions=tests,tests/**,**/tests/**
             -Dsonar.branch.name=${{ github.ref_name }}
             -Dsonar.sourceEncoding=UTF-8
             -Dsonar.language=py
