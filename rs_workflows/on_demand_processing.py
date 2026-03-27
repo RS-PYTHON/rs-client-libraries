@@ -115,26 +115,29 @@ async def process_input_adfs(
 
                 tasks = []
                 indexed_items = []
-
+                # For each staged adfs, check assets href, and process in parallel ones with '.zip'
+                # To be verified if it's possible with other extensions? .7z .rar?
                 for idx, auxip_item in enumerate(item_collection.items):
-                    has_zip = any(".zip" in asset.href for asset in auxip_item.assets.values())
-
-                    if has_zip:
-                        logger.info(f"The following staged ADFS asset is zipped/compressed\
-                                    {auxip_item}. Starting normalization task")
+                    if any(".zip" in asset.href for asset in auxip_item.assets.values()):
+                        logger.info(
+                            "The following staged ADFS asset is zipped/compressed "
+                            f"{auxip_item.to_dict()}. Starting normalization task",
+                        )
                         future = auxip_flow.auxip_unzip_decompress_task.submit(auxip_item)
                         tasks.append(future)
                         indexed_items.append(idx)
 
                 # Wait only for tasks that were actually triggered
                 results = [t.result() for t in tasks]
-
+                # Since the .zip extension is removed, href is changed therefore item_collection needs to be updated
                 # Replace only processed items
                 for idx, new_item in zip(indexed_items, results):
                     item_collection.items[idx] = new_item
 
-                logger.info(f"Processed ADFS: {indexed_items}")
+                logger.info(f"Processed ADFS ItemCollection: {item_collection.to_dict()}")
 
+                # pack things again as before
+                auxip_items = (auxip_items[0], item_collection)  # type: ignore
                 return input_adfs["name"], auxip_items
 
         raise RuntimeError(f"Searching for adfs input {input_adfs['name']} did not return any result")

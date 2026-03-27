@@ -347,11 +347,18 @@ async def on_demand_auxip_staging(
 
 @flow(name="Auxip unzip and decompress")
 async def auxip_unzip_decompress(auxip_item: Item) -> Item:
-    """Prefect flow used to unzip and decompress ADFS"""
-    for _, asset in auxip_item.assets.items():
-        new_href = await process_asset(asset.href)
-        asset.href = new_href
+    """Prefect flow used to unzip and decompress ADFS."""
+    updated_assets = {}
 
+    for asset_name, asset in auxip_item.assets.items():
+        if asset_name.endswith(".zip"):
+            new_href = await process_asset(asset.href)
+            asset.href = new_href
+            updated_assets[asset_name.removesuffix(".zip")] = asset
+        else:
+            updated_assets[asset_name] = asset
+
+    auxip_item.assets = updated_assets
     return auxip_item
 
 
