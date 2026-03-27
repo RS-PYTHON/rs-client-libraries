@@ -371,9 +371,9 @@ class DprProcessOut:
 class DprProcessedItemMetadata:
     """Metadata for a DPR processed item."""
 
-    stac_item: Item
-    product_type: str | None
     output_product_id: str
+    product_type: str | None
+    stac_item: Item
 
 
 class RetryConfig(BaseModel):

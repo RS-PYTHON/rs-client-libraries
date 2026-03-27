@@ -341,6 +341,7 @@ def update_eopf_assets(
         )
         logger.info(f"Added one stac item metadata to the already existing list. Length: {len(items_metadata)}.")
 
+    logger.info(f"List with stac_items to be published: {items_metadata}.")
     return items_metadata
 
 
