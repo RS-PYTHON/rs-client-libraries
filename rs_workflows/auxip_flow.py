@@ -48,19 +48,21 @@ def extract_zip(zip_path: Path, extract_to: Path):
         zip_ref.extractall(extract_to)
 
 
-def extract_tar(file_path: Path, extract_to: Path):
-    """Extract a TAR/TGZ archive into the target directory."""
+def extract_tar(file_path: Path, extract_to: Path) -> int:
+    """Extract a TAR-compatible archive into the target directory."""
     logger = get_run_logger()
-    logger.info(f"Extracting TAR/TGZ: {file_path} -> {extract_to}")
+    logger.info(f"Extracting TAR archive: {file_path} -> {extract_to}")
 
     with tarfile.open(file_path, "r:*") as tar:
         members = tar.getmembers()
-        logger.info(f"TAR/TGZ contains {len(members)} entries")
-        tar.extractall(path=extract_to)
+        logger.info(f"TAR archive contains {len(members)} entries")
+        if members:
+            tar.extractall(path=extract_to)
+        return len(members)
 
 
 def recursive_extract(folder: Path) -> int:
-    """Extract nested TAR/TGZ archives found anywhere under ``folder``."""
+    """Extract nested TAR-compatible archives found anywhere under ``folder``."""
     logger = get_run_logger()
     extracted_count = 0
     extracted = True
@@ -72,14 +74,18 @@ def recursive_extract(folder: Path) -> int:
             for file in files:
                 full_path = Path(root) / file
 
-                if file.endswith((".tar", ".tgz")):
+                if file.endswith((".tar", ".tgz", ".tar.gz")):
                     logger.info(f"Found nested archive: {full_path}")
 
-                    extract_tar(full_path, Path(root))
-                    full_path.unlink()
-
-                    extracted = True
-                    extracted_count += 1
+                    extracted_members = extract_tar(full_path, Path(root))
+                    if extracted_members:
+                        full_path.unlink()
+                        extracted = True
+                        extracted_count += 1
+                    else:
+                        logger.warning(
+                            "Skipping removal of nested archive because no members were extracted: " f"{full_path}",
+                        )
 
     logger.info(f"Processed {extracted_count} nested archive(s)")
     return extracted_count
@@ -136,7 +142,7 @@ async def process_asset(asset_href: str) -> str:
 
     If the asset href points to a `.zip` object in S3, the archive is downloaded to a
     temporary local directory and extracted. If the extracted content contains nested
-    `.tar` or `.tgz` archives, those archives are also extracted in place.
+    `.tar`, `.tgz`, or `.tar.gz` archives, those archives are also extracted in place.
 
     The extracted payload is then uploaded back to the same S3 parent prefix using a
     folder-like target derived from the original ZIP name. In this context,
@@ -145,9 +151,9 @@ async def process_asset(asset_href: str) -> str:
 
     Example:
     - input href: `s3://bucket/path/some_adfs.zip`
-    - extracted content: `file.xml` and `content.tgz`
+    - extracted content: `file.xml` and `content.tar.gz`
     - final S3 result: `s3://bucket/path/some_adfs/` containing `file.xml` and the
-    extracted content from `content.tgz`
+    extracted content from `content.tar.gz`
 
     The function returns the new S3 prefix pointing to the extracted content.
     """
@@ -172,7 +178,7 @@ async def process_asset(asset_href: str) -> str:
         # 3. Extract the main ZIP archive first.
         extract_zip(zip_local, extract_dir)
 
-        # 4. Some AUXIP deliveries contain nested TAR/TGZ payloads.
+        # 4. Some AUXIP deliveries contain nested TAR/TGZ/TAR.GZ payloads.
         nested_archives = recursive_extract(extract_dir)
         logger.info(f"Nested extraction complete, processed {nested_archives} archive(s)")
 
