@@ -252,8 +252,8 @@ class StacBase(RsClient):
             try:
                 return collection.get_items(*items_ids)
 
-            # Avoid pystac-client fallback through /search (EDRS has no /search); fetch items one by one.
-            # collection.get_items(*ids) internally triggers a search request, which fails on EDRS.
+            # Avoid pystac-client fallback through /search ; fetch items one by one.
+            # collection.get_items(*ids) internally triggers a search request.
             except (APIError, requests.HTTPError, STACError, ValueError, TypeError) as exc:
                 self.logger.debug("Direct retrieval failed, fallback to per-item: %s", exc)
 

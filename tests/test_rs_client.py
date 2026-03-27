@@ -21,7 +21,6 @@ from rs_client.rs_client import RsClient
 from rs_client.stac.auxip_client import AuxipClient
 from rs_client.stac.cadip_client import CadipClient
 from rs_client.stac.catalog_client import CatalogClient
-from rs_client.stac.edrs_client import EdrsClient
 from rs_client.stac.prip_client import PripClient
 from tests.common import json_landing_page
 
@@ -34,14 +33,12 @@ def test_get_child_client(  # pylint: disable=redefined-outer-name
     cadip_client,
     prip_client,
     stac_client,
-    edrs_client,
 ):
     """Test get_*_client child factories."""
     assert isinstance(auxip_client, AuxipClient)
     assert isinstance(cadip_client, CadipClient)
     assert isinstance(prip_client, PripClient)
     assert isinstance(stac_client, CatalogClient)
-    assert isinstance(edrs_client, EdrsClient)
 
 
 @pytest.mark.unit
