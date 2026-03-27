@@ -59,7 +59,8 @@ async def process_input_adfs(
     """
     Stage ADFS files from the tasktable.
     """
-
+    logger = get_run_logger()
+    logger.info(f"Starting processing input ADFS for {input_adfs}")
     try:
 
         # For each "alternative" ( get it following the "order" )
@@ -92,6 +93,7 @@ async def process_input_adfs(
                     default_aux_collection,
                 ),
             )
+            logger.info(f"Selected collection {collection}")
             # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
             auxip_items = (
                 auxip_flow.auxip_staging_task.with_options(
@@ -106,8 +108,33 @@ async def process_input_adfs(
                 )
                 .result()
             )
+            logger.info(f"Staged ADFS: {auxip_items}")
             # 6. Return the first found result
             if auxip_items[1]:  # type: ignore
+                item_collection = auxip_items[1]  # type: ignore
+
+                tasks = []
+                indexed_items = []
+
+                for idx, auxip_item in enumerate(item_collection.items):
+                    has_zip = any(".zip" in asset.href for asset in auxip_item.assets.values())
+
+                    if has_zip:
+                        logger.info(f"The following staged ADFS asset is zipped/compressed\
+                                    {auxip_item}. Starting normalization task")
+                        future = auxip_flow.auxip_unzip_decompress_task.submit(auxip_item)
+                        tasks.append(future)
+                        indexed_items.append(idx)
+
+                # Wait only for tasks that were actually triggered
+                results = [t.result() for t in tasks]
+
+                # Replace only processed items
+                for idx, new_item in zip(indexed_items, results):
+                    item_collection.items[idx] = new_item
+
+                logger.info(f"Processed ADFS: {indexed_items}")
+
                 return input_adfs["name"], auxip_items
 
         raise RuntimeError(f"Searching for adfs input {input_adfs['name']} did not return any result")

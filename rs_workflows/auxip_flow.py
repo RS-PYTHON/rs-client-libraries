@@ -12,20 +12,170 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Auxip flow implementation"""
+"""Auxip flow implementation."""
 
 import datetime
 import json
+import os
+import tarfile
+import tempfile
+import zipfile
+from pathlib import Path
 
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
-from pystac import ItemCollection
+from pystac import Item, ItemCollection
 
 from rs_client.stac.auxip_client import AuxipClient
 from rs_client.stac.catalog_client import CatalogClient
+from rs_common.prefect_utils import s3_delete, s3_download_file, s3_upload_file
 from rs_common.utils import create_valcover_filter
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task
+
+####################################################
+# Auxip unzip and decompress convenience functions #
+####################################################
+
+
+def extract_zip(zip_path: Path, extract_to: Path):
+    """Extract a ZIP archive into the target directory."""
+    logger = get_run_logger()
+    logger.info(f"Extracting ZIP: {zip_path} -> {extract_to}")
+
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        logger.info(f"ZIP contains {len(zip_ref.namelist())} entries")
+        zip_ref.extractall(extract_to)
+
+
+def extract_tar(file_path: Path, extract_to: Path):
+    """Extract a TAR/TGZ archive into the target directory."""
+    logger = get_run_logger()
+    logger.info(f"Extracting TAR/TGZ: {file_path} -> {extract_to}")
+
+    with tarfile.open(file_path, "r:*") as tar:
+        members = tar.getmembers()
+        logger.info(f"TAR/TGZ contains {len(members)} entries")
+        tar.extractall(path=extract_to)
+
+
+def recursive_extract(folder: Path) -> int:
+    """Extract nested TAR/TGZ archives found anywhere under ``folder``."""
+    logger = get_run_logger()
+    extracted_count = 0
+    extracted = True
+
+    while extracted:
+        extracted = False
+
+        for root, _, files in os.walk(folder):
+            for file in files:
+                full_path = Path(root) / file
+
+                if file.endswith((".tar", ".tgz")):
+                    logger.info(f"Found nested archive: {full_path}")
+
+                    extract_tar(full_path, Path(root))
+                    full_path.unlink()
+
+                    extracted = True
+                    extracted_count += 1
+
+    logger.info(f"Processed {extracted_count} nested archive(s)")
+    return extracted_count
+
+
+def normalize_extract_dir(extract_dir: Path) -> Path:
+    """
+    Return the directory that should be used as the upload root.
+
+    If the extraction produced a single top-level directory, descend into it to
+    avoid creating an unnecessary extra folder level in S3.
+    """
+    logger = get_run_logger()
+    root_items = list(extract_dir.iterdir())
+
+    if len(root_items) != 1:
+        logger.info("No normalization needed, multiple root items found")
+        return extract_dir
+
+    root_item = root_items[0]
+    if not root_item.is_dir():
+        logger.info("No normalization needed, single root item is not a directory")
+        return extract_dir
+
+    logger.info(f"Normalizing folder structure: entering {root_item}")
+    return root_item
+
+
+async def upload_folder_flat(local_folder: Path, prefix: str):
+    """
+    Upload all files under ``local_folder`` to the same S3 prefix.
+
+    The upload is intentionally flattened: only the filename is kept in the
+    destination key, regardless of the original nested local path.
+    """
+    logger = get_run_logger()
+    files_to_upload = [path for path in local_folder.rglob("*") if path.is_file()]
+
+    logger.info(
+        f"Preparing flat upload of {len(files_to_upload)} file(s) from {local_folder} to {prefix}",
+    )
+
+    for file_path in files_to_upload:
+        s3_path = prefix + file_path.name
+        logger.info(f"Uploading {file_path} -> {s3_path}")
+        await s3_upload_file(file_path, s3_path)
+
+    logger.info(f"Finished uploading {len(files_to_upload)} file(s) to {prefix}")
+
+
+async def process_asset(asset_href: str) -> str:
+    """
+    Download, extract, normalize, and re-upload an AUXIP archive.
+
+    The archive is downloaded locally, expanded recursively, and then uploaded
+    back to the original S3 prefix using flattened filenames. The returned href
+    is the prefix that now contains the extracted content.
+    """
+    logger = get_run_logger()
+    logger.info(f"Processing asset: {asset_href}")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_dir = Path(tmp_dir)  # type: ignore
+
+        zip_local = tmp_dir / "archive.zip"  # type: ignore
+        extract_dir = tmp_dir / "extracted"  # type: ignore
+        extract_dir.mkdir()
+
+        # 1. Download
+        logger.info(f"Downloading {asset_href} -> {zip_local}")
+        await s3_download_file(asset_href, zip_local)
+
+        # 2. Remove the original ZIP before publishing the extracted content.
+        logger.info(f"Deleting original ZIP from S3: {asset_href}")
+        s3_delete(asset_href)
+
+        # 3. Extract the main ZIP archive first.
+        extract_zip(zip_local, extract_dir)
+
+        # 4. Some AUXIP deliveries contain nested TAR/TGZ payloads.
+        nested_archives = recursive_extract(extract_dir)
+        logger.info(f"Nested extraction complete, processed {nested_archives} archive(s)")
+
+        # 5. Pick the most appropriate directory root for the upload step.
+        upload_dir = normalize_extract_dir(extract_dir)
+        logger.info(f"Selected upload root: {upload_dir}")
+
+        # 6. Uplaod the extracted payload back to the original S3 prefix.
+        prefix = asset_href.rsplit("/", 1)[0] + "/"
+        logger.info(f"Uploading to prefix: {prefix}")
+
+        await upload_folder_flat(upload_dir, prefix)
+
+    # Return the folder-like href that now contains the extracted content.
+    return prefix
+
 
 ###############
 # Auxip flows #
@@ -33,7 +183,7 @@ from rs_workflows.staging_flow import staging_task
 
 
 @flow(name="Auxip search")
-async def search(
+async def auxip_search(
     env: FlowEnvArgs,
     auxip_cql2: dict,
     error_if_empty: bool = False,
@@ -64,7 +214,7 @@ async def search(
             raise ValueError(
                 f"No Auxip product found for CQL2 filter: {json.dumps(auxip_cql2, indent=2)}",
             )
-        logger.info(f"Auxip search found {len(found)} results: {found}")
+        logger.info(f"Auxip search found {len(found)} result(s): {found.to_dict()}")
         return found
 
 
@@ -195,6 +345,16 @@ async def on_demand_auxip_staging(
     )
 
 
+@flow(name="Auxip unzip and decompress")
+async def auxip_unzip_decompress(auxip_item: Item) -> Item:
+    """Prefect flow used to unzip and decompress ADFS"""
+    for _, asset in auxip_item.assets.items():
+        new_href = await process_asset(asset.href)
+        asset.href = new_href
+
+    return auxip_item
+
+
 ###########################
 # Call the flows as tasks #
 ###########################
@@ -202,11 +362,17 @@ async def on_demand_auxip_staging(
 
 @task(name="Auxip search")
 async def search_task(*args, **kwargs) -> ItemCollection | None:
-    """See: search"""
-    return await search.fn(*args, **kwargs)
+    """See: auxip_search"""
+    return await auxip_search.fn(*args, **kwargs)
 
 
 @task(name="Auxip staging")
 async def auxip_staging_task(*args, **kwargs) -> tuple[bool, ItemCollection | None]:
     """See: auxip_staging"""
     return await auxip_staging.fn(*args, **kwargs)
+
+
+@task(name="Auxip unzip and decompress")
+async def auxip_unzip_decompress_task(*args, **kwargs) -> Item:
+    """See: auxip_unzip_decompress"""
+    return await auxip_unzip_decompress.fn(*args, **kwargs)
