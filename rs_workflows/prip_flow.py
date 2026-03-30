@@ -14,11 +14,15 @@
 
 """Prip flow implementation"""
 
+import datetime
+
 from prefect import flow, get_run_logger, task
 from pystac import ItemCollection
 
 from rs_client.stac.prip_client import PripClient
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_common.utils import create_valcover_filter
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, RetryConfig
+from rs_workflows.staging_flow import staging_task
 
 
 @flow(name="Prip search")
@@ -56,6 +60,64 @@ async def search(
             raise ValueError("No PRIP products found")
         logger.info(f"PRIP search found {len(found)} results: {found}")
         return found
+
+
+@flow(name="On-demand Prip staging")
+async def on_demand_prip_staging(
+    env: FlowEnvArgs,
+    start_datetime: datetime.datetime | str,
+    end_datetime: datetime.datetime | str,
+    product_type: str,
+    prip_collection: str,
+    catalog_collection_identifier: str,
+    retry_config: RetryConfig = RetryConfig(),  # type: ignore
+):
+    """
+    Flow to retrieve Prip files with the given time interval defined by
+    start_datetime and end_datetime, select only the type of files wanted,
+    stage the files and add STAC items into the catalog.
+
+    Args:
+        env: Prefect flow environment
+        start_datetime: Start datetime for the time interval used to filter the files
+            (date or timestamp, e.g. "2025-08-07T11:51:12.509000Z")
+        end_datetime: End datetime for the time interval used to filter the files
+            (date or timestamp, e.g. "2025-08-10T14:00:00.509000Z")
+        product_type: Prip product type wanted
+        prip_collection: PRIP collection identifier (station)
+        catalog_collection_identifier: Catalog collection identifier where PRIP data are staged
+    """
+
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "on-demand-prip-staging"):
+
+        # CQL2 filter: filter on product type and time interval
+        cql2_filter = create_valcover_filter(start_datetime, end_datetime, product_type)
+
+        # Search Prip products
+        prip_items = search_task.with_options(
+            retries=retry_config.staging_retries,
+            retry_delay_seconds=retry_config.staging_retry_delay,
+        ).submit(
+            flow_env.serialize(),
+            prip_cql2={"filter": cql2_filter},
+            prip_collection=prip_collection,
+            error_if_empty=False,
+        )
+
+        # Stage Prip items
+        staged = staging_task.with_options(
+            retries=retry_config.staging_retries,
+            retry_delay_seconds=retry_config.staging_retry_delay,
+        ).submit(
+            flow_env.serialize(),
+            prip_items,
+            catalog_collection_identifier,
+        )
+
+        # Wait for last task to end (unwrap exceptions if any)
+        staged.result()  # type: ignore[unused-coroutine]
 
 
 ###########################

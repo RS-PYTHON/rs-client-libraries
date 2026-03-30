@@ -30,8 +30,10 @@ from rs_client.stac import catalog_client
 from rs_common import prefect_utils
 from rs_workflows import (
     auxip_flow,
+    cadip_flow,
     catalog_flow,
     on_demand_processing,
+    prip_flow,
 )
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
@@ -329,7 +331,7 @@ async def test_on_demand_cadip_staging(
 ):  # pylint: disable=unused-argument
     """Test the on_demand_cadip_staging flow"""
     await setup_worklow_test_env()
-    await on_demand_processing.on_demand_cadip_staging(
+    await cadip_flow.on_demand_cadip_staging(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         # values come from the mocked_stac_catalog_search_inside_collection fixture
         cadip_collection_identifier="S1_L1",
@@ -375,7 +377,7 @@ async def test_on_demand_prip_staging(
 ):  # pylint: disable=unused-argument
     """Test the on_demand_prip_staging flow"""
     await setup_worklow_test_env()
-    await on_demand_processing.on_demand_prip_staging(
+    await prip_flow.on_demand_prip_staging(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         start_datetime="2024-05-27T09:44:09.509000Z",
         end_datetime="2024-05-27T09:44:19.509000Z",
