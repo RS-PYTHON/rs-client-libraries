@@ -390,9 +390,10 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
             ("S03OLCCR1", 0, 1),
             ("S03OLCL0_", 22, 24),
             ("S03SLSL0_", 15, 22),
-            ("S03ALTL0_", 10, 13),
-            ("S03SRCRL0", 0, 1),
+            ("S03SRAL0_", 10, 13),
+            ("S03SRAL0C", 0, 1),
             ("S03HKML0_", 1, 1),
+            ("S03HKMRAW", 1, 1),
             ("S03HKM2L0", 1, 1),
             ("S03NATL0_", 2, 2),
         ]
@@ -757,9 +758,15 @@ def record_performance_indicators(
         update_timeliness_fields(flow_run_id)  # type: ignore[unused-coroutine]
         logger.info("Transaction committed successfully!")
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         db.rollback()
-        logger.error(f"Error in record_performance_indicators: {e}")
-        raise
+        logger.error(
+            f"Error in record_performance_indicators: {e}. The transaction has been rolled back. "
+            "The remaining processing steps will continue to run",
+        )
+        # This raise has been intentionally eliminated to allow the workflow to continue even
+        # if recording performance indicators fails. This is due to a discussion on slack:
+        # ```PI computing failure should be a warning, not an error that prevent the remaining processing steps.```
+        # raise
     finally:
         db.close()
