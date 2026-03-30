@@ -202,7 +202,7 @@ async def process_asset(asset_href: str) -> str:
 
 
 @flow(name="Auxip search")
-async def auxip_search(
+async def search(
     env: FlowEnvArgs,
     auxip_cql2: dict,
     error_if_empty: bool = False,
@@ -392,8 +392,8 @@ async def auxip_unzip_decompress(auxip_item: Item) -> Item:
 
 @task(name="Auxip search")
 async def search_task(*args, **kwargs) -> ItemCollection | None:
-    """See: auxip_search"""
-    return await auxip_search.fn(*args, **kwargs)
+    """See: search"""
+    return await search.fn(*args, **kwargs)
 
 
 @task(name="Auxip staging")
