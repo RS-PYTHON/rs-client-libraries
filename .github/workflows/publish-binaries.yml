@@ -281,8 +281,8 @@ jobs:
   # See https://docs.github.com/en/rest/actions/workflows?apiVersion=2022-11-28#create-a-workflow-dispatch-event
   trigger-jupyter-k8s-image-build:
     runs-on: ubuntu-latest
-    name: Trigger rs-workflow-env CI to build the Jupyter image for cluster use
-    needs: [test-demo]  # Trigger build for cluster image only if rs-demo passed, to not intoduce bugs in it
+    name: Trigger rs-workflow-env CI to build the Jupyter k8s image
+    needs: [set-env, test-demo]  # Trigger build for cluster image only if rs-demo passed, to not intoduce bugs in it
     steps:
       - run: |
           set -x
