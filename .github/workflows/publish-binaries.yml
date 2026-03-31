@@ -164,6 +164,8 @@ jobs:
           image_basename: "${{ github.repository_owner }}/jupyter"
           image_suffix: /rs-client-libraries/local
           version_name: ${{ needs.build-whl.outputs.version_name }}
+          dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_tag: ${{ needs.set-env.outputs.docker_tag }}
 
@@ -198,6 +200,8 @@ jobs:
           image_basename: "${{ github.repository_owner }}/prefect"
           image_suffix: /rs-client-libraries/local
           version_name: ${{ needs.build-whl.outputs.version_name }}
+          dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_tag: ${{ needs.set-env.outputs.docker_tag }}
           build_args: |
@@ -234,6 +238,8 @@ jobs:
           image_basename: "${{ github.repository_owner }}/prefect"
           image_suffix: /rs-client-libraries/k8s
           version_name: ${{ needs.build-whl.outputs.version_name }}
+          dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_tag: ${{ needs.set-env.outputs.docker_tag }}
           build_args: |
