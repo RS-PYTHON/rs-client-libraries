@@ -28,13 +28,11 @@ from prefect.artifacts import acreate_markdown_artifact
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
-from rs_common.utils import create_valcover_filter
-from rs_workflows import auxip_flow, cadip_flow, catalog_flow, prip_flow
+from rs_workflows import auxip_flow, catalog_flow
 from rs_workflows.dpr_flow import run_processor
-from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs, RetryConfig
+from rs_workflows.flow_utils import DprProcessIn, FlowEnv, RetryConfig
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload
-from rs_workflows.staging_flow import staging_task
 
 
 def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
@@ -300,111 +298,3 @@ async def dpr_processing(
         published.result()  # type: ignore[unused-coroutine]
 
         return
-
-
-@flow(name="On-demand Cadip staging")
-async def on_demand_cadip_staging(
-    env: FlowEnvArgs,
-    cadip_collection_identifier: str,
-    session_identifier: str,
-    catalog_collection_identifier: str,
-    staging_retries: int = 3,
-    staging_retry_delay: int = 60,
-):
-    """
-    Flow to retrieve a session, stage it and add the STAC item into the catalog.
-
-    Args:
-        env: Prefect flow environment
-        cadip_collection_identifier: CADIP collection identifier that contains the mission and station
-            (e.g. s1_ins for Sentinel-1 sessions from the Inuvik station)
-        session_identifier: Session identifier
-        catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
-    """
-
-    # Init flow environment and opentelemetry span
-    flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "on-demand-cadip-staging"):
-
-        # Search Cadip sessions
-        cadip_items = cadip_flow.search_task.with_options(
-            retries=3,
-            retry_delay_seconds=60,
-        ).submit(
-            flow_env.serialize(),
-            cadip_collection_identifier,
-            session_identifier,
-            error_if_empty=True,
-        )
-
-        # Stage Cadip items.
-        staged = staging_task.with_options(
-            retries=staging_retries,
-            retry_delay_seconds=staging_retry_delay,
-        ).submit(
-            flow_env.serialize(),
-            cadip_items,
-            catalog_collection_identifier,
-        )
-
-        # Wait for last task to end.
-        # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        staged.result()  # type: ignore[unused-coroutine]
-
-
-@flow(name="On-demand Prip staging")
-async def on_demand_prip_staging(
-    env: FlowEnvArgs,
-    start_datetime: datetime.datetime | str,
-    end_datetime: datetime.datetime | str,
-    product_type: str,
-    prip_collection: str,
-    catalog_collection_identifier: str,
-    retry_config: RetryConfig = RetryConfig(),  # type: ignore
-):
-    """
-    Flow to retrieve Prip files with the given time interval defined by
-    start_datetime and end_datetime, select only the type of files wanted,
-    stage the files and add STAC items into the catalog.
-
-    Args:
-        env: Prefect flow environment
-        start_datetime: Start datetime for the time interval used to filter the files
-            (date or timestamp, e.g. "2025-08-07T11:51:12.509000Z")
-        end_datetime: End datetime for the time interval used to filter the files
-            (date or timestamp, e.g. "2025-08-10T14:00:00.509000Z")
-        product_type: Prip product type wanted
-        prip_collection: PRIP collection identifier (station)
-        catalog_collection_identifier: Catalog collection identifier where PRIP data are staged
-    """
-
-    # Init flow environment and opentelemetry span
-    flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "on-demand-prip-staging"):
-
-        # CQL2 filter: filter on product type and time interval
-        cql2_filter = create_valcover_filter(start_datetime, end_datetime, product_type)
-
-        # Search Prip products
-        prip_items = prip_flow.search_task.with_options(
-            retries=retry_config.staging_retries,
-            retry_delay_seconds=retry_config.staging_retry_delay,
-        ).submit(
-            flow_env.serialize(),
-            prip_cql2={"filter": cql2_filter},
-            prip_collection=prip_collection,
-            error_if_empty=False,
-        )
-
-        # Stage Prip items
-        staged = staging_task.with_options(
-            retries=retry_config.staging_retries,
-            retry_delay_seconds=retry_config.staging_retry_delay,
-        ).submit(
-            flow_env.serialize(),
-            prip_items,
-            catalog_collection_identifier,
-        )
-
-        # Wait for last task to end (unwrap exceptions if any)
-        staged.result()  # type: ignore[unused-coroutine]
