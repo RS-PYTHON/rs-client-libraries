@@ -17,6 +17,7 @@
 # pylint: disable=redefined-outer-name,unused-argument
 
 from contextlib import nullcontext
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -38,7 +39,7 @@ def mock_auxip_logger(monkeypatch, mocker):
 @pytest.fixture
 def sample_item():
     """Create a minimal STAC item for AUXIP tests."""
-    item = Item(id="aux-item", geometry=None, bbox=None, datetime=None, properties={})
+    item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(UTC), properties={})
     item.add_asset("data.zip", Asset(href="s3://bucket/path/data.zip"))
     item.add_asset("other.raw", Asset(href="s3://bucket/path/other.raw"))
     return item
@@ -210,8 +211,9 @@ async def test_auxip_staging_returns_early_when_search_is_empty(monkeypatch, moc
 async def test_auxip_staging_success(monkeypatch, mocker, mock_auxip_logger):
     """Test AUXIP staging returns staged catalog items and creates artifact on success."""
     env = FlowEnvArgs(owner_id="me")
-    source_item = Item(id="item-1", geometry=None, bbox=None, datetime=None, properties={})
-    catalog_item = Item(id="item-1", geometry=None, bbox=None, datetime=None, properties={})
+    item_datetime = datetime.now(UTC)
+    source_item = Item(id="item-1", geometry=None, bbox=None, datetime=item_datetime, properties={})
+    catalog_item = Item(id="item-1", geometry=None, bbox=None, datetime=item_datetime, properties={})
     flow_env = mocker.Mock()
     flow_env.start_span.return_value = nullcontext()
     flow_env.serialize.return_value = {"owner_id": "me"}
@@ -240,8 +242,9 @@ async def test_auxip_staging_success(monkeypatch, mocker, mock_auxip_logger):
 async def test_auxip_staging_failure_skips_artifact(monkeypatch, mocker, mock_auxip_logger):
     """Test AUXIP staging returns False when one staging job failed."""
     env = FlowEnvArgs(owner_id="me")
-    source_item = Item(id="item-1", geometry=None, bbox=None, datetime=None, properties={})
-    catalog_item = Item(id="item-1", geometry=None, bbox=None, datetime=None, properties={})
+    item_datetime = datetime.now(UTC)
+    source_item = Item(id="item-1", geometry=None, bbox=None, datetime=item_datetime, properties={})
+    catalog_item = Item(id="item-1", geometry=None, bbox=None, datetime=item_datetime, properties={})
     flow_env = mocker.Mock()
     flow_env.start_span.return_value = nullcontext()
     flow_env.serialize.return_value = {"owner_id": "me"}
@@ -270,7 +273,8 @@ async def test_on_demand_auxip_staging_builds_valcover_filter(monkeypatch):
     """Test on-demand AUXIP staging builds a ValCover filter and forwards it."""
     env = FlowEnvArgs(owner_id="me")
     create_filter_mock = MagicMock(return_value={"op": "and"})
-    staging_mock = AsyncMock(return_value=(True, ItemCollection([])))
+    staged_items = ItemCollection([])
+    staging_mock = AsyncMock(return_value=(True, staged_items))
     auxip_staging_task = MagicMock()
     auxip_staging_task.fn = staging_mock
     monkeypatch.setattr(auxip_flow, "create_valcover_filter", create_filter_mock)
@@ -284,7 +288,7 @@ async def test_on_demand_auxip_staging_builds_valcover_filter(monkeypatch):
         "collection",
     )
 
-    assert result == (True, ItemCollection([]))
+    assert result == (True, staged_items)
     create_filter_mock.assert_called_once_with("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z", "AUX_TEST")
     staging_mock.assert_awaited_once_with(
         env=env,
@@ -296,7 +300,7 @@ async def test_on_demand_auxip_staging_builds_valcover_filter(monkeypatch):
 @pytest.mark.asyncio
 async def test_auxip_unzip_decompress_updates_supported_assets(monkeypatch, mock_auxip_logger):
     """Test asset hrefs and names are updated for supported archive suffixes."""
-    item = Item(id="item-1", geometry=None, bbox=None, datetime=None, properties={})
+    item = Item(id="item-1", geometry=None, bbox=None, datetime=datetime.now(UTC), properties={})
     item.add_asset("data.zip", Asset(href="s3://bucket/path/data.zip"))
     item.add_asset("bundle.tar.gz", Asset(href="s3://bucket/path/bundle.tar.gz"))
     item.add_asset("raw.bin", Asset(href="s3://bucket/path/raw.bin"))
