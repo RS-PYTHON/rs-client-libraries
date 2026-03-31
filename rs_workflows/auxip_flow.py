@@ -16,10 +16,7 @@
 
 import datetime
 import json
-import os
-import tarfile
 import tempfile
-import zipfile
 from pathlib import Path
 
 from prefect import flow, get_run_logger, task
@@ -29,7 +26,15 @@ from pystac import Item, ItemCollection
 from rs_client.stac.auxip_client import AuxipClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common.prefect_utils import s3_delete, s3_download_file, s3_upload_file
-from rs_common.utils import create_valcover_filter
+from rs_common.utils import (
+    create_valcover_filter,
+    extract_tar,
+    extract_zip,
+    get_upload_prefix,
+    normalize_extract_dir,
+    recursive_extract,
+    strip_archive_suffix,
+)
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, archive_suffixes
 from rs_workflows.staging_flow import staging_task
 
@@ -38,107 +43,7 @@ from rs_workflows.staging_flow import staging_task
 ####################################################
 
 
-def extract_zip(zip_path: Path, extract_to: Path):
-    """Extract a ZIP archive into the target directory."""
-    logger = get_run_logger()
-    logger.info(f"Extracting ZIP: {zip_path} -> {extract_to}")
-
-    with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        logger.info(f"ZIP contains {len(zip_ref.namelist())} entries")
-        zip_ref.extractall(extract_to)
-
-
-def extract_tar(file_path: Path, extract_to: Path) -> int:
-    """Extract a TAR-compatible archive into the target directory."""
-    logger = get_run_logger()
-    logger.info(f"Extracting TAR archive: {file_path} -> {extract_to}")
-
-    with tarfile.open(file_path, "r:*") as tar:
-        members = tar.getmembers()
-        logger.info(f"TAR archive contains {len(members)} entries")
-        if members:
-            tar.extractall(path=extract_to)
-        return len(members)
-
-
-def strip_archive_suffix(name: str) -> str:
-    """Return the asset name without its supported archive suffix."""
-    for suffix in (".tar.gz", ".tgz", ".zip", ".tar"):
-        if name.endswith(suffix):
-            return name.removesuffix(suffix)
-    return name
-
-
-def get_upload_prefix(asset_href: str, asset_name: str) -> str:
-    """Return the S3 prefix where extracted content should be uploaded."""
-    parent_prefix = asset_href.rsplit("/", 1)[0]
-
-    if asset_name.endswith(".zip"):
-        return parent_prefix + "/"
-
-    last_segment = parent_prefix.rsplit("/", 1)[-1]
-    normalized_segment = strip_archive_suffix(last_segment)
-
-    if normalized_segment != last_segment:
-        base_prefix = parent_prefix.rsplit("/", 1)[0]
-        return base_prefix + "/" + normalized_segment + "/"
-
-    return parent_prefix + "/"
-
-
-def recursive_extract(folder: Path) -> int:
-    """Extract nested TAR-compatible archives found anywhere under ``folder``."""
-    logger = get_run_logger()
-    extracted_count = 0
-    extracted = True
-
-    while extracted:
-        extracted = False
-
-        for root, _, files in os.walk(folder):
-            for file in files:
-                full_path = Path(root) / file
-
-                if file.endswith((".tar", ".tgz", ".tar.gz")):
-                    logger.info(f"Found nested archive: {full_path}")
-
-                    extracted_members = extract_tar(full_path, Path(root))
-                    if extracted_members:
-                        full_path.unlink()
-                        extracted = True
-                        extracted_count += 1
-                    else:
-                        logger.warning(
-                            "Skipping removal of nested archive because no members were extracted: " f"{full_path}",
-                        )
-
-    logger.info(f"Processed {extracted_count} nested archive(s)")
-    return extracted_count
-
-
-def normalize_extract_dir(extract_dir: Path) -> Path:
-    """
-    Return the directory that should be used as the upload root.
-
-    If the extraction produced a single top-level directory, descend into it to
-    avoid creating an unnecessary extra folder level in S3.
-    """
-    logger = get_run_logger()
-    root_items = list(extract_dir.iterdir())
-
-    if len(root_items) != 1:
-        logger.info("No normalization needed, multiple root items found")
-        return extract_dir
-
-    root_item = root_items[0]
-    if not root_item.is_dir():
-        logger.info("No normalization needed, single root item is not a directory")
-        return extract_dir
-
-    logger.info(f"Normalizing folder structure: entering {root_item}")
-    return root_item
-
-
+# this can't be in rs_common.utils because of circular imports with prefect_utils
 async def upload_folder_flat(local_folder: Path, prefix: str):
     """
     Upload all files under ``local_folder`` to the same S3 prefix.
