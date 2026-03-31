@@ -216,6 +216,18 @@ def get_upload_prefix(asset_href: str, asset_name: str) -> str:
     return parent_prefix + "/"
 
 
+def _extract_nested_archive(full_path: Path) -> bool:
+    """Extract a nested TAR-compatible archive and delete it on success."""
+    logger = get_run_logger()
+    logger.info(f"Found nested archive: {full_path}")
+    extracted_members = extract_tar(full_path, full_path.parent)
+    if not extracted_members:
+        logger.warning("Skipping removal of nested archive because no members were extracted: " f"{full_path}")
+        return False
+    full_path.unlink()
+    return True
+
+
 def recursive_extract(folder: Path) -> int:
     """Extract nested TAR-compatible archives found anywhere under ``folder``."""
     logger = get_run_logger()
@@ -229,18 +241,9 @@ def recursive_extract(folder: Path) -> int:
             for file in files:
                 full_path = Path(root) / file
 
-                if file.endswith((".tar", ".tgz", ".tar.gz")):
-                    logger.info(f"Found nested archive: {full_path}")
-
-                    extracted_members = extract_tar(full_path, Path(root))
-                    if extracted_members:
-                        full_path.unlink()
-                        extracted = True
-                        extracted_count += 1
-                    else:
-                        logger.warning(
-                            "Skipping removal of nested archive because no members were extracted: " f"{full_path}",
-                        )
+                if file.endswith((".tar", ".tgz", ".tar.gz")) and _extract_nested_archive(full_path):
+                    extracted = True
+                    extracted_count += 1
 
     logger.info(f"Processed {extracted_count} nested archive(s)")
     return extracted_count
