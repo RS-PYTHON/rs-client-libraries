@@ -115,6 +115,8 @@ async def process_input_adfs(
                 indexed_items = []
                 # For each staged ADFS, check asset hrefs and process in parallel the archived ones.
                 for idx, auxip_item in enumerate(item_collection.items):
+                    # Can an adfs href be a folder? If yes, we need to check all the assets in the folder and
+                    # process the archived ones. Otherwise, we can directly check the href of the single asset.
                     if any(asset.href.endswith(archive_suffixes) for asset in auxip_item.assets.values()):
                         logger.info(
                             "The following staged ADFS asset is archived/compressed "

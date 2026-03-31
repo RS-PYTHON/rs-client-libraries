@@ -15,6 +15,7 @@
 """This module is used to share common functions between apis"""
 
 import os
+import shutil
 import tarfile
 import zipfile
 from dataclasses import dataclass
@@ -127,14 +128,38 @@ LOCAL_MODE: bool = env_bool("RSPY_LOCAL_MODE", default=False)
 CLUSTER_MODE: bool = not LOCAL_MODE
 
 
+def _is_safe_extract_path(extract_to: Path, member_name: str) -> bool:
+    """Return whether an archive member stays within the target directory."""
+    member_path = Path(member_name.replace("\\", "/"))
+    if member_path.is_absolute():
+        return False
+    try:
+        (extract_to / member_path).resolve().relative_to(extract_to.resolve())
+    except ValueError:
+        return False
+    return True
+
+
 def extract_zip(zip_path: Path, extract_to: Path):
     """Extract a ZIP archive into the target directory."""
     logger = get_run_logger()
     logger.info(f"Extracting ZIP: {zip_path} -> {extract_to}")
 
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
-        logger.info(f"ZIP contains {len(zip_ref.namelist())} entries")
-        zip_ref.extractall(extract_to)
+        count = 0
+        for name in zip_ref.namelist():
+            if not _is_safe_extract_path(extract_to, name):
+                logger.warning(f"Skipping unsafe ZIP member: {name}")
+                continue
+            destination = (extract_to / name.replace("\\", "/")).resolve()
+            if name.endswith("/"):
+                destination.mkdir(parents=True, exist_ok=True)
+            else:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with zip_ref.open(name) as src, destination.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
+            count += 1
+        logger.info(f"ZIP contains {count} safe entries")
 
 
 def extract_tar(file_path: Path, extract_to: Path) -> int:
@@ -143,11 +168,27 @@ def extract_tar(file_path: Path, extract_to: Path) -> int:
     logger.info(f"Extracting TAR archive: {file_path} -> {extract_to}")
 
     with tarfile.open(file_path, "r:*") as tar:
-        members = tar.getmembers()
-        logger.info(f"TAR archive contains {len(members)} entries")
-        if members:
-            tar.extractall(path=extract_to)
-        return len(members)
+        count = 0
+        for member in tar.getmembers():
+            if member.issym() or member.islnk() or member.isdev():
+                logger.warning(f"Skipping unsafe TAR member: {member.name}")
+                continue
+            if not _is_safe_extract_path(extract_to, member.name):
+                logger.warning(f"Skipping unsafe TAR member: {member.name}")
+                continue
+            destination = (extract_to / member.name).resolve()
+            if member.isdir():
+                destination.mkdir(parents=True, exist_ok=True)
+            else:
+                extracted = tar.extractfile(member)
+                if extracted is None:
+                    continue
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with extracted, destination.open("wb") as dst:
+                    shutil.copyfileobj(extracted, dst)
+            count += 1
+        logger.info(f"TAR archive contains {count} safe entries")
+        return count
 
 
 def strip_archive_suffix(name: str) -> str:
