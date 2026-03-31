@@ -31,11 +31,18 @@ inputs:
   version_name:
     description: Version name e.g. 1.2.3a4.dev1a2b3c4d
     required: true
+  dockerhub_username:
+    description: vars.DOCKERHUB_USERNAME
+    required: true
+  dockerhub_token:
+    description: secrets.DOCKERHUB_TOKEN
+    required: true
   github_token:
     description: secrets.GITHUB_TOKEN
     required: true
   docker_tag:
     description: Tag the docker images
+    required: false
   build_args:
     description: List of build-time variables
     required: false
@@ -49,7 +56,14 @@ runs:
   using: "composite"
   steps:
 
-    - name: Log into Docker registry
+    # Login to Docker Hub to increase pull quota from 100 to 200 per 6 hours
+    - name: Log into Docker Hub
+      uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
+      with:
+        username: ${{ inputs.dockerhub_username }}
+        password: ${{ inputs.dockerhub_token }}
+
+    - name: Log into GitHub Container Registry
       uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
       with:
         registry: ${{ env.DOCKER_REGISTRY }}
@@ -98,12 +112,14 @@ runs:
         TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
         TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1
       with:
+        version: v0.69.3
         image-ref: ${{ env.docker_image }}
         format: sarif
         output: trivy-results-docker.sarif
         exit-code: 0
+        limit-severities-for-sarif: true
+        severity: HIGH,CRITICAL
         timeout: 30m
-        #severity: HIGH,CRITICAL
 
     - name: Upload Trivy scan results to GitHub Security tab
       uses: github/codeql-action/upload-sarif@v4

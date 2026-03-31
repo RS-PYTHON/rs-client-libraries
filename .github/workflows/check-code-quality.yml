@@ -171,7 +171,7 @@ jobs:
           TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db:2
           TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db:1
         with:
-          version: v0.69.1
+          version: v0.69.3
           scan-type: fs
           ignore-unfixed: true
           format: sarif
@@ -361,9 +361,3 @@ jobs:
         timeout-minutes: 5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-      - if: always()
-        run: >
-          echo "SonarCloud report:
-          https://sonarcloud.io/dashboard?id=${{ env.SONAR_PROJECT_KEY }}&branch=${{ github.ref_name }}"
-          >> $GITHUB_STEP_SUMMARY
