@@ -30,7 +30,7 @@ from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
 from rs_workflows import auxip_flow, catalog_flow
 from rs_workflows.dpr_flow import run_processor
-from rs_workflows.flow_utils import DprProcessIn, FlowEnv, RetryConfig
+from rs_workflows.flow_utils import DprProcessIn, FlowEnv, RetryConfig, archive_suffixes
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload
 
@@ -113,12 +113,11 @@ async def process_input_adfs(
 
                 tasks = []
                 indexed_items = []
-                # For each staged adfs, check assets href, and process in parallel ones with '.zip'
-                # To be verified if it's possible with other extensions? .7z .rar?
+                # For each staged ADFS, check asset hrefs and process in parallel the archived ones.
                 for idx, auxip_item in enumerate(item_collection.items):
-                    if any(".zip" in asset.href for asset in auxip_item.assets.values()):
+                    if any(asset.href.endswith(archive_suffixes) for asset in auxip_item.assets.values()):
                         logger.info(
-                            "The following staged ADFS asset is zipped/compressed "
+                            "The following staged ADFS asset is archived/compressed "
                             f"{auxip_item.to_dict()}. Starting normalization task",
                         )
                         future = auxip_flow.auxip_unzip_decompress_task.submit(auxip_item)
@@ -127,7 +126,7 @@ async def process_input_adfs(
 
                 # Wait only for tasks that were actually triggered
                 results = [t.result() for t in tasks]
-                # Since the .zip extension is removed, href is changed therefore item_collection needs to be updated
+                # Since the archive extension is removed, href is changed therefore item_collection needs to be updated
                 # Replace only processed items
                 for idx, new_item in zip(indexed_items, results):
                     item_collection.items[idx] = new_item
