@@ -301,12 +301,16 @@ def update_eopf_assets(
         for name, loc in new_zattrs:
             zattrs_list.append((name, loc, prod.id))
         logger.info(
-            f"Product {prod.id} has been added to the list and will be published to the catalog."
-            f" The path is {path}",
+            f"The output product section {prod.id} has been added to the list, "
+            "and all product types found at this path will be published to the catalog. "
+            f"The path is {path}",
         )
 
     # List & extract
-    logger.info(f"Found {len(zattrs_list)} .zattrs files. The list: {zattrs_list}")
+    logger.info(
+        f"Found {len(zattrs_list)} .zattrs files from {len(payload.io.output_products)} "
+        f"output product sections from payload. The list with products to be published: {zattrs_list}",
+    )
 
     items_metadata = []
     for product_name, zattrs_s3_location, output_product_id in zattrs_list:
@@ -466,6 +470,7 @@ async def run_processor(
         start_time = time.time()
         s3_payload_dir = osp.dirname(s3_payload_run)
         s3_payload_filename = osp.basename(s3_payload_run)
+        logger.info(f"Triggering DPR processor {processor!r}")
         job_status = dpr_client.run_process(
             process=processor,
             cluster_info=cluster_info,
