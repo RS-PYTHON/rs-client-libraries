@@ -15,9 +15,15 @@
 """This module is used to share common functions between apis"""
 
 import os
+import shutil
+import tarfile
+import zipfile
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
+
+from prefect import get_run_logger
 
 
 @dataclass
@@ -120,3 +126,147 @@ LOCAL_MODE: bool = env_bool("RSPY_LOCAL_MODE", default=False)
 
 # Cluster mode is the opposite of local mode
 CLUSTER_MODE: bool = not LOCAL_MODE
+
+
+def _is_safe_extract_path(extract_to: Path, member_name: str) -> bool:
+    """Return whether an archive member stays within the target directory."""
+    member_path = Path(member_name.replace("\\", "/"))
+    if member_path.is_absolute():
+        return False
+    try:
+        (extract_to / member_path).resolve().relative_to(extract_to.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def extract_zip(zip_path: Path, extract_to: Path):
+    """Extract a ZIP archive into the target directory."""
+    logger = get_run_logger()
+    logger.info(f"Extracting ZIP: {zip_path} -> {extract_to}")
+
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        count = 0
+        for name in zip_ref.namelist():
+            if not _is_safe_extract_path(extract_to, name):
+                logger.warning(f"Skipping unsafe ZIP member: {name}")
+                continue
+            destination = (extract_to / name.replace("\\", "/")).resolve()
+            if name.endswith("/"):
+                destination.mkdir(parents=True, exist_ok=True)
+            else:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with zip_ref.open(name) as src, destination.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
+            count += 1
+        logger.info(f"ZIP contains {count} safe entries")
+
+
+def extract_tar(file_path: Path, extract_to: Path) -> int:
+    """Extract a TAR-compatible archive into the target directory."""
+    logger = get_run_logger()
+    logger.info(f"Extracting TAR archive: {file_path} -> {extract_to}")
+
+    with tarfile.open(file_path, "r:*") as tar:
+        count = 0
+        for member in tar.getmembers():
+            if member.issym() or member.islnk() or member.isdev():
+                logger.warning(f"Skipping unsafe TAR member: {member.name}")
+                continue
+            if not _is_safe_extract_path(extract_to, member.name):
+                logger.warning(f"Skipping unsafe TAR member: {member.name}")
+                continue
+            destination = (extract_to / member.name).resolve()
+            if member.isdir():
+                destination.mkdir(parents=True, exist_ok=True)
+            else:
+                extracted = tar.extractfile(member)
+                if extracted is None:
+                    continue
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with extracted, destination.open("wb") as dst:
+                    shutil.copyfileobj(extracted, dst)
+            count += 1
+        logger.info(f"TAR archive contains {count} safe entries")
+        return count
+
+
+def strip_archive_suffix(name: str) -> str:
+    """Return the asset name without its supported archive suffix."""
+    for suffix in (".tar.gz", ".tgz", ".zip", ".tar"):
+        if name.endswith(suffix):
+            return name.removesuffix(suffix)
+    return name
+
+
+def get_upload_prefix(asset_href: str, asset_name: str) -> str:
+    """Return the S3 prefix where extracted content should be uploaded."""
+    parent_prefix = asset_href.rsplit("/", 1)[0]
+
+    if asset_name.endswith(".zip"):
+        return parent_prefix + "/"
+
+    last_segment = parent_prefix.rsplit("/", 1)[-1]
+    normalized_segment = strip_archive_suffix(last_segment)
+
+    if normalized_segment != last_segment:
+        base_prefix = parent_prefix.rsplit("/", 1)[0]
+        return base_prefix + "/" + normalized_segment + "/"
+
+    return parent_prefix + "/"
+
+
+def _extract_nested_archive(full_path: Path) -> bool:
+    """Extract a nested TAR-compatible archive and delete it on success."""
+    logger = get_run_logger()
+    logger.info(f"Found nested archive: {full_path}")
+    extracted_members = extract_tar(full_path, full_path.parent)
+    if not extracted_members:
+        logger.warning("Skipping removal of nested archive because no members were extracted: " f"{full_path}")
+        return False
+    full_path.unlink()
+    return True
+
+
+def recursive_extract(folder: Path) -> int:
+    """Extract nested TAR-compatible archives found anywhere under ``folder``."""
+    logger = get_run_logger()
+    extracted_count = 0
+    extracted = True
+
+    while extracted:
+        extracted = False
+
+        for root, _, files in os.walk(folder):
+            for file in files:
+                full_path = Path(root) / file
+
+                if file.endswith((".tar", ".tgz", ".tar.gz")) and _extract_nested_archive(full_path):
+                    extracted = True
+                    extracted_count += 1
+
+    logger.info(f"Processed {extracted_count} nested archive(s)")
+    return extracted_count
+
+
+def normalize_extract_dir(extract_dir: Path) -> Path:
+    """
+    Return the directory that should be used as the upload root.
+
+    If the extraction produced a single top-level directory, descend into it to
+    avoid creating an unnecessary extra folder level in S3.
+    """
+    logger = get_run_logger()
+    root_items = list(extract_dir.iterdir())
+
+    if len(root_items) != 1:
+        logger.info("No normalization needed, multiple root items found")
+        return extract_dir
+
+    root_item = root_items[0]
+    if not root_item.is_dir():
+        logger.info("No normalization needed, single root item is not a directory")
+        return extract_dir
+
+    logger.info(f"Normalizing folder structure: entering {root_item}")
+    return root_item

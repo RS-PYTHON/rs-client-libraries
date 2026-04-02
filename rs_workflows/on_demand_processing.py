@@ -30,7 +30,7 @@ from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_common import prefect_utils
 from rs_workflows import auxip_flow, catalog_flow
 from rs_workflows.dpr_flow import run_processor
-from rs_workflows.flow_utils import DprProcessIn, FlowEnv, RetryConfig
+from rs_workflows.flow_utils import DprProcessIn, FlowEnv, RetryConfig, archive_suffixes
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload
 
@@ -57,7 +57,8 @@ async def process_input_adfs(
     """
     Stage ADFS files from the tasktable.
     """
-
+    logger = get_run_logger()
+    logger.info(f"Starting processing input ADFS for {input_adfs}")
     try:
 
         # For each "alternative" ( get it following the "order" )
@@ -90,6 +91,7 @@ async def process_input_adfs(
                     default_aux_collection,
                 ),
             )
+            logger.info(f"Selected collection {collection}")
             # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
             auxip_items = (
                 auxip_flow.auxip_staging_task.with_options(
@@ -104,8 +106,39 @@ async def process_input_adfs(
                 )
                 .result()
             )
+            logger.info(f"Staged ADFS: {auxip_items}")
             # 6. Return the first found result
             if auxip_items[1]:  # type: ignore
+                item_collection = auxip_items[1]  # type: ignore
+
+                tasks = []
+                indexed_items = []
+                # For each staged ADFS, check asset hrefs and process in parallel the archived ones.
+                for idx, auxip_item in enumerate(item_collection.items):
+                    # Can an adfs href be a folder? If yes, we need to check all the assets in the folder and
+                    # process the archived ones. Otherwise, we can directly check the href of the single asset.
+                    if any(asset.href.endswith(archive_suffixes) for asset in auxip_item.assets.values()):
+                        logger.info(
+                            "The following staged ADFS asset is archived/compressed "
+                            f"{auxip_item.to_dict()}. Starting normalization task",
+                        )
+                        future = auxip_flow.auxip_unzip_decompress_task.submit(auxip_item)
+                        tasks.append(future)
+                        indexed_items.append(idx)
+
+                # Wait only for tasks that were actually triggered
+                results = [t.result() for t in tasks]
+                # Since the archive extension is removed, href is changed therefore item_collection needs to be updated
+                # Replace only processed items
+                for idx, new_item in zip(indexed_items, results):
+                    item_collection.items[idx] = new_item
+
+                # info size, debug content
+                logger.info(f"Finished processing input ADFS, ItemCollection size: {len(item_collection.items)}")
+                logger.debug(f"Finished processing input ADFS, ItemCollection: {item_collection.to_dict()}")
+
+                # pack things again as before
+                auxip_items = (auxip_items[0], item_collection)  # type: ignore
                 return input_adfs["name"], auxip_items
 
         raise RuntimeError(f"Searching for adfs input {input_adfs['name']} did not return any result")

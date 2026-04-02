@@ -14,8 +14,13 @@
 
 """Unit tests for utility funtions."""
 
+# pylint: disable=redefined-outer-name,unused-argument
+
 import json
+import tarfile
+import zipfile
 from contextlib import suppress
+from datetime import datetime
 
 import pytest
 import requests  # type: ignore
@@ -24,7 +29,21 @@ from prefect.blocks.system import Secret
 from pydantic import SecretStr
 
 from rs_common import prefect_utils
-from rs_common.utils import get_href_service, read_response_error
+from rs_common.utils import (
+    _extract_nested_archive,
+    _is_safe_extract_path,
+    create_valcover_filter,
+    env_bool,
+    extract_tar,
+    extract_zip,
+    get_href_service,
+    get_upload_prefix,
+    normalize_extract_dir,
+    read_response_error,
+    recursive_extract,
+    strftime_millis,
+    strip_archive_suffix,
+)
 from rs_workflows.catalog_flow import resolve_collection
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
@@ -254,3 +273,176 @@ def test_auxiliary_product_mapping_items():
 
     assert items["product_type"] == "*"
     assert items["collection_name"] == "aux_collection"
+
+
+@pytest.fixture
+def mock_utils_logger(monkeypatch, mocker):
+    """Replace Prefect run logger with a plain mock for utility tests."""
+    logger = mocker.Mock()
+    monkeypatch.setattr("rs_common.utils.get_run_logger", lambda: logger)
+    return logger
+
+
+@pytest.mark.parametrize(
+    ("value", "default", "expected"),
+    [
+        ("yes", False, True),
+        ("0", True, False),
+        ("maybe", True, True),
+        ("maybe", False, False),
+    ],
+)
+def test_env_bool(monkeypatch, value, default, expected):
+    """Test env_bool parsing and fallback behavior."""
+    monkeypatch.setenv("TEST_BOOL", value)
+    assert env_bool("TEST_BOOL", default) is expected
+
+
+def test_get_href_service_raises_without_rs_server_href(monkeypatch):
+    """Test get_href_service raises when no env override or RS server href is provided."""
+    monkeypatch.delenv("RSPY_HOST_NOT_SET", raising=False)
+    with pytest.raises(RuntimeError, match="RS-Server URL is undefined"):
+        get_href_service(None, "RSPY_HOST_NOT_SET")
+
+
+def test_strftime_millis():
+    """Test datetime formatting with millisecond precision."""
+    assert strftime_millis(datetime(2024, 1, 2, 3, 4, 5, 678901)) == "2024-01-02T03:04:05.678Z"
+
+
+def test_create_valcover_filter_with_datetimes():
+    """Test ValCover filter creation from datetime inputs."""
+    start = datetime(2024, 1, 2, 3, 4, 5, 123000)
+    end = datetime(2024, 1, 2, 4, 5, 6, 456000)
+    result = create_valcover_filter(start, end, "AUX_TEST")
+    assert result == {
+        "op": "and",
+        "args": [
+            {"op": "=", "args": [{"property": "product:type"}, "AUX_TEST"]},
+            {
+                "op": "t_contains",
+                "args": [
+                    {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                    {"interval": ["2024-01-02T03:04:05.123Z", "2024-01-02T04:05:06.456Z"]},
+                ],
+            },
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("member_name", "expected"),
+    [
+        ("safe/file.txt", True),
+        ("nested\\safe.txt", True),
+        ("../escape.txt", False),
+        ("/absolute.txt", False),
+    ],
+)
+def test_is_safe_extract_path(tmp_path, member_name, expected):
+    """Test archive path safety checks."""
+    assert _is_safe_extract_path(tmp_path, member_name) is expected
+
+
+def test_extract_zip_skips_unsafe_members(tmp_path, mock_utils_logger):
+    """Test ZIP extraction keeps safe members and skips unsafe ones."""
+    zip_path = tmp_path / "archive.zip"
+    extract_dir = tmp_path / "out"
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("safe/file.txt", "ok")
+        archive.writestr("../escape.txt", "bad")
+
+    extract_zip(zip_path, extract_dir)
+
+    assert (extract_dir / "safe" / "file.txt").read_text() == "ok"
+    assert not (tmp_path / "escape.txt").exists()
+    mock_utils_logger.warning.assert_called_with("Skipping unsafe ZIP member: ../escape.txt")
+
+
+def test_extract_tar_skips_unsafe_members(tmp_path, mock_utils_logger):
+    """Test TAR extraction keeps safe members and skips unsafe ones."""
+    tar_path = tmp_path / "archive.tar"
+    extract_dir = tmp_path / "out"
+    safe_file = tmp_path / "safe.txt"
+    unsafe_file = tmp_path / "unsafe.txt"
+    safe_file.write_text("ok")
+    unsafe_file.write_text("bad")
+
+    with tarfile.open(tar_path, "w") as archive:
+        archive.add(safe_file, arcname="safe/file.txt")
+        archive.add(unsafe_file, arcname="../escape.txt")
+
+    assert extract_tar(tar_path, extract_dir) == 1
+    assert (extract_dir / "safe" / "file.txt").read_text() == "ok"
+    assert not (tmp_path / "escape.txt").exists()
+    mock_utils_logger.warning.assert_called_with("Skipping unsafe TAR member: ../escape.txt")
+
+
+def test_strip_archive_suffix():
+    """Test supported archive suffixes are removed correctly."""
+    assert strip_archive_suffix("file.zip") == "file"
+    assert strip_archive_suffix("file.tar") == "file"
+    assert strip_archive_suffix("file.tgz") == "file"
+    assert strip_archive_suffix("file.tar.gz") == "file"
+    assert strip_archive_suffix("file.raw") == "file.raw"
+
+
+def test_get_upload_prefix():
+    """Test upload prefix normalization for ZIP and TAR-like assets."""
+    zip_href = "s3://bucket/user/item/file.zip"
+    tar_href = "s3://bucket/user/item.tar/file.tar"
+    plain_href = "s3://bucket/user/item/file.tar"
+
+    assert get_upload_prefix(zip_href, "file.zip") == "s3://bucket/user/item/"
+    assert get_upload_prefix(tar_href, "file.tar") == "s3://bucket/user/item/"
+    assert get_upload_prefix(plain_href, "file.tar") == "s3://bucket/user/item/"
+
+
+def test_extract_nested_archive(tmp_path, mock_utils_logger):
+    """Test nested archive extraction removes the archive on success."""
+    nested_tar = tmp_path / "nested.tar"
+    content = tmp_path / "content.txt"
+    content.write_text("ok")
+
+    with tarfile.open(nested_tar, "w") as archive:
+        archive.add(content, arcname="inside.txt")
+
+    assert _extract_nested_archive(nested_tar) is True
+    assert (tmp_path / "inside.txt").read_text() == "ok"
+    assert not nested_tar.exists()
+
+
+def test_recursive_extract_processes_nested_archives(tmp_path, mock_utils_logger):
+    """Test recursive extraction handles nested TAR archives."""
+    outer_dir = tmp_path / "folder"
+    outer_dir.mkdir()
+    inner_tar = outer_dir / "inner.tar"
+    payload = tmp_path / "payload.txt"
+    payload.write_text("ok")
+
+    with tarfile.open(inner_tar, "w") as archive:
+        archive.add(payload, arcname="payload.txt")
+
+    assert recursive_extract(tmp_path) == 1
+    assert (outer_dir / "payload.txt").read_text() == "ok"
+    assert not inner_tar.exists()
+
+
+def test_normalize_extract_dir(tmp_path, mock_utils_logger):
+    """Test extraction directory normalization."""
+    single_root = tmp_path / "single"
+    single_root.mkdir()
+    child = single_root / "child"
+    child.mkdir()
+    assert normalize_extract_dir(single_root) == child
+
+    multiple_root = tmp_path / "multiple"
+    multiple_root.mkdir()
+    (multiple_root / "a").mkdir()
+    (multiple_root / "b").mkdir()
+    assert normalize_extract_dir(multiple_root) == multiple_root
+
+    file_root = tmp_path / "file_root"
+    file_root.mkdir()
+    (file_root / "only.txt").write_text("x")
+    assert normalize_extract_dir(file_root) == file_root
