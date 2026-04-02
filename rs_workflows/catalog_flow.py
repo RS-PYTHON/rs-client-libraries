@@ -131,7 +131,8 @@ async def publish(
                             )
                             continue
                     valid_providers.append(provider)
-                item.properties["providers"] = valid_providers
+                if item.properties.get("providers"):
+                    item.properties["providers"] = valid_providers
                 # TEMPFIX END
                 logger.info(
                     "Writing product %s to %s. This may take a while...",
