@@ -28,7 +28,10 @@ class TaskTableError(ValueError):
 
 
 def _replace_external_variables(
-    obj, start_datetime, end_datetime, satellite,
+    obj,
+    start_datetime,
+    end_datetime,
+    satellite,
 ):  # pylint: disable=too-many-return-statements
     if isinstance(obj, dict):
         return {k: _replace_external_variables(v, start_datetime, end_datetime, satellite) for k, v in obj.items()}
