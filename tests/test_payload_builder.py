@@ -41,45 +41,49 @@ SCENARIOS: dict[str, dict] = {
         "json_path": "TaskTable_S3_L0_generated_by_rs_python_v1.json",
         "kwargs": {"unit": "single_unit", "processing_mode": ["reprocessing"]},
     },
-    # S1 L0
     "5": {
+        "json_path": "TaskTable_S3_L0_satellite_generated_by_rs_python_v1.json",
+        "kwargs": {"pipeline": "s3_l0_full", "processing_mode": None},
+    },
+    # S1 L0
+    "6": {
         "json_path": "TaskTable_S1_L0_generated_by_rs_python_v1.json",
         "kwargs": {"pipeline": "s1_l0_full", "processing_mode": None},
     },
-    "6": {
+    "7": {
         "json_path": "TaskTable_S1_L0_generated_by_rs_python_v1.json",
         "kwargs": {"pipeline": "s1_l0_full", "processing_mode": ["reprocessing"]},
     },
-    "7": {
+    "8": {
         "json_path": "TaskTable_S1_L0_generated_by_rs_python_v1.json",
         "kwargs": {"unit": "single_unit", "processing_mode": ["nrt"]},
     },
     # S1 ARD
-    "8": {
+    "9": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
         "kwargs": {"pipeline": "s1_ard_full", "processing_mode": ["nrt", "reprocessing"]},
     },
-    "9": {
+    "10": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
         "kwargs": {"unit": "calibration", "processing_mode": ["nrt"]},
     },
-    "10": {
+    "11": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
         "kwargs": {"unit": "reference_dem", "processing_mode": ["nrt"]},
     },
-    "11": {
+    "12": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
         "kwargs": {"unit": "reference_geometry", "processing_mode": ["nrt"]},
     },
-    "12": {
+    "13": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
         "kwargs": {"unit": "coregistration", "processing_mode": ["nrt"]},
     },
-    "13": {
+    "14": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
         "kwargs": {"unit": "geocoding", "processing_mode": ["nrt"]},
     },
-    "14": {
+    "15": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
         "kwargs": {"unit": "mosaicking", "processing_mode": ["nrt"]},
     },
@@ -101,6 +105,7 @@ def test_build_unit_list_returns_dict(case_id, cfg):  # pylint: disable=unused-a
         processing_mode=cfg["kwargs"].get("processing_mode"),
         start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+        satellite="sentinel-3a",
     )
     assert isinstance(out, dict)
 
@@ -487,6 +492,7 @@ def test_case_s1_l0_exact_output_with_regex():
         processing_mode=None,
         start_datetime=start_datetime,
         end_datetime=end_datetime,
+        satellite=None,
     )
 
     expected = {
