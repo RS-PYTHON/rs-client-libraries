@@ -143,7 +143,7 @@ async def process_input_adfs(
                     for idx, new_item in zip(indexed_items, results):
                         item_collection.items[idx] = new_item
                         logger.info(
-                            f"Updating catalog with uncompressed/unzipped item {new_item.id} in collection {new_item.properties.get('collection', 'unknown')}",
+                            f"Updating catalog with uncompressed/unzipped item {new_item.id} in collection {new_item.get('collection', 'unknown')}",
                         )
                         catalog_client.update_item(
                             new_item,
