@@ -141,10 +141,6 @@ async def process_input_adfs(
                     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
                     for idx, new_item in zip(indexed_items, results):
                         item_collection.items[idx] = new_item
-                        logger.info(
-                            f"Updating catalog with uncompressed/unzipped item {new_item.id} in "  # type: ignore
-                            f"collection {new_item.get('collection', 'unknown')}",  # type: ignore
-                        )
                         catalog_client.update_item(
                             new_item,  # type: ignore
                         )  # update the catalog with the new uncompressed/unzipped item
