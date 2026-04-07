@@ -27,10 +27,17 @@ from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
+from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
 from rs_workflows import auxip_flow, catalog_flow
 from rs_workflows.dpr_flow import run_processor
-from rs_workflows.flow_utils import DprProcessIn, FlowEnv, RetryConfig, archive_suffixes
+from rs_workflows.flow_utils import (
+    DprProcessIn,
+    FlowEnv,
+    FlowEnvArgs,
+    RetryConfig,
+    archive_suffixes,
+)
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload
 
@@ -130,8 +137,28 @@ async def process_input_adfs(
                 results = [t.result() for t in tasks]
                 # Since the archive extension is removed, href is changed therefore item_collection needs to be updated
                 # Replace only processed items
-                for idx, new_item in zip(indexed_items, results):
-                    item_collection.items[idx] = new_item
+                try:
+                    flow_env = FlowEnv(dpr_input.env)
+                    catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+                    for idx, new_item in zip(indexed_items, results):
+                        item_collection.items[idx] = new_item
+                        collection_id = [
+                            aux.collection_name
+                            for aux in dpr_input.auxiliary_product_to_collection_identifier
+                            if aux.product_type == new_item.properties.get("product_type", "*")
+                        ]
+                        owner_id = flow_env.owner_id
+                        logger.info(
+                            f"Updating catalog with uncompressed/unzipped item {new_item.id} in collection {collection_id} for owner {owner_id}",
+                        )
+                        catalog_client.update_item(
+                            new_item, owner=owner_id, collection=collection_id,
+                        )  # update the catalog with the new uncompressed/unzipped item
+                except Exception as err:
+                    raise RuntimeError(
+                        "Error while trying to update the item collection with the uncompressed/unzipped items. "
+                        "This error is likely due to a failure in the auxip_unzip_decompress_task. Check previous logs for more details.",
+                    ) from err
 
                 # info size, debug content
                 logger.info(f"Finished processing input ADFS, ItemCollection size: {len(item_collection.items)}")

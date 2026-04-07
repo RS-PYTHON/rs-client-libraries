@@ -461,6 +461,8 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         item: Item | dict,
         timeout: int = TIMEOUT,
         raise_for_status: bool = True,
+        owner: str | None = None,
+        collection: str | None = None,
     ) -> Response:
         """Put/update an item in the catalog.
 
@@ -481,8 +483,8 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
 
         # Get the collection owner_id and remove it from the collection id
         # which is like <owner_id>_<short_collection_id>
-        owner_id = item_dict["properties"]["owner"]
-        collection_id = item_dict["collection"].removeprefix(f"{owner_id}_")
+        owner_id = item_dict["properties"]["owner"] or owner
+        collection_id = item_dict["collection"].removeprefix(f"{owner_id}_") or collection
         item_dict["collection"] = collection_id
 
         # owner_id:collection_id
