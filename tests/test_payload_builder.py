@@ -492,7 +492,6 @@ def test_case_s1_l0_exact_output_with_regex():
         processing_mode=None,
         start_datetime=start_datetime,
         end_datetime=end_datetime,
-        satellite=None,
     )
 
     expected = {
