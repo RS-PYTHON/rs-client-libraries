@@ -34,7 +34,6 @@ from rs_workflows.dpr_flow import run_processor
 from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
-    FlowEnvArgs,
     RetryConfig,
     archive_suffixes,
 )
@@ -143,15 +142,17 @@ async def process_input_adfs(
                     for idx, new_item in zip(indexed_items, results):
                         item_collection.items[idx] = new_item
                         logger.info(
-                            f"Updating catalog with uncompressed/unzipped item {new_item.id} in collection {new_item.get('collection', 'unknown')}",
+                            f"Updating catalog with uncompressed/unzipped item {new_item.id} in "  # type: ignore
+                            f"collection {new_item.get('collection', 'unknown')}",  # type: ignore
                         )
                         catalog_client.update_item(
-                            new_item,
+                            new_item,  # type: ignore
                         )  # update the catalog with the new uncompressed/unzipped item
                 except Exception as err:
                     raise RuntimeError(
                         "Error while trying to update the item collection with the uncompressed/unzipped items. "
-                        "This error is likely due to a failure in the auxip_unzip_decompress_task. Check previous logs for more details.",
+                        "This error is likely due to a failure in the auxip_unzip_decompress_task. "
+                        "Check previous logs for more details.",
                     ) from err
 
                 # info size, debug content
