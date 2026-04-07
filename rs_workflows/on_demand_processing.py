@@ -142,17 +142,11 @@ async def process_input_adfs(
                     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
                     for idx, new_item in zip(indexed_items, results):
                         item_collection.items[idx] = new_item
-                        collection_id = [
-                            aux.collection_name
-                            for aux in dpr_input.auxiliary_product_to_collection_identifier
-                            if aux.product_type == new_item.properties.get("product_type", "*")
-                        ]
-                        owner_id = flow_env.owner_id
                         logger.info(
-                            f"Updating catalog with uncompressed/unzipped item {new_item.id} in collection {collection_id} for owner {owner_id}",
+                            f"Updating catalog with uncompressed/unzipped item {new_item.id} in collection {new_item.properties.get('collection', 'unknown')}",
                         )
                         catalog_client.update_item(
-                            new_item, owner=owner_id, collection=collection_id,
+                            new_item,
                         )  # update the catalog with the new uncompressed/unzipped item
                 except Exception as err:
                     raise RuntimeError(
