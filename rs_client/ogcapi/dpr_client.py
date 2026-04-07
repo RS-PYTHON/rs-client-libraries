@@ -48,7 +48,7 @@ class DprProcessor(str, Enum):
     S3L0 = "s3_l0"
     S1ARD = "s1_ard"
     S3OL1 = "s3olci_l1"
-    # S3OL2 = "s3olci_l2"    # Not yet implemented
+    # Add S3OL2 as "s3olci_l2" when implementation needed (already exists in rs-dpr-service)
 
 
 class DprPipeline(str, Enum):
@@ -59,7 +59,7 @@ class DprPipeline(str, Enum):
     S3L0FULL = "s3_l0_full"
     S1ARDFULL = "s1_ard_full"
     S3OL1FULL = "ol1_eo"
-    # S3OL2FULL = "ol2_fr"    # Not yet implemented
+    # Add S3OL2FULL as "ol2_fr" when implementation needed (already exists in rs-dpr-service)
 
 
 @dataclass
