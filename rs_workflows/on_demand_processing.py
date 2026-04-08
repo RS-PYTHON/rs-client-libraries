@@ -140,6 +140,7 @@ async def process_input_adfs(
                     flow_env = FlowEnv(dpr_input.env)
                     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
                     for idx, new_item in zip(indexed_items, results):
+                        logger.info(f"Results after processing ADFS assets: {new_item.to_dict()}")  # type: ignore
                         item_collection.items[idx] = new_item
                         catalog_client.update_item(
                             new_item,  # type: ignore

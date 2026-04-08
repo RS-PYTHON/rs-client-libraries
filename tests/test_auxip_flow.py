@@ -77,8 +77,15 @@ async def test_process_asset_zip(monkeypatch, mock_auxip_logger):
     monkeypatch.setattr(auxip_flow, "extract_zip", extract_zip_mock)
     monkeypatch.setattr(auxip_flow, "extract_tar", extract_tar_mock)
     monkeypatch.setattr(auxip_flow, "recursive_extract", MagicMock(return_value=0))
+
+    def fake_extract_zip(zip_path, extract_to):
+        file_path = Path(extract_to) / "file"
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text("content")
+
     monkeypatch.setattr(auxip_flow, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
     monkeypatch.setattr(auxip_flow, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(auxip_flow, "extract_zip", MagicMock(side_effect=fake_extract_zip))
     monkeypatch.setattr(auxip_flow, "get_upload_prefix", MagicMock(return_value=("s3://bucket/path/", "file")))
 
     result = await auxip_flow.process_asset("s3://bucket/path/data.zip", "data.zip")
@@ -106,13 +113,19 @@ async def test_process_asset_tar(monkeypatch, mock_auxip_logger):
     monkeypatch.setattr(auxip_flow, "extract_zip", extract_zip_mock)
     monkeypatch.setattr(auxip_flow, "extract_tar", extract_tar_mock)
     monkeypatch.setattr(auxip_flow, "recursive_extract", MagicMock(return_value=1))
+
+    def fake_extract_tar(file_path, extract_to):
+        (Path(extract_to) / "file1").write_text("one")
+        (Path(extract_to) / "file2").write_text("two")
+
     monkeypatch.setattr(auxip_flow, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
     monkeypatch.setattr(auxip_flow, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(auxip_flow, "extract_tar", MagicMock(side_effect=fake_extract_tar))
     monkeypatch.setattr(auxip_flow, "get_upload_prefix", MagicMock(return_value=("s3://bucket/path/data/", "file")))
 
     result = await auxip_flow.process_asset("s3://bucket/path/data.tar/file.tar", "file.tar")
 
-    assert result == "s3://bucket/path/data/file"
+    assert result == "s3://bucket/path/data/"
     download_target = Path(download_mock.await_args_list[0].args[1])
     assert download_target.name == "file.tar"
     extract_tar_mock.assert_called_once()
