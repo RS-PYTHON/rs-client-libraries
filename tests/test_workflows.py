@@ -234,6 +234,78 @@ async def test_dpr_processing(
     assert keys == ["task-table", "processing-unit-list", "auxip-cql2", "auxip-cql2", "dpr-payload-file"]
 
 
+@pytest.mark.asyncio
+async def test_normalize_archived_auxip_items_updates_collection_and_catalog(mocker):
+    """Normalized archived items should replace collection entries and be persisted to the catalog."""
+    item_a = Item(id="item-a", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    item_a.add_asset("archive.zip", Asset(href="s3://bucket/path/archive.zip"))
+    item_b = Item(id="item-b", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    item_b.add_asset("plain.bin", Asset(href="s3://bucket/path/plain.bin"))
+    item_collection = ItemCollection([item_a, item_b])
+
+    normalized_item = Item(id="item-a", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    normalized_item.add_asset("archive", Asset(href="s3://bucket/path/archive/file"))
+
+    future_mock = MagicMock()
+    future_mock.result.return_value = normalized_item
+    submit_mock = MagicMock(return_value=future_mock)
+    mocker.patch.object(on_demand_processing.auxip_flow.auxip_unzip_decompress_task, "submit", submit_mock)
+
+    catalog_client_mock = MagicMock()
+    flow_env_mock = MagicMock()
+    flow_env_mock.rs_client.get_catalog_client.return_value = catalog_client_mock
+    mocker.patch.object(on_demand_processing, "FlowEnv", MagicMock(return_value=flow_env_mock))
+
+    dpr_input = MagicMock()
+    dpr_input.env = FlowEnvArgs(owner_id=OWNER_ID)
+
+    result = await on_demand_processing._normalize_archived_auxip_items(  # pylint: disable=protected-access
+        item_collection,
+        dpr_input,
+    )
+
+    assert result is item_collection
+    assert result.items[0] is normalized_item
+    assert result.items[1].id == item_b.id
+    assert result.items[1].assets["plain.bin"].href == item_b.assets["plain.bin"].href
+    assert submit_mock.call_count == 1
+    submitted_item = submit_mock.call_args.args[0]
+    assert submitted_item.id == item_a.id
+    assert submitted_item.assets["archive.zip"].href == item_a.assets["archive.zip"].href
+    catalog_client_mock.update_item.assert_called_once_with(normalized_item)
+
+
+@pytest.mark.asyncio
+async def test_normalize_archived_auxip_items_wraps_catalog_update_errors(mocker):
+    """Catalog update failures should be wrapped with the task-specific RuntimeError."""
+    item = Item(id="item-a", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    item.add_asset("archive.zip", Asset(href="s3://bucket/path/archive.zip"))
+    item_collection = ItemCollection([item])
+
+    normalized_item = Item(id="item-a", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    normalized_item.add_asset("archive", Asset(href="s3://bucket/path/archive/file"))
+
+    future_mock = MagicMock()
+    future_mock.result.return_value = normalized_item
+    submit_mock = MagicMock(return_value=future_mock)
+    mocker.patch.object(on_demand_processing.auxip_flow.auxip_unzip_decompress_task, "submit", submit_mock)
+
+    catalog_client_mock = MagicMock()
+    catalog_client_mock.update_item.side_effect = ValueError("boom")
+    flow_env_mock = MagicMock()
+    flow_env_mock.rs_client.get_catalog_client.return_value = catalog_client_mock
+    mocker.patch.object(on_demand_processing, "FlowEnv", MagicMock(return_value=flow_env_mock))
+
+    dpr_input = MagicMock()
+    dpr_input.env = FlowEnvArgs(owner_id=OWNER_ID)
+
+    with pytest.raises(RuntimeError, match="Error while trying to update the item collection"):
+        await on_demand_processing._normalize_archived_auxip_items(  # pylint: disable=protected-access
+            item_collection,
+            dpr_input,
+        )
+
+
 async def test_dpr_processing_raises_on_unstaged_adf(
     mocker,
     mocked_tasktable,  # /dpr/processes/mockup?...
