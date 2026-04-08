@@ -127,13 +127,13 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
         logger.info(f"Selected upload root: {upload_dir}")
 
         # 6. Uplaod the extracted payload back to the original S3 prefix.
-        prefix = get_upload_prefix(asset_href, asset_name)
+        prefix, asset_name = get_upload_prefix(asset_href, asset_name)
         logger.info(f"Uploading to prefix: {prefix}")
 
         await upload_folder_flat(upload_dir, prefix)
 
     # Return the folder-like href that now contains the extracted content.
-    return prefix
+    return prefix + asset_name
 
 
 ###############
