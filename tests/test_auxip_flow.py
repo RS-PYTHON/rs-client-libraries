@@ -85,7 +85,7 @@ async def test_process_asset_zip(monkeypatch, mock_auxip_logger):
     monkeypatch.setattr(auxip_flow, "recursive_extract", MagicMock(return_value=0))
     monkeypatch.setattr(auxip_flow, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
     monkeypatch.setattr(auxip_flow, "upload_folder_flat", upload_mock)
-    monkeypatch.setattr(auxip_flow, "get_upload_prefix", MagicMock(return_value=("s3://bucket/path/", "file")))
+    monkeypatch.setattr(auxip_flow, "get_upload_prefix", MagicMock(return_value="s3://bucket/path/"))
 
     result = await auxip_flow.process_asset("s3://bucket/path/data.zip", "data.zip")
 
@@ -119,7 +119,7 @@ async def test_process_asset_tar(monkeypatch, mock_auxip_logger):
     monkeypatch.setattr(auxip_flow, "recursive_extract", MagicMock(return_value=1))
     monkeypatch.setattr(auxip_flow, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
     monkeypatch.setattr(auxip_flow, "upload_folder_flat", upload_mock)
-    monkeypatch.setattr(auxip_flow, "get_upload_prefix", MagicMock(return_value=("s3://bucket/path/data/", "file")))
+    monkeypatch.setattr(auxip_flow, "get_upload_prefix", MagicMock(return_value="s3://bucket/path/data/"))
 
     result = await auxip_flow.process_asset("s3://bucket/path/data.tar/file.tar", "file.tar")
 

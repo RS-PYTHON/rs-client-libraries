@@ -393,9 +393,9 @@ def test_get_upload_prefix():
     tar_href = "s3://bucket/user/item.tar/file.tar"
     plain_href = "s3://bucket/user/item/file.tar"
 
-    assert get_upload_prefix(zip_href, "file.zip") == ("s3://bucket/user/item/", "file")
-    assert get_upload_prefix(tar_href, "file.tar") == ("s3://bucket/user/item/", "file")
-    assert get_upload_prefix(plain_href, "file.tar") == ("s3://bucket/user/item/", "file")
+    assert get_upload_prefix(zip_href, "file.zip") == "s3://bucket/user/item/"
+    assert get_upload_prefix(tar_href, "file.tar") == "s3://bucket/user/item/"
+    assert get_upload_prefix(plain_href, "file.tar") == "s3://bucket/user/item/"
 
 
 def test_extract_nested_archive(tmp_path, mock_utils_logger):

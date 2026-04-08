@@ -199,27 +199,27 @@ def strip_archive_suffix(name: str) -> str:
     return name
 
 
-def get_upload_prefix(asset_href: str, asset_name: str) -> tuple[str, str]:
-    """Return the S3 prefix where extracted content should be uploaded.
-
-    The returned tuple is:
-    - the upload prefix (full S3 prefix ending with `/`)
-    - the extracted asset name without archive suffix
-    """
+def get_upload_prefix(asset_href: str, asset_name: str) -> str:
+    """Return the S3 prefix where extracted content should be uploaded."""
     parent_prefix = asset_href.rsplit("/", 1)[0]
-    asset_base_name = strip_archive_suffix(asset_name)
 
     if asset_name.endswith(".zip"):
-        return parent_prefix + "/", asset_base_name
+        result = parent_prefix + "/"
+        get_run_logger().info(f"get_upload_prefix returning ZIP prefix={result}")
+        return result
 
     last_segment = parent_prefix.rsplit("/", 1)[-1]
     normalized_segment = strip_archive_suffix(last_segment)
 
     if normalized_segment != last_segment:
         base_prefix = parent_prefix.rsplit("/", 1)[0]
-        return base_prefix + "/" + normalized_segment + "/", asset_base_name
+        result = base_prefix + "/" + normalized_segment + "/"
+        get_run_logger().info(f"get_upload_prefix returning normalized prefix={result}")
+        return result
 
-    return parent_prefix + "/", asset_base_name
+    result = parent_prefix + "/"
+    get_run_logger().info(f"get_upload_prefix returning parent prefix={result}")
+    return result
 
 
 def _extract_nested_archive(full_path: Path) -> bool:
