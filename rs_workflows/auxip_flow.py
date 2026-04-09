@@ -132,6 +132,12 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
 
         await upload_folder_flat(upload_dir, prefix)
 
+        extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
+        if len(extracted_files) == 1:
+            single_file_name = extracted_files[0].name
+            logger.info(f"Single extracted file found, returning file href: {prefix + single_file_name}")
+            return prefix + single_file_name
+
     # Return the folder-like href that now contains the extracted content.
     return prefix
 

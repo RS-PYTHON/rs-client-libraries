@@ -69,8 +69,14 @@ async def test_process_asset_zip(monkeypatch, mock_auxip_logger):
     download_mock = AsyncMock()
     upload_mock = AsyncMock()
     delete_mock = MagicMock()
-    extract_zip_mock = MagicMock()
     extract_tar_mock = MagicMock()
+
+    def fake_extract_zip(zip_path, extract_to):
+        file_path = Path(extract_to) / "file"
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text("content")
+
+    extract_zip_mock = MagicMock(side_effect=fake_extract_zip)
 
     monkeypatch.setattr(auxip_flow, "s3_download_file", download_mock)
     monkeypatch.setattr(auxip_flow, "s3_delete", delete_mock)
@@ -83,7 +89,7 @@ async def test_process_asset_zip(monkeypatch, mock_auxip_logger):
 
     result = await auxip_flow.process_asset("s3://bucket/path/data.zip", "data.zip")
 
-    assert result == "s3://bucket/path/"
+    assert result == "s3://bucket/path/file"
     download_target = Path(download_mock.await_args_list[0].args[1])
     assert download_target.name == "archive.zip"
     extract_zip_mock.assert_called_once()
@@ -99,7 +105,12 @@ async def test_process_asset_tar(monkeypatch, mock_auxip_logger):
     upload_mock = AsyncMock()
     delete_mock = MagicMock()
     extract_zip_mock = MagicMock()
-    extract_tar_mock = MagicMock(return_value=1)
+
+    def fake_extract_tar(file_path, extract_to):
+        (Path(extract_to) / "file1").write_text("one")
+        (Path(extract_to) / "file2").write_text("two")
+
+    extract_tar_mock = MagicMock(side_effect=fake_extract_tar)
 
     monkeypatch.setattr(auxip_flow, "s3_download_file", download_mock)
     monkeypatch.setattr(auxip_flow, "s3_delete", delete_mock)

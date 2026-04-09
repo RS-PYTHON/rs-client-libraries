@@ -27,10 +27,16 @@ from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
+from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
 from rs_workflows import auxip_flow, catalog_flow
 from rs_workflows.dpr_flow import run_processor
-from rs_workflows.flow_utils import DprProcessIn, FlowEnv, RetryConfig, archive_suffixes
+from rs_workflows.flow_utils import (
+    DprProcessIn,
+    FlowEnv,
+    RetryConfig,
+    archive_suffixes,
+)
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload
 
@@ -46,6 +52,178 @@ def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
     return f"Dask cluster dashboard URL: {dashboard_url}"
 
 
+def _select_aux_collection(dpr_input, product_type: str) -> str:
+    """
+    Resolve the catalog collection identifier for a requested AUX product type.
+
+    The selection logic mirrors the previous inline implementation used by
+    ``process_input_adfs``:
+    - prefer the collection explicitly mapped to the requested ``product_type``
+    - otherwise fall back to the wildcard mapping (``*``) when present
+    - otherwise derive the default convention-based collection name from the
+      satellite and product type
+
+    Keeping this lookup in a dedicated helper makes the fallback chain easier to
+    read and test independently from the staging flow logic.
+    """
+    default_aux_collection = f"{dpr_input.satellite}-aux-{product_type}"
+    return next(
+        (
+            p.collection_name
+            for p in dpr_input.auxiliary_product_to_collection_identifier
+            if p.product_type == product_type
+        ),
+        next(
+            (p.collection_name for p in dpr_input.auxiliary_product_to_collection_identifier if p.product_type == "*"),
+            default_aux_collection,
+        ),
+    )
+
+
+async def _build_auxip_request(alternative, input_adfs, dpr_input, task_table) -> tuple[dict, str, int]:
+    """
+    Build the AUXIP request data for a single ADFS alternative.
+
+    For one alternative definition taken from the task table input, this helper:
+    - extracts the timeout, query name and query parameters
+    - renders the final STAC/CQL2 payload with placeholders resolved
+    - stores the generated CQL2 filter as a Prefect artifact for observability
+    - resolves the target AUX catalog collection for the requested product type
+
+    The returned tuple contains everything needed by the staging call:
+    ``(auxip_cql2, collection, timeout)``.
+    """
+    timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
+    name = alternative["query"]["name"]
+    parameters = alternative["query"]["parameters"]
+    auxip_cql2 = build_cql2_json(task_table, name, parameters)["stac"]
+
+    md = "# Auxip CQL2 filter \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
+    await acreate_markdown_artifact(key="auxip-cql2", markdown=md, description="Auxip CQL2 filter")
+
+    product_type = parameters.get("product_type", "*")
+    collection = _select_aux_collection(dpr_input, product_type)
+    get_run_logger().info(
+        f"Prepared AUXIP request for input {input_adfs['name']} using collection {collection}",
+    )
+    return auxip_cql2, collection, timeout if timeout else -1
+
+
+def _get_archived_item_indexes(item_collection) -> list[int]:
+    """
+    Return the indexes of staged items that still reference archive assets.
+
+    Only items whose asset hrefs end with one of the known archive suffixes need
+    the extra unzip/decompress normalization step. Returning indexes instead of
+    copying items allows the caller to update the existing collection in place
+    after normalization completes.
+    """
+    archived_indexes = []
+    for idx, auxip_item in enumerate(item_collection.items):
+        if any(asset.href.endswith(archive_suffixes) for asset in auxip_item.assets.values()):
+            archived_indexes.append(idx)
+    return archived_indexes
+
+
+async def _normalize_archived_auxip_items(item_collection, dpr_input):
+    """
+    Normalize archived AUXIP items and persist the updated metadata to the catalog.
+
+    When staged AUXIP items still point to archived content, this helper:
+    - finds the affected items in the collection
+    - submits one normalization task per archived item
+    - waits for all normalization results
+    - replaces the corresponding items in the in-memory collection
+    - updates the catalog so the stored STAC item reflects the new asset hrefs
+
+    If no archived assets are present, the original collection is returned
+    unchanged.
+    """
+    logger = get_run_logger()
+    archived_indexes = _get_archived_item_indexes(item_collection)
+
+    if not archived_indexes:
+        return item_collection
+
+    tasks = []
+    for idx in archived_indexes:
+        auxip_item = item_collection.items[idx]
+        logger.info(
+            "The following staged ADFS asset is archived/compressed "
+            f"{auxip_item.to_dict()}. Starting normalization task",
+        )
+        tasks.append(auxip_flow.auxip_unzip_decompress_task.submit(auxip_item))
+
+    results = [task.result() for task in tasks]
+
+    try:
+        flow_env = FlowEnv(dpr_input.env)
+        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+        for idx, new_item in zip(archived_indexes, results):
+            logger.info(f"Results after processing ADFS assets: {new_item.to_dict()}")  # type: ignore
+            item_collection.items[idx] = new_item
+            catalog_client.update_item(new_item)  # type: ignore[arg-type]
+    except Exception as err:
+        raise RuntimeError(
+            "Error while trying to update the item collection with the uncompressed/unzipped items. "
+            "This error is likely due to a failure in the auxip_unzip_decompress_task. "
+            "Check previous logs for more details.",
+        ) from err
+
+    return item_collection
+
+
+async def _stage_input_adfs_alternative(
+    alternative,
+    input_adfs,
+    dpr_input,
+    task_table,
+    staging_retries,
+    staging_retry_delay,
+):
+    """
+    Stage one ADFS alternative and normalize archived outputs when needed.
+
+    This helper encapsulates the "happy path" for a single alternative:
+    1. build the final AUXIP request and resolve the target collection
+    2. stage matching AUXIP items with the configured retry policy
+    3. if the staged assets are still archived, normalize them and update the catalog
+    4. return the same tuple shape expected by the caller
+
+    It returns ``None`` when the staging flow succeeds technically but produces
+    no item collection for the current alternative, allowing the caller to try
+    the next alternative in order.
+    """
+    logger = get_run_logger()
+    auxip_cql2, collection, timeout = await _build_auxip_request(alternative, input_adfs, dpr_input, task_table)
+    logger.info(f"Selected collection {collection}")
+
+    auxip_items = (
+        auxip_flow.auxip_staging_task.with_options(
+            retries=staging_retries,
+            retry_delay_seconds=staging_retry_delay,
+        )
+        .submit(
+            dpr_input.env,
+            auxip_cql2,
+            collection,
+            timeout,
+        )
+        .result()
+    )
+    logger.info(f"Staged ADFS: {auxip_items}")
+
+    if not auxip_items[1]:  # type: ignore
+        return None
+
+    item_collection = await _normalize_archived_auxip_items(auxip_items[1], dpr_input)  # type: ignore
+
+    logger.info(f"Finished processing input ADFS, ItemCollection size: {len(item_collection.items)}")
+    logger.debug(f"Finished processing input ADFS, ItemCollection: {item_collection.to_dict()}")
+
+    return input_adfs["name"], (auxip_items[0], item_collection)  # type: ignore[index]
+
+
 @task(name="Process input ADFS")
 async def process_input_adfs(
     input_adfs,
@@ -55,7 +233,29 @@ async def process_input_adfs(
     staging_retry_delay: int = 60,
 ):
     """
-    Stage ADFS files from the tasktable.
+    Stage the ADFS inputs described in the task table for one processing unit input.
+
+    The task iterates through the ordered alternatives defined for a given ADFS
+    input and stops at the first alternative that produces staged items.
+
+    For each alternative, the task:
+    - builds the final AUXIP CQL2 request from the task table definition
+    - resolves the target AUX collection identifier
+    - runs AUXIP staging with retries
+    - normalizes archived outputs when the staged assets still point to
+      compressed archives
+    - updates the catalog entries after normalization so downstream payload
+      generation sees the final asset hrefs
+
+    Returns:
+        tuple[str, tuple[bool, Any]]:
+            The input ADFS name together with the original staging status/item
+            collection tuple shape expected by downstream code.
+
+    Raises:
+        RuntimeError:
+            If no alternative returns staged data, or if the task table content
+            cannot be read as expected.
     """
     logger = get_run_logger()
     logger.info(f"Starting processing input ADFS for {input_adfs}")
@@ -63,83 +263,16 @@ async def process_input_adfs(
 
         # For each "alternative" ( get it following the "order" )
         for alternative in input_adfs["alternatives"]:
-            # 1. Get the "query" with the "parameters" and "timeout_seconds" information
-            timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
-            # 2. Get the corresponding "query.name" on the section "query" of the task table
-            name, parameters = alternative["query"]["name"], alternative["query"]["parameters"]
-            # 3. Build the CQL2 JSON by replacing the parameters. Only keep the "stac" field.
-            auxip_cql2 = build_cql2_json(task_table, name, parameters)["stac"]
-            # save auxip cql2 json as flow artefact
-            md = "# Auxip CQL2 filter \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
-            # Artifact key must only contain lowercase letters, numbers, and dashes.
-            await acreate_markdown_artifact(key="auxip-cql2", markdown=md, description="Auxip CQL2 filter")
-            # 4.Choose the mission-aux for "catalog_collection_identifier" between s1-aux, s2-aux or s3-aux
-            product_type = parameters.get("product_type", "*")
-            default_aux_collection = f"{dpr_input.satellite}-aux-{product_type}"
-            collection = next(
-                (
-                    p.collection_name
-                    for p in dpr_input.auxiliary_product_to_collection_identifier
-                    if p.product_type == product_type
-                ),
-                next(
-                    (
-                        p.collection_name
-                        for p in dpr_input.auxiliary_product_to_collection_identifier
-                        if p.product_type == "*"
-                    ),
-                    default_aux_collection,
-                ),
+            result = await _stage_input_adfs_alternative(
+                alternative,
+                input_adfs,
+                dpr_input,
+                task_table,
+                staging_retries,
+                staging_retry_delay,
             )
-            logger.info(f"Selected collection {collection}")
-            # 5. Call the flow "auxip-staging" with stac_query, catalog_collection_identifier, timeout
-            auxip_items = (
-                auxip_flow.auxip_staging_task.with_options(
-                    retries=staging_retries,
-                    retry_delay_seconds=staging_retry_delay,
-                )
-                .submit(
-                    dpr_input.env,
-                    auxip_cql2,
-                    collection,
-                    timeout if timeout else -1,
-                )
-                .result()
-            )
-            logger.info(f"Staged ADFS: {auxip_items}")
-            # 6. Return the first found result
-            if auxip_items[1]:  # type: ignore
-                item_collection = auxip_items[1]  # type: ignore
-
-                tasks = []
-                indexed_items = []
-                # For each staged ADFS, check asset hrefs and process in parallel the archived ones.
-                for idx, auxip_item in enumerate(item_collection.items):
-                    # Can an adfs href be a folder? If yes, we need to check all the assets in the folder and
-                    # process the archived ones. Otherwise, we can directly check the href of the single asset.
-                    if any(asset.href.endswith(archive_suffixes) for asset in auxip_item.assets.values()):
-                        logger.info(
-                            "The following staged ADFS asset is archived/compressed "
-                            f"{auxip_item.to_dict()}. Starting normalization task",
-                        )
-                        future = auxip_flow.auxip_unzip_decompress_task.submit(auxip_item)
-                        tasks.append(future)
-                        indexed_items.append(idx)
-
-                # Wait only for tasks that were actually triggered
-                results = [t.result() for t in tasks]
-                # Since the archive extension is removed, href is changed therefore item_collection needs to be updated
-                # Replace only processed items
-                for idx, new_item in zip(indexed_items, results):
-                    item_collection.items[idx] = new_item
-
-                # info size, debug content
-                logger.info(f"Finished processing input ADFS, ItemCollection size: {len(item_collection.items)}")
-                logger.debug(f"Finished processing input ADFS, ItemCollection: {item_collection.to_dict()}")
-
-                # pack things again as before
-                auxip_items = (auxip_items[0], item_collection)  # type: ignore
-                return input_adfs["name"], auxip_items
+            if result is not None:
+                return result
 
         raise RuntimeError(f"Searching for adfs input {input_adfs['name']} did not return any result")
 

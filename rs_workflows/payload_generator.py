@@ -242,10 +242,10 @@ def find_s3_output_bucket(
                 logger.info(f"Configuration bucket: fallback_bucket: {fallback_bucket}")
             else:
                 logger.warning(
-                    "Multiple default configurations found in the configuration map "
-                    "(rs-catalog-staging-configmap), expected only one. Using the first "
-                    f"one found ({fallback_bucket}), but please check your configuration table to avoid "
-                    "unexpected behaviors. There should be only one entry with the three first columns set to '*'",
+                    "Multiple default configurations were found in the configuration map "
+                    "(rs-catalog-staging-configmap), while only one is expected. The first "
+                    f"one found ({fallback_bucket})will be used, but please review your configmap to prevent "
+                    "unexpected behaviors. Only a single entry should have the first three columns set to '*'",
                 )
 
     if fallback_bucket:
@@ -390,9 +390,10 @@ def build_output_products(
 
     outputs = []
     processed_products = set()
-
+    logger = get_run_logger()
     for output_product in dpr_process_in.generated_product_to_collection_identifier:
         product_name = output_product.name
+        logger.info(f"Configuration bucket: Building output section for name: {product_name}")
         mapping = next((outp for outp in unit.get("output_products", []) if outp["name"] == product_name), None)
 
         if not mapping:
