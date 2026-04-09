@@ -1,0 +1,41 @@
+' Copyright 2023-2026 Airbus, CS Group
+'
+' Licensed under the Apache License, Version 2.0 (the "License");
+' you may not use this file except in compliance with the License.
+' You may obtain a copy of the License at
+'
+'     http://www.apache.org/licenses/LICENSE-2.0
+'
+' Unless required by applicable law or agreed to in writing, software
+' distributed under the License is distributed on an "AS IS" BASIS,
+' WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+' See the License for the specific language governing permissions and
+' limitations under the License.
+
+@startuml aux-conversion
+
+actor John
+
+actor Prefect
+actor Object_Storage as Obs
+actor RS_Server_Catalog as Catalog
+
+activate Prefect
+activate Obs
+activate Catalog
+
+John -> Prefect: Run flow 'adf-conversion'\n(S00__ADF_ECMWA,\n[2026-04-03T00:00:00Z, 2026-04-03T23:59:59Z])
+
+Prefect -> Prefect: Run AUXIP Staging flow\n(AX___MA1_AX + AX___MA2_AX,\n[2026-04-03T00:00:00Z, 2026-04-03T23:59:59Z])
+
+Prefect -> Prefect: Copy + unzip AX___MA1_AX + AX___MA2_AX
+
+Prefect -> Prefect: Call S00__ADF_ECMWA.py
+
+Prefect -> Obs: Copy ZARR data
+
+Prefect -> Catalog: Publish STAC item
+
+Prefect --> John: Logs + Artifacts
+
+@enduml
