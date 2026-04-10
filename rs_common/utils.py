@@ -14,6 +14,7 @@
 
 """This module is used to share common functions between apis"""
 
+import logging
 import os
 import shutil
 import tarfile
@@ -24,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from prefect import get_run_logger
+from prefect.exceptions import MissingContextError
 
 
 @dataclass
@@ -128,6 +130,14 @@ LOCAL_MODE: bool = env_bool("RSPY_LOCAL_MODE", default=False)
 CLUSTER_MODE: bool = not LOCAL_MODE
 
 
+def _get_logger():
+    """Return the Prefect run logger when available, otherwise a module logger."""
+    try:
+        return get_run_logger()
+    except MissingContextError:
+        return logging.getLogger(__name__)
+
+
 def _is_safe_extract_path(extract_to: Path, member_name: str) -> bool:
     """Return whether an archive member stays within the target directory."""
     member_path = Path(member_name.replace("\\", "/"))
@@ -201,19 +211,26 @@ def strip_archive_suffix(name: str) -> str:
 
 def get_upload_prefix(asset_href: str, asset_name: str) -> str:
     """Return the S3 prefix where extracted content should be uploaded."""
+    logger = _get_logger()
     parent_prefix = asset_href.rsplit("/", 1)[0]
 
     if asset_name.endswith(".zip"):
-        return parent_prefix + "/"
+        result = parent_prefix + "/"
+        logger.info(f"get_upload_prefix returning ZIP prefix={result}")
+        return result
 
     last_segment = parent_prefix.rsplit("/", 1)[-1]
     normalized_segment = strip_archive_suffix(last_segment)
 
     if normalized_segment != last_segment:
         base_prefix = parent_prefix.rsplit("/", 1)[0]
-        return base_prefix + "/" + normalized_segment + "/"
+        result = base_prefix + "/" + normalized_segment + "/"
+        logger.info(f"get_upload_prefix returning normalized prefix={result}")
+        return result
 
-    return parent_prefix + "/"
+    result = parent_prefix + "/"
+    logger.info(f"get_upload_prefix returning parent prefix={result}")
+    return result
 
 
 def _extract_nested_archive(full_path: Path) -> bool:

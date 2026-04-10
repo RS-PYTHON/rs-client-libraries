@@ -27,16 +27,23 @@ class TaskTableError(ValueError):
     """Errors related to Task Table parsing/validation."""
 
 
-def _replace_external_variables(obj, start_datetime, end_datetime):
+def _replace_external_variables(
+    obj,
+    start_datetime,
+    end_datetime,
+    satellite,
+):  # pylint: disable=too-many-return-statements
     if isinstance(obj, dict):
-        return {k: _replace_external_variables(v, start_datetime, end_datetime) for k, v in obj.items()}
+        return {k: _replace_external_variables(v, start_datetime, end_datetime, satellite) for k, v in obj.items()}
     if isinstance(obj, list):
-        return [_replace_external_variables(v, start_datetime, end_datetime) for v in obj]
+        return [_replace_external_variables(v, start_datetime, end_datetime, satellite) for v in obj]
     if isinstance(obj, str):
         if obj == "{external_variable.start_datetime}":
             return strftime_millis(start_datetime)
         if obj == "{external_variable.end_datetime}":
             return strftime_millis(end_datetime)
+        if obj == "{external_variable.satellite}":
+            return satellite
         return obj
     return obj
 
@@ -74,6 +81,7 @@ def _build_entries(
     origin_map_by_unit: dict[str, dict[str, dict[str, Any]]],
     start_datetime: datetime | None,
     end_datetime: datetime | None,
+    satellite: str | None,
 ) -> list[dict[str, Any]]:
     """
     Build STEP 1 entries for input_products / input_adfs / output_products.
@@ -128,7 +136,7 @@ def _build_entries(
             merged_cfg[k] = v
 
         if merged_cfg:
-            merged_cfg = _replace_external_variables(merged_cfg, start_datetime, end_datetime)
+            merged_cfg = _replace_external_variables(merged_cfg, start_datetime, end_datetime, satellite)
             out.update(merged_cfg)
 
         # Pass through extra input/output fields without overriding IO-derived values.
@@ -141,7 +149,7 @@ def _build_entries(
                     continue
                 extra_cfg[k] = v
             if extra_cfg:
-                extra_cfg = _replace_external_variables(extra_cfg, start_datetime, end_datetime)
+                extra_cfg = _replace_external_variables(extra_cfg, start_datetime, end_datetime, satellite)
                 out.update(extra_cfg)
 
         kept.append(out)
@@ -157,6 +165,7 @@ def build_unit_list(
     *,
     start_datetime: datetime | None = None,
     end_datetime: datetime | None = None,
+    satellite: str | None = None,
 ) -> dict[str, Any]:
     """
     STEP 1: Build the list of processing units from the Task Table.
@@ -257,6 +266,7 @@ def build_unit_list(
             origin_map_by_unit=origin_map_by_unit,
             start_datetime=start_datetime,
             end_datetime=end_datetime,
+            satellite=satellite,
         )
         input_adfs = _build_entries(
             udef.get("input_adfs", []),
@@ -268,6 +278,7 @@ def build_unit_list(
             origin_map_by_unit=origin_map_by_unit,
             start_datetime=start_datetime,
             end_datetime=end_datetime,
+            satellite=satellite,
         )
         output_products = _build_entries(
             udef.get("output_products", []),
@@ -279,6 +290,7 @@ def build_unit_list(
             origin_map_by_unit=origin_map_by_unit,
             start_datetime=start_datetime,
             end_datetime=end_datetime,
+            satellite=satellite,
         )
 
         out_units.append(
