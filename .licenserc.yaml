@@ -27,6 +27,7 @@ header:
     - '**/*.raw'
     - '**/Dockerfile*'
     - '**/.gitignore'
+    - '**/.prefectignore'
     - '.gitmodules'
     - '.safety-project.ini'
     - '.trivyignore'

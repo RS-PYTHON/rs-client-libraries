@@ -91,7 +91,7 @@ def test_get_io_builds_input_and_output(
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
-        return_value="s3://mocked/cadip_session",
+        return_value=(None, "s3://mocked/cadip_session"),
     )
     # the fetch_csv_from_endpoint function also needs to be mocked; otherwise,
     # it will fail to fetch the file and the test will not pass.
@@ -141,7 +141,7 @@ def test_get_io_builds_input_and_output(
 
 def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flow_env, mocker):
     """
-    Test that malformed input_products (missing 'name' or 'origin') raise KeyError.
+    Test that malformed input_products (missing 'name' or 'origin') raise RuntimeError.
     """
     # the fetch_csv_from_endpoint function also needs to be mocked; otherwise,
     # it will fail to fetch the file and the test will not pass.
@@ -157,7 +157,7 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
 
-    with pytest.raises(KeyError):
+    with pytest.raises(RuntimeError):
         get_io(bad_unit, mock_dpr_process_in, flow_env, mock_storage_config, [])
 
 
@@ -514,9 +514,10 @@ def test_resolve_stac_input_path(mocker, catalog_client):
     # get_first_asset_dir returns the directory (this is what the function uses)
     mocker.patch("rs_workflows.payload_generator.get_first_asset_dir", return_value="s3://catalog-bucket/items/item123")
 
-    result = resolve_stac_input_path(catalog_client, "my-collection", "item123")
+    result_item, result_path = resolve_stac_input_path(catalog_client, "my-collection", "item123")
 
-    assert result == "s3://catalog-bucket/items/item123"
+    assert result_item == mock_item
+    assert result_path == "s3://catalog-bucket/items/item123"
 
 
 # ----------------------------------------------------------------------
@@ -530,7 +531,7 @@ def test_build_input_products_success(sample_unit, mock_store_params, mocker):
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
-        return_value="s3://path/to/item",
+        return_value=(None, "s3://path/to/item"),
     )
 
     mock_dpr = MagicMock()
@@ -546,6 +547,51 @@ def test_build_input_products_success(sample_unit, mock_store_params, mocker):
     assert inputs[0].store_type == "S3"
     assert inputs[0].path == "s3://path/to/item"
     assert inputs[0].store_params == mock_store_params
+
+
+def test_build_input_products_success_multiple_inputs_regex(sample_unit, mock_store_params, mocker):
+    """
+    Test successful build of input products when multiple inputs share the same name (regex case).
+    """
+    # Mock STAC resolution to return different paths
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        side_effect=[
+            ("item1", "s3://path/to/item1"),
+            ("item2", "s3://path/to/item2"),
+        ],
+    )
+
+    # Create multiple input products with SAME name
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [
+        FlowInputProduct(name="S1CADUS", item_id="item1", collection_name="coll"),
+        FlowInputProduct(name="S1CADUS", item_id="item2", collection_name="coll"),
+    ]
+
+    # Mock storage config
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    # Ensure mock_store_params behaves like StoreParams
+    assert isinstance(mock_store_params, StoreParams)
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    # Assertions
+    assert len(inputs) == 1  # regex => single InputProduct
+
+    input_product = inputs[0]
+    assert input_product.id == "S1CADUS"
+    assert input_product.store_type == "S3"
+    assert input_product.path == "s3://path/to/"
+    assert input_product.type == "regex"
+
+    # Checks generated regex
+    assert isinstance(input_product.store_params, StoreParams)
+    assert input_product.store_params.regex == r"(item1|item2)"
+    assert input_product.store_params.multiplicity == "2"
 
 
 def test_build_input_products_missing_mapping(sample_unit):
@@ -566,7 +612,7 @@ def test_build_input_products_missing_storage(sample_unit, mocker):
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
-        return_value="s3://path/to/item",
+        return_value=(None, "s3://path/to/item"),
     )
 
     mock_dpr = MagicMock()
@@ -591,7 +637,7 @@ def test_build_input_products_fallback_storage_unit(sample_unit, mock_store_para
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
-        return_value="s3://path/to/item",
+        return_value=(None, "s3://path/to/item"),
     )
 
     mock_dpr = MagicMock()
@@ -617,7 +663,7 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
-        return_value="s3://path/to/item",
+        return_value=(None, "s3://path/to/item"),
     )
 
     mock_dpr = MagicMock()

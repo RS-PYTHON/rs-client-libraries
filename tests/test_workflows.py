@@ -306,6 +306,102 @@ async def test_normalize_archived_auxip_items_wraps_catalog_update_errors(mocker
         )
 
 
+def test_resolve_specific_input_product_stac_items_nominal(mocker):
+    """
+    Nominal case:
+    - multiplicity = one_per_input
+    - exactly one referenced input product
+    - regex matches at least one STAC asset
+    """
+
+    # --- Mock logger ---
+    mock_logger = MagicMock()
+    mocker.patch(
+        "rs_workflows.on_demand_processing.get_run_logger",
+        return_value=mock_logger,
+    )
+
+    # Mock STAC resolution to return different paths
+    mocker.patch(
+        "rs_workflows.on_demand_processing.resolve_stac_input_path",
+        side_effect=[
+            ("item1", "s3://path/to/item1"),
+            ("item2", "s3://path/to/item2"),
+        ],
+    )
+
+    # --- Mock RS client / catalog ---
+    mock_catalog = MagicMock()
+    mock_rs_client = MagicMock()
+    mock_rs_client.get_catalog_client.return_value = mock_catalog
+
+    # --- Input ADFS ---
+    input_adfs = {
+        "name": "ADFS_INPUT",
+    }
+
+    # --- Task table ---
+    task_table = {
+        "io": [
+            {
+                "name": "ADFS_INPUT",
+                "multiplicity": "one_per_input",
+                "alternatives": [
+                    {
+                        "order": 1,
+                        "timeout_seconds": 0,
+                        "query": {
+                            "name": "LatestValCover",
+                            "parameters": {
+                                "product_type": "SOMETHING",
+                                "start_datetime": "{S1CADUS.start_datetime}",
+                                "end_datetime": "{S1CADUS.end_datetime}",
+                                "satellite": "{S1CADUS.platform}",
+                                "dTa": 0,
+                                "dTb": 0,
+                            },
+                        },
+                    },
+                ],
+            },
+            {
+                "name": "S1CADUS",
+                "store_params": {"regex": r".*item\d"},
+            },
+        ],
+    }
+
+    # --- Unit config ---
+    unit = {
+        "input_products": [
+            {"name": "S1CADUS"},
+        ],
+    }
+
+    # --- Provided input products ---
+    provided_input_products = [
+        MagicMock(collection_name="stac_collection", item_id="item1"),
+        MagicMock(collection_name="stac_collection", item_id="item2"),
+    ]
+
+    # --- Call ---
+    ref_name, items = (
+        on_demand_processing._resolve_specific_input_product_stac_items(  # pylint:disable=protected-access
+            input_adfs,
+            task_table,
+            unit,
+            provided_input_products,
+            mock_rs_client,
+        )
+    )
+
+    # --- Assertions ---
+    assert ref_name == "S1CADUS"
+    assert items == ["item1", "item2"]
+
+    mock_logger.info.assert_any_call("ADFS multiplicity 'one_per_input' refers to input 'S1CADUS'")
+
+
 async def test_dpr_processing_raises_on_unstaged_adf(
     mocker,
     mocked_tasktable,  # /dpr/processes/mockup?...
