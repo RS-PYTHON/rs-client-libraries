@@ -789,6 +789,12 @@ def generate_payload(  # pylint: disable=unused-argument
                         workflow_step.parameters.update(extra_parameters)
                     else:
                         workflow_step.parameters = extra_parameters
+    elif dpr_process_in.processor_name == DprProcessor.S1ARD:
+        for workflow_step in workflow_steps:
+            if workflow_step.processing_unit == "Calibration":
+                workflow_step.parameters = {
+                    "reference_date": str(dpr_process_in.reference_date),
+                }
 
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service

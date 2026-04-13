@@ -230,8 +230,15 @@ async def _stage_input_adfs_alternative(
 
     aux_status: bool
     aux_items: ItemCollection | None
+    # Special case for S1 ETAD products which are "auxiliary products" available at PRIP and CDSE only
+    if re.match(r"^(iw|ew|sm)_eta__ax$", collection):
+        logger.warning("ETAD products are not available at ADGS, looking for them in rs-catalog instead")
+        aux_status, aux_items = (
+            True,
+            catalog_flow.catalog_search_task.submit(dpr_input.env, aux_cql2, True, [collection]).result(),
+        )
     # Special case for Copernicus DEM available at Earthdatahub
-    if input_adfs["name"] == "DEM":
+    elif input_adfs["name"] == "DEM":
         aux_items = earthdatahub_flow.earthdatahub_search_task.submit(
             dpr_input.env,
             aux_cql2,

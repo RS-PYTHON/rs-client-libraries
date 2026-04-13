@@ -1,0 +1,16 @@
+{
+  "slcs": [
+    "S01SIWSLC_20260327T174632_0026_C132_TF72",
+    "S01SIWSLC_20260408T174632_0026_C132_TFC6",
+    "S01SIWSLC_20260420T055953_0026_D110_TD47"
+  ],
+  "flow_params": {
+    "unit": "Calibration",
+    "owner_identifier": "copernicus",
+    "input_collections": [
+      "s01siwslc"
+    ],
+    "dask_cluster_label": "dask-s1ard.vprivat.latest"
+  },
+  "reference_date": "2026-04-08"
+}

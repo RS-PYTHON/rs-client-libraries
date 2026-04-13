@@ -1,0 +1,65 @@
+# Copyright 2023-2026 Airbus, CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+# Welcome to your prefect.yaml file! You can use this file for
+# storing and managing configuration for deploying your flows.
+# We recommend committing this file to source control along
+# with your flow code.
+
+# Generic metadata about this project
+name: rs-client-libraries
+prefect-version: 3.6.20
+
+# build section allows you to manage and build docker images
+build: null
+
+# push section allows you to manage if and how this project
+# is uploaded to remote locations
+push: null
+
+# pull section allows you to provide instructions for cloning
+# this project in remote locations
+pull:
+- prefect.deployments.steps.git_clone:
+    repository: https://github.com/RS-PYTHON/rs-client-libraries
+    branch: feat/rspy1025-new-s1-ard
+
+# the deployments section allows you to provide configuration
+# for deploying flows
+deployments:
+- name: On-demand processing
+  tags: [on-demand, processing]
+  decsription: |-
+    Generic processing flow. Not meant to be called directly.
+  entrypoint: rs_workflows/on_demand_processing.py:dpr_processing
+  work_pool:
+    name: eopf-prefect-pool
+    work_queue_name: null
+    job_variables: {}
+  schedules: []
+- name: On-demand S1L1 ARD processing
+  version: null
+  tags: [ard, on-demand, processing]
+  concurrency_limit: null
+  description: |-
+    Sentinel-1 ARD processing.
+    The SLC products should have been staged before.
+  entrypoint: rs_workflows/on_demand/sentinel1/s1_ard.py:process_s1ard
+  parameters: {}
+  work_pool:
+    name: eopf-prefect-pool
+    work_queue_name: null
+    job_variables: {}
+  schedules: []

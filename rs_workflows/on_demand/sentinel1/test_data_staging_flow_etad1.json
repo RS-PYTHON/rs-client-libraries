@@ -1,0 +1,13 @@
+{
+  "env": {
+    "owner_id": "copernicus",
+    "calling_span": null,
+    "service_name": "rs.workflows"
+  },
+  "stac_input": "https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-etad/items/S1D_IW_ETA__AXDV_20260420T055950_20260420T060023_002426_003FB6_3356",
+  "asset_names": [
+    "product"
+  ],
+  "poll_interval": 10,
+  "catalog_collection_identifier": "iw_eta__ax"
+}
