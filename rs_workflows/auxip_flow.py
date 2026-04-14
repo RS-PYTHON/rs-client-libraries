@@ -155,9 +155,6 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
 
         return _get_normalized_asset_href(upload_dir, prefix, asset_name)
 
-    # Return the folder-like href that now contains the extracted content.
-    return prefix
-
 
 ###############
 # Auxip flows #
