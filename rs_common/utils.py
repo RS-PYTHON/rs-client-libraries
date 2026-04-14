@@ -203,9 +203,10 @@ def extract_tar(file_path: Path, extract_to: Path) -> int:
 
 def strip_archive_suffix(name: str) -> str:
     """Return the asset name without its supported archive suffix."""
+    normalized_name = name.lower()
     for suffix in (".tar.gz", ".tgz", ".zip", ".tar"):
-        if name.endswith(suffix):
-            return name.removesuffix(suffix)
+        if normalized_name.endswith(suffix):
+            return name[: -len(suffix)]
     return name
 
 
@@ -214,7 +215,7 @@ def get_upload_prefix(asset_href: str, asset_name: str) -> str:
     logger = _get_logger()
     parent_prefix = asset_href.rsplit("/", 1)[0]
 
-    if asset_name.endswith(".zip"):
+    if asset_name.lower().endswith(".zip"):
         result = parent_prefix + "/"
         logger.info(f"get_upload_prefix returning ZIP prefix={result}")
         return result
@@ -258,7 +259,7 @@ def recursive_extract(folder: Path) -> int:
             for file in files:
                 full_path = Path(root) / file
 
-                if file.endswith((".tar", ".tgz", ".tar.gz")) and _extract_nested_archive(full_path):
+                if file.lower().endswith((".tar", ".tgz", ".tar.gz")) and _extract_nested_archive(full_path):
                     extracted = True
                     extracted_count += 1
 

@@ -383,6 +383,7 @@ def test_strip_archive_suffix():
     assert strip_archive_suffix("file.zip") == "file"
     assert strip_archive_suffix("file.tar") == "file"
     assert strip_archive_suffix("file.tgz") == "file"
+    assert strip_archive_suffix("file.TGZ") == "file"
     assert strip_archive_suffix("file.tar.gz") == "file"
     assert strip_archive_suffix("file.raw") == "file.raw"
 
@@ -392,10 +393,12 @@ def test_get_upload_prefix():
     zip_href = "s3://bucket/user/item/file.zip"
     tar_href = "s3://bucket/user/item.tar/file.tar"
     plain_href = "s3://bucket/user/item/file.tar"
+    uppercase_tgz_href = "s3://bucket/user/item.TGZ/file.TGZ"
 
     assert get_upload_prefix(zip_href, "file.zip") == "s3://bucket/user/item/"
     assert get_upload_prefix(tar_href, "file.tar") == "s3://bucket/user/item/"
     assert get_upload_prefix(plain_href, "file.tar") == "s3://bucket/user/item/"
+    assert get_upload_prefix(uppercase_tgz_href, "file.TGZ") == "s3://bucket/user/item/"
 
 
 def test_extract_nested_archive(tmp_path, mock_utils_logger):

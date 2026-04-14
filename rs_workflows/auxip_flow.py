@@ -90,8 +90,9 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
     """
     logger = get_run_logger()
     logger.info(f"Processing asset: {asset_href}")
-    is_zip_asset = asset_name.endswith(".zip")
-    is_tar_asset = asset_name.endswith((".tar", ".tgz", ".tar.gz"))
+    normalized_asset_name = asset_name.lower()
+    is_zip_asset = normalized_asset_name.endswith(".zip")
+    is_tar_asset = normalized_asset_name.endswith((".tar", ".tgz", ".tar.gz"))
 
     if not (is_zip_asset or is_tar_asset):
         msg = f"Unsupported archive type for asset: {asset_href}"
