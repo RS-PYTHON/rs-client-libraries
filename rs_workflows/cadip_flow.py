@@ -55,7 +55,10 @@ async def search(
             raise ValueError(
                 f"No Cadip session found for id={session_identifier!r} collection={cadip_collection_identifier!r}",
             )
-        logger.info(f"Cadip search found {len(found)} results: {found}")
+        logger.info(
+            f"Cadip search found {len(found)} results for id={session_identifier!r} "
+            f"collection={cadip_collection_identifier!r}",
+        )
         return found
 
 
