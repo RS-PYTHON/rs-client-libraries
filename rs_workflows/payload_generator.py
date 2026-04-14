@@ -201,13 +201,14 @@ def find_s3_output_bucket(
     output_collection: str,
     product_type: str,
 ) -> str:
-    """ "
+    """
     Determines the appropriate S3 output bucket based on owner, collection, and product type.
     It is based on story 854
 
     The matching logic prioritizes:
         1. Exact owner and collection match.
-        2. Otherwise, the first row matching via wildcard pattern ('*').
+        2. Fallback match for owner only.
+        3. Global fallback bucket (all first 3 columns are '*').
 
     Args:
         config_rows (list[list[str]]): Parsed configuration rows from the configmap file.
@@ -222,34 +223,51 @@ def find_s3_output_bucket(
         RuntimeError: If no matching bucket is found in the configuration.
     """
     fallback_bucket = None
+    fallback_bucket_owner_only = None
     logger = get_run_logger()
+
     for row in config_rows:
         # the expiration_delay (the fourth field) is not used
         logger.info(f"Configuration bucket: Checking row {row}")
         owner_pat, coll_pat, prod_type_pat, _, bucket = row
 
+        # Basic compatibility check using wildcard_match
         if (
             wildcard_match(owner_id, owner_pat)
             and wildcard_match(output_collection, coll_pat)
             and wildcard_match(product_type, prod_type_pat)
         ):
-            # highest priority: exact match on owner and collection
+            # Rank 1: Exact owner and collection
             if owner_pat == owner_id and coll_pat == output_collection:
-                logger.info(f"Configuration bucket: Return bucket: {bucket}")
+                logger.info(f"Configuration bucket: Return bucket (exact match): {bucket}")
                 return bucket
-            if fallback_bucket is None:
-                fallback_bucket = bucket
-                logger.info(f"Configuration bucket: fallback_bucket: {fallback_bucket}")
+
+            # Rank 2: owner_id match (coll_pat must be '*')
+            if owner_pat == owner_id and coll_pat == "*":
+                if fallback_bucket_owner_only is None:
+                    fallback_bucket_owner_only = bucket
+                    logger.info(f"Configuration bucket: owner only fallback bucket: {bucket}")
+
+            # Rank 3: Global fallback (*, *, *)
+            if owner_pat == "*" and coll_pat == "*" and prod_type_pat == "*":
+                if fallback_bucket is None:
+                    fallback_bucket = bucket
+                logger.info(
+                    "Configuration bucket: global fallback bucket (all first 3 columns are '*'): " f"{fallback_bucket}",
+                )
             else:
                 logger.warning(
                     "Multiple default configurations were found in the configuration map "
                     "(rs-catalog-staging-configmap), while only one is expected. The first "
-                    f"one found ({fallback_bucket})will be used, but please review your configmap to prevent "
+                    f"one found ({fallback_bucket}) will be used, but please review your configmap to prevent "
                     "unexpected behaviors. Only a single entry should have the first three columns set to '*'",
                 )
+    if fallback_bucket_owner_only:
+        logger.info(f"Configuration bucket: Returning owner only fallback: {fallback_bucket_owner_only}")
+        return fallback_bucket_owner_only
 
     if fallback_bucket:
-        logger.info(f"Configuration bucket: Return fallback_bucket: {fallback_bucket}")
+        logger.info(f"Configuration bucket: Returning global fallback: {fallback_bucket}")
         return fallback_bucket
 
     raise RuntimeError(
