@@ -133,6 +133,50 @@ async def test_process_asset_tar(monkeypatch, mock_auxip_logger):
 
 
 @pytest.mark.asyncio
+async def test_process_asset_prefers_matching_eof_when_multiple_files(monkeypatch, mock_auxip_logger):
+    """Test normalized assets prefer the matching EOF file when several files are extracted."""
+    download_mock = AsyncMock()
+    upload_mock = AsyncMock()
+    delete_mock = MagicMock()
+
+    def fake_extract_zip(zip_path, extract_to):
+        (Path(extract_to) / "manifest.safe").write_text("meta")
+        (Path(extract_to) / "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.EOF").write_text(
+            "content",
+        )
+
+    extract_zip_mock = MagicMock(side_effect=fake_extract_zip)
+
+    monkeypatch.setattr(auxip_flow, "s3_download_file", download_mock)
+    monkeypatch.setattr(auxip_flow, "s3_delete", delete_mock)
+    monkeypatch.setattr(auxip_flow, "extract_zip", extract_zip_mock)
+    monkeypatch.setattr(auxip_flow, "recursive_extract", MagicMock(return_value=0))
+    monkeypatch.setattr(auxip_flow, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
+    monkeypatch.setattr(auxip_flow, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(
+        auxip_flow,
+        "get_upload_prefix",
+        MagicMock(
+            return_value=(
+                "s3://bucket/path/" "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732/"
+            ),
+        ),
+    )
+
+    result = await auxip_flow.process_asset(
+        "s3://bucket/path/S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.zip",
+        "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.zip",
+    )
+
+    assert result == (
+        "s3://bucket/path/S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732/"
+        "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.EOF"
+    )
+    delete_mock.assert_called_once()
+    upload_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_process_asset_rejects_unsupported_extension(mock_auxip_logger):
     """Test unsupported archive extensions are rejected."""
     with pytest.raises(ValueError, match="Unsupported archive type"):

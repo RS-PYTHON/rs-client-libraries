@@ -66,6 +66,26 @@ async def upload_folder_flat(local_folder: Path, prefix: str):
     logger.info(f"Finished uploading {len(files_to_upload)} file(s) to {prefix}")
 
 
+def _get_normalized_asset_href(upload_dir: Path, prefix: str, asset_name: str) -> str:
+    """Return the most appropriate href for a normalized asset."""
+    logger = get_run_logger()
+    extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
+
+    if len(extracted_files) == 1:
+        single_file_name = extracted_files[0].name
+        logger.info(f"Single extracted file found, returning file href: {prefix + single_file_name}")
+        return prefix + single_file_name
+
+    normalized_asset_base = strip_archive_suffix(asset_name).lower()
+    eof_candidates = [path for path in extracted_files if path.name.lower() == f"{normalized_asset_base}.eof"]
+    if len(eof_candidates) == 1:
+        logger.info(f"Matched normalized EOF asset, returning file href: {prefix + eof_candidates[0].name}")
+        return prefix + eof_candidates[0].name
+
+    logger.info(f"Returning normalized folder prefix: {prefix}")
+    return prefix
+
+
 async def process_asset(asset_href: str, asset_name: str) -> str:
     """
     Process an archived AUXIP asset stored in S3 and replace it with its extracted content.
@@ -133,11 +153,7 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
 
         await upload_folder_flat(upload_dir, prefix)
 
-        extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
-        if len(extracted_files) == 1:
-            single_file_name = extracted_files[0].name
-            logger.info(f"Single extracted file found, returning file href: {prefix + single_file_name}")
-            return prefix + single_file_name
+        return _get_normalized_asset_href(upload_dir, prefix, asset_name)
 
     # Return the folder-like href that now contains the extracted content.
     return prefix
