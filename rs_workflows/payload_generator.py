@@ -252,16 +252,17 @@ def find_s3_output_bucket(
             if owner_pat == "*" and coll_pat == "*" and prod_type_pat == "*":
                 if fallback_bucket is None:
                     fallback_bucket = bucket
-                logger.info(
-                    "Configuration bucket: global fallback bucket (all first 3 columns are '*'): " f"{fallback_bucket}",
-                )
-            else:
-                logger.warning(
-                    "Multiple default configurations were found in the configuration map "
-                    "(rs-catalog-staging-configmap), while only one is expected. The first "
-                    f"one found ({fallback_bucket}) will be used, but please review your configmap to prevent "
-                    "unexpected behaviors. Only a single entry should have the first three columns set to '*'",
-                )
+                    logger.info(
+                        "Configuration bucket: global fallback bucket (all first 3 columns are '*'): "
+                        f"{fallback_bucket}",
+                    )
+                else:
+                    logger.warning(
+                        "Multiple default configurations were found in the configuration map "
+                        "(rs-catalog-staging-configmap), while only one is expected. The first "
+                        f"one found ({fallback_bucket}) will be used, but please review your configmap to prevent "
+                        "unexpected behaviors. Only a single entry should have the first three columns set to '*'",
+                    )
     if fallback_bucket_owner_only:
         logger.info(f"Configuration bucket: Returning owner only fallback: {fallback_bucket_owner_only}")
         return fallback_bucket_owner_only
