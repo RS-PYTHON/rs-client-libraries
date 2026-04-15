@@ -66,36 +66,34 @@ async def upload_folder_flat(local_folder: Path, prefix: str):
     logger.info(f"Finished uploading {len(files_to_upload)} file(s) to {prefix}")
 
 
-def _get_normalized_asset_href(upload_dir: Path, prefix: str, asset_name: str) -> str:
+def _get_normalized_asset_href(upload_dir: Path, prefix: str) -> str:
     """Return the most appropriate href for a normalized asset."""
     logger = get_run_logger()
     extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
+    extracted_paths = [upload_dir, *upload_dir.rglob("*")]
 
-    # We want the normalized href to point directly to the extracted payload
-    # file, not just to the folder created by unzip/untar.
+    def href_suffix(path: Path) -> str:
+        """Build the suffix to append to the normalized S3 prefix."""
+        return path.name if path == upload_dir else path.relative_to(upload_dir).as_posix()
+
+    # After normalization we want the href to target a concrete product object,
+    # not the parent prefix. For these AUXIP payloads that object should resolve
+    # to either a `.SEN3` product path or an extracted `.EOF` file path.
+    sen3_candidates = [href_suffix(path) for path in extracted_paths if path.name.lower().endswith(".sen3")]
+    if len(sen3_candidates) == 1:
+        logger.info(f"Single normalized SEN3 product found, returning product href: {prefix + sen3_candidates[0]}")
+        return prefix + sen3_candidates[0]
+
+    eof_files = [href_suffix(path) for path in extracted_files if path.name.lower().endswith(".eof")]
+    if len(eof_files) == 1:
+        logger.info(f"Single extracted EOF found, returning file href: {prefix + eof_files[0]}")
+        return prefix + eof_files[0]
+
     # The common case after normalization is a single extracted payload file.
     if len(extracted_files) == 1:
         single_file_name = extracted_files[0].name
         logger.info(f"Single extracted file found, returning file href: {prefix + single_file_name}")
         return prefix + single_file_name
-
-    normalized_asset_base = strip_archive_suffix(asset_name).lower()
-
-    # When an archive expands to several files, prefer the extracted file whose
-    # name is the closest match to the source archive name after removing the
-    # archive suffix. This keeps the href pointed at the payload file that most
-    # likely corresponds to the original archived asset, instead of the parent
-    # folder or an auxiliary file such as a manifest.
-    match_steps = (
-        lambda path: path.name.lower() == normalized_asset_base,
-        lambda path: path.stem.lower() == normalized_asset_base,
-        lambda path: path.name.lower().startswith(f"{normalized_asset_base}."),
-        lambda path: path.stem.lower().startswith(normalized_asset_base),
-    )
-    for matches in ([path for path in extracted_files if predicate(path)] for predicate in match_steps):
-        if len(matches) == 1:
-            logger.info(f"Matched normalized extracted file, returning file href: {prefix + matches[0].name}")
-            return prefix + matches[0].name
 
     logger.info(f"Returning normalized folder prefix: {prefix}")
     return prefix
@@ -166,7 +164,7 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
 
         await upload_folder_flat(upload_dir, prefix)
 
-        return _get_normalized_asset_href(upload_dir, prefix, asset_name)
+        return _get_normalized_asset_href(upload_dir, prefix)
 
 
 ###############

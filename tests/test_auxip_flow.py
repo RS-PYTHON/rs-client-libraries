@@ -177,8 +177,8 @@ async def test_process_asset_prefers_matching_file_with_similar_name(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_process_asset_ignores_directory_name_and_uses_matching_extracted_file(monkeypatch, mock_auxip_logger):
-    """Test normalized assets use the matching extracted file, not the enclosing directory name."""
+async def test_process_asset_returns_sen3_product_href(monkeypatch, mock_auxip_logger):
+    """Test normalized `.SEN3` products return the logical product href."""
     download_mock = AsyncMock()
     upload_mock = AsyncMock()
     delete_mock = MagicMock()
@@ -210,7 +210,7 @@ async def test_process_asset_ignores_directory_name_and_uses_matching_extracted_
         f"{product_name}.zip",
     )
 
-    assert result == f"s3://bucket/path/{product_name}/{product_name}.nc"
+    assert result == f"s3://bucket/path/{product_name}/{product_name}"
     delete_mock.assert_called_once()
     upload_mock.assert_awaited_once()
 
