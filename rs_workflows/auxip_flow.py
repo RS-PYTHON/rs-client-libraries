@@ -132,13 +132,16 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
         await upload_folder_flat(upload_dir, prefix)
 
         extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
-        if len(extracted_files) == 1:
-            single_file_name = extracted_files[0].name
-            logger.info(f"Single extracted file found, returning file href: {prefix + single_file_name}")
-            return prefix + single_file_name
+        if not extracted_files:
+            logger.info(f"No extracted files found, returning normalized folder prefix: {prefix}")
+            return prefix
 
-    # Return the folder-like href that now contains the extracted content.
-    return prefix
+        # Always expose a concrete extracted file in the normalized href.
+        # When several files are produced, pick a deterministic "main" payload
+        # by preferring the largest file and then the lexicographically smallest
+        selected_file = min(extracted_files, key=lambda path: (-path.stat().st_size, path.name))
+        logger.info(f"Selected extracted file for normalized href: {prefix + selected_file.name}")
+        return prefix + selected_file.name
 
 
 ###############
