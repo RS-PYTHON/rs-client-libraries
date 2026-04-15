@@ -66,39 +66,6 @@ async def upload_folder_flat(local_folder: Path, prefix: str):
     logger.info(f"Finished uploading {len(files_to_upload)} file(s) to {prefix}")
 
 
-def _get_normalized_asset_href(upload_dir: Path, prefix: str) -> str:
-    """Return the most appropriate href for a normalized asset."""
-    logger = get_run_logger()
-    extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
-    extracted_paths = [upload_dir, *upload_dir.rglob("*")]
-
-    def href_suffix(path: Path) -> str:
-        """Build the suffix to append to the normalized S3 prefix."""
-        return path.name if path == upload_dir else path.relative_to(upload_dir).as_posix()
-
-    # After normalization we want the href to target a concrete product object,
-    # not the parent prefix. For these AUXIP payloads that object should resolve
-    # to either a `.SEN3` product path or an extracted `.EOF` file path.
-    sen3_candidates = [href_suffix(path) for path in extracted_paths if path.name.lower().endswith(".sen3")]
-    if len(sen3_candidates) == 1:
-        logger.info(f"Single normalized SEN3 product found, returning product href: {prefix + sen3_candidates[0]}")
-        return prefix + sen3_candidates[0]
-
-    eof_files = [href_suffix(path) for path in extracted_files if path.name.lower().endswith(".eof")]
-    if len(eof_files) == 1:
-        logger.info(f"Single extracted EOF found, returning file href: {prefix + eof_files[0]}")
-        return prefix + eof_files[0]
-
-    # The common case after normalization is a single extracted payload file.
-    if len(extracted_files) == 1:
-        single_file_name = extracted_files[0].name
-        logger.info(f"Single extracted file found, returning file href: {prefix + single_file_name}")
-        return prefix + single_file_name
-
-    logger.info(f"Returning normalized folder prefix: {prefix}")
-    return prefix
-
-
 async def process_asset(asset_href: str, asset_name: str) -> str:
     """
     Process an archived AUXIP asset stored in S3 and replace it with its extracted content.
@@ -164,7 +131,14 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
 
         await upload_folder_flat(upload_dir, prefix)
 
-        return _get_normalized_asset_href(upload_dir, prefix)
+        extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
+        if len(extracted_files) == 1:
+            single_file_name = extracted_files[0].name
+            logger.info(f"Single extracted file found, returning file href: {prefix + single_file_name}")
+            return prefix + single_file_name
+
+    # Return the folder-like href that now contains the extracted content.
+    return prefix
 
 
 ###############
