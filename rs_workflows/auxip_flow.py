@@ -82,6 +82,13 @@ def _get_normalized_asset_href(upload_dir: Path, prefix: str, asset_name: str) -
         logger.info(f"Matched normalized EOF asset, returning file href: {prefix + eof_candidates[0].name}")
         return prefix + eof_candidates[0].name
 
+    # Some AUXIP products normalize to a product directory such as `.SAFE` or
+    # `.SEN3`. In those cases the asset href must point to the logical product
+    # object under the normalized prefix, not just to the prefix itself.
+    if upload_dir.name.lower() == normalized_asset_base:
+        logger.info(f"Matched normalized product directory, returning product href: {prefix + upload_dir.name}")
+        return prefix + upload_dir.name
+
     logger.info(f"Returning normalized folder prefix: {prefix}")
     return prefix
 

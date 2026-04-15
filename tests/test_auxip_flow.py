@@ -177,6 +177,45 @@ async def test_process_asset_prefers_matching_eof_when_multiple_files(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_process_asset_returns_product_href_for_normalized_product_directory(monkeypatch, mock_auxip_logger):
+    """Test normalized directory products keep the full product href under the prefix."""
+    download_mock = AsyncMock()
+    upload_mock = AsyncMock()
+    delete_mock = MagicMock()
+
+    product_name = "S3A_AX___OSF_AX_20160216T192404_99991231T235959_20250724T075944___________________EUM_O_AL_001.SEN3"
+
+    def fake_extract_zip(zip_path, extract_to):
+        product_dir = Path(extract_to) / product_name
+        product_dir.mkdir(parents=True, exist_ok=True)
+        (product_dir / "xfdumanifest.xml").write_text("content")
+        (product_dir / "metadata.nc").write_text("content")
+
+    extract_zip_mock = MagicMock(side_effect=fake_extract_zip)
+
+    monkeypatch.setattr(auxip_flow, "s3_download_file", download_mock)
+    monkeypatch.setattr(auxip_flow, "s3_delete", delete_mock)
+    monkeypatch.setattr(auxip_flow, "extract_zip", extract_zip_mock)
+    monkeypatch.setattr(auxip_flow, "recursive_extract", MagicMock(return_value=0))
+    monkeypatch.setattr(auxip_flow, "normalize_extract_dir", MagicMock(side_effect=lambda path: next(path.iterdir())))
+    monkeypatch.setattr(auxip_flow, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(
+        auxip_flow,
+        "get_upload_prefix",
+        MagicMock(return_value=f"s3://bucket/path/{product_name}/"),
+    )
+
+    result = await auxip_flow.process_asset(
+        f"s3://bucket/path/{product_name}.zip",
+        f"{product_name}.zip",
+    )
+
+    assert result == f"s3://bucket/path/{product_name}/{product_name}"
+    delete_mock.assert_called_once()
+    upload_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_process_asset_rejects_unsupported_extension(mock_auxip_logger):
     """Test unsupported archive extensions are rejected."""
     with pytest.raises(ValueError, match="Unsupported archive type"):
