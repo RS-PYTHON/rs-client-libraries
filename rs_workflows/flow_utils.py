@@ -31,7 +31,7 @@ from rs_client.ogcapi.dpr_client import DprPipeline, DprProcessor
 from rs_client.rs_client import RsClient
 from rs_common import init_opentelemetry, prefect_utils
 
-archive_suffixes = (".zip", ".tar", ".tgz", ".tar.gz")
+ARCHIVE_SUFFIXES = (".zip", ".tar", ".tgz", ".tar.gz")
 
 
 class Priority(str, Enum):
