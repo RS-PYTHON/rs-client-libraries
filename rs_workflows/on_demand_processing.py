@@ -312,7 +312,7 @@ async def dpr_processing(
         # Create cluster info from JUPYTERHUB_API_TOKEN env var (only in cluster mode, read from the
         # prefect blocks) and Dask cluster label.
         cluster_info = ClusterInfo(
-            jupyter_token=os.environ["JUPYTERHUB_API_TOKEN"] if prefect_utils.cluster_mode else "",
+            jupyter_token=os.environ["JUPYTERHUB_API_TOKEN"] if prefect_utils.CLUSTER_MODE else "",
             cluster_label=dpr_input.dask_cluster_label,
             cluster_instance=dpr_input.dask_cluster_instance or "",
         )
