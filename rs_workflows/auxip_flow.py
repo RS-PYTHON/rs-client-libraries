@@ -118,6 +118,9 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
     logger = get_run_logger()
     logger.info(f"Processing asset: {asset_href}")
 
+    if not asset_name.lower().endswith(ARCHIVE_SUFFIXES):
+        raise ValueError(f"Unsupported archive type for asset '{asset_name}'")
+
     is_zip = asset_name.lower().endswith(".zip")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
