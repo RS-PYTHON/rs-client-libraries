@@ -71,23 +71,31 @@ def _get_normalized_asset_href(upload_dir: Path, prefix: str, asset_name: str) -
     logger = get_run_logger()
     extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
 
+    # We want the normalized href to point directly to the extracted payload
+    # file, not just to the folder created by unzip/untar.
+    # The common case after normalization is a single extracted payload file.
     if len(extracted_files) == 1:
         single_file_name = extracted_files[0].name
         logger.info(f"Single extracted file found, returning file href: {prefix + single_file_name}")
         return prefix + single_file_name
 
     normalized_asset_base = strip_archive_suffix(asset_name).lower()
-    eof_candidates = [path for path in extracted_files if path.name.lower() == f"{normalized_asset_base}.eof"]
-    if len(eof_candidates) == 1:
-        logger.info(f"Matched normalized EOF asset, returning file href: {prefix + eof_candidates[0].name}")
-        return prefix + eof_candidates[0].name
 
-    # Some AUXIP products normalize to a product directory such as `.SAFE` or
-    # `.SEN3`. In those cases the asset href must point to the logical product
-    # object under the normalized prefix, not just to the prefix itself.
-    if upload_dir.name.lower() == normalized_asset_base:
-        logger.info(f"Matched normalized product directory, returning product href: {prefix + upload_dir.name}")
-        return prefix + upload_dir.name
+    # When an archive expands to several files, prefer the extracted file whose
+    # name is the closest match to the source archive name after removing the
+    # archive suffix. This keeps the href pointed at the payload file that most
+    # likely corresponds to the original archived asset, instead of the parent
+    # folder or an auxiliary file such as a manifest.
+    match_steps = (
+        lambda path: path.name.lower() == normalized_asset_base,
+        lambda path: path.stem.lower() == normalized_asset_base,
+        lambda path: path.name.lower().startswith(f"{normalized_asset_base}."),
+        lambda path: path.stem.lower().startswith(normalized_asset_base),
+    )
+    for matches in ([path for path in extracted_files if predicate(path)] for predicate in match_steps):
+        if len(matches) == 1:
+            logger.info(f"Matched normalized extracted file, returning file href: {prefix + matches[0].name}")
+            return prefix + matches[0].name
 
     logger.info(f"Returning normalized folder prefix: {prefix}")
     return prefix

@@ -133,8 +133,8 @@ async def test_process_asset_tar(monkeypatch, mock_auxip_logger):
 
 
 @pytest.mark.asyncio
-async def test_process_asset_prefers_matching_eof_when_multiple_files(monkeypatch, mock_auxip_logger):
-    """Test normalized assets prefer the matching EOF file when several files are extracted."""
+async def test_process_asset_prefers_matching_file_with_similar_name(monkeypatch, mock_auxip_logger):
+    """Test normalized assets prefer the extracted file whose name best matches the asset name."""
     download_mock = AsyncMock()
     upload_mock = AsyncMock()
     delete_mock = MagicMock()
@@ -177,8 +177,8 @@ async def test_process_asset_prefers_matching_eof_when_multiple_files(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_process_asset_returns_product_href_for_normalized_product_directory(monkeypatch, mock_auxip_logger):
-    """Test normalized directory products keep the full product href under the prefix."""
+async def test_process_asset_ignores_directory_name_and_uses_matching_extracted_file(monkeypatch, mock_auxip_logger):
+    """Test normalized assets use the matching extracted file, not the enclosing directory name."""
     download_mock = AsyncMock()
     upload_mock = AsyncMock()
     delete_mock = MagicMock()
@@ -189,7 +189,7 @@ async def test_process_asset_returns_product_href_for_normalized_product_directo
         product_dir = Path(extract_to) / product_name
         product_dir.mkdir(parents=True, exist_ok=True)
         (product_dir / "xfdumanifest.xml").write_text("content")
-        (product_dir / "metadata.nc").write_text("content")
+        (product_dir / f"{product_name}.nc").write_text("content")
 
     extract_zip_mock = MagicMock(side_effect=fake_extract_zip)
 
@@ -210,7 +210,7 @@ async def test_process_asset_returns_product_href_for_normalized_product_directo
         f"{product_name}.zip",
     )
 
-    assert result == f"s3://bucket/path/{product_name}/{product_name}"
+    assert result == f"s3://bucket/path/{product_name}/{product_name}.nc"
     delete_mock.assert_called_once()
     upload_mock.assert_awaited_once()
 
