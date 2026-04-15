@@ -416,6 +416,59 @@ def test_find_s3_output_bucket_no_fallback(_mock_bucket_config_no_fallback):
         find_s3_output_bucket(config_rows, "nobody", "none", "NONE")
 
 
+def test_find_s3_output_bucket_priority_1():
+    """Test case for Priority 1: Exact match for owner_id and output_collection"""
+    config_rows = [
+        ["user1", "coll1", "*", "30", "bucket1"],
+        ["user1", "*", "*", "30", "bucket2"],
+        ["*", "*", "*", "30", "fallback"],
+    ]
+    assert find_s3_output_bucket(config_rows, "user1", "coll1", "type1") == "bucket1"
+
+
+def test_find_s3_output_bucket_owner_fallback():
+    """Test case for Priority 2: Match for owner_id only (coll_pat is *)"""
+    config_rows = [
+        ["user1", "other_coll", "*", "30", "bucket1"],
+        ["user1", "*", "*", "30", "bucket2"],
+        ["*", "*", "*", "30", "fallback"],
+    ]
+    assert find_s3_output_bucket(config_rows, "user1", "coll1", "type1") == "bucket2"
+
+
+def test_find_s3_output_bucket_global_fallback():
+    """Test case for Priority 3: Global fallback (*, *, *)"""
+    config_rows = [
+        ["other_user", "*", "*", "30", "bucket1"],
+        ["*", "*", "*", "30", "fallback"],
+    ]
+    assert find_s3_output_bucket(config_rows, "user1", "coll1", "type1") == "fallback"
+
+
+def test_find_s3_output_bucket_no_match():
+    """Test case where no matching bucket is found"""
+    config_rows = [
+        ["other_user", "*", "*", "30", "bucket1"],
+    ]
+    with pytest.raises(RuntimeError, match="Unable to determine the output bucket"):
+        find_s3_output_bucket(config_rows, "user1", "coll1", "type1")
+
+
+def test_find_s3_output_bucket_priority_order():
+    """Test case for complex priority order scenario"""
+    config_rows = [
+        ["*", "*", "*", "30", "fallback"],
+        ["user1", "*", "*", "30", "bucket_owner"],
+        ["user1", "coll1", "*", "30", "bucket_exact"],
+    ]
+    # Should get bucket_exact
+    assert find_s3_output_bucket(config_rows, "user1", "coll1", "type1") == "bucket_exact"
+    # Should get bucket_owner for other coll
+    assert find_s3_output_bucket(config_rows, "user1", "other_coll", "type1") == "bucket_owner"
+    # Should get fallback for other user
+    assert find_s3_output_bucket(config_rows, "other_user", "other_coll", "other_type") == "fallback"
+
+
 def test_get_first_asset_dir():
     """
     Test extraction of directory path from first asset href (S3 and local).
