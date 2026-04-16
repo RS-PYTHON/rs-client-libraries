@@ -58,7 +58,7 @@ async def process_l0_last_steps(
             return
 
         # Satellite identifier
-        satellite_identifier = f"sentinel-{mission}{session[:3].lower()}"
+        satellite_identifier = f"sentinel-{mission}{session[2].lower()}"
 
         # Published date
         published = item_session.properties.get("published")
