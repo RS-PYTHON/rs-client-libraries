@@ -26,7 +26,7 @@ async def staging(
     env: FlowEnvArgs,
     stac_input: str | ItemCollection | dict,  # warning: dict as last choice for prefect ui
     catalog_collection_identifier: str,
-    # timeout: int = 1200,
+    asset_names: set[str] | None = None,
     poll_interval: int = 2,
 ) -> dict[str, dict]:
     """
@@ -40,10 +40,9 @@ async def staging(
             - A json string corresponding to a Feature or a FeatureCollection<br>
             - A string corresponding to a path to a json file containing a Feature or a FeatureCollection<br>
             - A single link that returns a STAC ItemCollection: this link should be an url to search an ItemCollection
-        catalog_collection_identifier: Catalog collection identifier where items are staged
-        timeout: Job completion timeout in seconds
-            NOTE: This argument has been disabled, see the comment in staging_client.wait_for_jobs function
-        poll_interval: When to check again for job completion in seconds
+        catalog_collection_identifier (str): Catalog collection identifier where items are staged
+        asset_names (set[str]): Optional set to keep only selected asset names. If not provided, all assets are staged.
+        poll_interval (int): When to check again for job completion in seconds
 
     Returns:
         dict[str, dict]: Job status after completion
@@ -61,11 +60,10 @@ async def staging(
             stac_input = stac_input.to_dict()
 
         # Trigger the staging and wait for jobs to finish
-        job_status = staging_client.run_staging(stac_input, catalog_collection_identifier)
+        job_status = staging_client.run_staging(stac_input, catalog_collection_identifier, asset_names)
         job_status = staging_client.wait_for_jobs(
             job_status,
             logger,
-            # timeout,
             poll_interval,
         )
 
