@@ -35,7 +35,7 @@ from rs_common.utils import (
     recursive_extract,
     strip_archive_suffix,
 )
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, archive_suffixes
+from rs_workflows.flow_utils import ARCHIVE_SUFFIXES, FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task
 
 ####################################################
@@ -90,17 +90,16 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
     """
     logger = get_run_logger()
     logger.info(f"Processing asset: {asset_href}")
-    is_zip_asset = asset_name.endswith(".zip")
-    is_tar_asset = asset_name.endswith((".tar", ".tgz", ".tar.gz"))
 
-    if not (is_zip_asset or is_tar_asset):
-        msg = f"Unsupported archive type for asset: {asset_href}"
-        raise ValueError(msg)
+    if not asset_name.lower().endswith(ARCHIVE_SUFFIXES):
+        raise ValueError(f"Unsupported archive type for asset '{asset_name}'")
+
+    is_zip = asset_name.lower().endswith(".zip")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_dir = Path(tmp_dir)  # type: ignore
 
-        archive_local = tmp_dir / ("archive.zip" if is_zip_asset else Path(asset_href).name)  # type: ignore
+        archive_local = tmp_dir / ("archive.zip" if is_zip else Path(asset_href).name)  # type: ignore
         extract_dir = tmp_dir / "extracted"  # type: ignore
         extract_dir.mkdir()
 
@@ -113,7 +112,7 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
         s3_delete(asset_href)
 
         # 3. Extract the main archive first.
-        if is_zip_asset:
+        if is_zip:
             extract_zip(archive_local, extract_dir)
         else:
             extract_tar(archive_local, extract_dir)
@@ -133,13 +132,16 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
         await upload_folder_flat(upload_dir, prefix)
 
         extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
-        if len(extracted_files) == 1:
-            single_file_name = extracted_files[0].name
-            logger.info(f"Single extracted file found, returning file href: {prefix + single_file_name}")
-            return prefix + single_file_name
+        if not extracted_files:
+            logger.info(f"No extracted files found, returning normalized folder prefix: {prefix}")
+            return prefix
 
-    # Return the folder-like href that now contains the extracted content.
-    return prefix
+        # Always expose a concrete extracted file in the normalized href.
+        # When several files are produced, pick a deterministic "main" payload
+        # by preferring the largest file and then the lexicographically smallest
+        selected_file = min(extracted_files, key=lambda path: (-path.stat().st_size, path.name))
+        logger.info(f"Selected extracted file for normalized href: {prefix + selected_file.name}")
+        return prefix + selected_file.name
 
 
 ###############
@@ -319,7 +321,7 @@ async def auxip_unzip_decompress(auxip_item: Item) -> Item:
     for asset_name, asset in auxip_item.assets.items():
         # After normalisation (unzip / decompress) the href is changed with the new s3 path.
         # Therefore asset name should also be updated for supported archive types.
-        if asset_name.endswith(archive_suffixes):
+        if asset_name.lower().endswith(ARCHIVE_SUFFIXES):
             new_href = await process_asset(asset.href, asset_name)
             asset.href = new_href
             updated_assets[strip_archive_suffix(asset_name)] = asset

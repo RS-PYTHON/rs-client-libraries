@@ -100,7 +100,7 @@ async def test_process_asset_zip(monkeypatch, mock_auxip_logger):
 
 @pytest.mark.asyncio
 async def test_process_asset_tar(monkeypatch, mock_auxip_logger):
-    """Test TAR-like assets use TAR extraction path and strip archive folder from prefix."""
+    """Test TAR-like assets return a concrete extracted file href."""
     download_mock = AsyncMock()
     upload_mock = AsyncMock()
     delete_mock = MagicMock()
@@ -123,12 +123,95 @@ async def test_process_asset_tar(monkeypatch, mock_auxip_logger):
 
     result = await auxip_flow.process_asset("s3://bucket/path/data.tar/file.tar", "file.tar")
 
-    assert result == "s3://bucket/path/data/"
+    assert result == "s3://bucket/path/data/file1"
     download_target = Path(download_mock.await_args_list[0].args[1])
     assert download_target.name == "file.tar"
     extract_tar_mock.assert_called_once()
     extract_zip_mock.assert_not_called()
     delete_mock.assert_called_once_with("s3://bucket/path/data.tar/file.tar")
+    upload_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_asset_returns_concrete_extracted_file_when_multiple_files_exist(monkeypatch, mock_auxip_logger):
+    """Test normalized assets return a concrete extracted file href when multiple files exist."""
+    download_mock = AsyncMock()
+    upload_mock = AsyncMock()
+    delete_mock = MagicMock()
+
+    def fake_extract_zip(zip_path, extract_to):
+        (Path(extract_to) / "manifest.safe").write_text("meta")
+        (Path(extract_to) / "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.EOF").write_text(
+            "payload-content",
+        )
+
+    extract_zip_mock = MagicMock(side_effect=fake_extract_zip)
+
+    monkeypatch.setattr(auxip_flow, "s3_download_file", download_mock)
+    monkeypatch.setattr(auxip_flow, "s3_delete", delete_mock)
+    monkeypatch.setattr(auxip_flow, "extract_zip", extract_zip_mock)
+    monkeypatch.setattr(auxip_flow, "recursive_extract", MagicMock(return_value=0))
+    monkeypatch.setattr(auxip_flow, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
+    monkeypatch.setattr(auxip_flow, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(
+        auxip_flow,
+        "get_upload_prefix",
+        MagicMock(
+            return_value=(
+                "s3://bucket/path/" "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732/"
+            ),
+        ),
+    )
+
+    result = await auxip_flow.process_asset(
+        "s3://bucket/path/S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.zip",
+        "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.zip",
+    )
+
+    assert result == (
+        "s3://bucket/path/S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732/"
+        "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.EOF"
+    )
+    delete_mock.assert_called_once()
+    upload_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_asset_returns_concrete_extracted_file_for_sen3_payload(monkeypatch, mock_auxip_logger):
+    """Test normalized `.SEN3` products return a concrete extracted file href."""
+    download_mock = AsyncMock()
+    upload_mock = AsyncMock()
+    delete_mock = MagicMock()
+
+    product_name = "S3A_AX___OSF_AX_20160216T192404_99991231T235959_20250724T075944___________________EUM_O_AL_001.SEN3"
+
+    def fake_extract_zip(zip_path, extract_to):
+        product_dir = Path(extract_to) / product_name
+        product_dir.mkdir(parents=True, exist_ok=True)
+        (product_dir / "xfdumanifest.xml").write_text("meta")
+        (product_dir / f"{product_name}.nc").write_text("payload-content")
+
+    extract_zip_mock = MagicMock(side_effect=fake_extract_zip)
+
+    monkeypatch.setattr(auxip_flow, "s3_download_file", download_mock)
+    monkeypatch.setattr(auxip_flow, "s3_delete", delete_mock)
+    monkeypatch.setattr(auxip_flow, "extract_zip", extract_zip_mock)
+    monkeypatch.setattr(auxip_flow, "recursive_extract", MagicMock(return_value=0))
+    monkeypatch.setattr(auxip_flow, "normalize_extract_dir", MagicMock(side_effect=lambda path: next(path.iterdir())))
+    monkeypatch.setattr(auxip_flow, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(
+        auxip_flow,
+        "get_upload_prefix",
+        MagicMock(return_value=f"s3://bucket/path/{product_name}/"),
+    )
+
+    result = await auxip_flow.process_asset(
+        f"s3://bucket/path/{product_name}.zip",
+        f"{product_name}.zip",
+    )
+
+    assert result == f"s3://bucket/path/{product_name}/{product_name}.nc"
+    delete_mock.assert_called_once()
     upload_mock.assert_awaited_once()
 
 

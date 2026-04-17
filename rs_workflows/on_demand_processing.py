@@ -32,10 +32,10 @@ from rs_common import prefect_utils
 from rs_workflows import auxip_flow, catalog_flow
 from rs_workflows.dpr_flow import run_processor
 from rs_workflows.flow_utils import (
+    ARCHIVE_SUFFIXES,
     DprProcessIn,
     FlowEnv,
     RetryConfig,
-    archive_suffixes,
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload
@@ -120,7 +120,7 @@ def _get_archived_item_indexes(item_collection) -> list[int]:
     """
     archived_indexes = []
     for idx, auxip_item in enumerate(item_collection.items):
-        if any(asset.href.endswith(archive_suffixes) for asset in auxip_item.assets.values()):
+        if any(asset.href.endswith(ARCHIVE_SUFFIXES) for asset in auxip_item.assets.values()):
             archived_indexes.append(idx)
     return archived_indexes
 
