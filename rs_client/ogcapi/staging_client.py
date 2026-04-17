@@ -62,6 +62,7 @@ class StagingClient(OgcApiClient):
         self,
         stac_input: dict[Any, Any] | str,
         out_coll_name: str,
+        asset_names: set[str] | None = None,
     ) -> dict[str, dict]:
         """Method to start the staging process from rs-client - Call the endpoint /processes/staging/execution
 
@@ -74,7 +75,9 @@ class StagingClient(OgcApiClient):
                 - A single link that returns a STAC itemCollection: this link should be an url to search a
                   itemCollection, for example:
                   http://localhost:8002/cadip/search?ids=S1A_20231120061537234567&collections=cadip_sentinel1
-        out_coll_name (str): name of the output collection
+            out_coll_name (str): name of the output collection
+            asset_names (set[str]): An optional set to keep only selected asset names.
+                                    If not provided, all assets are staged.
         Return:
             dict(hostname, job_id (int, str)): Returns the status codes of the staging requests (one per URL hostname) +
             the identifiers
@@ -83,11 +86,10 @@ class StagingClient(OgcApiClient):
 
         # ----- Case 1: we only load a link (that refers to a STAC itemCollection) in the staging request body
         if isinstance(stac_input, str):
-
             # Check that it's an url
             parsed = urlparse(stac_input)
             if parsed.scheme and parsed.netloc and parsed.hostname:
-                staging_body = {"inputs": {"collection": out_coll_name, "items": {"href": stac_input}}}
+                staging_body = self.staging_body(out_coll_name, {"href": stac_input}, asset_names)
                 return {parsed.hostname: super()._run_process(RESOURCE, staging_body)}
 
         # ----- Case 2: we directly load a STAC ItemCollection in the staging request body
@@ -139,21 +141,31 @@ class StagingClient(OgcApiClient):
         hostname_triggers: dict[str, dict] = {}
         for hostname, items in hostname_items.items():
             stac_item_collection = ItemCollection(type="FeatureCollection", features=items)
-            staging_body = {
-                "inputs": {
-                    "collection": out_coll_name,
-                    "items": {"value": stac_item_collection.model_dump(mode="json")},
-                },
-            }
+            staging_body = self.staging_body(
+                out_coll_name,
+                {"value": stac_item_collection.model_dump(mode="json")},
+                asset_names,
+            )
             hostname_triggers[hostname] = super()._run_process(RESOURCE, staging_body)
 
         return hostname_triggers
+
+    def staging_body(
+        self,
+        collection: str,
+        items: dict[str, Any],
+        asset_names: set[str] | None = None,
+    ) -> dict[str, Any]:
+        """Build the staging request body with provided arguments"""
+        inputs = {"collection": collection, "items": items}
+        if asset_names:
+            inputs["asset_names"] = list(asset_names)
+        return {"inputs": inputs}
 
     def wait_for_jobs(
         self,
         all_job_status: dict[str, dict],
         logger=None,
-        # timeout: int | float = math.inf,
         poll_interval: int = 2,
     ) -> dict[str, dict]:
         """
@@ -162,8 +174,6 @@ class StagingClient(OgcApiClient):
         Args:
             job_status: Returned by `run_staging`
             logger: To show advancement in logger
-            timeout: Job completion timeout in seconds
-                    NOTE: This argument has been disabled, see the comment in super().wait_for_job() function
             poll_interval: When to check again for job completion in seconds
 
         Returns:
@@ -179,7 +189,6 @@ class StagingClient(OgcApiClient):
                 job_status,
                 logger,
                 f"Staging from {hostname!r}",
-                # timeout,
                 poll_interval,
             )
         return job_results

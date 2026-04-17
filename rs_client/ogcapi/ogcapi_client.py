@@ -80,7 +80,7 @@ class OgcApiClient(RsClient):
 
         if result.errors:
             raise OgcValidationException(
-                f"Error validating the request of the endpoint "
+                f"Error validating the request body {request.body!r} of the endpoint "
                 f"{openapi_request.path}: {', '.join(str(x) for x in result.errors)}",
             )
         if not result.body:
@@ -226,7 +226,6 @@ class OgcApiClient(RsClient):
         job_status: dict,
         logger=None,
         job_name: str = "",
-        # timeout: int | float = math.inf,
         poll_interval: int = 2,
     ) -> dict:
         """
@@ -236,8 +235,6 @@ class OgcApiClient(RsClient):
             job_status: Returned by `_run_process`
             logger: To show advancement in logger
             job_name: Job name to show in the logger
-            timeout: Job completion timeout in seconds.
-                        NOTE: This argument has been disabled, see the comment bellow !
             poll_interval: When to check again for job completion in seconds
 
         Returns:
