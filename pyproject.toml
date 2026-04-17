@@ -140,13 +140,15 @@ max-line-length = 120
 [tool.pylint.messages_control]
 max-line-length=120
 disable = [
-    "logging-fstring-interpolation",
     "global-statement",
-    "too-many-arguments",
-    "too-many-positional-arguments",
+    "import-error",
+    "logging-fstring-interpolation",
     "not-context-manager",
-    "too-many-locals",
+    "too-few-public-methods",
+    "too-many-arguments",
     "too-many-branches",
+    "too-many-locals",
+    "too-many-positional-arguments",
     "too-many-statements",
 ]
 

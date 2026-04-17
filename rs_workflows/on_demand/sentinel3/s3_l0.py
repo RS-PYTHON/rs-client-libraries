@@ -39,7 +39,7 @@ async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: boo
     ]
 
     await process_l0_last_steps(
-        mission="1",
+        mission="3",
         session=session,
         flow_params=flow_params,
         input_products=input_products,

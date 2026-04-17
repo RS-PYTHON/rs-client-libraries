@@ -21,8 +21,7 @@ on:
     branches:
       - '!feat/prepare-new-release'
   push:
-    branches:
-      - develop # pushes on the 'develop' branch
+    branches: [develop, main] # pushes on the 'develop' or 'main' branches
     # run this worflow only for rs_workflows code related changes
     paths: ['rs_workflows/**.py', '**.toml', 'install.sh']
   workflow_dispatch: # manual trigger
@@ -47,7 +46,7 @@ jobs:
             echo "branch_to_use=develop" >> $GITHUB_OUTPUT
           fi
       - name: Trigger deployment of ${{ matrix.repo }}
-        uses: benc-uk/workflow-dispatch@7a027648b88c2413826b6ddd6c76114894dc5ec4  # v1.3.1
+        uses: benc-uk/workflow-dispatch@7a027648b88c2413826b6ddd6c76114894dc5ec4
         with:
           workflow: test-deployment.yml
           repo: RS-PYTHON/${{ matrix.repo }}

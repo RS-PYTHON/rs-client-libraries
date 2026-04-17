@@ -45,11 +45,11 @@ from rs_common.utils import env_bool
 # In local mode, all your services are running locally.
 # In cluster mode, we use the services deployed on the RS-Server website.
 # This configuration is set in an environment variable.
-local_mode: bool = False
-cluster_mode: bool = not local_mode
+LOCAL_MODE: bool = False
+CLUSTER_MODE: bool = not LOCAL_MODE
 
 # Current user
-owner_id: str = ""
+OWNER_ID: str = ""
 
 # Prefect block names
 BLOCK_NAME_ENV_GLOBAL: str = "env-vars"
@@ -73,16 +73,16 @@ def init_global_env(new_owner_id: str | None = None):
     Args:
         new_owner_id: new ower/user id, if known.
     """
-    global local_mode, cluster_mode, owner_id
+    global LOCAL_MODE, CLUSTER_MODE, OWNER_ID
 
-    local_mode = env_bool("RSPY_LOCAL_MODE", default=False)
-    cluster_mode = not local_mode
+    LOCAL_MODE = env_bool("RSPY_LOCAL_MODE", default=False)
+    CLUSTER_MODE = not LOCAL_MODE
 
     # Override the owner id or read it from the env vars
     if new_owner_id:
-        owner_id = new_owner_id
+        OWNER_ID = new_owner_id
     else:
-        owner_id = os.getenv("JUPYTERHUB_USER", "") if cluster_mode else os.getenv("RSPY_HOST_USER", "")
+        OWNER_ID = os.getenv("JUPYTERHUB_USER", "") if CLUSTER_MODE else os.getenv("RSPY_HOST_USER", "")
 
 
 # Init the global variables
@@ -110,7 +110,7 @@ async def read_apikey(optional: bool = False, save_to_env: bool = True) -> None:
         save_to_env (bool): If True, saves the API key to the ~/.env file.
     """
     # No API key in local mode
-    if local_mode:
+    if LOCAL_MODE:
         return
 
     # If the API is saved as an env var in the ~/.env file, then it has already
@@ -177,7 +177,7 @@ async def init_prefect_blocks():
 
     # In local mode, create the block that contains the environment variables for all users.
     # In cluster mode, this block has already been created by an admin.
-    if local_mode:
+    if LOCAL_MODE:
 
         # Get all env var names that start with DASK_GATEWAY_
         regex = re.compile("^DASK_GATEWAY_.*")
@@ -207,7 +207,7 @@ async def init_prefect_blocks():
     # Env vars for current user/owner_id
 
     # In cluster mode, read the API key
-    if cluster_mode:
+    if CLUSTER_MODE:
         await read_apikey()
 
     # Read env vars that are available from the client env in both local and cluster mode.
@@ -227,10 +227,10 @@ async def init_prefect_blocks():
             user_env_vars[key] = "1"
 
     # Save env vars in a secret block for the current user
-    await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), user_env_vars)
+    await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, OWNER_ID), user_env_vars)
 
     # Now read back the blocks so we are sure our env vars are up-to-date
-    await read_prefect_blocks(owner_id)
+    await read_prefect_blocks(OWNER_ID)
 
 
 @sync_compatible
@@ -277,7 +277,7 @@ async def save_bucket_credentials(
         )
 
     # Update the prefect block
-    await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), env_vars)
+    await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, OWNER_ID), env_vars)
 
     # Save the env vars
     os.environ.update(env_vars)
@@ -303,7 +303,7 @@ async def remove_bucket_credentials(obs_ids: list[str] | str):
         env_vars += [f"S3_{key}_ACCESSKEY", f"S3_{key}_SECRETKEY", f"S3_{key}_ENDPOINT", f"S3_{key}_REGION"]
 
     # Update the prefect block
-    await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, owner_id), remove_keys=env_vars)
+    await update_prefect_block(format_env_user(BLOCK_NAME_ENV_USER, OWNER_ID), remove_keys=env_vars)
 
     # NOTE: I'm not sure we should remove the env vars from os.environ, it's risky because if the env vars
     # are also defined in other blocks, then maybe we don't want to remove them from os.environ.
@@ -425,7 +425,7 @@ async def get_share_bucket(sub_folder: str = "") -> tuple[S3Bucket, str]:
 
     # Use a specific block for the current user. Always overwrite it, because the subfolder may have changed.
     else:
-        block_name = format_env_user(BLOCK_NAME_SHARE_BUCKET_USER, owner_id)  # type: ignore
+        block_name = format_env_user(BLOCK_NAME_SHARE_BUCKET_USER, OWNER_ID)  # type: ignore
 
     # Read the prefect blocks that contain the S3 authentication
     bucket_name = os.environ["PREFECT_BUCKET_NAME"]
