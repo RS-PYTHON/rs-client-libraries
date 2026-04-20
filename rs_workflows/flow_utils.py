@@ -80,6 +80,12 @@ class SentinelSatellite(str, Enum):
     S3B = "sentinel-3b"
 
 
+class AdfType(str, Enum):
+    """ADF type"""
+
+    S00__ADF_ECMWA = "S00__ADF_ECMWA"
+
+
 class FlowEnvArgs(BaseModel):
     """
     Prefect flow environment arguments.
@@ -357,6 +363,58 @@ class DprProcessIn(BaseModel):
             raise ValueError("Exactly one of 'pipeline' or 'unit' must be provided.")
 
         return self
+
+
+class AdfProcessIn(BaseModel):
+    """
+    Input parameters for executing the 'adf_conversion' flow.
+
+    This model defines all the configuration needed to run an ADF conversion script.
+    """
+
+    env: FlowEnvArgs = Field(
+        title="Flow Environment",
+        description="Environment configuration for Prefect flow. Includes identifiers like owner_id.",
+    )
+    adf_type: str | AdfType = Field(
+        title="ADF Type",
+        description="Name of the ADF type to generate. Can be a string or AdfType enum.",
+    )
+    auxiliary_product_to_collection_identifier: list[FlowGeneratedProduct] = Field(
+        title="Auxiliary Product Mapping",
+        description=(
+            "Mapping of auxiliary product types to collections. "
+            "Use '*' as a wildcard to map all other auxiliary products."
+        ),
+        min_length=1,
+    )
+    start_datetime: datetime | None = Field(
+        default=None,
+        title="Start Datetime",
+        description="Start datetime for retrieving auxiliary data. ISO format.",
+    )
+    end_datetime: datetime | None = Field(
+        default=None,
+        title="End Datetime",
+        description="End datetime for retrieving auxiliary data. ISO format.",
+    )
+    satellite: str | SentinelSatellite | None = Field(
+        default=None,
+        title="Satellite",
+        description="Satellite identifier used in certain queries. Can be a string or SentinelSatellite enum.",
+    )
+
+    @field_validator("adf_type", mode="before")
+    @classmethod
+    def normalize_adf_type(cls, v):
+        """Normalize ADF type to string."""
+        return v.value if hasattr(v, "value") else v
+
+    @field_validator("satellite", mode="before")
+    @classmethod
+    def normalize_satellite_name(cls, v):
+        """Normalize satellite name to string."""
+        return v.value if hasattr(v, "value") else v
 
 
 @dataclass
