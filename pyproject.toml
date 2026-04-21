@@ -115,6 +115,7 @@ build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.black]
 line-length = 120
+extend-exclude = 'rs_workflows/adf_conversion/'
 
 [tool.pytest.ini_options]
 markers = [
@@ -130,9 +131,11 @@ warn_redundant_casts = true
 check_untyped_defs = true
 ignore_missing_imports = true
 disable_error_code = ["call-overload"]
+exclude = ["rs_workflows/adf_conversion/"]
 
 [tool.flake8]
 max-line-length = 120
+exclude = ["rs_workflows/adf_conversion/"]
 # per-file-ignores = [
 #     '__init__.py:F401',
 # ]
@@ -153,7 +156,7 @@ disable = [
 ]
 
 [tool.pylint.MASTER]
-ignore-paths = '^docs/.*$'
+ignore-paths = ['^docs/.*$', '^rs_workflows/adf_conversion/.*$']
 
 [tool.pylint.MISCELLANEOUS]
 notes = ["XXX"] # no errors on TODO and FIXME
@@ -163,4 +166,4 @@ notes = ["XXX"] # no errors on TODO and FIXME
 min-similarity-lines=10
 
 [tool.bandit]
-exclude_dirs = ["tests", ".poetry/plugins"]
+exclude_dirs = ["tests", ".poetry/plugins", "rs_workflows/adf_conversion"]

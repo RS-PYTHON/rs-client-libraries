@@ -380,7 +380,7 @@ class AdfProcessIn(BaseModel):
         title="ADF Type",
         description="Name of the ADF type to generate. Can be a string or AdfType enum.",
     )
-    auxiliary_product_to_collection_identifier: list[FlowGeneratedProduct] = Field(
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] = Field(
         title="Auxiliary Product Mapping",
         description=(
             "Mapping of auxiliary product types to collections. "
