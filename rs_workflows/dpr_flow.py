@@ -19,14 +19,14 @@ import json
 import tempfile
 import time
 from datetime import timedelta
-
-# import datetime
+from logging import Logger
 from os import path as osp
 from pathlib import Path
 from typing import Any
 
 import anyio
 from prefect import get_run_logger, task
+from prefect.logging import LoggingAdapter
 from pystac import Asset, Item
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
@@ -123,6 +123,7 @@ def create_stac_item(
     s3_data_location,
     product_name: str,
     dpr_processor: str,
+    logger: Logger | LoggingAdapter,
 ) -> Item:
     """
     Create a list of STAC Items from EOPF features and processing payload metadata.
@@ -137,6 +138,7 @@ def create_stac_item(
         s3_data_location (str): Base S3 path where output products are stored.
         product_name (str): Product name
         dpr_processor (str): DPR processor name
+        logger (Logger|LoggingAdapter): Logger
 
     Returns:
         list[Item]: List of constructed STAC Item objects.
@@ -230,7 +232,7 @@ def create_stac_item(
     if dpr_processor.lower() == "mockup":
         eopf_origin_datetime = "2026-01-01T00:00:00Z"
     else:
-        eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
+        eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products, logger)
 
     item = build_item(
         eopf_feature,
@@ -334,7 +336,15 @@ def update_eopf_assets(
         logger.debug(f"EOPF discovery metadata extracted: {eopf_item}")
 
         # Build STAC items
-        stac_item = create_stac_item(env, input_products, eopf_item, zattrs_s3_location, product_name, dpr_processor)
+        stac_item = create_stac_item(
+            env,
+            input_products,
+            eopf_item,
+            zattrs_s3_location,
+            product_name,
+            dpr_processor,
+            logger,
+        )
 
         items_metadata.append(
             DprProcessedItemMetadata(
@@ -349,7 +359,7 @@ def update_eopf_assets(
     return items_metadata
 
 
-def compute_eopf_origin_datetime(env, input_products) -> str:
+def compute_eopf_origin_datetime(env, input_products, logger: Logger | LoggingAdapter) -> str:
     """
     Compute the maximum ``eopf:origin_datetime`` across all input products.
 
@@ -369,6 +379,7 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
     input_products : Iterable[dict]
         Iterable of input product mappings. Each mapping is expected to
         contain values of the form ``(item_id, collection_id)``.
+    logger : Logger
 
     Returns
     -------
@@ -377,7 +388,6 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
         found among all retrieved items. If no valid items are found,
         returns the fallback value ``"2023-01-01T00:00:00Z"``.
     """
-    logger = get_run_logger()
     items = []
     if not input_products:
         logger.error("No valid input products found to compute eopf:origin_datetime. Exit")

@@ -280,6 +280,7 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
         s3_data_location="s3://my-bucket/output/feature_1.zarr",
         product_name="feature_1.zarr",
         dpr_processor=DprProcessor.S1L0,
+        logger=None,
     )
 
     # compute_eopf_origin_datetime called correctly
