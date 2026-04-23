@@ -317,7 +317,7 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
     items_metadata = update_eopf_assets.fn(
         env=env,
         input_products=[
-            FlowInputProduct(name="input_name", cadip_session="dummy_id", collection_name="dummy_collection"),
+            FlowInputProduct(name="input_name", item_id="dummy_id", collection_name="dummy_collection"),
         ],
         payload=payload,
         dpr_processor=DprProcessor.S1L0,
@@ -579,7 +579,7 @@ def test_compute_eopf_origin_datetime_single_item(mocker):
     env = mocker.Mock()
     env.serialize.return_value = {"env": "data"}
 
-    input_products = [FlowInputProduct(name="input", cadip_session="CADU_1", collection_name="COLLECTION_1")]
+    input_products = [FlowInputProduct(name="input", item_id="CADU_1", collection_name="COLLECTION_1")]
 
     mock_item = make_mock_item("2024-01-10T12:00:00Z", mocker)
 
@@ -611,8 +611,8 @@ def test_compute_eopf_origin_datetime_multiple_items_returns_max(mocker):
     env.serialize.return_value = {"env": "data"}
 
     input_products = [
-        FlowInputProduct(name="input1", cadip_session="CADU_1", collection_name="COLLECTION_1"),
-        FlowInputProduct(name="input2", cadip_session="CADU_2", collection_name="COLLECTION_2"),
+        FlowInputProduct(name="input1", item_id="CADU_1", collection_name="COLLECTION_1"),
+        FlowInputProduct(name="input2", item_id="CADU_2", collection_name="COLLECTION_2"),
     ]
     item_1 = make_mock_item("2024-01-01T00:00:00Z", mocker)
     item_2 = make_mock_item("2024-02-01T00:00:00Z", mocker)
@@ -646,7 +646,7 @@ def test_compute_eopf_origin_datetime_raises_on_missing_item(mocker):
     mock_future.result.return_value = None
     mocker.patch("rs_workflows.dpr_flow.catalog_flow.get_item.submit", return_value=mock_future)
 
-    input_products = [FlowInputProduct(name="input", cadip_session="missing_id", collection_name="some_coll")]
+    input_products = [FlowInputProduct(name="input", item_id="missing_id", collection_name="some_coll")]
 
     with pytest.raises(RuntimeError, match="No valid items found to compute eopf:origin_datetime") as excinfo:
         compute_eopf_origin_datetime(env, input_products)
@@ -675,7 +675,7 @@ def test_compute_eopf_origin_datetime_raises_on_catalog_error(mocker):
     env = mocker.Mock()
     env.serialize.return_value = {"env": "data"}
 
-    input_products = [FlowInputProduct(name="input", cadip_session="CADU_FAIL", collection_name="COLLECTION_FAIL")]
+    input_products = [FlowInputProduct(name="input", item_id="CADU_FAIL", collection_name="COLLECTION_FAIL")]
 
     mocker.patch(
         "rs_workflows.dpr_flow.get_run_logger",

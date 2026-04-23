@@ -879,11 +879,11 @@ def _mock_dpr_process_in():
     """
     mock = MagicMock()
 
-    # input_products: list[dict[product_id, (stac_item_name_of_cadip_session, collection_id)]]
-    # After UI update, input_products = list(InputProduct(name=..., cadip_session=..., collection_name=...))
+    # input_products: list[dict[product_id, (stac_item_name, collection_id)]]
+    # After UI update, input_products = list(InputProduct(name=..., item_id=..., collection_name=...))
     mock.input_products = [
-        FlowInputProduct(name="S1CADUS", cadip_session="cadip_session", collection_name="COLLECTION_CADIP_TEST"),
-        FlowInputProduct(name="S3CADUS", cadip_session="another_cadip_session", collection_name="COLLECTION_S3"),
+        FlowInputProduct(name="S1CADUS", item_id="cadip_session", collection_name="COLLECTION_CADIP_TEST"),
+        FlowInputProduct(name="S3CADUS", item_id="another_cadip_session", collection_name="COLLECTION_S3"),
     ]
 
     # generated_product_to_collection_identifier:
