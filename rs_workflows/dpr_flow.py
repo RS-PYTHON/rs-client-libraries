@@ -117,8 +117,7 @@ def s3_download_file_sync(
 
 
 def create_stac_item(
-    env,
-    input_products,
+    eopf_origin_datetime,
     eopf_feature,
     s3_data_location,
     product_name: str,
@@ -163,7 +162,8 @@ def create_stac_item(
         Returns:
             Item: A STAC Item populated with geometry, properties, and extensions.
         """
-        feature_dict["properties"]["eopf:origin_datetime"] = eopf_origin_datetimes
+        if eopf_origin_datetimes:
+            feature_dict["properties"]["eopf:origin_datetime"] = eopf_origin_datetimes
 
         # C1.2 Ensure that all EOPF items have stac_version property set to "1.1.0"
         feature_dict["properties"]["stac_version"] = "1.1.0"
@@ -223,14 +223,6 @@ def create_stac_item(
             #     "auth:ref": "should be filled thanks to story RSPY-280",
             # },
         )
-
-    # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
-    # eopf:origin_datetime among all input products (excluding ADFS inputs)
-    # Note: input_products != input_adfs
-    if dpr_processor.lower() == "mockup":
-        eopf_origin_datetime = "2026-01-01T00:00:00Z"
-    else:
-        eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
 
     item = build_item(
         eopf_feature,
@@ -312,6 +304,16 @@ def update_eopf_assets(
         f"output product sections from payload. The list with products to be published: {zattrs_list}",
     )
 
+    # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
+    # eopf:origin_datetime among all input products (excluding ADFS inputs)
+    # Note: input_products != input_adfs
+    if dpr_processor.lower() == "mockup":
+        eopf_origin_datetime = "2026-01-01T00:00:00Z"
+    elif input_products:
+        eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
+    else:
+        eopf_origin_datetime = None
+
     items_metadata = []
     for product_name, zattrs_s3_location, output_product_id in zattrs_list:
         logger.info(f"Product = {product_name} | zattrs = {zattrs_s3_location}")
@@ -334,7 +336,7 @@ def update_eopf_assets(
         logger.debug(f"EOPF discovery metadata extracted: {eopf_item}")
 
         # Build STAC items
-        stac_item = create_stac_item(env, input_products, eopf_item, zattrs_s3_location, product_name, dpr_processor)
+        stac_item = create_stac_item(eopf_origin_datetime, eopf_item, zattrs_s3_location, product_name, dpr_processor)
 
         items_metadata.append(
             DprProcessedItemMetadata(
