@@ -231,7 +231,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                         ],
                     },
                 }
-
+                logger.info(f"Built CQL2 filter for product type {prod_type}: {cql2_filter}")
                 # Find target collection from mapping
                 target_collection = "AUX"
                 for mapping in adf_input.auxiliary_product_to_collection_identifier:
