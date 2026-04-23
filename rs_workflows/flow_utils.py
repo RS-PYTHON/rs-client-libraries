@@ -182,7 +182,7 @@ class FlowInputProduct(BaseModel):
     """Represents one input product for the processor."""
 
     name: str = Field(description="Input product name.")
-    cadip_session: str = Field(description="STAC item identifier.")
+    item_id: str = Field(description="STAC item identifier.")
     collection_name: str = Field(description="Collection name.")
 
     def items(self):

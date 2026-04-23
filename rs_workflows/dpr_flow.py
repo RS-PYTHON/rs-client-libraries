@@ -386,26 +386,25 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
         raise RuntimeError("No valid input products found to compute eopf:origin_datetime")
 
     for input_product in input_products:
-        cadip_session = input_product.cadip_session
+        item_id = input_product.item_id
         collection_name = input_product.collection_name
         try:
             future = catalog_flow.get_item.submit(
                 env.serialize(),
                 collection_name,
-                cadip_session,
+                item_id,
             )
             if not future.result():
                 logger.error(
-                    f"Expected valid input product item {cadip_session} was not found"
+                    f"Expected valid input product item {item_id} was not found"
                     " to compute eopf:origin_datetime. Exit",
                 )
                 raise RuntimeError(
-                    f"Expected valid input product item {cadip_session} was not found"
-                    " to compute eopf:origin_datetime",
+                    f"Expected valid input product item {item_id} was not found" " to compute eopf:origin_datetime",
                 )
             items.append(future.result())
         except RuntimeError as rte:
-            logger.exception(f"Failed to get item '{cadip_session}' from collection '{collection_name}'")
+            logger.exception(f"Failed to get item '{item_id}' from collection '{collection_name}'")
             raise RuntimeError("No valid items found to compute eopf:origin_datetime") from rte
 
     logger.info(f"Items matching input found in catalog: {len(items)}")

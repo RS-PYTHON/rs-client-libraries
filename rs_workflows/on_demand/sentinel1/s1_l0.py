@@ -33,7 +33,7 @@ async def process_s1l0(session: str, flow_params: Level0FlowParams, verbose: boo
     input_products = [
         FlowInputProduct(
             name="S1CADUS",
-            cadip_session=session,
+            item_id=session,
             collection_name=flow_params.session_collection,
         ),
     ]
