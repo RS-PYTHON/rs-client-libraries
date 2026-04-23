@@ -41,6 +41,11 @@ RUN pip install -U pip && \
         s3fs \
         boto3 \
         dask-gateway \
+        numpy \
+        pandas \
+        xarray \
+        cfgrib eccodes \
+        "zarr<3" \
     && layer-cleanup.sh
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,
