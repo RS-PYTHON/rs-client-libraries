@@ -15,7 +15,7 @@
 """Helper task to interact with the DPR as a service."""
 
 import time
-from datetime import datetime
+from typing import Any
 
 from prefect import task
 from pystac import ItemCollection
@@ -50,9 +50,7 @@ def generate_payload_path(owner_id: str) -> str:
 async def call_dpr_flow(
     env: FlowEnvArgs,
     input_products: list[FlowInputProduct],
-    start_datetime: datetime,
-    end_datetime: datetime,
-    satellite_identifier: str,
+    external_variables: dict[str, Any],
     dask_cluster_label: str,
     processor_name: str,
     processor_version: str,
@@ -85,9 +83,7 @@ async def call_dpr_flow(
         generated_product_to_collection_identifier=generated_product_to_collection_identifier,
         auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
         processing_mode=processing_mode,
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
-        satellite=satellite_identifier,
+        **external_variables,
     )
 
     print(a_process.model_dump_json(indent=2))

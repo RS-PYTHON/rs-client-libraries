@@ -86,9 +86,11 @@ async def process_l0_last_steps(
         await call_dpr_flow(
             FlowEnvArgs(owner_id=p.owner_identifier),
             input_products=input_products,
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
-            satellite_identifier=satellite_identifier,
+            external_variables={
+                "start_datetime": start_datetime,
+                "end_datetime": end_datetime,
+                "satellite_identifier": satellite_identifier,
+            },
             dask_cluster_label=p.dask_cluster_label,
             processor_name=p.processor_name,
             processor_version=p.processor_version,
