@@ -332,9 +332,11 @@ async def dpr_processing(
             pipeline=dpr_input.pipeline,
             unit=dpr_input.unit,
             processing_mode=processing_mode,
-            start_datetime=dpr_input.start_datetime,
-            end_datetime=dpr_input.end_datetime,
-            satellite=dpr_input.satellite,
+            external_variables={
+                "start_datetime": dpr_input.start_datetime,
+                "end_datetime": dpr_input.end_datetime,
+                "satellite": dpr_input.satellite,
+            },
         )
         unit_list = out["units"]
 
