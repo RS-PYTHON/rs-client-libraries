@@ -137,7 +137,7 @@ async def test_adf_conversion_flow_logic(
     await adf_flow.adf_conversion.fn(sample_adf_process_in)
 
     # Verifications
-    assert staging_mock.call_count == 2  # Once for each MA type
+    assert staging_mock.call_count == 1  # Once for each MA type
     assert extract_mock.called
     assert not download_mock.called  # Download is now inside the extract task
     assert run_script_mock.called

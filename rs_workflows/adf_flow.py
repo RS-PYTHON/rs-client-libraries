@@ -215,7 +215,9 @@ async def adf_conversion(adf_input: AdfProcessIn):
             # 1. Build CQL2 filters for required auxiliary types
             # We need AX___MA1_AX and AX___MA2_AX for S00__ADF_ECMWA
             # required_types = ["AX___MA1_AX", "AX___MA2_AX"]
-            required_types = ["AX___MA2_AX"]
+            # AX___MA2_AX is not used anymore in S00__ADF_ECMWA.py. uncomment the prev line and remove the next one
+            # if a change in the script is made to use it again
+            required_types = ["AX___MA1_AX"]
             staged_items: list[Item] = []
             logger.info(
                 "adf_input.start_datetime = "
