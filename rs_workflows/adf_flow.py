@@ -102,19 +102,26 @@ def run_adf_ecmwa_script(data_dir: Path, working_dir: Path, output_dir: Path) ->
     env = os.environ.copy()
     env["ADF_OUTPUT"] = str(output_dir)
 
+    def log_subprocess_output(output: str):
+        """Forward subprocess output to the Prefect logger line by line."""
+        for line in output.splitlines():
+            logger.info(line)
+
     # The script expects data_dir as first argument
     try:
-        subprocess.run(
+        result = subprocess.run(
             ["python3", str(ADF_ECMWA_SCRIPT_PATH), str(data_dir), "--working_dir", str(working_dir)],
             env=env,
             check=True,
             capture_output=True,
             text=True,
         )
+        log_subprocess_output(result.stdout)
+        log_subprocess_output(result.stderr)
     except subprocess.CalledProcessError as e:
+        log_subprocess_output(e.stdout or "")
+        log_subprocess_output(e.stderr or "")
         logger.error(f"ADF conversion script failed with exit code {e.returncode}")
-        logger.error(f"Stdout: {e.stdout}")
-        logger.error(f"Stderr: {e.stderr}")
         raise
 
     # Find the generated ZARR directory in output_dir
@@ -206,6 +213,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
             # 1. Build CQL2 filters for required auxiliary types
             # We need AX___MA1_AX and AX___MA2_AX for S00__ADF_ECMWA
             required_types = ["AX___MA1_AX", "AX___MA2_AX"]
+            # required_types = ["AX___MA2_AX"]
             staged_items: list[Item] = []
             logger.info(
                 "adf_input.start_datetime = "
