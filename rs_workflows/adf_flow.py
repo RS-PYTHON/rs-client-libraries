@@ -62,7 +62,7 @@ async def download_and_extract_assets_task(items: list[Item], extract_to: Path):
                 logger.warning(f"Skipping non-S3 asset: {asset_name} ({asset.href})")
                 continue
 
-            # Download to a temporary file
+            # download to a temporary file
             with tempfile.NamedTemporaryFile(delete=False, suffix=Path(asset.href).suffix) as tmp_file:
                 tmp_path = Path(tmp_file.name)
 
@@ -70,7 +70,7 @@ async def download_and_extract_assets_task(items: list[Item], extract_to: Path):
                 logger.info(f"Downloading asset {asset_name} from {asset.href}")
                 await s3_download_file(asset.href, tmp_path)
 
-                # Extract or move to destination
+                # extract or move to destination
                 if asset.href.lower().endswith((".zip", ".tar", ".tgz", ".tar.gz")):
                     logger.info(f"Extracting {asset.href} to {extract_to}")
                     if asset.href.lower().endswith(".zip"):
@@ -78,10 +78,10 @@ async def download_and_extract_assets_task(items: list[Item], extract_to: Path):
                     else:
                         extract_tar(tmp_path, extract_to)
 
-                    # Handle nested archives (common in AUXIP)
+                    # handle nested archives (common in AUXIP)
                     recursive_extract(extract_to)
                 else:
-                    # Not an archive, just copy/move to destination
+                    # not an archive, just copy/move to destination
                     dest_path = extract_to / Path(asset.href).name
                     logger.info(f"Copying {asset.href} to {dest_path}")
                     shutil.copy(tmp_path, dest_path)
@@ -107,7 +107,7 @@ def run_adf_ecmwa_script(data_dir: Path, working_dir: Path, output_dir: Path) ->
         for line in output.splitlines():
             logger.info(line)
 
-    # The script expects data_dir as first argument
+    # the script expects data_dir as first argument
     try:
         result = subprocess.run(
             ["python3", str(ADF_ECMWA_SCRIPT_PATH), str(data_dir), "--working_dir", str(working_dir)],
@@ -124,12 +124,14 @@ def run_adf_ecmwa_script(data_dir: Path, working_dir: Path, output_dir: Path) ->
         logger.error(f"ADF conversion script failed with exit code {e.returncode}")
         raise
 
-    # Find the generated ZARR directory in output_dir
+    # find the generated ZARR directory in output_dir
     zarr_products = list(output_dir.glob("*.zarr"))
     if not zarr_products:
-        raise RuntimeError(f"No ZARR product generated in {output_dir}")
+        raise RuntimeError(
+            f"No ZARR product generated in {output_dir}. The content of this dir is: " f"{list(output_dir.glob('*'))}",
+        )
 
-    # Should be only one
+    # should be only one
     return zarr_products[0]
 
 
@@ -141,10 +143,10 @@ def create_stac_item_from_zarr(zarr_path: Path) -> Item:
     logger = get_run_logger()
     logger.info(f"Creating STAC item from ZARR: {zarr_path}")
 
-    # Read .zattrs for global attributes
+    # read .zattrs for global attributes
     zattrs_path = zarr_path / ".zattrs"
     if not zattrs_path.exists():
-        # Try zarr.json if .zattrs doesn't exist (though xarray usually creates .zattrs)
+        # try zarr.json if .zattrs doesn't exist (though xarray usually creates .zattrs)
         zattrs_path = zarr_path / "zarr.json"
 
     if not zattrs_path.exists():
@@ -153,28 +155,28 @@ def create_stac_item_from_zarr(zarr_path: Path) -> Item:
     with open(zattrs_path, encoding="utf-8") as f:
         metadata = json.load(f)
 
-    # Extract STAC properties from metadata.
-    # The script S00__ADF_ECMWA.py puts them in 'properties' attribute.
+    # extract STAC properties from metadata.
+    # the script S00__ADF_ECMWA.py puts them in 'properties' attribute.
     stac_props = metadata.get("properties", {})
 
-    # Workarounds for invalid STAC metadata produced by the script
-    # See: https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file/-/issues/XXX
-    # Requirement: "Create a STAC item ... with S00__ADF_ECMWA as product:type"
-    # But the script sets it to "ADF_ECMWA"
+    # workarounds for invalid STAC metadata produced by the script
+    # see: https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file/-/issues/XXX
+    # requirement: "Create a STAC item ... with S00__ADF_ECMWA as product:type"
+    # but the script sets it to "ADF_ECMWA"
     if stac_props.get("product:type") == "ADF_ECMWA":
         logger.info("Applying workaround: updating product:type to S00__ADF_ECMWA")
         stac_props["product:type"] = "S00__ADF_ECMWA"
 
     item_id = metadata.get("id", zarr_path.stem)
 
-    # Extract start/end datetime for pystac.Item validation
+    # extract start/end datetime for pystac.Item validation
     start_dt_str = stac_props.get("start_datetime")
     end_dt_str = stac_props.get("end_datetime")
 
     start_dt = parse_date(start_dt_str) if start_dt_str else None
     end_dt = parse_date(end_dt_str) if end_dt_str else None
 
-    # Build basic STAC item
+    # build basic STAC item
     item = Item(
         id=item_id,
         geometry=None,
@@ -185,7 +187,7 @@ def create_stac_item_from_zarr(zarr_path: Path) -> Item:
         properties=stac_props,
     )
 
-    # Add ZARR folder as an asset
+    # add ZARR folder as an asset
     item.add_asset(
         key="data",
         asset=Asset(
@@ -212,8 +214,8 @@ async def adf_conversion(adf_input: AdfProcessIn):
         if adf_input.adf_type == AdfType.S00__ADF_ECMWA:
             # 1. Build CQL2 filters for required auxiliary types
             # We need AX___MA1_AX and AX___MA2_AX for S00__ADF_ECMWA
-            required_types = ["AX___MA1_AX", "AX___MA2_AX"]
-            # required_types = ["AX___MA2_AX"]
+            # required_types = ["AX___MA1_AX", "AX___MA2_AX"]
+            required_types = ["AX___MA2_AX"]
             staged_items: list[Item] = []
             logger.info(
                 "adf_input.start_datetime = "
@@ -240,7 +242,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     },
                 }
                 logger.info(f"Built CQL2 filter for product type {prod_type}: {cql2_filter}")
-                # Find target collection from mapping
+                # find target collection from mapping
                 target_collection = "AUX"
                 for mapping in adf_input.auxiliary_product_to_collection_identifier:
                     if mapping.product_type in (prod_type, "*"):
@@ -273,23 +275,23 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 # 2. Download and unzip assets locally
                 await download_and_extract_assets_task(staged_items, input_dir)
 
-                # 5. Call the S00__ADF_ECMWA.py script
+                # 3. Call the S00__ADF_ECMWA.py script
                 zarr_product_path = run_adf_ecmwa_script(input_dir, work_dir, output_dir)
 
-                # 6. Create STAC item for the generated ZARR
+                # 4. Create STAC item for the generated ZARR
                 stac_item = create_stac_item_from_zarr(zarr_product_path)
 
-                # 7. Copy ZARR to catalog bucket
-                # Compute location using find_s3_output_bucket
+                # 5. Copy ZARR to catalog bucket
+                # compute location using find_s3_output_bucket
                 bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
 
-                # Find destination collection and product type for the generated ADF
-                # The script says product:type is ADF_ECMWA but we workaround it to S00__ADF_ECMWA
+                # find destination collection and product type for the generated ADF
+                # the script says product:type is ADF_ECMWA but we workaround it to S00__ADF_ECMWA
                 generated_prod_type = "S00__ADF_ECMWA"
                 owner_id = flow_env.owner_id
 
-                # Resolve target collection for publishing
-                # The user mapping should contain the entry for this new product type
+                # resolve target collection for publishing
+                # the user mapping should contain the entry for this new product type
                 publish_collection = "ADF"  # Fallback
                 for mapping in adf_input.auxiliary_product_to_collection_identifier:
                     if mapping.product_type in (generated_prod_type, "*"):
@@ -306,10 +308,10 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{publish_collection}/{stac_item.id}/"
                 logger.info(f"Uploading ZARR to {s3_dest_prefix}")
 
-                # Upload folder
+                # upload folder
                 await s3_upload_dir(zarr_product_path, s3_dest_prefix)
 
-                # Update STAC item href to point to S3
+                # update STAC item href to point to S3
                 stac_item.assets["data"].href = s3_dest_prefix
 
                 # 8. Publish to catalog
@@ -323,7 +325,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 ]
 
                 # generated_product_to_collection_identifier: list[FlowGeneratedProduct]
-                # We reuse the mapping from AdfProcessIn
+                # we reuse the mapping from AdfProcessIn
                 publish_mapping = [
                     FlowGeneratedProduct(
                         name=stac_item.id,
