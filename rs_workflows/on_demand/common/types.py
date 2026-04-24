@@ -15,7 +15,7 @@
 """common types and class"""
 
 from collections.abc import Awaitable
-from typing import Any, cast
+from typing import Any, Self, cast
 
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
@@ -32,9 +32,9 @@ from rs_workflows.flow_utils import (
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 
 
-class Level0FlowParams(BaseModel):
+class ProcessingFlowParams(BaseModel):
     """
-    Parameters to override default Prefect variable 'sx-l0-default-setting'..
+    Parameters to override default Prefect variable 'sx-lx-default-setting'..
 
     There is no need to set all of them.
     Only the ones you want to override from default settings.
@@ -62,24 +62,17 @@ class Level0FlowParams(BaseModel):
         json_schema_extra={"order": 3},
     )
 
-    session_collection: str = Field(
-        default="",
-        title="Session Collection",
-        description="CADIP collection name containing the Sentinel session.",
-        json_schema_extra={"order": 4},
-    )
-
     processor_name: str = Field(
         default="",
         title="Processor Name",
-        description="Name of the processor used for Level-0 processing.",
+        description="Name of the processor used for processing.",
         json_schema_extra={"order": 5},
     )
 
     processor_version: str = Field(
         default="",
         title="Processor Version",
-        description="Version of the processor used for Level-0 processing.",
+        description="Version of the processor used for processing.",
         json_schema_extra={"order": 6},
     )
 
@@ -125,14 +118,13 @@ class Level0FlowParams(BaseModel):
         json_schema_extra={"order": 11},
     )
 
-    cadip_collections: list[str] = Field(
-        default_factory=list,
-        title="CADIP Collections",
-        description="List of CADIP collections to query for session retrieval.",
-        json_schema_extra={"order": 12},
-    )
+    def _resolve_specific(self, settings: dict[str, Any]) -> dict[str, Any]:  # pylint: disable=W0613
+        """
+        Hook for subclasses to inject specific fields.
+        """
+        return {}
 
-    async def resolve(self, mission: str, level: str = "0") -> "Level0FlowParams":
+    async def _resolve(self, mission: str, level: str) -> Self:
         """
         Merge data from Prefect variable and parameters called.
         """
@@ -144,24 +136,62 @@ class Level0FlowParams(BaseModel):
             raw = {}
         settings: dict[str, Any] = raw
 
-        return Level0FlowParams(
-            owner_identifier=self.owner_identifier or settings.get("owner_identifier", ""),
-            dask_cluster_label=self.dask_cluster_label or settings.get("dask_cluster_name", ""),
-            session_collection=self.session_collection or settings.get("session_collection", ""),
-            processor_name=self.processor_name or settings.get("processor", {}).get("name", ""),
-            processor_version=self.processor_version or settings.get("processor", {}).get("version", ""),
-            pipeline=self.pipeline or settings.get("pipeline", None),
-            unit=self.unit or settings.get("unit", ""),
-            priority=self.priority or settings.get("priority"),
-            processing_mode=self.processing_mode or settings.get("processing_mode", []),
-            workflow=self.workflow or settings.get("workflow"),
-            generated_product_to_collection_identifier=(
+        base_kwargs: dict[str, Any] = {
+            "owner_identifier": self.owner_identifier or settings.get("owner_identifier", ""),
+            "dask_cluster_label": self.dask_cluster_label or settings.get("dask_cluster_name", ""),
+            "processor_name": self.processor_name or settings.get("processor", {}).get("name", ""),
+            "processor_version": self.processor_version or settings.get("processor", {}).get("version", ""),
+            "pipeline": self.pipeline or settings.get("pipeline", None),
+            "unit": self.unit or settings.get("unit", ""),
+            "priority": self.priority or settings.get("priority"),
+            "processing_mode": self.processing_mode or settings.get("processing_mode", []),
+            "workflow": self.workflow or settings.get("workflow"),
+            "generated_product_to_collection_identifier": (
                 self.generated_product_to_collection_identifier
                 or settings.get("generated_product_to_collection_identifier", [])
             ),
-            auxiliary_product_to_collection_identifier=(
+            "auxiliary_product_to_collection_identifier": (
                 self.auxiliary_product_to_collection_identifier
                 or settings.get("auxiliary_product_to_collection_identifier", [])
             ),
-            cadip_collections=settings.get("cadip_collections", []),
-        )
+        }
+
+        specific_kwargs = self._resolve_specific(settings)
+
+        return self.__class__(**base_kwargs, **specific_kwargs)
+
+
+class Level0FlowParams(ProcessingFlowParams):
+    """
+    Parameters to override default Prefect variable 'sx-l0-default-setting'..
+
+    There is no need to set all of them.
+    Only the ones you want to override from default settings.
+    optional type not used.
+    """
+
+    session_collection: str = Field(
+        default="",
+        title="Session Collection",
+        description="CADIP collection name containing the Sentinel session.",
+        json_schema_extra={"order": 4},
+    )
+
+    cadip_collections: list[str] = Field(
+        default_factory=list,
+        title="CADIP Collections",
+        description="List of CADIP collections to query for session retrieval.",
+        json_schema_extra={"order": 12},
+    )
+
+    def _resolve_specific(self, settings: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "session_collection": self.session_collection or settings.get("session_collection", ""),
+            "cadip_collections": self.cadip_collections or settings.get("cadip_collections", []),
+        }
+
+    async def resolve(self, mission: str) -> Self:
+        """
+        Merge data from Prefect variable and parameters called.
+        """
+        return await super()._resolve(mission, "0")
