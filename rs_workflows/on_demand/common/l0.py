@@ -63,7 +63,7 @@ async def process_l0(
     # Override of some parameters with default configuration
     if flow_params is None:
         flow_params = Level0FlowParams()
-    p: Level0FlowParams = await flow_params.resolve(mission, level="0")
+    p: Level0FlowParams = await flow_params.resolve(mission)
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
     with flow_env.start_span(__name__, "level0-processing"):

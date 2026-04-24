@@ -400,7 +400,7 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
                     " to compute eopf:origin_datetime. Exit",
                 )
                 raise RuntimeError(
-                    f"Expected valid input product item {item_id} was not found" " to compute eopf:origin_datetime",
+                    f"Expected valid input product item {item_id} was not found to compute eopf:origin_datetime",
                 )
             items.append(future.result())
         except RuntimeError as rte:

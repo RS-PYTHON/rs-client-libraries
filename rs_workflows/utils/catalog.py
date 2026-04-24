@@ -19,7 +19,6 @@ from datetime import datetime, timezone
 from prefect import get_run_logger, task
 from pystac import Item, ItemCollection
 
-from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import FlowEnv
 
 
@@ -31,21 +30,14 @@ async def get_single_catalog_item(flow_env: FlowEnv, item_id: str, collections: 
     logger = get_run_logger()
     result: Item | None = None
 
-    # Try to retrieve the session on the collection
-    catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-    logger.info(f"Search item {item_id} on the collections {', '.join(collections)} from the  rs-catalog.")
-    item_collection: ItemCollection | None = catalog_client.search(
-        method="POST",
-        collections=collections,
-        ids=[item_id],
-        limit=1,
-    )
+    # Try to retrieve the item on the collection
+    item_collection: ItemCollection | None = await get_catalog_items(flow_env, [item_id], collections)
 
     count = 0
     if item_collection is not None:
         count = len(item_collection.items)
     if count == 1:
-        # One  item  was found on the rs-catalog
+        # One item was found on the rs-catalog
         logger.info(
             f"✔️ The STAC item 🧊 '{item_id}' has been found on the rs-catalog collections {', '.join(collections)}.",
         )
@@ -57,6 +49,24 @@ async def get_single_catalog_item(flow_env: FlowEnv, item_id: str, collections: 
         )
 
     return result
+
+
+@task(name="Retrieve rs-catalog items from collections")
+async def get_catalog_items(flow_env: FlowEnv, item_ids: list[str], collections: list[str]) -> ItemCollection | None:
+    """
+    Get items from a set of rs-catalog collections
+    """
+    get_run_logger().info(
+        f"Search items {', '.join(item_ids)} in the collections {', '.join(collections)} from the rs-catalog.",
+    )
+    size = len(item_ids)
+    return flow_env.rs_client.get_catalog_client().search(
+        method="POST",
+        collections=collections,
+        ids=item_ids,
+        max_items=size,
+        limit=size,
+    )
 
 
 def is_evicted(item: Item) -> tuple[bool, datetime | None]:
