@@ -156,9 +156,7 @@ async def test_adf_conversion_flow_logic(
     assert published_metadata[0].stac_item.assets["data"].href.startswith("s3://test-bucket/")
     assert publish_mapping[0].collection_name == "ADF_EXACT"
     rmtree_calls = [
-        (call.args[0].name, call.kwargs)
-        for call in rmtree_mock.call_args_list
-        if hasattr(call.args[0], "name")
+        (call.args[0].name, call.kwargs) for call in rmtree_mock.call_args_list if hasattr(call.args[0], "name")
     ]
     assert ("INPUT", {"ignore_errors": True}) in rmtree_calls
     assert ("OUTPUT", {"ignore_errors": True}) in rmtree_calls
