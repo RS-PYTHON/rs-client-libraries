@@ -75,7 +75,7 @@ async def call_dpr_flow(
         processor_version=processor_version,
         dask_cluster_label=dask_cluster_label,
         s3_payload_file=f"{s3_payload}/payload_{processor_name}.yaml",
-        pipeline=DprPipeline(pipeline),
+        pipeline=DprPipeline(pipeline) if pipeline else None,
         unit=unit,
         priority=Priority(priority),
         workflow_type=WorkflowType(workflow),
