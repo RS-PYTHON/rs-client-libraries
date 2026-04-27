@@ -73,6 +73,7 @@ class SentinelSatellite(str, Enum):
     S1A = "sentinel-1a"
     S1B = "sentinel-1b"
     S1C = "sentinel-1c"
+    S1D = "sentinel-1d"
     S2A = "sentinel-2a"
     S2B = "sentinel-2b"
     S2C = "sentinel-2c"
