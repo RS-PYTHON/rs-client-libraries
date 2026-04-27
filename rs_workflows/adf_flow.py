@@ -19,6 +19,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from datetime import timezone
 from pathlib import Path
 
 from dateutil.parser import parse as parse_date
@@ -43,6 +44,35 @@ from rs_workflows.payload_generator import (
 
 # Path to the S00__ADF_ECMWA script
 ADF_ECMWA_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWA.py"
+
+STAC_DATETIME_PROPERTY_NAMES = {
+    "created",
+    "updated",
+    "published",
+    "datetime",
+    "start_datetime",
+    "end_datetime",
+}
+
+
+def normalize_stac_datetime_value(value: str) -> str:
+    """Normalize a datetime string to an RFC 3339 UTC representation."""
+    parsed_value = parse_date(value)
+    if parsed_value.tzinfo is None:
+        parsed_value = parsed_value.replace(tzinfo=timezone.utc)
+    else:
+        parsed_value = parsed_value.astimezone(timezone.utc)
+    return parsed_value.isoformat().replace("+00:00", "Z")
+
+
+def normalize_stac_properties_datetimes(stac_props: dict) -> dict:
+    """Normalize STAC datetime-like property values to include an explicit timezone."""
+    normalized_props = dict(stac_props)
+    for key in STAC_DATETIME_PROPERTY_NAMES:
+        value = normalized_props.get(key)
+        if isinstance(value, str):
+            normalized_props[key] = normalize_stac_datetime_value(value)
+    return normalized_props
 
 
 @task(name="download_and_extract_assets")
@@ -105,7 +135,7 @@ def run_adf_ecmwa_script(data_dir: Path, working_dir: Path, output_dir: Path) ->
     def log_subprocess_output(output: str):
         """Forward subprocess output to the Prefect logger line by line."""
         for line in output.splitlines():
-            logger.info(line)
+            logger.info(f"Conversion script log: {line}")
 
     # the script expects data_dir as first argument
     try:
@@ -157,17 +187,16 @@ def create_stac_item_from_zarr(zarr_path: Path) -> Item:
 
     # extract STAC properties from metadata.
     # the script S00__ADF_ECMWA.py puts them in 'properties' attribute.
-    stac_props = metadata.get("properties", {})
+    logger.info(f"ZARR metadata: {metadata.get("properties", {})}")
+    stac_props = normalize_stac_properties_datetimes(metadata.get("properties", {}))
+    logger.info(f"Extracted STAC properties from ZARR metadata: {stac_props}")
 
-    # workarounds for invalid STAC metadata produced by the script
-    # see: https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file/-/issues/XXX
     # requirement: "Create a STAC item ... with S00__ADF_ECMWA as product:type"
     # but the script sets it to "ADF_ECMWA"
-    if stac_props.get("product:type") == "ADF_ECMWA":
-        logger.info("Applying workaround: updating product:type to S00__ADF_ECMWA")
-        stac_props["product:type"] = "S00__ADF_ECMWA"
+    stac_props["product:type"] = "S00__ADF_ECMWA"
 
     item_id = metadata.get("id", zarr_path.stem)
+    logger.info(f"Setting item_id to {item_id}")
 
     # extract start/end datetime for pystac.Item validation
     start_dt_str = stac_props.get("start_datetime")
@@ -192,8 +221,9 @@ def create_stac_item_from_zarr(zarr_path: Path) -> Item:
         key="data",
         asset=Asset(
             href=str(zarr_path),
-            media_type="application/x-zarr",
-            roles=["data"],
+            title=item_id,
+            media_type="application/vnd+zarr",
+            roles=["data", "metadata"],
         ),
     )
 
@@ -218,12 +248,8 @@ async def adf_conversion(adf_input: AdfProcessIn):
             # AX___MA2_AX is not used anymore in S00__ADF_ECMWA.py. uncomment the prev line and remove the next one
             # if a change in the script is made to use it again
             required_types = ["AX___MA1_AX"]
+
             staged_items: list[Item] = []
-            logger.info(
-                "adf_input.start_datetime = "
-                f"{adf_input.start_datetime.isoformat() if adf_input.start_datetime else None} |"
-                f"adf_input.end_datetime = {adf_input.end_datetime.isoformat() if adf_input.end_datetime else None}",
-            )
             for prod_type in required_types:
                 cql2_filter = {
                     "filter": {
@@ -278,7 +304,10 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 await download_and_extract_assets_task(staged_items, input_dir)
 
                 # 3. Call the S00__ADF_ECMWA.py script
-                zarr_product_path = run_adf_ecmwa_script(input_dir, work_dir, output_dir)
+                try:
+                    zarr_product_path = run_adf_ecmwa_script(input_dir, work_dir, output_dir)
+                finally:
+                    shutil.rmtree(input_dir, ignore_errors=True)
 
                 # 4. Create STAC item for the generated ZARR
                 stac_item = create_stac_item_from_zarr(zarr_product_path)
@@ -294,11 +323,23 @@ async def adf_conversion(adf_input: AdfProcessIn):
 
                 # resolve target collection for publishing
                 # the user mapping should contain the entry for this new product type
-                publish_collection = "ADF"  # Fallback
+                publish_collection = None
+                wildcard_collection = None
                 for mapping in adf_input.auxiliary_product_to_collection_identifier:
-                    if mapping.product_type in (generated_prod_type, "*"):
+                    if mapping.product_type == generated_prod_type:
                         publish_collection = mapping.collection_name or generated_prod_type
                         break
+                    if mapping.product_type == "*" and wildcard_collection is None:
+                        wildcard_collection = mapping.collection_name or generated_prod_type
+                else:
+                    if wildcard_collection is not None:
+                        publish_collection = wildcard_collection
+
+                if publish_collection is None:
+                    raise RuntimeError(
+                        "No publish collection found for generated product type "
+                        f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
+                    )
 
                 bucket_name = find_s3_output_bucket(
                     bucket_configuration,
@@ -336,11 +377,14 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     ),
                 ]
 
-                await publish(
-                    adf_input.env,
-                    publish_mapping,
-                    items_metadata,
-                )
+                try:
+                    await publish(
+                        adf_input.env,
+                        publish_mapping,
+                        items_metadata,
+                    )
+                finally:
+                    shutil.rmtree(output_dir, ignore_errors=True)
 
         else:
             logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
