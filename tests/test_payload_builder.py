@@ -547,7 +547,7 @@ def test_case_s1_l0_exact_output_with_regex():
                                 "query": {
                                     "name": "LatestValCover",
                                     "parameters": {
-                                        "product_type": "MPL_ORBPRE",
+                                        "product_type": "MPL_ORBRES",
                                         "start_datetime": "2023-10-03T11:00:00.000Z",
                                         "end_datetime": "2025-10-03T11:00:00.000Z",
                                         "dTa": 7200,
