@@ -136,13 +136,29 @@ class ProcessingFlowParams(BaseModel):
             raw = {}
         settings: dict[str, Any] = raw
 
+        user_pipeline = self.pipeline
+        user_unit = self.unit
+
+        if user_pipeline and user_unit:
+            raise ValueError("pipeline and unit are mutually exclusive")
+
+        if user_pipeline:
+            pipeline = user_pipeline
+            unit = None
+        elif user_unit:
+            pipeline = None
+            unit = user_unit
+        else:
+            pipeline = settings.get("pipeline")
+            unit = settings.get("unit")
+
         base_kwargs: dict[str, Any] = {
             "owner_identifier": self.owner_identifier or settings.get("owner_identifier", ""),
             "dask_cluster_label": self.dask_cluster_label or settings.get("dask_cluster_name", ""),
             "processor_name": self.processor_name or settings.get("processor", {}).get("name", ""),
             "processor_version": self.processor_version or settings.get("processor", {}).get("version", ""),
-            "pipeline": self.pipeline or settings.get("pipeline", None),
-            "unit": self.unit or settings.get("unit", ""),
+            "pipeline": pipeline,
+            "unit": unit,
             "priority": self.priority or settings.get("priority"),
             "processing_mode": self.processing_mode or settings.get("processing_mode", []),
             "workflow": self.workflow or settings.get("workflow"),
