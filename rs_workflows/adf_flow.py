@@ -14,6 +14,7 @@
 
 """Adf conversion flow implementation."""
 
+import asyncio
 import json
 import os
 import shutil
@@ -56,6 +57,17 @@ STAC_DATETIME_PROPERTY_NAMES = {
 }
 
 
+def resolve_collection_name(mappings, product_type: str) -> str | None:
+    """Resolve a collection name from mappings, preferring an exact match over '*'."""
+    fallback_collection = None
+    for mapping in mappings:
+        if mapping.product_type == product_type:
+            return mapping.collection_name
+        if mapping.product_type == "*" and fallback_collection is None:
+            fallback_collection = mapping.collection_name
+    return fallback_collection
+
+
 def normalize_stac_datetime_value(value: str) -> str:
     """Normalize a datetime string to an RFC 3339 UTC representation."""
     parsed_value = parse_date(value)
@@ -93,9 +105,13 @@ async def download_and_extract_assets_task(items: list[Item], extract_to: Path):
                 logger.warning(f"Skipping non-S3 asset: {asset_name} ({asset.href})")
                 continue
 
-            # download to a temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=Path(asset.href).suffix) as tmp_file:
-                tmp_path = Path(tmp_file.name)
+            # create the temporary file off the event loop
+            tmp_fd, tmp_name = await asyncio.to_thread(
+                tempfile.mkstemp,
+                suffix=Path(asset.href).suffix,
+            )
+            os.close(tmp_fd)
+            tmp_path = Path(tmp_name)
 
             try:
                 logger.info(f"Downloading asset {asset_name} from {asset.href}")
@@ -273,12 +289,16 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     },
                 }
                 logger.info(f"Built CQL2 filter for product type {prod_type}: {cql2_filter}")
-                # find target collection from mapping
-                target_collection = "AUX"
-                for mapping in adf_input.auxiliary_product_to_collection_identifier:
-                    if mapping.product_type in (prod_type, "*"):
-                        target_collection = mapping.collection_name or prod_type
-                        break
+                # find target collection from mapping, preferring an exact product type match
+                target_collection = resolve_collection_name(
+                    adf_input.auxiliary_product_to_collection_identifier,
+                    prod_type,
+                )
+                if target_collection is None:
+                    raise RuntimeError(
+                        "No target collection found for input product type "
+                        f"{prod_type!r} in auxiliary_product_to_collection_identifier.",
+                    )
 
                 logger.info(f"Staging {prod_type} to collection {target_collection}")
                 success, items = await auxip_staging_task(
@@ -324,34 +344,24 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 generated_prod_type = "S00__ADF_ECMWA"
                 owner_id = flow_env.owner_id
 
-                # resolve target collection for publishing
-                # the user mapping should contain the entry for this new product type
-                publish_collection = None
-                wildcard_collection = None
-                for mapping in adf_input.auxiliary_product_to_collection_identifier:
-                    if mapping.product_type == generated_prod_type:
-                        publish_collection = mapping.collection_name or generated_prod_type
-                        break
-                    if mapping.product_type == "*" and wildcard_collection is None:
-                        wildcard_collection = mapping.collection_name or generated_prod_type
-                else:
-                    if wildcard_collection is not None:
-                        publish_collection = wildcard_collection
-
-                if publish_collection is None:
+                target_collection = resolve_collection_name(
+                    adf_input.auxiliary_product_to_collection_identifier,
+                    generated_prod_type,
+                )
+                if target_collection is None:
                     raise RuntimeError(
-                        "No publish collection found for generated product type "
+                        "No target collection found for generated product type "
                         f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
                     )
 
                 bucket_name = find_s3_output_bucket(
                     bucket_configuration,
                     owner_id,
-                    publish_collection,
+                    target_collection,
                     generated_prod_type,
                 )
 
-                s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{publish_collection}/{stac_item.id}/"
+                s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}/"
                 logger.info(f"Uploading ZARR to {s3_dest_prefix}")
 
                 # upload folder
@@ -376,7 +386,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     FlowGeneratedProduct(
                         name=stac_item.id,
                         product_type=generated_prod_type,
-                        collection_name=publish_collection,
+                        collection_name=target_collection,
                     ),
                 ]
 

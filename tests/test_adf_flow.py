@@ -41,8 +41,9 @@ def sample_adf_process_in():
         env=FlowEnvArgs(owner_id="test-user"),
         adf_type=AdfType.S00__ADF_ECMWA,
         auxiliary_product_to_collection_identifier=[
+            AuxiliaryProductMapping(product_type="AX___MA1_AX", collection_name="AUX_EXACT"),
+            AuxiliaryProductMapping(product_type="S00__ADF_ECMWA", collection_name="ADF_PUBLISH"),
             AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
-            AuxiliaryProductMapping(product_type="S00__ADF_ECMWA", collection_name="ADF_EXACT"),
         ],
         start_datetime=datetime(2021, 3, 21, 3, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2021, 3, 21, 15, 0, 0, tzinfo=timezone.utc),
@@ -291,7 +292,7 @@ async def test_adf_conversion_flow_logic(
     publish_mapping = publish_mock.call_args[0][1]
     assert published_metadata[0].stac_item.properties["product:type"] == "S00__ADF_ECMWA"
     assert published_metadata[0].stac_item.assets["data"].href.startswith("s3://test-bucket/")
-    assert publish_mapping[0].collection_name == "ADF_EXACT"
+    assert publish_mapping[0].collection_name == "ADF_PUBLISH"
     rmtree_calls = [
         (call.args[0].name, call.kwargs) for call in rmtree_mock.call_args_list if hasattr(call.args[0], "name")
     ]
@@ -359,7 +360,7 @@ async def test_adf_conversion_raises_when_publish_collection_not_found(
     flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id="test-user")
     monkeypatch.setattr(adf_flow, "FlowEnv", lambda env: flow_env_mock)
 
-    with pytest.raises(RuntimeError, match="No publish collection found"):
+    with pytest.raises(RuntimeError, match="No target collection found for generated product type"):
         await adf_flow.adf_conversion.fn(sample_adf_process_in)
 
     assert not find_bucket_mock.called
