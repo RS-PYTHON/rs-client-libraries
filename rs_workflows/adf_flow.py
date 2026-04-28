@@ -141,6 +141,8 @@ def run_adf_ecmwa_script(data_dir: Path, working_dir: Path, output_dir: Path) ->
     # the script expects data_dir as first argument
     try:
         result = subprocess.run(  # nosec B603
+            # trusted local script executed with the current interpreter and flow-created paths
+            # if B603 is not used, the bandit complains about using a list with shell=True, which is not the case here
             [sys.executable, str(ADF_ECMWA_SCRIPT_PATH), str(data_dir), "--working_dir", str(working_dir)],
             env=env,
             check=True,
