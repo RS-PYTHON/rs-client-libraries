@@ -17,7 +17,7 @@
 import json
 import os
 import shutil
-import subprocess
+import subprocess # nosec B404
 import sys
 import tempfile
 from datetime import timezone
@@ -140,7 +140,7 @@ def run_adf_ecmwa_script(data_dir: Path, working_dir: Path, output_dir: Path) ->
 
     # the script expects data_dir as first argument
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603
             [sys.executable, str(ADF_ECMWA_SCRIPT_PATH), str(data_dir), "--working_dir", str(working_dir)],
             env=env,
             check=True,
