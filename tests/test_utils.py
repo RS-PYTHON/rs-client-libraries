@@ -222,14 +222,14 @@ def test_flow_input_product_items():
     """Test that the items method of FlowInputProduct returns the correct items."""
     product = FlowInputProduct(
         name="input1",
-        cadip_session="session123",
+        item_id="session123",
         collection_name="collectionA",
     )
 
     items = dict(product.items())
 
     assert items["name"] == "input1"
-    assert items["cadip_session"] == "session123"
+    assert items["item_id"] == "session123"
     assert items["collection_name"] == "collectionA"
 
 

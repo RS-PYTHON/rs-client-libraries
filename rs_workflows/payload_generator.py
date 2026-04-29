@@ -341,7 +341,7 @@ def build_input_products(
         if not mapping:
             raise RuntimeError(f"Couldn't find any input for task table entry '{product_name}'")
 
-        stac_item_identifier = input_product.cadip_session
+        stac_item_identifier = input_product.item_id
         collection = input_product.collection_name
 
         stac_item_path = resolve_stac_input_path(

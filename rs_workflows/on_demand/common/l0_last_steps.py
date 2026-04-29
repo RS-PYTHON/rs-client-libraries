@@ -46,7 +46,7 @@ async def process_l0_last_steps(
 
     # Resolve parameters
     flow_params = flow_params or Level0FlowParams()
-    p = await flow_params.resolve(mission=mission, level="0")
+    p = await flow_params.resolve(mission=mission)
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
 
@@ -68,27 +68,15 @@ async def process_l0_last_steps(
         end_datetime = datetime.fromisoformat(published)
         start_datetime = end_datetime
 
-        # Generated products
-        generated_product = (
-            p.generated_product_to_collection_identifier
-            if p.generated_product_to_collection_identifier is not None
-            else []
-        )
-
-        # Auxiliary products
-        aux_product = (
-            p.auxiliary_product_to_collection_identifier
-            if p.auxiliary_product_to_collection_identifier is not None
-            else []
-        )
-
         # Call DPR flow
         await call_dpr_flow(
             FlowEnvArgs(owner_id=p.owner_identifier),
             input_products=input_products,
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
-            satellite_identifier=satellite_identifier,
+            external_variables={
+                "start_datetime": start_datetime,
+                "end_datetime": end_datetime,
+                "satellite_identifier": satellite_identifier,
+            },
             dask_cluster_label=p.dask_cluster_label,
             processor_name=p.processor_name,
             processor_version=p.processor_version,
@@ -97,6 +85,6 @@ async def process_l0_last_steps(
             priority=p.priority,
             processing_mode=p.processing_mode,
             workflow=p.workflow,
-            generated_product_to_collection_identifier=generated_product,
-            auxiliary_product_to_collection_identifier=aux_product,
+            generated_product_to_collection_identifier=p.generated_product_to_collection_identifier or [],
+            auxiliary_product_to_collection_identifier=p.auxiliary_product_to_collection_identifier or [],
         )

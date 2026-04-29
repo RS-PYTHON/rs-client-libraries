@@ -36,7 +36,7 @@ async def staging(
         env: Prefect flow environment (at least the owner_id is required)
         stac_input (dict | str): it can be:<br>
             - A Python dictionary corresponding to a Feature or a FeatureCollection (that can be for example
-                the output of a search for Cadip or Auxip sessions)<br>
+                the output of a search for Cadip sessions, Auxip files or Prip products)<br>
             - A json string corresponding to a Feature or a FeatureCollection<br>
             - A string corresponding to a path to a json file containing a Feature or a FeatureCollection<br>
             - A single link that returns a STAC ItemCollection: this link should be an url to search an ItemCollection

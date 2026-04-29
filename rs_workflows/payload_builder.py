@@ -17,34 +17,28 @@
 import re
 from collections.abc import Iterable
 from copy import deepcopy
-from datetime import datetime
 from typing import Any
 
 from rs_common.utils import strftime_millis
+
+EXTERNAL_VAR_PATTERN = re.compile(r"^\{external_variable\.([a-zA-Z_][a-zA-Z0-9_]*)\}$")
 
 
 class TaskTableError(ValueError):
     """Errors related to Task Table parsing/validation."""
 
 
-def _replace_external_variables(
-    obj,
-    start_datetime,
-    end_datetime,
-    satellite,
-):  # pylint: disable=too-many-return-statements
+def _replace_external_variables(obj, external_variables: dict[str, Any] | None):
     if isinstance(obj, dict):
-        return {k: _replace_external_variables(v, start_datetime, end_datetime, satellite) for k, v in obj.items()}
+        return {k: _replace_external_variables(v, external_variables) for k, v in obj.items()}
     if isinstance(obj, list):
-        return [_replace_external_variables(v, start_datetime, end_datetime, satellite) for v in obj]
-    if isinstance(obj, str):
-        if obj == "{external_variable.start_datetime}":
-            return strftime_millis(start_datetime)
-        if obj == "{external_variable.end_datetime}":
-            return strftime_millis(end_datetime)
-        if obj == "{external_variable.satellite}":
-            return satellite
-        return obj
+        return [_replace_external_variables(v, external_variables) for v in obj]
+    if isinstance(obj, str) and external_variables:
+        match = EXTERNAL_VAR_PATTERN.match(obj)
+        if match:
+            variable_name = match.group(1)
+            value = external_variables[variable_name]
+            return strftime_millis(value) if "datetime" in variable_name else value
     return obj
 
 
@@ -79,9 +73,7 @@ def _build_entries(
     unit_name: str,
     origin_kind: str,
     origin_map_by_unit: dict[str, dict[str, dict[str, Any]]],
-    start_datetime: datetime | None,
-    end_datetime: datetime | None,
-    satellite: str | None,
+    external_variables: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
     """
     Build STEP 1 entries for input_products / input_adfs / output_products.
@@ -136,7 +128,7 @@ def _build_entries(
             merged_cfg[k] = v
 
         if merged_cfg:
-            merged_cfg = _replace_external_variables(merged_cfg, start_datetime, end_datetime, satellite)
+            merged_cfg = _replace_external_variables(merged_cfg, external_variables)
             out.update(merged_cfg)
 
         # Pass through extra input/output fields without overriding IO-derived values.
@@ -149,7 +141,7 @@ def _build_entries(
                     continue
                 extra_cfg[k] = v
             if extra_cfg:
-                extra_cfg = _replace_external_variables(extra_cfg, start_datetime, end_datetime, satellite)
+                extra_cfg = _replace_external_variables(extra_cfg, external_variables)
                 out.update(extra_cfg)
 
         kept.append(out)
@@ -162,10 +154,7 @@ def build_unit_list(
     pipeline: str | None = None,
     unit: str | None = None,
     processing_mode: Iterable[str] | None = None,
-    *,
-    start_datetime: datetime | None = None,
-    end_datetime: datetime | None = None,
-    satellite: str | None = None,
+    external_variables: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     STEP 1: Build the list of processing units from the Task Table.
@@ -264,9 +253,7 @@ def build_unit_list(
             unit_name=uname,
             origin_kind="in",
             origin_map_by_unit=origin_map_by_unit,
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
-            satellite=satellite,
+            external_variables=external_variables,
         )
         input_adfs = _build_entries(
             udef.get("input_adfs", []),
@@ -276,9 +263,7 @@ def build_unit_list(
             unit_name=uname,
             origin_kind="in",
             origin_map_by_unit=origin_map_by_unit,
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
-            satellite=satellite,
+            external_variables=external_variables,
         )
         output_products = _build_entries(
             udef.get("output_products", []),
@@ -288,9 +273,7 @@ def build_unit_list(
             unit_name=uname,
             origin_kind="out",
             origin_map_by_unit=origin_map_by_unit,
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
-            satellite=satellite,
+            external_variables=external_variables,
         )
 
         out_units.append(

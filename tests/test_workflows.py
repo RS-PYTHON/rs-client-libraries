@@ -169,7 +169,7 @@ async def test_dpr_processing(
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
         dask_cluster_instance=DASK_CLUSTER_INSTANCE,
-        input_products=[{"name": "input_name", "cadip_session": "dummy_id", "collection_name": "dummy_collection"}],
+        input_products=[{"name": "input_name", "item_id": "dummy_id", "collection_name": "dummy_collection"}],
         generated_product_to_collection_identifier=MAP_PRODUCT_TO_COLLECTION,  # type: ignore
         auxiliary_product_to_collection_identifier=[{"product_type": "*", "collection_name": COLLECTION_ID}],
         processing_mode=[ProcessingMode.NRT],  # type: ignore[list-item]
@@ -368,7 +368,7 @@ async def test_dpr_processing_raises_on_unstaged_adf(
         dask_cluster_label="dask-eopf-mockup",
         dask_cluster_instance=DASK_CLUSTER_INSTANCE,
         input_products=[
-            FlowInputProduct(name="input_name", cadip_session="stac_item_id", collection_name="collection_name"),
+            FlowInputProduct(name="input_name", item_id="stac_item_id", collection_name="collection_name"),
         ],
         generated_product_to_collection_identifier=[
             FlowGeneratedProduct(

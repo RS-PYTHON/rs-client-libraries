@@ -73,6 +73,7 @@ class SentinelSatellite(str, Enum):
     S1A = "sentinel-1a"
     S1B = "sentinel-1b"
     S1C = "sentinel-1c"
+    S1D = "sentinel-1d"
     S2A = "sentinel-2a"
     S2B = "sentinel-2b"
     S2C = "sentinel-2c"
@@ -188,7 +189,7 @@ class FlowInputProduct(BaseModel):
     """Represents one input product for the processor."""
 
     name: str = Field(description="Input product name.")
-    cadip_session: str = Field(description="STAC item identifier.")
+    item_id: str = Field(description="STAC item identifier.")
     collection_name: str = Field(description="Collection name.")
 
     def items(self):

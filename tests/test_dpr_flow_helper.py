@@ -239,16 +239,11 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
     assets corresponding to output products.
 
     This test mocks Item and Asset constructors and ensures:
-    - compute_eopf_origin_datetime is called to populate eopf:origin_datetime
     - Each feature results in one Item being created
     - STAC properties like stac_version are correctly set
     - Assets are built with correct href, title, media_type, and extra_fields
     - Assets are attached to the corresponding Item
     """
-    env = mocker.Mock()
-    input_products = [
-        {"dummy": "input"},
-    ]
 
     eopf_feature = {
         "id": "feature_1",
@@ -258,11 +253,6 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
             "datetime": "2024-01-01T00:00:00",
         },
     }
-
-    mocker.patch(
-        "rs_workflows.dpr_flow.compute_eopf_origin_datetime",
-        return_value="2024-01-10T12:00:00",
-    )
 
     mock_item_cls = mocker.patch("rs_workflows.dpr_flow.Item")
     mock_asset_cls = mocker.patch("rs_workflows.dpr_flow.Asset")
@@ -274,17 +264,12 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
     mock_item_cls.return_value = mock_item
 
     create_stac_item(
-        env=env,
-        input_products=input_products,
+        eopf_origin_datetime="2024-01-10T12:00:00",
         eopf_feature=eopf_feature,
         s3_data_location="s3://my-bucket/output/feature_1.zarr",
         product_name="feature_1.zarr",
         dpr_processor=DprProcessor.S1L0,
     )
-
-    # compute_eopf_origin_datetime called correctly
-    compute_call = mocker.patch("rs_workflows.dpr_flow.compute_eopf_origin_datetime")
-    compute_call.assert_not_called()  # sanity: patched above
 
     first_call_kwargs = mock_item_cls.call_args_list[0].kwargs
     assert first_call_kwargs["id"] == "feature_1.zarr"
@@ -332,7 +317,7 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
     items_metadata = update_eopf_assets.fn(
         env=env,
         input_products=[
-            FlowInputProduct(name="input_name", cadip_session="dummy_id", collection_name="dummy_collection"),
+            FlowInputProduct(name="input_name", item_id="dummy_id", collection_name="dummy_collection"),
         ],
         payload=payload,
         dpr_processor=DprProcessor.S1L0,
@@ -363,6 +348,11 @@ def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
     # Mock s3_list to avoid actual S3 calls
     mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=[])
 
+    mocker.patch(
+        "rs_workflows.dpr_flow.compute_eopf_origin_datetime",
+        return_value="2024-01-10T12:00:00",
+    )
+
     # Mock read_zattrs_sync to return None, triggering the error
     mocker.patch("rs_workflows.dpr_flow.read_zattrs_sync", return_value=None)
 
@@ -385,6 +375,10 @@ def test_update_eopf_assets_skips_non_final_products(mocker):
     calling update_eopf_assets, so this function only receives final products.
     """
     env = mocker.Mock()
+    mocker.patch(
+        "rs_workflows.dpr_flow.compute_eopf_origin_datetime",
+        return_value="2024-01-10T12:00:00",
+    )
     input_products = [{"id": "input_1"}]
 
     # Mock only final products (non-final products are already filtered by run_processor)
@@ -585,7 +579,7 @@ def test_compute_eopf_origin_datetime_single_item(mocker):
     env = mocker.Mock()
     env.serialize.return_value = {"env": "data"}
 
-    input_products = [FlowInputProduct(name="input", cadip_session="CADU_1", collection_name="COLLECTION_1")]
+    input_products = [FlowInputProduct(name="input", item_id="CADU_1", collection_name="COLLECTION_1")]
 
     mock_item = make_mock_item("2024-01-10T12:00:00Z", mocker)
 
@@ -617,8 +611,8 @@ def test_compute_eopf_origin_datetime_multiple_items_returns_max(mocker):
     env.serialize.return_value = {"env": "data"}
 
     input_products = [
-        FlowInputProduct(name="input1", cadip_session="CADU_1", collection_name="COLLECTION_1"),
-        FlowInputProduct(name="input2", cadip_session="CADU_2", collection_name="COLLECTION_2"),
+        FlowInputProduct(name="input1", item_id="CADU_1", collection_name="COLLECTION_1"),
+        FlowInputProduct(name="input2", item_id="CADU_2", collection_name="COLLECTION_2"),
     ]
     item_1 = make_mock_item("2024-01-01T00:00:00Z", mocker)
     item_2 = make_mock_item("2024-02-01T00:00:00Z", mocker)
@@ -652,7 +646,7 @@ def test_compute_eopf_origin_datetime_raises_on_missing_item(mocker):
     mock_future.result.return_value = None
     mocker.patch("rs_workflows.dpr_flow.catalog_flow.get_item.submit", return_value=mock_future)
 
-    input_products = [FlowInputProduct(name="input", cadip_session="missing_id", collection_name="some_coll")]
+    input_products = [FlowInputProduct(name="input", item_id="missing_id", collection_name="some_coll")]
 
     with pytest.raises(RuntimeError, match="No valid items found to compute eopf:origin_datetime") as excinfo:
         compute_eopf_origin_datetime(env, input_products)
@@ -681,7 +675,7 @@ def test_compute_eopf_origin_datetime_raises_on_catalog_error(mocker):
     env = mocker.Mock()
     env.serialize.return_value = {"env": "data"}
 
-    input_products = [FlowInputProduct(name="input", cadip_session="CADU_FAIL", collection_name="COLLECTION_FAIL")]
+    input_products = [FlowInputProduct(name="input", item_id="CADU_FAIL", collection_name="COLLECTION_FAIL")]
 
     mocker.patch(
         "rs_workflows.dpr_flow.get_run_logger",

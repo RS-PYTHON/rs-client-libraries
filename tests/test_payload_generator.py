@@ -534,7 +534,7 @@ def test_build_input_products_success(sample_unit, mock_store_params, mocker):
     )
 
     mock_dpr = MagicMock()
-    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", cadip_session="item_id", collection_name="coll_id")]
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", item_id="item_id", collection_name="coll_id")]
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
@@ -554,7 +554,7 @@ def test_build_input_products_missing_mapping(sample_unit):
     """
     mock_dpr = MagicMock()
     # "UNKNOWN" is not in sample_unit's input_products
-    mock_dpr.input_products = [FlowInputProduct(name="UNKNOWN", cadip_session="item_id", collection_name="coll_id")]
+    mock_dpr.input_products = [FlowInputProduct(name="UNKNOWN", item_id="item_id", collection_name="coll_id")]
 
     with pytest.raises(RuntimeError, match="Couldn't find any input"):
         build_input_products(sample_unit, mock_dpr, MagicMock(), MagicMock())
@@ -570,7 +570,7 @@ def test_build_input_products_missing_storage(sample_unit, mocker):
     )
 
     mock_dpr = MagicMock()
-    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", cadip_session="item_id", collection_name="coll_id")]
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", item_id="item_id", collection_name="coll_id")]
     # clear flags to avoid fallbacks triggering if checked before specific storage
     mock_dpr.unit = False
     mock_dpr.pipeline = False
@@ -595,7 +595,7 @@ def test_build_input_products_fallback_storage_unit(sample_unit, mock_store_para
     )
 
     mock_dpr = MagicMock()
-    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", cadip_session="item_id", collection_name="coll_id")]
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", item_id="item_id", collection_name="coll_id")]
     mock_dpr.unit = True  # Enable unit fallback
     mock_dpr.pipeline = False
 
@@ -621,7 +621,7 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
     )
 
     mock_dpr = MagicMock()
-    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", cadip_session="item_id", collection_name="coll_id")]
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", item_id="item_id", collection_name="coll_id")]
     mock_dpr.unit = False
     mock_dpr.pipeline = True  # Enable pipeline fallback
 

@@ -103,9 +103,11 @@ def test_build_unit_list_returns_dict(case_id, cfg):  # pylint: disable=unused-a
         pipeline=cfg["kwargs"].get("pipeline"),
         unit=cfg["kwargs"].get("unit"),
         processing_mode=cfg["kwargs"].get("processing_mode"),
-        start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
-        end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
-        satellite="sentinel-3a",
+        external_variables={
+            "start_datetime": datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+            "end_datetime": datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+            "satellite": "sentinel-3a",
+        },
     )
     assert isinstance(out, dict)
 
@@ -490,8 +492,10 @@ def test_case_s1_l0_exact_output_with_regex():
         tasktable=tt,
         pipeline="s1_l0_full",
         processing_mode=None,
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
+        external_variables={
+            "start_datetime": start_datetime,
+            "end_datetime": end_datetime,
+        },
     )
 
     expected = {
@@ -543,7 +547,7 @@ def test_case_s1_l0_exact_output_with_regex():
                                 "query": {
                                     "name": "LatestValCover",
                                     "parameters": {
-                                        "product_type": "MPL_ORBPRE",
+                                        "product_type": "MPL_ORBRES",
                                         "start_datetime": "2023-10-03T11:00:00.000Z",
                                         "end_datetime": "2025-10-03T11:00:00.000Z",
                                         "dTa": 7200,
