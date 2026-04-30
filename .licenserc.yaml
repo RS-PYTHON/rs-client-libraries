@@ -32,5 +32,6 @@ header:
     - '.trivyignore'
     - 'LICENSE'
     - 'NOTICE'
+    - rs_workflows/adf_conversion
 
   comment: on-failure

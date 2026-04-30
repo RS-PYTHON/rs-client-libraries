@@ -15,6 +15,7 @@
 default_language_version:
     python: python3
 default_stages: [pre-commit]
+exclude: ^rs_workflows/adf_conversion/
 repos:
 
 # Basic verifications
