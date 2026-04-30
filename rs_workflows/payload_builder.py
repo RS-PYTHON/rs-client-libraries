@@ -57,7 +57,7 @@ def _select_unit_names(tasktable: dict[str, Any], *, pipeline: str | None) -> li
     if not isinstance(steps, list) or not steps:
         raise TaskTableError(f'Pipeline "{pipeline}" has no steps.')
 
-    ordered = sorted(steps, key=lambda s: s.get("order", 0))
+    ordered = sorted(steps, key=lambda s: s.get("step_id", 0))
     names: list[str] = [s["unit_name"] for s in ordered if isinstance(s, dict) and isinstance(s.get("unit_name"), str)]
     if not names:
         raise TaskTableError(f'Pipeline "{pipeline}" steps do not contain valid "unit_name" entries.')
@@ -114,6 +114,36 @@ def _build_entries(
                     "pipeline.internal": "pipeline_internal",
                 }.get(origin_raw, origin_raw)
                 out["origin"] = norm
+
+            # Check other origins than the normalized ones: unit.step_id.output_product_name and unit.output_product_name
+            unit_origin_pattern = r"^[^.]+\.[^.]+(\.[^.]+)?$"
+            if re.fullmatch(unit_origin_pattern, out["origin"]):
+                fields = out["origin"].split(".")
+
+                # Origin unit is always the first field. We check that it exists in the tasktable
+                origin_unit_name = fields[0]
+                if origin_unit_name not in origin_map_by_unit:
+                    raise TaskTableError(
+                        f"Unit '{unit_name}' has an origin '{out['origin']}' referencing unit '{origin_unit_name}' that doesn't exist in the Tasktable. Existing units: {', '.join(origin_map_by_unit.keys())}.",
+                    )
+
+                # Origin step_id is the second field if there are 3, else it has to be retrieved from the units map
+                # Origin product name is the last field, no matter if there are 2 or 3 fields
+                if len(fields) == 3:
+                    origin_step_id = fields[1]
+                    origin_product_name = fields[2]
+                else:
+                    # If there is no step_id, use 1 as default
+                    origin_step_id = origin_map_by_unit[origin_unit_name].get("step_id", 1)
+                    origin_product_name = fields[1]
+
+                # Check that the referenced product exists in the origin unit outputs
+                if origin_product_name not in origin_map_by_unit[origin_unit_name].get("out"):
+                    raise TaskTableError(
+                        f"Unit '{unit_name}' needs product '{origin_product_name}' from unit '{origin_unit_name}' but available outputs are: {origin_map_by_unit[origin_unit_name].get('out')}.",
+                    )
+
+                out["origin"] = f"{origin_unit_name}.{origin_step_id}.{origin_product_name}"
 
         if "mandatory" not in e:
             raise TaskTableError(f'Missing "mandatory" for item "{name}" in unit "{unit_name}".')
@@ -211,6 +241,7 @@ def build_unit_list(
             origin_map_by_unit[uname] = {
                 "in": s.get("input_products", {}) or {},
                 "out": s.get("output_products", {}) or {},
+                "step_id": s.get("step_id", None),
             }
     else:
         # unit provided: take the first pipeline step that defines this unit
@@ -232,6 +263,7 @@ def build_unit_list(
         origin_map_by_unit[uname] = {
             "in": s.get("input_products", {}) or {},
             "out": s.get("output_products", {}) or {},
+            "step_id": s.get("step_id", None),
         }
 
     # Build output units
