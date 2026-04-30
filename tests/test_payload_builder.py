@@ -343,7 +343,7 @@ def test_case_8_exact_output():
                 "input_products": [
                     {
                         "name": "cal_slcs",
-                        "origin": "calibration.cal_slcs",
+                        "origin": "calibration.1.cal_slcs",
                         "mandatory": False,
                         "type": "folder",
                         "store_type": "safe",
@@ -364,7 +364,7 @@ def test_case_8_exact_output():
                 "input_products": [
                     {
                         "name": "cal_slcs",
-                        "origin": "calibration.cal_slcs",
+                        "origin": "calibration.1.cal_slcs",
                         "mandatory": False,
                         "type": "folder",
                         "store_type": "safe",
@@ -372,7 +372,7 @@ def test_case_8_exact_output():
                     },
                     {
                         "name": "reference_dem",
-                        "origin": "reference_dem.reference_dem",
+                        "origin": "reference_dem.1.reference_dem",
                         "mandatory": False,
                         "type": "folder",
                     },
@@ -388,7 +388,7 @@ def test_case_8_exact_output():
                 "input_products": [
                     {
                         "name": "cal_slcs",
-                        "origin": "calibration.cal_slcs",
+                        "origin": "calibration.1.cal_slcs",
                         "mandatory": False,
                         "type": "folder",
                         "store_type": "safe",
@@ -396,13 +396,13 @@ def test_case_8_exact_output():
                     },
                     {
                         "name": "reference_dem",
-                        "origin": "reference_dem.reference_dem",
+                        "origin": "reference_dem.1.reference_dem",
                         "mandatory": False,
                         "type": "folder",
                     },
                     {
                         "name": "simulation_ref",
-                        "origin": "reference_geometry.simulation_ref",
+                        "origin": "reference_geometry.1.simulation_ref",
                         "mandatory": False,
                         "type": "folder",
                     },
@@ -425,7 +425,7 @@ def test_case_8_exact_output():
                 "input_products": [
                     {
                         "name": "cslcs",
-                        "origin": "coregistration.cslcs",
+                        "origin": "coregistration.1.cslcs",
                         "mandatory": False,
                         "type": "filename",
                         "store_type": "zarr",
@@ -433,7 +433,7 @@ def test_case_8_exact_output():
                     },
                     {
                         "name": "simulation_ref",
-                        "origin": "reference_geometry.simulation_ref",
+                        "origin": "reference_geometry.1.simulation_ref",
                         "mandatory": False,
                         "type": "folder",
                     },
@@ -456,7 +456,7 @@ def test_case_8_exact_output():
                 "input_products": [
                     {
                         "name": "gslcs",
-                        "origin": "geocoding.gslcs",
+                        "origin": "geocoding.1.gslcs",
                         "mandatory": False,
                         "type": "filename",
                         "store_type": "zarr",
