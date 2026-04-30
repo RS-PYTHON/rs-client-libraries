@@ -362,6 +362,7 @@ class StacBase(RsClient):
         kwargs.pop("owner_id", None)
         kwargs["datetime"] = kwargs.pop("timestamp", None)
         kwargs["filter"] = kwargs.pop("stac_filter", None)
+        self.logger.info(f"Performing STAC search with parameters: {kwargs}")
 
         try:
             items_search = self.ps_client.search(**kwargs)
