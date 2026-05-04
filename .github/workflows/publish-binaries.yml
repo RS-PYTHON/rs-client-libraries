@@ -55,7 +55,7 @@ jobs:
     outputs:
       branch_name: ${{ steps.set-binary-env.outputs.branch_name }}
       docker_tags: ${{ steps.set-binary-env.outputs.docker_tags }}
-      docker_temp_tag: ${{ steps.set-binary-env.outputs.docker_temp_tag }}
+      docker_final_tags: ${{ steps.set-binary-env.outputs.docker_final_tags }}
     steps:
       - id: set-binary-env
         name: Call action 'set-binary-env'
@@ -112,10 +112,7 @@ jobs:
           build_context_path: ./build_context_path
           image_basename: ${{ github.repository_owner }}/
           image_suffix: ${{ matrix.image_suffix }}
-          image_tags: ${{
-            case(needs.set-env.outputs.docker_temp_tag != '',
-            needs.set-env.outputs.docker_temp_tag,
-            needs.set-env.outputs.docker_tags) }} # pass the temp tag if defined, else the nominal tags
+          image_tags: ${{ needs.set-env.outputs.docker_tags }}
           dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -136,12 +133,12 @@ jobs:
       pushed_images: ${{ steps.read.outputs.pushed_images }}
     steps:
       - id: read-matrix-outputs
-        if: ${{ needs.set-env.outputs.docker_temp_tag != '' }} # only if a temp Docker tag has been set
+        if: ${{ needs.set-env.outputs.docker_final_tags != '' }} # only if a temp Docker tag has been set
         uses: cloudposse/github-action-matrix-outputs-read@ddb62566e896c85614f5eeec2daa43d6d1dc6cb0
         with:
             matrix-step-name: publish-docker-images
       - id: read
-        if: ${{ needs.set-env.outputs.docker_temp_tag != '' }}
+        if: ${{ needs.set-env.outputs.docker_final_tags != '' }}
         run: |
           set -x
           # Docker images that have been pushed
@@ -184,11 +181,11 @@ jobs:
       # If we used a temp docker tag, and only if the tests succeeded, then
       # we tag the images with the real tags and push them.
       - name: Tag and push Docker images
-        if: ${{ needs.set-env.outputs.docker_temp_tag != '' }}
+        if: ${{ needs.set-env.outputs.docker_final_tags != '' }}
         uses: RS-PYTHON/actions/.github/actions/tag-push-docker@feat-rspy964/push-latest-after-tests
         with:
           old_docker_images: ${{ needs.get-pushed-images.outputs.pushed_images }}
-          new_tags: ${{ needs.set-env.outputs.docker_tags }}
+          new_tags: ${{ needs.set-env.outputs.docker_final_tags }}
 
   publish-wheels-pypi:
     name: "Publish wheels and sdists to PyPI"
