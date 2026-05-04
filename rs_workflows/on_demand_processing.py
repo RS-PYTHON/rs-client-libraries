@@ -19,14 +19,19 @@
 import datetime
 import json
 import os
+import re
 import tempfile as std_tempfile
+from copy import deepcopy
+from typing import Any
 
 import anyio
 import yaml
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
+from pystac import Item, ItemCollection
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
+from rs_client.rs_client import RsClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
 from rs_workflows import auxip_flow, catalog_flow
@@ -35,10 +40,14 @@ from rs_workflows.flow_utils import (
     ARCHIVE_SUFFIXES,
     DprProcessIn,
     FlowEnv,
+    FlowInputProduct,
     RetryConfig,
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
-from rs_workflows.payload_generator import generate_payload
+from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
+from rs_workflows.utils.utils import search_by_name
+
+SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
 def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
@@ -52,7 +61,7 @@ def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
     return f"Dask cluster dashboard URL: {dashboard_url}"
 
 
-def _select_aux_collection(dpr_input, product_type: str) -> str:
+def _select_aux_collection(dpr_input: DprProcessIn, product_type: str) -> str:
     """
     Resolve the catalog collection identifier for a requested AUX product type.
 
@@ -80,7 +89,13 @@ def _select_aux_collection(dpr_input, product_type: str) -> str:
     )
 
 
-async def _build_auxip_request(alternative, input_adfs, dpr_input, task_table) -> tuple[dict, str, int]:
+async def _build_auxip_request(
+    alternative,
+    input_adfs,
+    dpr_input: DprProcessIn,
+    task_table: dict[str, Any],
+    specific_input_product: tuple[str | None, Item | None] = (None, None),
+) -> tuple[dict, str, int]:
     """
     Build the AUXIP request data for a single ADFS alternative.
 
@@ -95,8 +110,20 @@ async def _build_auxip_request(alternative, input_adfs, dpr_input, task_table) -
     """
     timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
     name = alternative["query"]["name"]
-    parameters = alternative["query"]["parameters"]
-    auxip_cql2 = build_cql2_json(task_table, name, parameters)["stac"]
+    specific_input_name, stac_item = specific_input_product
+    parameters = {
+        k: (
+            stac_item.properties.get(m.group(2), v)
+            if stac_item
+            and isinstance(v, str)
+            and (m := SPECIFIC_INPUT_PATTERN.match(v))
+            and m.group(1) == specific_input_name
+            else v
+        )
+        for k, v in deepcopy(alternative["query"]["parameters"]).items()
+    }
+    query = next(q for q in task_table["queries"] if q["name"] == name)
+    auxip_cql2 = build_cql2_json(query, parameters)
 
     md = "# Auxip CQL2 filter \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
     await acreate_markdown_artifact(key="auxip-cql2", markdown=md, description="Auxip CQL2 filter")
@@ -104,7 +131,7 @@ async def _build_auxip_request(alternative, input_adfs, dpr_input, task_table) -
     product_type = parameters.get("product_type", "*")
     collection = _select_aux_collection(dpr_input, product_type)
     get_run_logger().info(
-        f"Prepared AUXIP request for input {input_adfs['name']} using collection {collection}",
+        f"Prepared AUXIP request for input {input_adfs['name']} using collection {collection}: {auxip_cql2}",
     )
     return auxip_cql2, collection, timeout if timeout else -1
 
@@ -175,11 +202,12 @@ async def _normalize_archived_auxip_items(item_collection, dpr_input):
 
 async def _stage_input_adfs_alternative(
     alternative,
-    input_adfs,
-    dpr_input,
-    task_table,
-    staging_retries,
-    staging_retry_delay,
+    input_adfs: dict[str, Any],
+    dpr_input: DprProcessIn,
+    task_table: dict[str, Any],
+    specific_input_product: tuple[str | None, Item | None] = (None, None),
+    staging_retries: int = 3,
+    staging_retry_delay: int = 60,
 ):
     """
     Stage one ADFS alternative and normalize archived outputs when needed.
@@ -195,40 +223,46 @@ async def _stage_input_adfs_alternative(
     the next alternative in order.
     """
     logger = get_run_logger()
-    auxip_cql2, collection, timeout = await _build_auxip_request(alternative, input_adfs, dpr_input, task_table)
-    logger.info(f"Selected collection {collection}")
+    auxip_cql2, collection, timeout = await _build_auxip_request(
+        alternative,
+        input_adfs,
+        dpr_input,
+        task_table,
+        specific_input_product,
+    )
+    logger.info(f"Selected ADFS collection {collection}")
 
-    auxip_items = (
+    auxip_status: bool
+    auxip_items: ItemCollection | None
+    auxip_status, auxip_items = (
         auxip_flow.auxip_staging_task.with_options(
             retries=staging_retries,
             retry_delay_seconds=staging_retry_delay,
         )
-        .submit(
-            dpr_input.env,
-            auxip_cql2,
-            collection,
-            timeout,
-        )
+        .submit(dpr_input.env, auxip_cql2, collection, timeout)
         .result()
     )
-    logger.info(f"Staged ADFS: {auxip_items}")
 
-    if not auxip_items[1]:  # type: ignore
+    if not auxip_items:
         return None
 
-    item_collection = await _normalize_archived_auxip_items(auxip_items[1], dpr_input)  # type: ignore
+    for auxip_item in auxip_items:
+        logger.info(f"Staged ADFS: {auxip_item}")
+
+    item_collection = await _normalize_archived_auxip_items(auxip_items, dpr_input)
 
     logger.info(f"Finished processing input ADFS, ItemCollection size: {len(item_collection.items)}")
     logger.debug(f"Finished processing input ADFS, ItemCollection: {item_collection.to_dict()}")
 
-    return input_adfs["name"], (auxip_items[0], item_collection)  # type: ignore[index]
+    return input_adfs["name"], (auxip_status, item_collection)
 
 
 @task(name="Process input ADFS")
 async def process_input_adfs(
-    input_adfs,
-    dpr_input,
-    task_table,
+    input_adfs: dict[str, Any],
+    dpr_input: DprProcessIn,
+    task_table: dict[str, Any],
+    specific_input_product: tuple[str | None, Item | None] = (None, None),
     staging_retries: int = 3,
     staging_retry_delay: int = 60,
 ):
@@ -268,6 +302,7 @@ async def process_input_adfs(
                 input_adfs,
                 dpr_input,
                 task_table,
+                specific_input_product,
                 staging_retries,
                 staging_retry_delay,
             )
@@ -282,6 +317,58 @@ async def process_input_adfs(
         ) from kerr
 
 
+def _resolve_specific_input_product_stac_items(
+    input_adfs: dict[str, Any],
+    task_table: dict[str, Any],
+    unit: dict[str, Any],
+    provided_input_products: list[FlowInputProduct],
+    rs_client: RsClient,
+) -> tuple[str | None, list[Item | None]]:
+    input_adfs_io = search_by_name(task_table["io"], input_adfs["name"])
+    if input_adfs_io.get("multiplicity", None) == "one_per_input":
+        logger = get_run_logger()
+        input_product_names: set[str] = {product["name"] for product in unit["input_products"]}
+        referenced_input_product_names = {
+            match.group(1)
+            for alt in input_adfs_io.get("alternatives", [])
+            for value in alt.get("query", {}).get("parameters", {}).values()
+            if isinstance(value, str)
+            for match in [re.fullmatch(r"\{([^\.}]+)\.[^}]+\}", value)]
+            if match and match.group(1) in input_product_names
+        }
+        if len(referenced_input_product_names) != 1:
+            raise ValueError(
+                f"ADFS multiplicy 'one_per_input' shall refer to a single input product, "
+                f"found '{referenced_input_product_names}'",
+            )
+        referenced_input_product_name = next(iter(referenced_input_product_names))
+        logger.info(f"ADFS multiplicity 'one_per_input' refers to input '{referenced_input_product_name}'")
+        input_product_io: dict[str, Any] = search_by_name(task_table["io"], referenced_input_product_name)
+        input_product_regex: str = input_product_io["store_params"]["regex"]
+        if not input_product_regex:
+            raise ValueError(
+                f"Input product '{referenced_input_product_name}' shall define a regex to perform discrimination",
+            )
+        result = []
+        catalog_client: CatalogClient = rs_client.get_catalog_client()
+        for input_product in provided_input_products:
+            stac_item, first_asset_path = resolve_stac_input_path(
+                catalog_client,
+                input_product.collection_name,
+                input_product.item_id,
+            )
+            # Check that first asset path matches input product regex
+            logger.info(f"Checking asset path '{first_asset_path}' against regex '{input_product_regex}'")
+            if not first_asset_path or not re.fullmatch(input_product_regex, first_asset_path):
+                logger.debug(f"Ignore path {first_asset_path} as it doesn't match regex '{input_product_regex}'")
+                continue
+            result.append(stac_item)
+        if not result:
+            logger.error(f"Found no STAC item with assets matching the regex '{input_product_regex}'")
+        return referenced_input_product_name, result
+    return None, [None]
+
+
 @flow
 async def dpr_processing(
     dpr_input: DprProcessIn,
@@ -291,16 +378,8 @@ async def dpr_processing(
     Prefect flow for dpr-process.
 
     Args:
-        env: Prefect flow environment
-        processor: DPR processor name
-        cluster_label (str): Dask cluster label e.g. "dask-l0"
-        cadip_collection_identifier: CADIP collection identifier that contains the mission and station
-            (e.g. s1_ins for Sentinel-1 sessions from the Inuvik station)
-        session_identifier: Session identifier
-        catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
-        s3_payload_template: S3 bucket location of the DPR payload file template.
-        s3_output_data: S3 bucket location of the output processed products. They will then be copied to the
-        catalog bucket.
+        dpr_input: Input parameters for executing this flow
+        retry_config: Staging retry config
     """
     logger = get_run_logger()
     logger.info(f"Starting the DPR processing flow with processor: {dpr_input.processor_name}")
@@ -318,7 +397,10 @@ async def dpr_processing(
         )
 
         # read tasktable and construct list of processing units
-        task_table = flow_env.rs_client.get_dpr_client().get_process(dpr_input.processor_name, cluster_info)
+        task_table: dict[str, Any] = flow_env.rs_client.get_dpr_client().get_process(
+            dpr_input.processor_name,
+            cluster_info,
+        )
 
         # Persist the full task table as a Prefect artifact for later investigation.
         md = "# Task table\n\n```json\n" + json.dumps(task_table, indent=2) + "\n```"
@@ -348,31 +430,45 @@ async def dpr_processing(
         for unit in unit_list:
             # For each input_adfs element computed on STEP 1
             for input_adfs in unit["input_adfs"]:
-                tasks.append(
-                    process_input_adfs.submit(
-                        input_adfs,
-                        dpr_input,
-                        task_table,
-                        retry_config.staging_retries,
-                        retry_config.staging_retry_delay,
-                    ),
+                # For each specific input in case of multiplicity=one_per_input
+                specific_input_name, product_stac_items = _resolve_specific_input_product_stac_items(
+                    input_adfs,
+                    task_table,
+                    unit,
+                    dpr_input.input_products,
+                    flow_env.rs_client,
                 )
+                for specific_input_product_stac_item in product_stac_items:
+                    if specific_input_product_stac_item:
+                        logger.info(
+                            f"Submitting '{input_adfs["name"]}' ADFS task for input {specific_input_product_stac_item}",
+                        )
+                    tasks.append(
+                        process_input_adfs.submit(
+                            input_adfs,
+                            dpr_input,
+                            task_table,
+                            (specific_input_name, specific_input_product_stac_item),
+                            retry_config.staging_retries,
+                            retry_config.staging_retry_delay,
+                        ),
+                    )
 
         try:
             auxip_items = [t.result() for t in tasks]
         except (RuntimeError, KeyError) as err:
             raise err
 
-        adfs = []
+        adfs: set[tuple[str, str]] = set()
         for name, (status, item_collection) in auxip_items:  # type: ignore
             for item in item_collection.items:  # type: ignore
                 if status:  # type: ignore
                     asset = next(iter(item.assets.values()))
-                    adfs.append((name, asset.href))  # type: ignore
+                    adfs.add((name, asset.href))  # type: ignore
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
         # generate the dpr payload file
-        task_future = generate_payload.submit(flow_env, unit_list, adfs, dpr_input)
+        task_future = generate_payload.submit(flow_env, unit_list, list(adfs), dpr_input)
         # get the payload generation result
         generated_payload_res = task_future.result()
         # create the generated payload as a dictionary, as it will be used for
