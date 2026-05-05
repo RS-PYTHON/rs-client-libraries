@@ -18,6 +18,7 @@ import fnmatch
 import os
 from collections import defaultdict
 from copy import deepcopy
+from os.path import commonprefix
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from uuid import uuid4
@@ -426,6 +427,7 @@ def build_input_products(
             # Compute longest common prefix
             common_folder, relative_parts = get_common_and_relative_paths(paths)
             store_params.regex = rf"({'|'.join(relative_parts)})"
+            store_params.regex = f"{commonprefix(relative_parts)}*"  # FIXME to remove after CPM issue #1080 is solved
 
             # Add a single InputProduct of type regex listing the provided inputs in the common folder
             inputs.append(
@@ -650,6 +652,7 @@ def build_adfs(
             # Compute longest common prefix
             common_folder, relative_parts = get_common_and_relative_paths(adfs_paths)
             store_params.regex = rf"({'|'.join(relative_parts)})"
+            store_params.regex = f"{commonprefix(relative_parts)}*"  # FIXME to remove after CPM issue #1080 is solved
             # Add a single AdfConfig of type regex listing the provided adfs in the common folder
             result.append(
                 AdfConfig(
