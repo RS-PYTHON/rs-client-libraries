@@ -378,14 +378,13 @@ async def test_adf_conversion_flow_logic_for_ecmwf(
 
     await adf_flow.adf_conversion.fn(sample_adf_ecmwf_process_in)
 
-    assert staging_mock.call_count == 2
+    assert staging_mock.call_count == 1
     staged_product_types = [
         call.kwargs["cql2_filter"]["filter"]["args"][1]["args"][1] for call in staging_mock.call_args_list
     ]
-    assert staged_product_types == ["AX___MF1_AX", "AX___MF2_AX"]
+    assert staged_product_types == ["AX___MF1_AX"]
     assert [call.kwargs["catalog_collection_identifier"] for call in staging_mock.call_args_list] == [
         "AUX_MF1",
-        "AUX_MF2",
     ]
     extract_mock.assert_awaited_once()
     run_script_mock.assert_called_once()

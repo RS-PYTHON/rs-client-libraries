@@ -271,13 +271,16 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 generated_prod_type = "S00__ADF_ECMWA"
                 script_path = ADF_ECMWA_SCRIPT_PATH
             case AdfType.S00__ADF_ECMWF:
-                required_types = ["AX___MF1_AX", "AX___MF2_AX"]
+                # We need AX___MF1_AX and AX___MF2_AX for S00__ADF_ECMWF
+                # required_types = ["AX___MF1_AX", "AX___MF2_AX"]
+                # AX___MF2_AX is not used anymore in S00__ADF_ECMWF.py. uncomment the prev line and
+                # remove the next one if a change in the script is made to use it again
+                required_types = ["AX___MF1_AX"]
                 generated_prod_type = "S00__ADF_ECMWF"
                 script_path = ADF_ECMWF_SCRIPT_PATH
             case _:
                 logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
                 return
-
         staged_items: list[Item] = []
         for prod_type in required_types:
             cql2_filter = {
@@ -299,6 +302,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 },
             }
             logger.info(f"Built CQL2 filter for product type {prod_type}: {cql2_filter}")
+
             # find target collection from mapping, preferring an exact product type match
             target_collection = resolve_collection_name(
                 adf_input.auxiliary_product_to_collection_identifier,
