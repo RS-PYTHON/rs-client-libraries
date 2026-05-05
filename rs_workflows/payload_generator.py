@@ -39,6 +39,7 @@ from rs_workflows.payload_template import (
     GeneralConfiguration,
     InputProduct,
     IOConfig,
+    LoggingConfig,
     OutputProduct,
     PayloadSchema,
     StoreParams,
@@ -822,8 +823,8 @@ def generate_payload(  # pylint: disable=unused-argument
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
     logger.info("Building the payload")
     payload = PayloadSchema(
-        # add some default params, as stated in a comment from jira (story 800)
-        general_configuration=GeneralConfiguration(),
+        # add some default params, as stated in a comment from jira (stories 800/1050)
+        general_configuration=GeneralConfiguration(logging=LoggingConfig(level=dpr_process_in.logging_level.name)),
         workflow=workflow_steps,
         io=io_config,  # type: ignore
         # The dask_context section is built in the dpr_service
