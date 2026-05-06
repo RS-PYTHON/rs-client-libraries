@@ -455,10 +455,14 @@ class ConversionIn(BaseModel):
     This model defines all the configuration needed to run an on-demand conversion flow,
     including input datasets, generated outputs, and scheduling parameters.
     """
-    stac_input: FlowInputProduct = Field(
+    env: FlowEnvArgs = Field(
+        title="Flow Environment",
+        description="Environment configuration for Prefect flow. Includes identifiers like owner_id.",
+    )
+    stac_input: str | dict = Field(
         title="STAC Input Product",
         description=(
-            "Input product for the conversion. Specifies the STAC item identifier and collection."
+            "Input product for the conversion. Specifies the STAC item or href."
         )
     )
     generated_product_to_collection_identifier: FlowGeneratedProduct = Field(
