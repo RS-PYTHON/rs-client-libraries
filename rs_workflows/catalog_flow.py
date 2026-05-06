@@ -37,6 +37,7 @@ async def catalog_search(
     env: FlowEnvArgs,
     catalog_cql2: dict,
     error_if_empty: bool = False,
+    collections: list[str] | None = None,
 ) -> ItemCollection | None:
     """
     Search Catalog items.
@@ -45,6 +46,7 @@ async def catalog_search(
         env: Prefect flow environment (at least the owner_id is required)
         catalog_cql2: CQL2 filter.
         error_if_empty: Raise a ValueError if the results are empty.
+        collections: list of collection names to search in
     """
     logger = get_run_logger()
 
@@ -52,13 +54,14 @@ async def catalog_search(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "catalog-search"):
 
-        logger.info("Start Catalog search")
+        logger.info(f"Start Catalog search: {catalog_cql2}")
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
         found = catalog_client.search(
             method="POST",
             stac_filter=catalog_cql2.get("filter"),
             max_items=catalog_cql2.get("limit"),
             sortby=catalog_cql2.get("sortby"),
+            collections=collections,
         )
         if (not found) and error_if_empty:
             raise ValueError(

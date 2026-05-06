@@ -53,6 +53,7 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
     FlowGeneratedProduct,
     FlowInputProduct,
+    LoggingLevel,
 )
 from rs_workflows.payload_generator import RSPY_CATALOG_BUCKET
 from rs_workflows.payload_template import (  # StoreOptionsWrapper,
@@ -901,6 +902,8 @@ def _mock_dpr_process_in():
     msg = MagicMock()
     msg.value = "TEST_PROCESSOR"
     mock.processor_name = msg
+
+    mock.logging_level = LoggingLevel.DEBUG
 
     return mock
 

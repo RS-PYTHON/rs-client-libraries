@@ -46,7 +46,7 @@ async def process_l0_last_steps(
 
     # Resolve parameters
     flow_params = flow_params or Level0FlowParams()
-    p = await flow_params.resolve(mission=mission)
+    p = await flow_params.resolve(mission)
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
 
@@ -87,4 +87,5 @@ async def process_l0_last_steps(
             workflow=p.workflow,
             generated_product_to_collection_identifier=p.generated_product_to_collection_identifier or [],
             auxiliary_product_to_collection_identifier=p.auxiliary_product_to_collection_identifier or [],
+            logging_level=p.logging_level,
         )

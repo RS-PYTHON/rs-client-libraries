@@ -226,7 +226,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     ) -> ItemCollection | None:
         """Search items inside a specific collection."""
 
-        if "collections" in kwargs:
+        if "collections" in kwargs and kwargs["collections"]:
             kwargs["collections"] = [
                 self.full_collection_id(kwargs.get("owner_id"), collection, "_") for collection in kwargs["collections"]
             ]  # type: ignore

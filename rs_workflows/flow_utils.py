@@ -88,6 +88,16 @@ class AdfType(str, Enum):
     S00__ADF_ECMWF = "S00__ADF_ECMWF"
 
 
+class LoggingLevel(str, Enum):
+    """Logging level allowed by eopf.logging module"""
+
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
+
+
 class FlowEnvArgs(BaseModel):
     """
     Prefect flow environment arguments.
@@ -257,6 +267,12 @@ class DprProcessIn(BaseModel):
         default=None,
         title="Dask Cluster Instance",
         description="Optional Dask cluster instance ID used to build a direct dashboard URL.",
+    )
+
+    logging_level: LoggingLevel = Field(
+        default=LoggingLevel.INFO,
+        title="Overall EOPF logging level",
+        description="Overall EOPF logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
 
     s3_payload_file: str = Field(

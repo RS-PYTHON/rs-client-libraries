@@ -169,7 +169,7 @@ async def search(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "auxip-search"):
 
-        logger.info("Start Auxip search")
+        logger.info(f"Start Auxip search: {auxip_cql2}")
         auxip_client: AuxipClient = flow_env.rs_client.get_auxip_client()
         found = auxip_client.search(
             method="POST",
