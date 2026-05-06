@@ -425,7 +425,7 @@ async def test_dpr_processing_raises_on_unstaged_adf(
                 datetime=datetime.now(),
             )
             it.add_asset("data", Asset(href=f"s3://{MOCKED_BUCKET}/unstaged1.bin"))
-            return ("ADFS_NAME", (False, ItemCollection([it])))
+            return ("ADFS_NAME", "filename", (False, ItemCollection([it])))
 
     class ProcessInputAdfsTaskFailMock(Mock):
         """Mock of process_input_adfs to force status=False in the flow."""

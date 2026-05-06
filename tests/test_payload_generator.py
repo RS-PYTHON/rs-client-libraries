@@ -26,6 +26,7 @@ from rs_workflows.flow_utils import (
     FlowInputProduct,
 )
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
+    build_adfs,
     build_input_products,
     build_output_products,
     build_workflow_step,
@@ -223,7 +224,7 @@ def test_generate_payload_success(
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[sample_unit],
-        adfs=[("ADF1", "s3://bucket/adf1")],
+        adfs=[("ADF1", "filename", "s3://bucket/adf1")],
         dpr_process_in=mock_dpr_process_in,
     )
 
@@ -243,7 +244,7 @@ def test_generate_payload_success(
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[sample_unit],
-        adfs=[("ADF1", "s3://bucket/adf1")],
+        adfs=[("ADF1", "filename", "s3://bucket/adf1")],
         dpr_process_in=mock_dpr_process_in,
     )
     assert payload.logging == expected_logging
@@ -685,6 +686,68 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
     mock_storage.get_storage_for_pipeline_section.assert_any_call("pipeline_input_1")
     mock_storage.get_storage_for_pipeline_section.assert_any_call("other")
     mock_storage.get_store_params.assert_called_with("pipeline_s3")
+
+
+# ----------------------------------------------------------------------
+
+# build_adfs
+
+
+def test_build_adfs_single_folder(mock_store_params):
+    """Test ADFS of type 'folder' with a single file"""
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
+    adfs = [
+        ("adf1", "folder", "/data/myfolder/file1.txt"),
+    ]
+
+    result = build_adfs(mock_storage_config, adfs)
+
+    assert len(result) == 1
+    assert result[0].id == "adf1"
+    assert result[0].path == "/data/myfolder"
+
+
+def test_build_adfs_single_filename(mock_store_params):
+    """Test ADFS of type 'filename' with a single file"""
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
+    adfs = [
+        ("adf1", "filename", "/data/file1.txt"),
+    ]
+
+    result = build_adfs(mock_storage_config, adfs)
+
+    assert len(result) == 1
+    assert result[0].id == "adf1"
+    assert result[0].path == "/data/file1.txt"
+
+
+def test_build_adfs_multiple_entries(mock_store_params):
+    """Test ADFS with multiple files"""
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
+    adfs = [
+        ("adf1", "filename", "/data/folder/file1.txt"),
+        ("adf1", "filename", "/data/folder/file2.txt"),
+    ]
+
+    result = build_adfs(mock_storage_config, adfs)
+
+    assert len(result) == 1
+    adf = result[0]
+
+    assert adf.id == "adf1"
+    assert adf.path == "/data/folder/"
+    assert isinstance(adf.store_params, StoreParams)
+    assert adf.store_params.multiplicity == "2"
+    assert adf.store_params.regex == r"(file1\.txt|file2\.txt)"
 
 
 # ----------------------------------------------------------------------

@@ -556,7 +556,7 @@ def get_io(
 
 def build_adfs(
     storage_configuration: StorageConfig,
-    adfs: list[tuple[str, str]],
+    adfs: list[tuple[str, str, str]],
 ) -> list[AdfConfig]:
     """
     Build a list of AdfConfig objects from input ADF definitions.
@@ -569,7 +569,7 @@ def build_adfs(
     Args:
         storage_configuration (StorageConfig): Configuration object used to
             retrieve default storage parameters.
-        adfs (list[tuple[str, str]]): List of (adf_id, path) tuples.
+        adfs (list[tuple[str, str, str]]): List of (adf_id, adfs_type, path) tuples.
 
     Returns:
         list[AdfConfig]: List of constructed AdfConfig objects, one per group
@@ -579,18 +579,22 @@ def build_adfs(
 
     # Group adfs by name (needed for adfs of type regex)
     grouped_adfs = defaultdict(list)
-    for adf in adfs:
-        grouped_adfs[adf[0]].append(adf[1])
+    for adf_id, adfs_type, path in adfs:
+        grouped_adfs[adf_id].append((path, adfs_type))
 
     # Iterate over each group of adfs
-    for adfs_id, adfs_paths in grouped_adfs.items():
+    for adfs_id, adfs_entries in grouped_adfs.items():
         adfs_name = storage_configuration.default_adfs_storage
         store_params = deepcopy(storage_configuration.get_store_params(adfs_name))
-        if len(adfs_paths) == 1:
+        if len(adfs_entries) == 1:
             # Standard case where each adfs has a different id (i.e. single file)
-            result.append(AdfConfig(id=adfs_id, path=adfs_paths[0], store_params=store_params))
+            path, adfs_type = adfs_entries[0]
+            if adfs_type == "folder":
+                path = os.path.dirname(path)
+            result.append(AdfConfig(id=adfs_id, path=path, store_params=store_params))
         elif isinstance(store_params, StoreParams):
             # Advanced case where several adfs share the same id (i.e. several files)
+            adfs_paths = [p for p, _ in adfs_entries]
             store_params.multiplicity = str(len(adfs_paths))
             # Compute longest common prefix
             common_folder, relative_parts = get_common_and_relative_paths(adfs_paths)
@@ -713,7 +717,7 @@ def build_mockup_payload(owner_id):
 def generate_payload(  # pylint: disable=unused-argument
     flow_env: FlowEnv,
     unit_list: list[dict],
-    adfs: list[tuple[str, str]],
+    adfs: list[tuple[str, str, str]],
     dpr_process_in: DprProcessIn,
 ) -> PayloadSchema:
     """
@@ -728,8 +732,8 @@ def generate_payload(  # pylint: disable=unused-argument
             credentials, tracing, and runtime context.
         unit_list (list[dict]): List of workflow unit definitions containing I/O
             specifications and processing parameters.
-        adfs (list[tuple[str, str]]): List of auxiliary item
-            tuples, where each tuple includes the eopf type and the s3 storage path.
+        adfs (list[tuple[str, str, str]]): List of auxiliary item
+            tuples, where each tuple includes the adfs name, the adfs type and the s3 storage path.
         dpr_process_in (DprProcessIn): DPR input process definition containing
             product paths and parameters.
 

@@ -152,7 +152,7 @@ def _get_archived_item_indexes(item_collection) -> list[int]:
     return archived_indexes
 
 
-async def _normalize_archived_auxip_items(item_collection, dpr_input):
+async def _normalize_archived_auxip_items(item_collection: ItemCollection, dpr_input: DprProcessIn) -> ItemCollection:
     """
     Normalize archived AUXIP items and persist the updated metadata to the catalog.
 
@@ -208,7 +208,7 @@ async def _stage_input_adfs_alternative(
     specific_input_product: tuple[str | None, Item | None] = (None, None),
     staging_retries: int = 3,
     staging_retry_delay: int = 60,
-):
+) -> tuple[str, str, tuple[bool, ItemCollection]] | None:
     """
     Stage one ADFS alternative and normalize archived outputs when needed.
 
@@ -254,7 +254,7 @@ async def _stage_input_adfs_alternative(
     logger.info(f"Finished processing input ADFS, ItemCollection size: {len(item_collection.items)}")
     logger.debug(f"Finished processing input ADFS, ItemCollection: {item_collection.to_dict()}")
 
-    return input_adfs["name"], (auxip_status, item_collection)
+    return input_adfs["name"], input_adfs["type"], (auxip_status, item_collection)
 
 
 @task(name="Process input ADFS")
@@ -265,7 +265,7 @@ async def process_input_adfs(
     specific_input_product: tuple[str | None, Item | None] = (None, None),
     staging_retries: int = 3,
     staging_retry_delay: int = 60,
-):
+) -> tuple[str, str, tuple[bool, ItemCollection]]:
     """
     Stage the ADFS inputs described in the task table for one processing unit input.
 
@@ -282,8 +282,8 @@ async def process_input_adfs(
       generation sees the final asset hrefs
 
     Returns:
-        tuple[str, tuple[bool, Any]]:
-            The input ADFS name together with the original staging status/item
+        tuple[str, str, tuple[bool, ItemCollection]]:
+            The input ADFS name and type together with the original staging status/item
             collection tuple shape expected by downstream code.
 
     Raises:
@@ -455,16 +455,17 @@ async def dpr_processing(
                     )
 
         try:
-            auxip_items = [t.result() for t in tasks]
+            auxip_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [t.result() for t in tasks]
         except (RuntimeError, KeyError) as err:
             raise err
 
-        adfs: set[tuple[str, str]] = set()
-        for name, (status, item_collection) in auxip_items:  # type: ignore
-            for item in item_collection.items:  # type: ignore
-                if status:  # type: ignore
+        # Set of ADFS. Each tuple includes the adfs name, type and the s3 storage path
+        adfs: set[tuple[str, str, str]] = set()
+        for name, adf_type, (status, item_collection) in auxip_items:
+            for item in item_collection.items:
+                if status:
                     asset = next(iter(item.assets.values()))
-                    adfs.add((name, asset.href))  # type: ignore
+                    adfs.add((name, adf_type, asset.href))
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
         # generate the dpr payload file
