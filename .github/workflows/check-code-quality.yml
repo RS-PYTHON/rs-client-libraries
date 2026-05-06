@@ -33,7 +33,7 @@ jobs:
         caller-ref: ${{ github.ref }}
         caller-ref_name: ${{ github.ref_name }}
         cov-dirs: "rs_client,rs_common,rs_workflows"
-        sonar-cov-exclusions: rs_workflows/on_demand/**,rs_workflows/operation/**,rs_workflows/utils/**,rs_workflows/adf_conversion/**
+        sonar-cov-exclusions: rs_workflows/on_demand/**,rs_workflows/operation/**,rs_workflows/utils/**
         sonar-exclusions: tests,tests/**,**/tests/**,rs_workflows/adf_conversion/**
     secrets:
       SAFETY_API_KEY: ${{ secrets.SAFETY_API_KEY }}
