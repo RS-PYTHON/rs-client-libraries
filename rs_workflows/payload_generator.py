@@ -16,6 +16,8 @@
 
 import fnmatch
 import os
+from collections import defaultdict
+from copy import deepcopy
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from uuid import uuid4
@@ -26,21 +28,25 @@ from prefect.blocks.system import Secret
 from pystac import Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
+from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
-from rs_workflows.flow_utils import (  # FlowEnvArgs,
+from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
 )
-from rs_workflows.payload_template import (  # DaskContext,; StorageOptions,; StoreParams,
+from rs_workflows.payload_template import (
     AdfConfig,
     GeneralConfiguration,
     InputProduct,
     IOConfig,
+    LoggingConfig,
     OutputProduct,
     PayloadSchema,
+    StoreParams,
     WorkflowStep,
 )
 from rs_workflows.storage_configuration import StorageConfig
+from rs_workflows.utils.utils import get_common_and_relative_paths, search_by_name
 
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
 DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
@@ -112,14 +118,20 @@ def build_workflow_step(unit):
 
 def get_first_asset_dir(item: Item) -> str | None:
     """
-    Returns the local or remote path component from the href of the first asset in a pystac Item.
+    Returns the directory path (local or remote) derived from the href of the first asset in a pystac Item.
+
+    Special case:
+        If the first asset is a Zarr store (media_type "application/vnd+zarr"),
+        the full href is returned unchanged, since it already represents a directory-like dataset.
 
     Args:
         item (pystac.Item): The STAC item containing assets.
 
     Returns:
-        str | None: The path component of the first asset's href, or None if no assets exist.
+        str | None: The resolved directory path or URL of the first asset, or None if no assets exist.
         Examples:
+            s3://dev-bucket/path/to/folder.zarr
+              ->  s3://dev-bucket/path/to/folder.zarr (Zarr store, returned as-is)
             s3://dev-bucket/path/to/cadu.raw  ->  s3://dev-bucket/path/to
             /local/path/to/file.raw       ->  /local/path/to
             https://example.com/data/file.tif -> https://example.com/data
@@ -129,6 +141,9 @@ def get_first_asset_dir(item: Item) -> str | None:
 
     first_asset = next(iter(item.assets.values()))
     href = first_asset.href
+
+    if first_asset.media_type == "application/vnd+zarr":
+        return href
 
     parsed = urlparse(href)
 
@@ -277,7 +292,7 @@ def find_s3_output_bucket(
     )
 
 
-def resolve_stac_input_path(catalog_client, collection: str, stac_item_id: str) -> str:
+def resolve_stac_input_path(catalog_client: CatalogClient, collection: str, stac_item_id: str) -> tuple[Item, str]:
     """
     Retrieves the S3 path of the first asset from a STAC item within a collection.
 
@@ -287,7 +302,7 @@ def resolve_stac_input_path(catalog_client, collection: str, stac_item_id: str) 
         stac_item_id (str): The STAC item identifier to resolve.
 
     Returns:
-        str: The path to the first asset of the specified STAC item.
+        tuple[Item, str]: The specified STAC item and the path to its first asset.
 
     Raises:
         RuntimeError: If the STAC item is missing or contains no assets.
@@ -300,14 +315,14 @@ def resolve_stac_input_path(catalog_client, collection: str, stac_item_id: str) 
     if not stac_item_path:
         raise RuntimeError(f"STAC item '{stac_item_id}' in collection '{collection}' has no assets.")
 
-    return stac_item_path
+    return stac_item, stac_item_path
 
 
 def build_input_products(
     unit,
     dpr_process_in: DprProcessIn,
     storage_configuration: StorageConfig,
-    catalog_client,
+    catalog_client: CatalogClient,
 ) -> list[InputProduct]:
     """
     Builds the list of input product configurations for a workflow step.
@@ -330,25 +345,18 @@ def build_input_products(
         RuntimeError: If an expected input product or STAC item cannot be found.
     """
     inputs = []
+
+    # Group input products by name (needed for inputs of type regex)
+    grouped_products = defaultdict(list)
     for input_product in dpr_process_in.input_products:
-        product_name = input_product.name
+        grouped_products[input_product.name].append(input_product)
 
-        mapping = next(
-            (inp for inp in unit.get("input_products", []) if inp["name"] == product_name),
-            None,
-        )
+    # Iterate over each group of products
+    for product_name, products in grouped_products.items():
 
+        mapping = search_by_name(unit.get("input_products", []), product_name)
         if not mapping:
             raise RuntimeError(f"Couldn't find any input for task table entry '{product_name}'")
-
-        stac_item_identifier = input_product.item_id
-        collection = input_product.collection_name
-
-        stac_item_path = resolve_stac_input_path(
-            catalog_client,
-            collection,
-            stac_item_identifier,
-        )
 
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
@@ -361,20 +369,60 @@ def build_input_products(
                 ) or storage_configuration.get_storage_for_pipeline_section("other")
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for input product '{product_name}'")
-        inputs.append(
-            InputProduct(
-                id=mapping["name"],
-                path=stac_item_path,
-                # TODO: The value for this filed in the tasktable (from where the unit is built) should be 'filename'
-                # in case of s1 l0 processor, otherwise the s1 l0 processor is failing in starting.
-                # check in the tasktable from rs-dpr-service (config/TaskTable_S1_L0_generated_by_rs_python_v1.json)
-                # that in section io, the type field is set to 'filename' for input_products (S1ACADUS).
-                # To be fixed in future iterations !
-                type=mapping.get("type", "filename"),
-                store_type=mapping["store_type"],
-                store_params=storage_configuration.get_store_params(store_name),
-            ),
-        )
+        store_params = deepcopy(storage_configuration.get_store_params(store_name))
+
+        if len(products) == 1:
+            # Standard case where each input product has a different name (i.e. single STAC item)
+            input_product = products[0]
+            _, stac_item_path = resolve_stac_input_path(
+                catalog_client,
+                input_product.collection_name,
+                input_product.item_id,
+            )
+
+            inputs.append(
+                InputProduct(
+                    id=mapping["name"],
+                    path=stac_item_path,
+                    # TODO: The value for this field in the tasktable (from where the unit is built) should be
+                    # 'filename' in case of s1 l0 processor, otherwise the s1 l0 processor is failing in starting.
+                    # check in the tasktable from rs-dpr-service (config/TaskTable_S1_L0_generated_by_rs_python_v1.json)
+                    # that in section io, the type field is set to 'filename' for input_products (S1ACADUS).
+                    # To be fixed in future iterations !
+                    type=mapping.get("type", "filename"),
+                    store_type=mapping["store_type"],
+                    store_params=store_params,
+                ),
+            )
+        elif isinstance(store_params, StoreParams):
+            # Advanced case where several input products share the same name (i.e. several STAC items)
+            store_params.multiplicity = str(len(products))
+
+            # Retrieve all paths
+            paths = [
+                resolve_stac_input_path(
+                    catalog_client,
+                    product.collection_name,
+                    product.item_id,
+                )[1]
+                for product in products
+            ]
+            # Compute longest common prefix
+            common_folder, relative_parts = get_common_and_relative_paths(paths)
+            store_params.regex = rf"({'|'.join(relative_parts)})"
+
+            # Add a single InputProduct of type regex listing the provided inputs in the common folder
+            inputs.append(
+                InputProduct(
+                    id=mapping["name"],
+                    path=common_folder,
+                    type=mapping.get("type", "regex"),
+                    store_type=mapping["store_type"],
+                    store_params=store_params,
+                ),
+            )
+        else:
+            raise RuntimeError(f"Couldn't find any storage configuration for input product '{product_name}'")
     return inputs
 
 
@@ -506,6 +554,66 @@ def get_io(
     return inputs, outputs
 
 
+def build_adfs(
+    storage_configuration: StorageConfig,
+    adfs: list[tuple[str, str, str]],
+) -> list[AdfConfig]:
+    """
+    Build a list of AdfConfig objects from input ADF definitions.
+
+    ADFs are grouped by their identifier. If an identifier is associated
+    with a single path, a standard AdfConfig is created. If multiple paths
+    share the same identifier, a single AdfConfig is created using a common
+    folder and a regex pattern to match all corresponding files.
+
+    Args:
+        storage_configuration (StorageConfig): Configuration object used to
+            retrieve default storage parameters.
+        adfs (list[tuple[str, str, str]]): List of (adf_id, adfs_type, path) tuples.
+
+    Returns:
+        list[AdfConfig]: List of constructed AdfConfig objects, one per group
+        of ADFs.
+    """
+    result = []
+
+    # Group adfs by name (needed for adfs of type regex)
+    grouped_adfs = defaultdict(list)
+    for adf_id, adfs_type, path in adfs:
+        grouped_adfs[adf_id].append((path, adfs_type))
+
+    # Iterate over each group of adfs
+    for adfs_id, adfs_entries in grouped_adfs.items():
+        adfs_name = storage_configuration.default_adfs_storage
+        store_params = deepcopy(storage_configuration.get_store_params(adfs_name))
+        if len(adfs_entries) == 1:
+            # Standard case where each adfs has a different id (i.e. single file)
+            path, adfs_type = adfs_entries[0]
+            if adfs_type == "folder":
+                path = os.path.dirname(path)
+            result.append(AdfConfig(id=adfs_id, path=path, store_params=store_params))
+        elif isinstance(store_params, StoreParams):
+            # Advanced case where several adfs share the same id (i.e. several files)
+            adfs_paths = [p for p, _ in adfs_entries]
+            store_params.multiplicity = str(len(adfs_paths))
+            # Compute longest common prefix
+            common_folder, relative_parts = get_common_and_relative_paths(adfs_paths)
+            store_params.regex = rf"({'|'.join(relative_parts)})"
+            # Add a single AdfConfig of type regex listing the provided adfs in the common folder
+            result.append(
+                AdfConfig(
+                    id=adfs_id,
+                    path=common_folder,
+                    # type="regex", # Unsupported by CPM but it feels needed here for S1ARD
+                    store_params=store_params,
+                ),
+            )
+        else:
+            raise RuntimeError(f"Couldn't find any storage configuration for adfs '{adfs_name}'")
+
+    return result
+
+
 def load_storage_configuration(
     secrets: dict,
     config_path: str = str(CONFIG_DIR / "storage_configuration.json"),
@@ -609,7 +717,7 @@ def build_mockup_payload(owner_id):
 def generate_payload(  # pylint: disable=unused-argument
     flow_env: FlowEnv,
     unit_list: list[dict],
-    adfs: list[tuple[str, str]],
+    adfs: list[tuple[str, str, str]],
     dpr_process_in: DprProcessIn,
 ) -> PayloadSchema:
     """
@@ -624,8 +732,8 @@ def generate_payload(  # pylint: disable=unused-argument
             credentials, tracing, and runtime context.
         unit_list (list[dict]): List of workflow unit definitions containing I/O
             specifications and processing parameters.
-        adfs (list[tuple[str, str]]): List of auxiliary item
-            tuples, where each tuple includes the eopf type and the s3 storage path.
+        adfs (list[tuple[str, str, str]]): List of auxiliary item
+            tuples, where each tuple includes the adfs name, the adfs type and the s3 storage path.
         dpr_process_in (DprProcessIn): DPR input process definition containing
             product paths and parameters.
 
@@ -684,8 +792,7 @@ def generate_payload(  # pylint: disable=unused-argument
             raise ValueError(f"Key {ke} not found in unit list") from ke
 
     logger.info("Building ADFs section")
-    store_params = storage_configuration.get_store_params(storage_configuration.default_adfs_storage)
-    io_config.adfs = [AdfConfig(id=adf[0], path=adf[1], store_params=store_params) for adf in adfs]
+    io_config.adfs = build_adfs(storage_configuration, adfs)
 
     # Add the logging config for l0 and s1 / s3 configurations. These configurations
     # are hardcoded in the l0 eopf dask worker image. The path where these files are stored is given
@@ -720,8 +827,8 @@ def generate_payload(  # pylint: disable=unused-argument
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
     logger.info("Building the payload")
     payload = PayloadSchema(
-        # add some default params, as stated in a comment from jira (story 800)
-        general_configuration=GeneralConfiguration(),
+        # add some default params, as stated in a comment from jira (stories 800/1050)
+        general_configuration=GeneralConfiguration(logging=LoggingConfig(level=dpr_process_in.logging_level.name)),
         workflow=workflow_steps,
         io=io_config,  # type: ignore
         # The dask_context section is built in the dpr_service

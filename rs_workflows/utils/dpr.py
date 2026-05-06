@@ -30,6 +30,7 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
     FlowGeneratedProduct,
     FlowInputProduct,
+    LoggingLevel,
     Priority,
     ProcessingMode,
     WorkflowType,
@@ -61,6 +62,7 @@ async def call_dpr_flow(
     workflow: WorkflowType | None,
     generated_product_to_collection_identifier: list[FlowGeneratedProduct],
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
+    logging_level: LoggingLevel = LoggingLevel.INFO,
 ) -> None:
     """
     Call any DPR processing flow with a set of default parameters.
@@ -82,6 +84,7 @@ async def call_dpr_flow(
         input_products=input_products,
         generated_product_to_collection_identifier=generated_product_to_collection_identifier,
         auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
+        logging_level=logging_level,
         processing_mode=processing_mode,
         **external_variables,
     )

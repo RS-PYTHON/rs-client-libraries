@@ -24,6 +24,7 @@ from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
     FlowGeneratedProduct,
+    LoggingLevel,
     Priority,
     ProcessingMode,
     WorkflowType,
@@ -88,6 +89,13 @@ class ProcessingFlowParams(BaseModel):
         title="Priority",
         description="Processing priority (low, normal, high).",
         json_schema_extra={"order": 8},
+    )
+
+    logging_level: LoggingLevel = Field(
+        default=LoggingLevel.INFO,
+        title="Overall EOPF logging level",
+        description="Overall EOPF logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+        json_schema_extra={"order": 9},
     )
 
     processing_mode: list[ProcessingMode] = Field(

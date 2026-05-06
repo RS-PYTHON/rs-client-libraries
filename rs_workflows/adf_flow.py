@@ -44,8 +44,9 @@ from rs_workflows.payload_generator import (
     find_s3_output_bucket,
 )
 
-# Path to the S00__ADF_ECMWA script
+# Path to the conversion scripts
 ADF_ECMWA_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWA.py"
+ADF_ECMWF_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWF.py"
 
 STAC_DATETIME_PROPERTY_NAMES = {
     "created",
@@ -137,14 +138,14 @@ async def download_and_extract_assets_task(items: list[Item], extract_to: Path):
                     tmp_path.unlink()
 
 
-@task(name="Run S00__ADF_ECMWA conversion script")
-def run_adf_ecmwa_script(data_dir: Path, working_dir: Path, output_dir: Path) -> Path:
+@task(name="Run ADF conversion script")
+def run_adf_script(script_path: Path, data_dir: Path, working_dir: Path, output_dir: Path) -> Path:
     """
-    Run the S00__ADF_ECMWA.py script with the given input and output directories.
+    Run the ADF conversion script with the given input and output directories.
     Returns the path to the generated ZARR product.
     """
     logger = get_run_logger()
-    logger.info(f"Running ADF conversion script: {ADF_ECMWA_SCRIPT_PATH}")
+    logger.info(f"Running ADF conversion script: {script_path}")
 
     env = os.environ.copy()
     env["ADF_OUTPUT"] = str(output_dir)
@@ -159,7 +160,7 @@ def run_adf_ecmwa_script(data_dir: Path, working_dir: Path, output_dir: Path) ->
         result = subprocess.run(  # nosec B603
             # trusted local script executed with the current interpreter and flow-created paths
             # if B603 is not used, the bandit complains about using a list with shell=True, which is not the case here
-            [sys.executable, str(ADF_ECMWA_SCRIPT_PATH), str(data_dir), "--working_dir", str(working_dir)],
+            [sys.executable, str(script_path), str(data_dir), "--working_dir", str(working_dir)],
             env=env,
             check=True,
             capture_output=True,
@@ -185,7 +186,7 @@ def run_adf_ecmwa_script(data_dir: Path, working_dir: Path, output_dir: Path) ->
 
 
 @task(name="Create STAC Item from ZARR metadata")
-def create_stac_item_from_zarr(zarr_path: Path) -> Item:
+def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Item:
     """
     Create a STAC Item from the .zattrs or zarr.json in the generated ZARR tree.
     """
@@ -210,9 +211,9 @@ def create_stac_item_from_zarr(zarr_path: Path) -> Item:
     stac_props = normalize_stac_properties_datetimes(metadata.get("properties", {}))
     logger.info(f"Extracted STAC properties from ZARR metadata: {stac_props}")
 
-    # requirement: "Create a STAC item ... with S00__ADF_ECMWA as product:type"
-    # but the script sets it to "ADF_ECMWA"
-    stac_props["product:type"] = "S00__ADF_ECMWA"
+    # requirement: "Create a STAC item ... with generated product type as product:type"
+    # but the script may set it differently
+    stac_props["product:type"] = generated_prod_type
 
     item_id = metadata.get("id", zarr_path.stem)
     logger.info(f"Setting item_id to {item_id}")
@@ -259,148 +260,156 @@ async def adf_conversion(adf_input: AdfProcessIn):
 
     flow_env = FlowEnv(adf_input.env)
     with flow_env.start_span(__name__, "adf_conversion"):
-
-        if adf_input.adf_type == AdfType.S00__ADF_ECMWA:
-            # 1. Build CQL2 filters for required auxiliary types
-            # We need AX___MA1_AX and AX___MA2_AX for S00__ADF_ECMWA
-            # required_types = ["AX___MA1_AX", "AX___MA2_AX"]
-            # AX___MA2_AX is not used anymore in S00__ADF_ECMWA.py. uncomment the prev line and remove the next one
-            # if a change in the script is made to use it again
-            required_types = ["AX___MA1_AX"]
-
-            staged_items: list[Item] = []
-            for prod_type in required_types:
-                cql2_filter = {
-                    "filter": {
-                        "op": "and",
-                        "args": [
-                            {
-                                "op": "t_intersects",
-                                "args": [
-                                    {"property": "datetime"},
-                                    [
-                                        adf_input.start_datetime.isoformat() if adf_input.start_datetime else None,
-                                        adf_input.end_datetime.isoformat() if adf_input.end_datetime else None,
-                                    ],
-                                ],
-                            },
-                            {"op": "=", "args": [{"property": "product:type"}, prod_type]},
-                        ],
-                    },
-                }
-                logger.info(f"Built CQL2 filter for product type {prod_type}: {cql2_filter}")
-                # find target collection from mapping, preferring an exact product type match
-                target_collection = resolve_collection_name(
-                    adf_input.auxiliary_product_to_collection_identifier,
-                    prod_type,
-                )
-                if target_collection is None:
-                    raise RuntimeError(
-                        "No target collection found for input product type "
-                        f"{prod_type!r} in auxiliary_product_to_collection_identifier.",
-                    )
-
-                logger.info(f"Staging {prod_type} to collection {target_collection}")
-                success, items = await auxip_staging_task(
-                    env=adf_input.env,
-                    cql2_filter=cql2_filter,
-                    catalog_collection_identifier=target_collection,
-                )
-                if success and items:
-                    staged_items.extend(items)
-
-            if not staged_items:
-                logger.error("No staged items found to process.")
-                return
-
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_path = Path(temp_dir)
-                input_dir = temp_path / "INPUT"
-                work_dir = temp_path / "WORK"
-                output_dir = temp_path / "OUTPUT"
-
-                input_dir.mkdir()
-                work_dir.mkdir()
-                output_dir.mkdir()
-
-                # 2. Download and unzip assets locally
-                await download_and_extract_assets_task(staged_items, input_dir)
-
-                # 3. Call the S00__ADF_ECMWA.py script
-                try:
-                    zarr_product_path = run_adf_ecmwa_script(input_dir, work_dir, output_dir)
-                finally:
-                    shutil.rmtree(input_dir, ignore_errors=True)
-
-                # 4. Create STAC item for the generated ZARR
-                stac_item = create_stac_item_from_zarr(zarr_product_path)
-
-                # 5. Copy ZARR to catalog bucket
-                # compute location using find_s3_output_bucket
-                bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
-
-                # find destination collection and product type for the generated ADF
-                # the script says product:type is ADF_ECMWA but we workaround it to S00__ADF_ECMWA
+        # 1. Build CQL2 filters for required auxiliary types
+        match adf_input.adf_type:
+            case AdfType.S00__ADF_ECMWA:
+                # We need AX___MA1_AX and AX___MA2_AX for S00__ADF_ECMWA
+                # required_types = ["AX___MA1_AX", "AX___MA2_AX"]
+                # AX___MA2_AX is not used anymore in S00__ADF_ECMWA.py. uncomment the prev line and
+                # remove the next one if a change in the script is made to use it again
+                required_types = ["AX___MA1_AX"]
                 generated_prod_type = "S00__ADF_ECMWA"
-                owner_id = flow_env.owner_id
+                script_path = ADF_ECMWA_SCRIPT_PATH
+            case AdfType.S00__ADF_ECMWF:
+                # We need AX___MF1_AX and AX___MF2_AX for S00__ADF_ECMWF
+                # required_types = ["AX___MF1_AX", "AX___MF2_AX"]
+                # AX___MF2_AX is not used anymore in S00__ADF_ECMWF.py. uncomment the prev line and
+                # remove the next one if a change in the script is made to use it again
+                required_types = ["AX___MF1_AX"]
+                generated_prod_type = "S00__ADF_ECMWF"
+                script_path = ADF_ECMWF_SCRIPT_PATH
+            case _:
+                logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
+                return
+        staged_items: list[Item] = []
+        for prod_type in required_types:
+            cql2_filter = {
+                "filter": {
+                    "op": "and",
+                    "args": [
+                        {
+                            "op": "t_intersects",
+                            "args": [
+                                {"property": "datetime"},
+                                [
+                                    adf_input.start_datetime.isoformat() if adf_input.start_datetime else None,
+                                    adf_input.end_datetime.isoformat() if adf_input.end_datetime else None,
+                                ],
+                            ],
+                        },
+                        {"op": "=", "args": [{"property": "product:type"}, prod_type]},
+                    ],
+                },
+            }
+            logger.info(f"Built CQL2 filter for product type {prod_type}: {cql2_filter}")
 
-                target_collection = resolve_collection_name(
-                    adf_input.auxiliary_product_to_collection_identifier,
-                    generated_prod_type,
+            # find target collection from mapping, preferring an exact product type match
+            target_collection = resolve_collection_name(
+                adf_input.auxiliary_product_to_collection_identifier,
+                prod_type,
+            )
+            if target_collection is None:
+                raise RuntimeError(
+                    "No target collection found for input product type "
+                    f"{prod_type!r} in auxiliary_product_to_collection_identifier.",
                 )
-                if target_collection is None:
-                    raise RuntimeError(
-                        "No target collection found for generated product type "
-                        f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
-                    )
 
-                bucket_name = find_s3_output_bucket(
-                    bucket_configuration,
-                    owner_id,
-                    target_collection,
-                    generated_prod_type,
+            logger.info(f"Staging {prod_type} to collection {target_collection}")
+            success, items = await auxip_staging_task(
+                env=adf_input.env,
+                cql2_filter=cql2_filter,
+                catalog_collection_identifier=target_collection,
+            )
+            if success and items:
+                staged_items.extend(items)
+
+        if not staged_items:
+            logger.error("No staged items found to process.")
+            return
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            input_dir = temp_path / "INPUT"
+            work_dir = temp_path / "WORK"
+            output_dir = temp_path / "OUTPUT"
+
+            input_dir.mkdir()
+            work_dir.mkdir()
+            output_dir.mkdir()
+
+            # 2. Download and unzip assets locally
+            await download_and_extract_assets_task(staged_items, input_dir)
+
+            # 3. Call the conversion script
+            try:
+                zarr_product_path = run_adf_script(script_path, input_dir, work_dir, output_dir)
+            finally:
+                shutil.rmtree(input_dir, ignore_errors=True)
+
+            # 4. Create STAC item for the generated ZARR
+            stac_item = create_stac_item_from_zarr(zarr_product_path, generated_prod_type)
+
+            # 5. Copy ZARR to catalog bucket
+            # compute location using find_s3_output_bucket
+            bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
+
+            # find destination collection and product type for the generated ADF
+            owner_id = flow_env.owner_id
+
+            target_collection = resolve_collection_name(
+                adf_input.auxiliary_product_to_collection_identifier,
+                generated_prod_type,
+            )
+            if target_collection is None:
+                raise RuntimeError(
+                    "No target collection found for generated product type "
+                    f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
                 )
 
-                s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}/"
-                logger.info(f"Uploading ZARR to {s3_dest_prefix}")
+            bucket_name = find_s3_output_bucket(
+                bucket_configuration,
+                owner_id,
+                target_collection,
+                generated_prod_type,
+            )
 
-                # upload folder
-                await s3_upload_dir(zarr_product_path, s3_dest_prefix)
+            s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}/"
+            logger.info(f"Uploading ZARR to {s3_dest_prefix}")
 
-                # update STAC item href to point to S3
-                stac_item.assets["data"].href = s3_dest_prefix
+            # upload folder
+            await s3_upload_dir(zarr_product_path, s3_dest_prefix)
 
-                # 8. Publish to catalog
-                # items_metadata: list[DprProcessedItemMetadata]
-                items_metadata = [
-                    DprProcessedItemMetadata(
-                        output_product_id=stac_item.id,
-                        product_type=generated_prod_type,
-                        stac_item=stac_item,
-                    ),
-                ]
+            # update STAC item href to point to S3
+            stac_item.assets["data"].href = s3_dest_prefix
 
-                # generated_product_to_collection_identifier: list[FlowGeneratedProduct]
-                # we reuse the mapping from AdfProcessIn
-                publish_mapping = [
-                    FlowGeneratedProduct(
-                        name=stac_item.id,
-                        product_type=generated_prod_type,
-                        collection_name=target_collection,
-                    ),
-                ]
+            # 8. Publish to catalog
+            # items_metadata: list[DprProcessedItemMetadata]
+            items_metadata = [
+                DprProcessedItemMetadata(
+                    output_product_id=stac_item.id,
+                    product_type=generated_prod_type,
+                    stac_item=stac_item,
+                ),
+            ]
 
-                try:
-                    await publish(
-                        adf_input.env,
-                        publish_mapping,
-                        items_metadata,
-                    )
-                finally:
-                    shutil.rmtree(output_dir, ignore_errors=True)
+            # generated_product_to_collection_identifier: list[FlowGeneratedProduct]
+            # we reuse the mapping from AdfProcessIn
+            publish_mapping = [
+                FlowGeneratedProduct(
+                    name=stac_item.id,
+                    product_type=generated_prod_type,
+                    collection_name=target_collection,
+                ),
+            ]
 
-        else:
-            logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
+            try:
+                await publish(
+                    adf_input.env,
+                    publish_mapping,
+                    items_metadata,
+                )
+            finally:
+                shutil.rmtree(output_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
