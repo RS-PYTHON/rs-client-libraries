@@ -319,9 +319,7 @@ async def test_adf_conversion_flow_logic(
     monkeypatch.setattr(adf_flow, "download_and_extract_assets_task", extract_mock)
 
     # 3. Mock S3 operations
-    download_mock = AsyncMock()
     upload_mock = AsyncMock()
-    monkeypatch.setattr(adf_flow, "s3_download_file", download_mock)
     monkeypatch.setattr(adf_flow, "s3_upload_dir", upload_mock)
     rmtree_mock = MagicMock()
     monkeypatch.setattr(adf_flow.shutil, "rmtree", rmtree_mock)
@@ -340,6 +338,16 @@ async def test_adf_conversion_flow_logic(
     (zarr_path / ".zattrs").write_text(json.dumps(zattrs_content))
     run_script_mock = MagicMock(return_value=zarr_path)
     monkeypatch.setattr(adf_flow, "run_adf_script", run_script_mock)
+    generated_item = Item(
+        id="mock-adf",
+        geometry=None,
+        bbox=None,
+        datetime=datetime.now(timezone.utc),
+        properties={"product:type": "S00__ADF_ECMWA"},
+    )
+    generated_item.add_asset("data", Asset(href=str(zarr_path)))
+    create_item_mock = MagicMock(return_value=generated_item)
+    monkeypatch.setattr(adf_flow, "create_stac_item_from_zarr", create_item_mock)
 
     # 5. Mock external configurations
     config_mock = MagicMock(return_value=[["*", "*", "*", "*", "test-bucket"]])
@@ -364,7 +372,6 @@ async def test_adf_conversion_flow_logic(
     # Verifications
     assert staging_mock.call_count == 1
     assert extract_mock.called
-    assert not download_mock.called  # Download is now inside the extract task
     run_script_mock.assert_called_once()
     assert run_script_mock.call_args.args[0] == adf_flow.ADF_ECMWA_SCRIPT_PATH
     assert upload_mock.called
@@ -423,6 +430,15 @@ async def test_adf_conversion_flow_logic_for_ecmwf(
     )
     run_script_mock = MagicMock(return_value=zarr_path)
     monkeypatch.setattr(adf_flow, "run_adf_script", run_script_mock)
+    generated_item = Item(
+        id="mock-ecmwf-adf",
+        geometry=None,
+        bbox=None,
+        datetime=datetime.now(timezone.utc),
+        properties={"product:type": "S00__ADF_ECMWF"},
+    )
+    generated_item.add_asset("data", Asset(href=str(zarr_path)))
+    monkeypatch.setattr(adf_flow, "create_stac_item_from_zarr", MagicMock(return_value=generated_item))
 
     monkeypatch.setattr(
         adf_flow,
