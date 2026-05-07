@@ -169,8 +169,8 @@ def _build_entry(
     mode = io_product.get("mode", "always")
 
     # Filter by processing mode: skip this product if it has a mode that's not "always" and not in the provided processing modes
-    if mode != "always" and (processing_modes and mode not in processing_modes):
-        # TODO add log?
+    processing_modes = processing_modes or []
+    if mode != "always" and mode not in processing_modes:
         return None
 
     # Retrieve product details from "io" section
