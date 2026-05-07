@@ -109,12 +109,9 @@ def test_build_unit_list_returns_dict(case_id, cfg):  # pylint: disable=unused-a
             "satellite": "sentinel-3a",
         },
     )
-    assert isinstance(out, dict)
+    assert isinstance(out, list)
 
-    assert "units" in out, "Missing key 'units'."
-    assert isinstance(out["units"], list)
-
-    for i, unit in enumerate(out["units"]):
+    for i, unit in enumerate(out):
         assert isinstance(unit, dict), f"units[{i}] must be a dict."
         for key in ("name", "module", "input_products", "input_adfs", "output_products"):
             assert key in unit, f"Missing key '{key}' in units[{i}]."
@@ -122,7 +119,7 @@ def test_build_unit_list_returns_dict(case_id, cfg):  # pylint: disable=unused-a
 
 def _valid_tasktable():
     return {
-        "pipelines": [{"name": "p1", "steps": [{"order": 1, "unit_name": "u1"}]}],
+        "pipelines": [{"name": "p1", "steps": [{"step_id": 1, "unit_name": "u1"}]}],
         "units": [
             {
                 "name": "u1",
@@ -139,14 +136,14 @@ def _valid_tasktable():
 def test_build_unit_list_rejects_both_pipeline_and_unit():
     """Test that build_unit_list raises TaskTableError when both 'pipeline' and 'unit' are provided."""
     tt = _valid_tasktable()
-    with pytest.raises(TaskTableError, match='Provide either "pipeline" or "unit", not both\\.'):
+    with pytest.raises(TaskTableError, match="Provide either 'pipeline' or 'unit', not both."):
         build_unit_list(tt, pipeline="p1", unit="u1")
 
 
 def test_build_unit_list_requires_one_of_pipeline_or_unit():
     """Test that build_unit_list raises TaskTableError when neither 'pipeline' nor 'unit' is provided."""
     tt = _valid_tasktable()
-    with pytest.raises(TaskTableError, match='One of "pipeline" or "unit" must be provided\\.'):
+    with pytest.raises(TaskTableError, match="One of 'pipeline' or 'unit' must be provided."):
         build_unit_list(tt, pipeline=None, unit=None)
 
 
@@ -175,7 +172,7 @@ def test_build_unit_list_missing_or_invalid_units_list():
 def test_build_unit_list_missing_or_invalid_io_list():
     """Test that a missing or non-list 'io' field in the task table raises TaskTableError with the expected message."""
     tt = {
-        "pipelines": [{"name": "p1", "steps": [{"order": 1, "unit_name": "u1"}]}],
+        "pipelines": [{"name": "p1", "steps": [{"step_id": 1, "unit_name": "u1"}]}],
         "units": [{"name": "u1", "module": "m", "input_products": [], "input_adfs": [], "output_products": []}],
     }
     with pytest.raises(TaskTableError, match=r"Missing or invalid 'io' list in task table:.+"):
@@ -198,7 +195,7 @@ def test_select_unit_names_reports_available_pipelines():
         "pipelines": [
             {
                 "name": "good_pipeline",
-                "steps": [{"unit_name": "u1", "order": 1, "input_products": {}, "output_products": {}}],
+                "steps": [{"unit_name": "u1", "step_id": 1, "input_products": {}, "output_products": {}}],
             },
         ],
     }
@@ -209,8 +206,8 @@ def test_select_unit_names_reports_available_pipelines():
 
     # checks
     msg = str(exc.value)
-    assert 'Pipeline "missing_pipeline" not found' in msg
-    assert 'Available pipelines: "good_pipeline"' in msg
+    assert "Could not find pipeline named 'missing_pipeline' in tasktable." in msg
+    assert "'good_pipeline'" in msg
 
 
 def test_build_unit_list_reports_available_units():
@@ -264,7 +261,7 @@ def test_build_entries_filters_by_mode():
                 "steps": [
                     {
                         "unit_name": "flt",
-                        "order": 1,
+                        "step_id": 1,
                         "input_products": {
                             "always_p": "pipeline_input",
                             "none_p": "pipeline_input",
@@ -280,19 +277,19 @@ def test_build_entries_filters_by_mode():
 
     # Case A: no processing_mode provided -> keep "always" and None, drop others
     out = build_unit_list(tasktable, pipeline="p_full", unit=None, processing_mode=None)
-    names = {ip["name"] for ip in out["units"][0]["input_products"]}
+    names = {ip["name"] for ip in out[0]["input_products"]}
     assert "always_p" in names and "none_p" in names
     assert "nrt_p" not in names and "ntc_p" not in names
 
     # Case B: processing_mode=["nrt"] -> keep always/none/nrt, drop ntc
     out = build_unit_list(tasktable, pipeline="p_full", unit=None, processing_mode=["nrt"])
-    names = {ip["name"] for ip in out["units"][0]["input_products"]}
+    names = {ip["name"] for ip in out[0]["input_products"]}
     assert {"always_p", "none_p", "nrt_p"} <= names
     assert "ntc_p" not in names
 
     # Case C: processing_mode=["ntc"] -> keep always/none/ntc, drop nrt
     out = build_unit_list(tasktable, pipeline="p_full", unit=None, processing_mode=["ntc"])
-    names = {ip["name"] for ip in out["units"][0]["input_products"]}
+    names = {ip["name"] for ip in out[0]["input_products"]}
     assert {"always_p", "none_p", "ntc_p"} <= names
     assert "nrt_p" not in names
 
@@ -308,175 +305,173 @@ def test_case_8_exact_output():
         processing_mode=["nrt", "reprocessing"],
     )
 
-    expected = {
-        "units": [
-            {
-                "name": "calibration",
-                "module": "s1_l12_rp.computing.ard_processing_units",
-                "input_products": [
-                    {
-                        "name": "cal_input",
-                        "origin": "pipeline_input",
-                        "mandatory": False,
-                        "type": "folder",
-                        "store_type": "safe",
-                    },
-                ],
-                "input_adfs": [
-                    {"name": "CONFIG", "mandatory": False, "type": "filename"},
-                    {"name": "ETAD", "mandatory": False, "type": "folder"},
-                ],
-                "output_products": [
-                    {
-                        "name": "cal_slcs",
-                        "origin": "pipeline_internal",
-                        "mandatory": True,
-                        "type": "folder",
-                        "store_type": "safe",
-                        "opening_mode": "CREATE_OVERWRITE",
-                    },
-                ],
-            },
-            {
-                "name": "reference_dem",
-                "module": "s1_l12_rp.computing.ard_processing_units",
-                "input_products": [
-                    {
-                        "name": "cal_slcs",
-                        "origin": "calibration.1.cal_slcs",
-                        "mandatory": False,
-                        "type": "folder",
-                        "store_type": "safe",
-                        "opening_mode": "CREATE_OVERWRITE",
-                    },
-                ],
-                "input_adfs": [
-                    {"name": "CONFIG", "mandatory": False, "type": "filename"},
-                    {"name": "DEM", "mandatory": False, "type": "folder"},
-                ],
-                "output_products": [
-                    {"name": "reference_dem", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
-                ],
-            },
-            {
-                "name": "reference_geometry",
-                "module": "s1_l12_rp.computing.ard_processing_units",
-                "input_products": [
-                    {
-                        "name": "cal_slcs",
-                        "origin": "calibration.1.cal_slcs",
-                        "mandatory": False,
-                        "type": "folder",
-                        "store_type": "safe",
-                        "opening_mode": "CREATE_OVERWRITE",
-                    },
-                    {
-                        "name": "reference_dem",
-                        "origin": "reference_dem.1.reference_dem",
-                        "mandatory": False,
-                        "type": "folder",
-                    },
-                ],
-                "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
-                "output_products": [
-                    {"name": "simulation_ref", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
-                ],
-            },
-            {
-                "name": "coregistration",
-                "module": "s1_l12_rp.computing.ard_processing_units",
-                "input_products": [
-                    {
-                        "name": "cal_slcs",
-                        "origin": "calibration.1.cal_slcs",
-                        "mandatory": False,
-                        "type": "folder",
-                        "store_type": "safe",
-                        "opening_mode": "CREATE_OVERWRITE",
-                    },
-                    {
-                        "name": "reference_dem",
-                        "origin": "reference_dem.1.reference_dem",
-                        "mandatory": False,
-                        "type": "folder",
-                    },
-                    {
-                        "name": "simulation_ref",
-                        "origin": "reference_geometry.1.simulation_ref",
-                        "mandatory": False,
-                        "type": "folder",
-                    },
-                ],
-                "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
-                "output_products": [
-                    {
-                        "name": "cslcs",
-                        "origin": "pipeline_internal",
-                        "mandatory": True,
-                        "type": "filename",
-                        "store_type": "zarr",
-                        "store_params": {"consolidate": True},
-                    },
-                ],
-            },
-            {
-                "name": "geocoding",
-                "module": "s1_l12_rp.computing.ard_processing_units",
-                "input_products": [
-                    {
-                        "name": "cslcs",
-                        "origin": "coregistration.1.cslcs",
-                        "mandatory": False,
-                        "type": "filename",
-                        "store_type": "zarr",
-                        "store_params": {"consolidate": True},
-                    },
-                    {
-                        "name": "simulation_ref",
-                        "origin": "reference_geometry.1.simulation_ref",
-                        "mandatory": False,
-                        "type": "folder",
-                    },
-                ],
-                "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
-                "output_products": [
-                    {
-                        "name": "gslcs",
-                        "origin": "pipeline_internal",
-                        "mandatory": True,
-                        "type": "filename",
-                        "store_type": "zarr",
-                        "store_params": {"consolidate": True},
-                    },
-                ],
-            },
-            {
-                "name": "mosaicking",
-                "module": "s1_l12_rp.computing.ard_processing_units",
-                "input_products": [
-                    {
-                        "name": "gslcs",
-                        "origin": "geocoding.1.gslcs",
-                        "mandatory": False,
-                        "type": "filename",
-                        "store_type": "zarr",
-                        "store_params": {"consolidate": True},
-                    },
-                ],
-                "input_adfs": [{"name": "S2_TILES", "mandatory": False, "type": "filename"}],
-                "output_products": [
-                    {
-                        "name": "nrb",
-                        "origin": "pipeline_output",
-                        "mandatory": True,
-                        "type": "filename",
-                        "store_type": "zarr",
-                        "store_params": {"consolidate": True},
-                    },
-                ],
-            },
-        ],
-    }
+    expected = [
+        {
+            "name": "calibration",
+            "module": "s1_l12_rp.computing.ard_processing_units",
+            "input_products": [
+                {
+                    "name": "cal_input",
+                    "origin": "pipeline_input",
+                    "mandatory": False,
+                    "type": "folder",
+                    "store_type": "safe",
+                },
+            ],
+            "input_adfs": [
+                {"name": "CONFIG", "mandatory": False, "type": "filename"},
+                {"name": "ETAD", "mandatory": False, "type": "folder"},
+            ],
+            "output_products": [
+                {
+                    "name": "cal_slcs",
+                    "origin": "pipeline_internal",
+                    "mandatory": True,
+                    "type": "folder",
+                    "store_type": "safe",
+                    "opening_mode": "CREATE_OVERWRITE",
+                },
+            ],
+        },
+        {
+            "name": "reference_dem",
+            "module": "s1_l12_rp.computing.ard_processing_units",
+            "input_products": [
+                {
+                    "name": "cal_slcs",
+                    "origin": "calibration.1.cal_slcs",
+                    "mandatory": False,
+                    "type": "folder",
+                    "store_type": "safe",
+                    "opening_mode": "CREATE_OVERWRITE",
+                },
+            ],
+            "input_adfs": [
+                {"name": "CONFIG", "mandatory": False, "type": "filename"},
+                {"name": "DEM", "mandatory": False, "type": "folder"},
+            ],
+            "output_products": [
+                {"name": "reference_dem", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
+            ],
+        },
+        {
+            "name": "reference_geometry",
+            "module": "s1_l12_rp.computing.ard_processing_units",
+            "input_products": [
+                {
+                    "name": "cal_slcs",
+                    "origin": "calibration.1.cal_slcs",
+                    "mandatory": False,
+                    "type": "folder",
+                    "store_type": "safe",
+                    "opening_mode": "CREATE_OVERWRITE",
+                },
+                {
+                    "name": "reference_dem",
+                    "origin": "reference_dem.1.reference_dem",
+                    "mandatory": False,
+                    "type": "folder",
+                },
+            ],
+            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
+            "output_products": [
+                {"name": "simulation_ref", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
+            ],
+        },
+        {
+            "name": "coregistration",
+            "module": "s1_l12_rp.computing.ard_processing_units",
+            "input_products": [
+                {
+                    "name": "cal_slcs",
+                    "origin": "calibration.1.cal_slcs",
+                    "mandatory": False,
+                    "type": "folder",
+                    "store_type": "safe",
+                    "opening_mode": "CREATE_OVERWRITE",
+                },
+                {
+                    "name": "reference_dem",
+                    "origin": "reference_dem.1.reference_dem",
+                    "mandatory": False,
+                    "type": "folder",
+                },
+                {
+                    "name": "simulation_ref",
+                    "origin": "reference_geometry.1.simulation_ref",
+                    "mandatory": False,
+                    "type": "folder",
+                },
+            ],
+            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
+            "output_products": [
+                {
+                    "name": "cslcs",
+                    "origin": "pipeline_internal",
+                    "mandatory": True,
+                    "type": "filename",
+                    "store_type": "zarr",
+                    "store_params": {"consolidate": True},
+                },
+            ],
+        },
+        {
+            "name": "geocoding",
+            "module": "s1_l12_rp.computing.ard_processing_units",
+            "input_products": [
+                {
+                    "name": "cslcs",
+                    "origin": "coregistration.1.cslcs",
+                    "mandatory": False,
+                    "type": "filename",
+                    "store_type": "zarr",
+                    "store_params": {"consolidate": True},
+                },
+                {
+                    "name": "simulation_ref",
+                    "origin": "reference_geometry.1.simulation_ref",
+                    "mandatory": False,
+                    "type": "folder",
+                },
+            ],
+            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
+            "output_products": [
+                {
+                    "name": "gslcs",
+                    "origin": "pipeline_internal",
+                    "mandatory": True,
+                    "type": "filename",
+                    "store_type": "zarr",
+                    "store_params": {"consolidate": True},
+                },
+            ],
+        },
+        {
+            "name": "mosaicking",
+            "module": "s1_l12_rp.computing.ard_processing_units",
+            "input_products": [
+                {
+                    "name": "gslcs",
+                    "origin": "geocoding.1.gslcs",
+                    "mandatory": False,
+                    "type": "filename",
+                    "store_type": "zarr",
+                    "store_params": {"consolidate": True},
+                },
+            ],
+            "input_adfs": [{"name": "S2_TILES", "mandatory": False, "type": "filename"}],
+            "output_products": [
+                {
+                    "name": "nrb",
+                    "origin": "pipeline_output",
+                    "mandatory": True,
+                    "type": "filename",
+                    "store_type": "zarr",
+                    "store_params": {"consolidate": True},
+                },
+            ],
+        },
+    ]
 
     assert out == expected
 
@@ -498,79 +493,77 @@ def test_case_s1_l0_exact_output_with_regex():
         },
     )
 
-    expected = {
-        "units": [
-            {
-                "name": "single_unit",
-                "module": "l0.s1.s1_l0_processor",
-                "input_products": [
-                    {
-                        "name": "S1CADUS",
-                        "origin": "pipeline_input",
-                        "mandatory": True,
-                        "type": "folder",
-                        "store_type": "cadu",
-                    },
-                ],
-                "input_adfs": [
-                    {
-                        "name": "OSF",
-                        "mandatory": False,
-                        "type": "filename",
-                        "store_type": "safe",
-                        "alternatives": [
-                            {
-                                "order": 1,
-                                "timeout_seconds": 0,
-                                "query": {
-                                    "name": "LatestValCover",
-                                    "parameters": {
-                                        "product_type": "MPL_ORBSCT",
-                                        "start_datetime": "2023-10-03T11:00:00.000Z",
-                                        "end_datetime": "2025-10-03T11:00:00.000Z",
-                                        "dTa": 0,
-                                        "dTb": 0,
-                                    },
+    expected = [
+        {
+            "name": "single_unit",
+            "module": "l0.s1.s1_l0_processor",
+            "input_products": [
+                {
+                    "name": "S1CADUS",
+                    "origin": "pipeline_input",
+                    "mandatory": True,
+                    "type": "folder",
+                    "store_type": "cadu",
+                },
+            ],
+            "input_adfs": [
+                {
+                    "name": "OSF",
+                    "mandatory": False,
+                    "type": "filename",
+                    "store_type": "safe",
+                    "alternatives": [
+                        {
+                            "step_id": 1,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCover",
+                                "parameters": {
+                                    "product_type": "MPL_ORBSCT",
+                                    "start_datetime": "2023-10-03T11:00:00.000Z",
+                                    "end_datetime": "2025-10-03T11:00:00.000Z",
+                                    "dTa": 0,
+                                    "dTb": 0,
                                 },
                             },
-                        ],
-                    },
-                    {
-                        "name": "FRO",
-                        "mandatory": False,
-                        "type": "filename",
-                        "store_type": "safe",
-                        "alternatives": [
-                            {
-                                "order": 1,
-                                "timeout_seconds": 0,
-                                "query": {
-                                    "name": "LatestValCover",
-                                    "parameters": {
-                                        "product_type": "MPL_ORBRES",
-                                        "start_datetime": "2023-10-03T11:00:00.000Z",
-                                        "end_datetime": "2025-10-03T11:00:00.000Z",
-                                        "dTa": 7200,
-                                        "dTb": 0,
-                                    },
+                        },
+                    ],
+                },
+                {
+                    "name": "FRO",
+                    "mandatory": False,
+                    "type": "filename",
+                    "store_type": "safe",
+                    "alternatives": [
+                        {
+                            "step_id": 1,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCover",
+                                "parameters": {
+                                    "product_type": "MPL_ORBRES",
+                                    "start_datetime": "2023-10-03T11:00:00.000Z",
+                                    "end_datetime": "2025-10-03T11:00:00.000Z",
+                                    "dTa": 7200,
+                                    "dTb": 0,
                                 },
                             },
-                        ],
-                    },
-                ],
-                "output_products": [
-                    {
-                        "name": "output_folder",
-                        "origin": "pipeline_output",
-                        "mandatory": True,
-                        "regex": ".*",
-                        "type": "folder",
-                        "store_type": "zarr",
-                        "opening_mode": "CREATE_OVERWRITE",
-                    },
-                ],
-            },
-        ],
-    }
+                        },
+                    ],
+                },
+            ],
+            "output_products": [
+                {
+                    "name": "output_folder",
+                    "origin": "pipeline_output",
+                    "mandatory": True,
+                    "regex": ".*",
+                    "type": "folder",
+                    "store_type": "zarr",
+                    "opening_mode": "CREATE_OVERWRITE",
+                },
+            ],
+        },
+    ]
 
     assert out == expected
