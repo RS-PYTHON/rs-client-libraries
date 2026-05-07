@@ -18,10 +18,9 @@ from prefect import flow, get_run_logger
 from pystac import ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
-from rs_workflows import auxip_flow
 from rs_workflows.flow_utils import ConversionIn, FlowEnv, RetryConfig
 from rs_workflows.staging_flow import staging_task
-from rs_workflows.utils.utils import get_archived_item_indexes
+from rs_workflows.utils.utils import asset_unzip_decompress, get_archived_item_indexes
 
 
 @flow
@@ -41,7 +40,10 @@ async def on_demand_conversion(
             if "product" in item.get("assets", {}):
                 selected_assets = {"product"}
 
-        legacy_product = staging_task.submit(
+        legacy_product = staging_task.with_options(
+            retries=retry_config.staging_retries,
+            retry_delay_seconds=retry_config.staging_retry_delay,
+        ).submit(
             flow_env.serialize(),
             stac_input=conversion_input.stac_input,
             catalog_collection_identifier=conversion_input.generated_product_to_collection_identifier.collection_name,
@@ -68,7 +70,8 @@ async def on_demand_conversion(
         for idx in get_archived_item_indexes(catalog_items):
             safe_zipped_item = catalog_items.items[idx]
             logger.info(f"Processing item {safe_zipped_item.id} for asset extraction...")
-            auxip_flow.auxip_unzip_decompress_task.submit(safe_zipped_item)
+            safe_unzipped_item = asset_unzip_decompress.submit(safe_zipped_item)
+            safe_item = safe_unzipped_item.result()
 
         logger.info("Staging task completed, proceeding with conversion...")
         # 3. compute the output product type from the product type mapping

@@ -14,6 +14,8 @@
 
 """Unit tests for shared workflow utilities."""
 
+# pylint: disable=redefined-outer-name,unused-argument
+
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -190,7 +192,11 @@ async def test_process_asset_returns_concrete_extracted_file_for_sen3_payload(
     monkeypatch.setattr(workflow_utils, "s3_delete", delete_mock)
     monkeypatch.setattr(workflow_utils, "extract_zip", extract_zip_mock)
     monkeypatch.setattr(workflow_utils, "recursive_extract", MagicMock(return_value=0))
-    monkeypatch.setattr(workflow_utils, "normalize_extract_dir", MagicMock(side_effect=lambda path: next(path.iterdir())))
+    monkeypatch.setattr(
+        workflow_utils,
+        "normalize_extract_dir",
+        MagicMock(side_effect=lambda path: next(path.iterdir())),
+    )
     monkeypatch.setattr(workflow_utils, "upload_folder_flat", upload_mock)
     monkeypatch.setattr(
         workflow_utils,
