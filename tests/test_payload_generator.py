@@ -900,7 +900,10 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
     )
 
     # This should raise RuntimeError with the proposed change
-    with pytest.raises(RuntimeError, match="Missing mapping in generated_product_to_collection_identifier for task table entry 'output2'"):
+    with pytest.raises(
+        RuntimeError,
+        match="Missing mapping in generated_product_to_collection_identifier for task table entry 'output2'",
+    ):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
 
@@ -925,9 +928,7 @@ def test_build_output_products_extra_mapping_is_ignored(sample_unit, mock_dpr_pr
         return_value="00000000-0000-0000-0000-000000000000",
     )
 
-    result = build_output_products(
-        sample_unit, mock_dpr_process_in, mock_storage, "test-owner", []
-    )
+    result = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
     assert len(result) == 2
     assert {r.id for r in result} == {"output1", "output2"}
@@ -953,9 +954,8 @@ def test_build_output_products_wildcard_collection_raises(sample_unit, mock_dpr_
     with pytest.raises(RuntimeError, match="cannot be '\\*' if the collection name is not specified"):
         build_output_products(sample_unit, mock_dpr_process_in, MagicMock(), "test-owner", [])
 
-def test_build_output_products_ignores_extra_generated_products(
-    mock_dpr_process_in, mock_store_params, mocker
-):
+
+def test_build_output_products_ignores_extra_generated_products(mock_dpr_process_in, mock_store_params, mocker):
     """
     Task table contains a single required output (S01SARRAW).
     generated_product_to_collection_identifier contains that entry + extras per RSPY-1039
@@ -968,8 +968,14 @@ def test_build_output_products_ignores_extra_generated_products(
 
     unit = {
         "output_products": [
-            {"name": "S01SARRAW", "store_type": "s3", "type": "filename", "opening_mode": "CREATE", "final_product": True}
-        ]
+            {
+                "name": "S01SARRAW",
+                "store_type": "s3",
+                "type": "filename",
+                "opening_mode": "CREATE",
+                "final_product": True,
+            },
+        ],
     }
 
     # --- Mapping parameter (flow input) ---
@@ -990,9 +996,7 @@ def test_build_output_products_ignores_extra_generated_products(
         return_value="00000000-0000-0000-0000-000000000000",
     )
 
-    result = build_output_products(
-        unit, mock_dpr_process_in, mock_storage, "test-owner", []
-    )
+    result = build_output_products(unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
     assert len(result) == 1
     assert result[0].id == "S01SARRAW"

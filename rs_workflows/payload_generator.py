@@ -459,9 +459,7 @@ def build_output_products(
     processed_products = set()
     logger = get_run_logger()
 
-    mapping_lookup = {
-        p.name: p for p in dpr_process_in.generated_product_to_collection_identifier
-    }
+    mapping_lookup = {p.name: p for p in dpr_process_in.generated_product_to_collection_identifier}
 
     for mapping in unit.get("output_products", []):
         product_name = mapping["name"]
@@ -472,7 +470,7 @@ def build_output_products(
         # Fails ONLY if required mapping is missing
         if not output_product:
             raise RuntimeError(
-                f"Missing mapping in generated_product_to_collection_identifier for task table entry '{product_name}'"
+                f"Missing mapping in generated_product_to_collection_identifier for task table entry '{product_name}'",
             )
 
         product_type = output_product.product_type
