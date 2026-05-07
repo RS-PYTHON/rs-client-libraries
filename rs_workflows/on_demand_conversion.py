@@ -15,8 +15,13 @@
 """Prefect flows and tasks for on-demand SAFE -zarr conversion."""
 
 from prefect import flow, get_run_logger
-from rs_workflows.flow_utils import FlowEnv, ConversionIn, RetryConfig
+from pystac import ItemCollection
+
+from rs_client.stac.catalog_client import CatalogClient
+from rs_workflows import auxip_flow
+from rs_workflows.flow_utils import ConversionIn, FlowEnv, RetryConfig
 from rs_workflows.staging_flow import staging_task
+from rs_workflows.utils.utils import get_archived_item_indexes
 
 
 @flow
@@ -43,8 +48,29 @@ async def on_demand_conversion(
             asset_names=selected_assets,
             poll_interval=10,
         )
+        staging_results = legacy_product.result()  # type: ignore[unused-coroutine]
+
+        for job_name, job_result in staging_results.items():
+            if job_result.get("status") != "successful":
+                raise RuntimeError(
+                    f"Staging job {job_name!r} failed with status {job_result.get('status')!r}: "
+                    f"{job_result.get('message')}",
+                )
+        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+        catalog_items = ItemCollection(
+            catalog_client.get_items(
+                collection_id=conversion_input.generated_product_to_collection_identifier.collection_name,
+                items_ids=[item.id for item in ItemCollection.from_dict(conversion_input.stac_input).items],
+            ),
+        )
+        logger.info(f"Retrieved catalog items after staging: {catalog_items.to_dict()}")
+        # 2. Prepare assets for conversion (e.g. unzip if needed)
+        for idx in get_archived_item_indexes(catalog_items):
+            safe_zipped_item = catalog_items.items[idx]
+            logger.info(f"Processing item {safe_zipped_item.id} for asset extraction...")
+            auxip_flow.auxip_unzip_decompress_task.submit(safe_zipped_item)
+
         logger.info("Staging task completed, proceeding with conversion...")
-        # 2. unzip if needed
         # 3. compute the output product type from the product type mapping
         # 4. compute the output bucket from the provided generated_product_to_collection_identifier mapping
         # 5. convert to zarr

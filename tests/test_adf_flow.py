@@ -28,6 +28,7 @@ from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
     FlowEnvArgs,
 )
+from rs_workflows.utils import utils as workflow_utils
 
 pytestmark = pytest.mark.filterwarnings(
     "ignore:Logger 'prefect\\.task_runs' attempted to send logs to the API without a flow run id\\.:UserWarning",
@@ -177,7 +178,7 @@ def test_run_adf_script_raises_when_no_zarr_is_generated(monkeypatch, mocker, tm
 async def test_download_and_extract_assets_task_extracts_zip(monkeypatch, mocker, tmp_path):
     """Test ZIP assets are downloaded and extracted to the destination directory."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.utils.utils.get_run_logger", return_value=mock_logger)
     item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
 
@@ -191,9 +192,9 @@ async def test_download_and_extract_assets_task_extracts_zip(monkeypatch, mocker
 
     recursive_extract_mock = MagicMock()
     extract_zip_mock = MagicMock(side_effect=fake_extract_zip)
-    monkeypatch.setattr(adf_flow, "s3_download_file", fake_download)
-    monkeypatch.setattr(adf_flow, "extract_zip", extract_zip_mock)
-    monkeypatch.setattr(adf_flow, "recursive_extract", recursive_extract_mock)
+    monkeypatch.setattr(workflow_utils, "s3_download_file", fake_download)
+    monkeypatch.setattr(workflow_utils, "extract_zip", extract_zip_mock)
+    monkeypatch.setattr(workflow_utils, "recursive_extract", recursive_extract_mock)
 
     await adf_flow.download_and_extract_assets_task.fn([item], tmp_path)
 
@@ -210,7 +211,7 @@ async def test_download_and_extract_assets_task_copies_plain_file_and_skips_non_
 ):
     """Test non-archive S3 assets are copied and non-S3 assets are skipped."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.utils.utils.get_run_logger", return_value=mock_logger)
     item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     item.add_asset("plain", Asset(href="s3://bucket/aux-item.txt"))
     item.add_asset("skip", Asset(href="https://example.com/aux-item.txt"))
@@ -220,8 +221,8 @@ async def test_download_and_extract_assets_task_copies_plain_file_and_skips_non_
 
     download_mock = AsyncMock(side_effect=fake_download)
     recursive_extract_mock = MagicMock()
-    monkeypatch.setattr(adf_flow, "s3_download_file", download_mock)
-    monkeypatch.setattr(adf_flow, "recursive_extract", recursive_extract_mock)
+    monkeypatch.setattr(workflow_utils, "s3_download_file", download_mock)
+    monkeypatch.setattr(workflow_utils, "recursive_extract", recursive_extract_mock)
 
     await adf_flow.download_and_extract_assets_task.fn([item], tmp_path)
 
@@ -230,6 +231,70 @@ async def test_download_and_extract_assets_task_copies_plain_file_and_skips_non_
     recursive_extract_mock.assert_not_called()
     mock_logger.warning.assert_called_once()
     assert "Skipping non-S3 asset" in mock_logger.warning.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_download_and_extract_assets_task_downloads_only_selected_asset(
+    monkeypatch,
+    mocker,
+    tmp_path,
+):
+    """Test only named assets are downloaded when the optional asset filter is provided."""
+    mock_logger = MagicMock()
+    mocker.patch("rs_workflows.utils.utils.get_run_logger", return_value=mock_logger)
+    item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    item.add_asset("product", Asset(href="s3://bucket/product.txt"))
+    item.add_asset("metadata", Asset(href="s3://bucket/metadata.txt"))
+
+    async def fake_download(href, destination):
+        destination.write_text(f"payload from {href}")
+
+    download_mock = AsyncMock(side_effect=fake_download)
+    monkeypatch.setattr(workflow_utils, "s3_download_file", download_mock)
+
+    await adf_flow.download_and_extract_assets_task.fn([item], tmp_path, asset="product")
+
+    assert (tmp_path / "product.txt").read_text() == "payload from s3://bucket/product.txt"
+    assert not (tmp_path / "metadata.txt").exists()
+    download_mock.assert_awaited_once_with("s3://bucket/product.txt", mocker.ANY)
+
+
+@pytest.mark.asyncio
+async def test_download_and_extract_assets_task_accepts_feature_collection_dict(
+    monkeypatch,
+    mocker,
+    tmp_path,
+):
+    """Test inline STAC FeatureCollection dictionaries are normalized before download."""
+    mocker.patch("rs_workflows.utils.utils.get_run_logger", return_value=MagicMock())
+
+    async def fake_download(href, destination):
+        destination.write_text(f"payload from {href}")
+
+    download_mock = AsyncMock(side_effect=fake_download)
+    monkeypatch.setattr(workflow_utils, "s3_download_file", download_mock)
+
+    await adf_flow.download_and_extract_assets_task.fn(
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "stac_version": "1.0.0",
+                    "id": "item-1",
+                    "geometry": None,
+                    "bbox": None,
+                    "properties": {"datetime": "2026-05-04T12:38:15Z"},
+                    "links": [],
+                    "assets": {"product": {"href": "s3://bucket/product.txt"}},
+                },
+            ],
+        },
+        tmp_path,
+    )
+
+    assert (tmp_path / "product.txt").read_text() == "payload from s3://bucket/product.txt"
+    download_mock.assert_awaited_once_with("s3://bucket/product.txt", mocker.ANY)
 
 
 @pytest.mark.asyncio
