@@ -405,15 +405,18 @@ def build_input_products(
                     # Verify in the rs-dpr-service tasktable (config/TaskTable_S1_L0_generated_by_rs_python_v1.json)
                     # that in the io section, the type field for input_products (S1ACADUS) is set to 'filename'.
                     # To be fixed in future iterations !
-                    type=mapping.get("type", "filename"),
-                    store_type=mapping["store_type"],
-                    store_params=store_params,
+                    # FIXME https://cpm.pages.eopf.copernicus.eu/eopf-cpm/v3.X.Y/v3/triggering_migration.html
+                    type=mapping.get("type", "file"),  # FIXME quick and dirty CPM v3 test
+                    engine=mapping["engine"],  # FIXME quick and dirty CPM v3 test
+                    reader_params=store_params,  # FIXME quick and dirty CPM v3 test
                     opening_mode=opening_mode,
                 ),
             )
         elif isinstance(store_params, StoreParams):
             # Advanced case where several input products share the same name (i.e. several STAC items)
-            store_params.multiplicity = str(len(products))
+            # FIXME it is store_params.multiplicity for CPMv2 but multiplicity in CPMv3
+            # store_params.multiplicity = str(len(products))
+            multiplicity = len(products)
 
             # Retrieve all paths
             paths = [
@@ -426,8 +429,10 @@ def build_input_products(
             ]
             # Compute longest common prefix
             common_folder, relative_parts = get_common_and_relative_paths(paths)
-            store_params.regex = rf"({'|'.join(relative_parts)})"
-            store_params.regex = f"{commonprefix(relative_parts)}*"  # FIXME to remove after CPM issue #1080 is solved
+            # FIXME it is store_params.regex for CPMv2 but regex in CPMv3
+            # store_params.regex = rf"({'|'.join(relative_parts)})"
+            # store_params.regex = f"{commonprefix(relative_parts)}*"  # FIXME to remove after CPM issue #1080 is solved
+            regex = f"{commonprefix(relative_parts)}*"  # FIXME to remove after CPM issue #1080 is solved # FIXME CPMv3
 
             # Add a single InputProduct of type regex listing the provided inputs in the common folder
             inputs.append(
@@ -435,8 +440,10 @@ def build_input_products(
                     id=mapping["name"],
                     path=common_folder,
                     type=mapping.get("type", "regex"),
-                    store_type=mapping["store_type"],
-                    store_params=store_params,
+                    engine=mapping["engine"],  # FIXME quick and dirty CPM v3 test
+                    reader_params=store_params,  # FIXME quick and dirty CPM v3 test
+                    regex=regex,  # FIXME quick and dirty CPM v3 test
+                    multiplicity=multiplicity,  # FIXME quick and dirty CPM v3 test
                 ),
             )
         else:
@@ -543,10 +550,11 @@ def build_output_products(
             OutputProduct(
                 id=mapping["name"],
                 path=output_path,
-                store_type=mapping["store_type"],
+                engine=mapping["engine"],  # FIXME quick and dirty CPM v3 test
                 store_params=store_params,
-                type=mapping.get("type", "filename"),
-                opening_mode=opening_mode,
+                # FIXME https://cpm.pages.eopf.copernicus.eu/eopf-cpm/v3.X.Y/v3/triggering_migration.html
+                type=mapping.get("type", "file"),  # FIXME quick and dirty CPM v3 test
+                # opening_mode=opening_mode,  # FIXME quick and dirty CPM v3 test
                 final_product=mapping.get("final_product", True),
                 autoclean=autoclean,
             ),
@@ -644,7 +652,9 @@ def build_adfs(
                 path = SecretStr(
                     path.replace(DATA_EDH_DOMAIN, f"edh:{dpr_process_in.edh_api_key}@api.earthdatahub.destine.eu"),
                 )
-            result.append(AdfConfig(id=adfs_id, path=path, store_params=store_params))
+            result.append(
+                AdfConfig(id=adfs_id, path=path, adf_params=store_params),
+            )  # FIXME quick and dirty CPM v3 test
         elif isinstance(store_params, StoreParams):
             # Advanced case where several adfs share the same id (i.e. several files)
             adfs_paths = [p for p, _ in adfs_entries]
@@ -659,7 +669,7 @@ def build_adfs(
                     id=adfs_id,
                     path=common_folder,
                     # type="regex", # Unsupported by CPM but it feels needed here for S1ARD
-                    store_params=store_params,
+                    adf_params=store_params,  # FIXME quick and dirty CPM v3 test
                 ),
             )
         else:
