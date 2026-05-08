@@ -20,7 +20,10 @@ from pystac import ItemCollection
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import ConversionIn, FlowEnv, RetryConfig
 from rs_workflows.staging_flow import staging_task
-from rs_workflows.utils.utils import asset_unzip_decompress, get_archived_item_indexes
+from rs_workflows.utils.utils import (
+    asset_unzip_decompress_task,
+    get_archived_item_indexes,
+)
 
 
 @flow
@@ -28,6 +31,7 @@ async def on_demand_conversion(
     conversion_input: ConversionIn,
     retry_config: RetryConfig = RetryConfig(),
 ):
+    """Docstring"""
     logger = get_run_logger()
     logger.info(f"Starting on-demand conversion flow with input: {conversion_input}")
     flow_env = FlowEnv(conversion_input.env)
@@ -67,12 +71,20 @@ async def on_demand_conversion(
         )
         logger.info(f"Retrieved catalog items after staging: {catalog_items.to_dict()}")
         # 2. Prepare assets for conversion (e.g. unzip if needed)
-        for idx in get_archived_item_indexes(catalog_items):
-            safe_zipped_item = catalog_items.items[idx]
-            logger.info(f"Processing item {safe_zipped_item.id} for asset extraction...")
-            safe_unzipped_item = asset_unzip_decompress.submit(safe_zipped_item)
-            safe_item = safe_unzipped_item.result()
-
+        try:
+            for idx in get_archived_item_indexes(catalog_items):
+                safe_zipped_item = catalog_items.items[idx]
+                logger.info(f"Processing item {safe_zipped_item.id} for asset extraction...")
+                safe_unzipped_item = asset_unzip_decompress_task.submit(safe_zipped_item)
+                safe_item = safe_unzipped_item.result()
+                catalog_client.update_item(safe_item)
+        except Exception as err:
+            raise RuntimeError(
+                "Error while trying to update the item collection with the uncompressed/unzipped items. "
+                "This error is likely due to a failure in the asset_unzip_decompress_task. "
+                "Check previous logs for more details.",
+            ) from err
+        logger.info(f"Asset preparation completed, proceeding with conversion... {safe_item.to_dict()}")
         logger.info("Staging task completed, proceeding with conversion...")
         # 3. compute the output product type from the product type mapping
         # 4. compute the output bucket from the provided generated_product_to_collection_identifier mapping

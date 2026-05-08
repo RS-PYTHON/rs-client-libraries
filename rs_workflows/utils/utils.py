@@ -290,3 +290,9 @@ async def asset_unzip_decompress(stac_item: Item) -> Item:
     logger.info(f"Updated the following asset {updated_assets} for item {stac_item.id}")
     stac_item.assets = updated_assets
     return stac_item
+
+
+@task(name="Asset unzip")
+async def asset_unzip_decompress_task(*args, **kwargs) -> Item:
+    """See: asset_unzip_decompress"""
+    return await asset_unzip_decompress.fn(*args, **kwargs)
