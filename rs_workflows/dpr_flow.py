@@ -415,7 +415,7 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
         if (origin_dt := item.to_dict().get("properties", {}).get("eopf:origin_datetime"))
     ]
 
-    max_eopf_datetime = max(dates).isoformat() if dates else None
+    max_eopf_datetime = max(dates).isoformat() if dates else "2023-01-01T00:00:00Z"
 
     logger.info(f"Maximum eopf datetime computed from all items is {max_eopf_datetime}")
     return max_eopf_datetime
