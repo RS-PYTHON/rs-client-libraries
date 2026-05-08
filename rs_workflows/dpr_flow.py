@@ -409,12 +409,13 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
 
     logger.info(f"Items matching input found in catalog: {len(items)}")
 
-    max_eopf_datetime = max(
-        datetime.datetime.fromisoformat(
-            item.to_dict()["properties"]["eopf:origin_datetime"].replace("Z", "+00:00"),  # type: ignore
-        )
+    dates = [
+        datetime.datetime.fromisoformat(origin_dt.replace("Z", "+00:00"))
         for item in items
-    ).isoformat()
+        if (origin_dt := item.to_dict().get("properties", {}).get("eopf:origin_datetime"))
+    ]
+
+    max_eopf_datetime = max(dates).isoformat() if dates else None
 
     logger.info(f"Maximum eopf datetime computed from all items is {max_eopf_datetime}")
     return max_eopf_datetime
