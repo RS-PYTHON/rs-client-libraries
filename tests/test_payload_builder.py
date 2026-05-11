@@ -514,7 +514,7 @@ def test_case_s1_l0_exact_output_with_regex():
                     "store_type": "safe",
                     "alternatives": [
                         {
-                            "step_id": 1,
+                            "order": 1,
                             "timeout_seconds": 0,
                             "query": {
                                 "name": "LatestValCover",
@@ -536,7 +536,7 @@ def test_case_s1_l0_exact_output_with_regex():
                     "store_type": "safe",
                     "alternatives": [
                         {
-                            "step_id": 1,
+                            "order": 1,
                             "timeout_seconds": 0,
                             "query": {
                                 "name": "LatestValCover",

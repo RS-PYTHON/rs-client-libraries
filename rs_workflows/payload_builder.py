@@ -142,6 +142,17 @@ def _extract_io_origin_from_pipeline(
     return product_origin
 
 
+def _extract_extra_fields_from_io_definition(
+    io_definition: str,
+):
+    mandatory_fields = {"name", "mode", "mandatory"}
+    extra_fields: dict[str, Any] = {}
+    for field_name, field_value in io_definition.items():
+        if field_name not in mandatory_fields:
+            extra_fields[field_name] = field_value
+    return extra_fields
+
+
 def _build_entry(
     io_product: dict,
     io_index: dict[str, dict[str, Any]],
@@ -168,6 +179,12 @@ def _build_entry(
     # Retrieve mode. If there is no "mode" field, we consider that the mode is "always" (default value)
     mode = io_product.get("mode", "always")
 
+    # Extra fields. All fields from io_product that are not "name", "mandatory" or "mode"
+    extra_fields: dict[str, Any] = {}
+    for field_name, field_value in io_product.items():
+        if field_name not in {"name", "mode", "mandatory"}:
+            extra_fields[field_name] = field_value
+
     # Filter by processing mode: skip this product if it has a mode that's not "always" and not in the provided processing modes
     processing_modes = processing_modes or []
     if mode != "always" and mode not in processing_modes:
@@ -184,6 +201,7 @@ def _build_entry(
     product_details = {
         "name": io_product["name"],
         "mandatory": bool(io_product["mandatory"]),
+        **extra_fields,
     }
     if origin:
         product_details["origin"] = origin
