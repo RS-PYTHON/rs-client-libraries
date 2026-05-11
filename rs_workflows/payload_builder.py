@@ -308,6 +308,10 @@ def _build_single_unit_details(
         if output_entry:
             output_products.append(output_entry)
 
+    # If "pipeline" mode, call the unit <unit_name>.<step_id> to be able to differenciate between several steps using the same unit
+    if full_pipeline:
+        unit_name = f"{unit_name}.{step_id}"
+
     # Build the final unit details for the payload
     out_unit = {
         "name": unit_name,

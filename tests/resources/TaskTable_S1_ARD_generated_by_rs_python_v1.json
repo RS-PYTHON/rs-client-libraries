@@ -405,7 +405,7 @@
         },
         {
           "unit_name": "reference_dem",
-          "step_id": 1,
+          "step_id": 2,
           "input_products": {
             "cal_slcs": "calibration.cal_slcs"
           },
@@ -415,7 +415,7 @@
         },
         {
           "unit_name": "reference_geometry",
-          "step_id": 1,
+          "step_id": 3,
           "input_products": {
             "cal_slcs": "calibration.cal_slcs",
             "reference_dem": "reference_dem.reference_dem"
@@ -426,7 +426,7 @@
         },
         {
           "unit_name": "coregistration",
-          "step_id": 1,
+          "step_id": 4,
           "input_products": {
             "cal_slcs": "calibration.cal_slcs",
             "reference_dem": "reference_dem.reference_dem",
@@ -438,7 +438,7 @@
         },
         {
           "unit_name": "geocoding",
-          "step_id": 1,
+          "step_id": 5,
           "input_products": {
             "cslcs": "coregistration.cslcs",
             "simulation_ref": "reference_geometry.simulation_ref"
@@ -449,7 +449,7 @@
         },
         {
           "unit_name": "mosaicking",
-          "step_id": 1,
+          "step_id": 6,
           "input_products": {
             "gslcs": "geocoding.gslcs"
           },

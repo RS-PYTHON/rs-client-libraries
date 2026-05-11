@@ -307,7 +307,7 @@ def test_case_8_exact_output():
 
     expected = [
         {
-            "name": "calibration",
+            "name": "calibration.1",
             "module": "s1_l12_rp.computing.ard_processing_units",
             "input_products": [
                 {
@@ -334,7 +334,7 @@ def test_case_8_exact_output():
             ],
         },
         {
-            "name": "reference_dem",
+            "name": "reference_dem.2",
             "module": "s1_l12_rp.computing.ard_processing_units",
             "input_products": [
                 {
@@ -355,7 +355,7 @@ def test_case_8_exact_output():
             ],
         },
         {
-            "name": "reference_geometry",
+            "name": "reference_geometry.3",
             "module": "s1_l12_rp.computing.ard_processing_units",
             "input_products": [
                 {
@@ -368,7 +368,7 @@ def test_case_8_exact_output():
                 },
                 {
                     "name": "reference_dem",
-                    "origin": "reference_dem.1.reference_dem",
+                    "origin": "reference_dem.2.reference_dem",
                     "mandatory": False,
                     "type": "folder",
                 },
@@ -379,7 +379,7 @@ def test_case_8_exact_output():
             ],
         },
         {
-            "name": "coregistration",
+            "name": "coregistration.4",
             "module": "s1_l12_rp.computing.ard_processing_units",
             "input_products": [
                 {
@@ -392,13 +392,13 @@ def test_case_8_exact_output():
                 },
                 {
                     "name": "reference_dem",
-                    "origin": "reference_dem.1.reference_dem",
+                    "origin": "reference_dem.2.reference_dem",
                     "mandatory": False,
                     "type": "folder",
                 },
                 {
                     "name": "simulation_ref",
-                    "origin": "reference_geometry.1.simulation_ref",
+                    "origin": "reference_geometry.3.simulation_ref",
                     "mandatory": False,
                     "type": "folder",
                 },
@@ -416,12 +416,12 @@ def test_case_8_exact_output():
             ],
         },
         {
-            "name": "geocoding",
+            "name": "geocoding.5",
             "module": "s1_l12_rp.computing.ard_processing_units",
             "input_products": [
                 {
                     "name": "cslcs",
-                    "origin": "coregistration.1.cslcs",
+                    "origin": "coregistration.4.cslcs",
                     "mandatory": False,
                     "type": "filename",
                     "store_type": "zarr",
@@ -429,7 +429,7 @@ def test_case_8_exact_output():
                 },
                 {
                     "name": "simulation_ref",
-                    "origin": "reference_geometry.1.simulation_ref",
+                    "origin": "reference_geometry.3.simulation_ref",
                     "mandatory": False,
                     "type": "folder",
                 },
@@ -447,12 +447,12 @@ def test_case_8_exact_output():
             ],
         },
         {
-            "name": "mosaicking",
+            "name": "mosaicking.6",
             "module": "s1_l12_rp.computing.ard_processing_units",
             "input_products": [
                 {
                     "name": "gslcs",
-                    "origin": "geocoding.1.gslcs",
+                    "origin": "geocoding.5.gslcs",
                     "mandatory": False,
                     "type": "filename",
                     "store_type": "zarr",
@@ -495,7 +495,7 @@ def test_case_s1_l0_exact_output_with_regex():
 
     expected = [
         {
-            "name": "single_unit",
+            "name": "single_unit.1",
             "module": "l0.s1.s1_l0_processor",
             "input_products": [
                 {
