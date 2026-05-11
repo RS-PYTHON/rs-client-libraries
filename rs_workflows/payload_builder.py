@@ -152,17 +152,6 @@ def _extract_io_origin_from_pipeline(
     return product_origin
 
 
-def _extract_extra_fields_from_io_definition(
-    io_definition: str,
-):
-    mandatory_fields = {"name", "mode", "mandatory"}
-    extra_fields: dict[str, Any] = {}
-    for field_name, field_value in io_definition.items():
-        if field_name not in mandatory_fields:
-            extra_fields[field_name] = field_value
-    return extra_fields
-
-
 def _build_entry(
     io_product: dict,
     io_index: dict[str, dict[str, Any]],
