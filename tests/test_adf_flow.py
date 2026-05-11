@@ -298,6 +298,14 @@ async def test_adf_conversion_flow_logic(
 
     # Verifications
     assert staging_mock.call_count == 1
+    temporal_filter = staging_mock.call_args.kwargs["cql2_filter"]["filter"]["args"][0]
+    assert temporal_filter == {
+        "op": "t_intersects",
+        "args": [
+            {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+            {"interval": ["2021-03-21T03:00:00+00:00", "2021-03-21T15:00:00+00:00"]},
+        ],
+    }
     assert extract_mock.called
     assert not download_mock.called  # Download is now inside the extract task
     run_script_mock.assert_called_once()
@@ -464,3 +472,103 @@ async def test_adf_conversion_raises_when_publish_collection_not_found(
     assert not find_bucket_mock.called
     assert not upload_mock.called
     assert not publish_mock.called
+
+
+@pytest.fixture
+def sample_adf_getas_process_in():
+    """Create a sample AdfProcessIn object for S00__ADF_GETAS."""
+    return AdfProcessIn(
+        env=FlowEnvArgs(owner_id="test-user"),
+        adf_type=AdfType.S00__ADF_GETAS,
+        auxiliary_product_to_collection_identifier=[
+            AuxiliaryProductMapping(product_type="AX___DEM_AX", collection_name="AUX_DEM"),
+            AuxiliaryProductMapping(product_type="S00__ADF_GETAS", collection_name="ADF_GETAS_PUBLISH"),
+            AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
+        ],
+        start_datetime=datetime(2021, 6, 15, 0, 0, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2021, 6, 15, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+
+@pytest.mark.asyncio
+async def test_adf_conversion_flow_logic_for_getas(
+    monkeypatch,
+    mocker,
+    sample_adf_getas_process_in,
+    tmp_path,
+    _mock_os_env,
+):  # pylint: disable=redefined-outer-name,unused-argument
+    """Test that S00__ADF_GETAS stages AX___DEM_AX inputs and uses the GETAS conversion script."""
+    mock_logger = MagicMock()
+    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+
+    source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
+    staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
+    monkeypatch.setattr(adf_flow, "auxip_staging_task", staging_mock)
+
+    extract_mock = AsyncMock()
+    monkeypatch.setattr(adf_flow, "download_and_extract_assets_task", extract_mock)
+
+    upload_mock = AsyncMock()
+    monkeypatch.setattr(adf_flow, "s3_upload_dir", upload_mock)
+    monkeypatch.setattr(adf_flow.shutil, "rmtree", MagicMock())
+
+    zarr_path = tmp_path / "mock-getas.zarr"
+    zarr_path.mkdir()
+    (zarr_path / ".zattrs").write_text(
+        json.dumps(
+            {
+                "id": "mock-getas-adf",
+                "properties": {
+                    "product:type": "ADF_GETAS",
+                    "start_datetime": "2021-06-15T00:00:00Z",
+                    "end_datetime": "2021-06-15T12:00:00Z",
+                },
+            },
+        ),
+    )
+    run_script_mock = MagicMock(return_value=zarr_path)
+    monkeypatch.setattr(adf_flow, "run_adf_script", run_script_mock)
+
+    monkeypatch.setattr(
+        adf_flow,
+        "fetch_csv_from_endpoint",
+        MagicMock(return_value=[["*", "*", "*", "*", "test-bucket"]]),
+    )
+    monkeypatch.setattr(adf_flow, "find_s3_output_bucket", MagicMock(return_value="test-bucket"))
+
+    publish_mock = AsyncMock()
+    monkeypatch.setattr(adf_flow, "publish", publish_mock)
+
+    flow_env_mock = mocker.MagicMock()
+    flow_env_mock.start_span.return_value = MagicMock()
+    flow_env_mock.start_span.return_value.__enter__.return_value = MagicMock()
+    flow_env_mock.owner_id = "test-user"
+    flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id="test-user")
+    monkeypatch.setattr(adf_flow, "FlowEnv", lambda env: flow_env_mock)
+
+    await adf_flow.adf_conversion.fn(sample_adf_getas_process_in)
+
+    # Verify AX___DEM_AX was staged
+    assert staging_mock.call_count == 1
+    staged_product_types = [
+        call.kwargs["cql2_filter"]["filter"]["args"][1]["args"][1] for call in staging_mock.call_args_list
+    ]
+    assert staged_product_types == ["AX___DEM_AX"]
+    assert [call.kwargs["catalog_collection_identifier"] for call in staging_mock.call_args_list] == [
+        "AUX_DEM",
+    ]
+    extract_mock.assert_awaited_once()
+
+    # Verify GETAS script was used
+    run_script_mock.assert_called_once()
+    assert run_script_mock.call_args.args[0] == adf_flow.ADF_GETAS_SCRIPT_PATH
+    upload_mock.assert_awaited_once()
+
+    # Verify published metadata
+    published_metadata = publish_mock.call_args[0][2]
+    publish_mapping = publish_mock.call_args[0][1]
+    assert published_metadata[0].product_type == "S00__ADF_GETAS"
+    assert published_metadata[0].stac_item.properties["product:type"] == "S00__ADF_GETAS"
+    assert publish_mapping[0].collection_name == "ADF_GETAS_PUBLISH"

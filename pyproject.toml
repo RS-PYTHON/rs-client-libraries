@@ -153,6 +153,7 @@ disable = [
     "too-many-locals",
     "too-many-positional-arguments",
     "too-many-statements",
+    "too-many-lines",
 ]
 
 [tool.pylint.MASTER]

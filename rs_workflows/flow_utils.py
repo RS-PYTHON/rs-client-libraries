@@ -86,6 +86,7 @@ class AdfType(str, Enum):
 
     S00__ADF_ECMWA = "S00__ADF_ECMWA"
     S00__ADF_ECMWF = "S00__ADF_ECMWF"
+    S00__ADF_GETAS = "S00__ADF_GETAS"
 
 
 class LoggingLevel(str, Enum):
