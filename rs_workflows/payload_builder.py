@@ -316,7 +316,7 @@ def _build_single_unit_details(
         unit_name = f"{unit_name}.{step_id}"
 
     # Build the final unit details for the payload
-    out_unit = {
+    out_unit: dict[str, Any] = {
         "name": unit_name,
         "module": module,
         "input_products": input_products,
