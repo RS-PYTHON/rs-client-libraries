@@ -21,7 +21,8 @@ from typing import Any
 
 from rs_common.utils import strftime_millis
 
-EXTERNAL_VAR_PATTERN = re.compile(r"^\{external_variable\.([a-zA-Z_][a-zA-Z0-9_]*)\}$")
+EXTERNAL_VAR_PATTERN = re.compile(r"\{external_variable\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
+VARIABLE_PATTERN = re.compile(r"^{(.*)}$")  # matches exactly "{var}" (whole string)
 
 
 class TaskTableError(ValueError):
@@ -34,11 +35,15 @@ def _replace_external_variables(obj, external_variables: dict[str, Any] | None):
     if isinstance(obj, list):
         return [_replace_external_variables(v, external_variables) for v in obj]
     if isinstance(obj, str) and external_variables:
-        match = EXTERNAL_VAR_PATTERN.match(obj)
-        if match:
+
+        def replacer(match: re.Match):
             variable_name = match.group(1)
+            if variable_name not in external_variables:
+                raise TaskTableError(f"Unknown external variable: {variable_name}")
             value = external_variables[variable_name]
-            return strftime_millis(value) if "datetime" in variable_name else value
+            return strftime_millis(value) if "datetime" in variable_name else str(value)
+
+        return EXTERNAL_VAR_PATTERN.sub(replacer, obj)
     return obj
 
 
@@ -415,29 +420,22 @@ def build_unit_list(
     return out_units
 
 
-def build_cql2_json(task_table, query_name, values):
+def build_cql2_json(query: dict[str, Any], values: dict[str, Any]):
     """
     Recursively replaces placeholders of the form {var} in a dictionary or list
     using the mapping from 'values'.
     """
-    template = {}
-    for cql_filter in task_table["queries"]:
-        if cql_filter["name"] == query_name:
-            # Work on a deep copy so we don't mutate the original
-            template = deepcopy(cql_filter)
-    pattern = re.compile(r"^{(.*)}$")  # matches exactly "{var}" (whole string)
 
     def _replace(item):
         if isinstance(item, str):
-            match = pattern.match(item)
-            if match:
-                key = match.group(1)
-                return values.get(key, item)  # replace if found, else keep
-            return item
+            # replace if found, else keep
+            match = VARIABLE_PATTERN.match(item)
+            return values.get(match.group(1), item) if match else item
         if isinstance(item, list):
             return [_replace(x) for x in item]
         if isinstance(item, dict):
             return {k: _replace(v) for k, v in item.items()}
         return item
 
-    return _replace(template)
+    # Work on a deep copy so we don't mutate the original
+    return _replace(deepcopy(query))["stac"]

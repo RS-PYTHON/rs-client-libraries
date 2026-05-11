@@ -30,7 +30,7 @@ async def get_single_catalog_item(flow_env: FlowEnv, item_id: str, collections: 
     logger = get_run_logger()
     result: Item | None = None
 
-    # Try to retrieve the item on the collection
+    # Try to retrieve the item in the collections
     item_collection: ItemCollection | None = await get_catalog_items(flow_env, [item_id], collections)
 
     count = 0

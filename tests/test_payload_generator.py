@@ -26,6 +26,7 @@ from rs_workflows.flow_utils import (
     FlowInputProduct,
 )
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
+    build_adfs,
     build_input_products,
     build_output_products,
     build_workflow_step,
@@ -91,7 +92,7 @@ def test_get_io_builds_input_and_output(
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
-        return_value="s3://mocked/cadip_session",
+        return_value=(None, "s3://mocked/cadip_session"),
     )
     # the fetch_csv_from_endpoint function also needs to be mocked; otherwise,
     # it will fail to fetch the file and the test will not pass.
@@ -141,7 +142,7 @@ def test_get_io_builds_input_and_output(
 
 def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flow_env, mocker):
     """
-    Test that malformed input_products (missing 'name' or 'origin') raise KeyError.
+    Test that malformed input_products (missing 'name' or 'origin') raise RuntimeError.
     """
     # the fetch_csv_from_endpoint function also needs to be mocked; otherwise,
     # it will fail to fetch the file and the test will not pass.
@@ -157,7 +158,7 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
 
-    with pytest.raises(KeyError):
+    with pytest.raises(RuntimeError):
         get_io(bad_unit, mock_dpr_process_in, flow_env, mock_storage_config, [])
 
 
@@ -223,7 +224,7 @@ def test_generate_payload_success(
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[sample_unit],
-        adfs=[("ADF1", "s3://bucket/adf1")],
+        adfs=[("ADF1", "filename", "s3://bucket/adf1")],
         dpr_process_in=mock_dpr_process_in,
     )
 
@@ -243,7 +244,7 @@ def test_generate_payload_success(
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[sample_unit],
-        adfs=[("ADF1", "s3://bucket/adf1")],
+        adfs=[("ADF1", "filename", "s3://bucket/adf1")],
         dpr_process_in=mock_dpr_process_in,
     )
     assert payload.logging == expected_logging
@@ -514,9 +515,10 @@ def test_resolve_stac_input_path(mocker, catalog_client):
     # get_first_asset_dir returns the directory (this is what the function uses)
     mocker.patch("rs_workflows.payload_generator.get_first_asset_dir", return_value="s3://catalog-bucket/items/item123")
 
-    result = resolve_stac_input_path(catalog_client, "my-collection", "item123")
+    result_item, result_path = resolve_stac_input_path(catalog_client, "my-collection", "item123")
 
-    assert result == "s3://catalog-bucket/items/item123"
+    assert result_item == mock_item
+    assert result_path == "s3://catalog-bucket/items/item123"
 
 
 # ----------------------------------------------------------------------
@@ -530,7 +532,7 @@ def test_build_input_products_success(sample_unit, mock_store_params, mocker):
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
-        return_value="s3://path/to/item",
+        return_value=(None, "s3://path/to/item"),
     )
 
     mock_dpr = MagicMock()
@@ -546,6 +548,51 @@ def test_build_input_products_success(sample_unit, mock_store_params, mocker):
     assert inputs[0].store_type == "S3"
     assert inputs[0].path == "s3://path/to/item"
     assert inputs[0].store_params == mock_store_params
+
+
+def test_build_input_products_success_multiple_inputs_regex(sample_unit, mock_store_params, mocker):
+    """
+    Test successful build of input products when multiple inputs share the same name (regex case).
+    """
+    # Mock STAC resolution to return different paths
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        side_effect=[
+            ("item1", "s3://path/to/item1"),
+            ("item2", "s3://path/to/item2"),
+        ],
+    )
+
+    # Create multiple input products with SAME name
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [
+        FlowInputProduct(name="S1CADUS", item_id="item1", collection_name="coll"),
+        FlowInputProduct(name="S1CADUS", item_id="item2", collection_name="coll"),
+    ]
+
+    # Mock storage config
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    # Ensure mock_store_params behaves like StoreParams
+    assert isinstance(mock_store_params, StoreParams)
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    # Assertions
+    assert len(inputs) == 1  # regex => single InputProduct
+
+    input_product = inputs[0]
+    assert input_product.id == "S1CADUS"
+    assert input_product.store_type == "S3"
+    assert input_product.path == "s3://path/to/"
+    assert input_product.type == "regex"
+
+    # Checks generated regex
+    assert isinstance(input_product.store_params, StoreParams)
+    assert input_product.store_params.regex == r"(item1|item2)"
+    assert input_product.store_params.multiplicity == "2"
 
 
 def test_build_input_products_missing_mapping(sample_unit):
@@ -566,7 +613,7 @@ def test_build_input_products_missing_storage(sample_unit, mocker):
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
-        return_value="s3://path/to/item",
+        return_value=(None, "s3://path/to/item"),
     )
 
     mock_dpr = MagicMock()
@@ -591,7 +638,7 @@ def test_build_input_products_fallback_storage_unit(sample_unit, mock_store_para
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
-        return_value="s3://path/to/item",
+        return_value=(None, "s3://path/to/item"),
     )
 
     mock_dpr = MagicMock()
@@ -617,7 +664,7 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
-        return_value="s3://path/to/item",
+        return_value=(None, "s3://path/to/item"),
     )
 
     mock_dpr = MagicMock()
@@ -639,6 +686,68 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
     mock_storage.get_storage_for_pipeline_section.assert_any_call("pipeline_input_1")
     mock_storage.get_storage_for_pipeline_section.assert_any_call("other")
     mock_storage.get_store_params.assert_called_with("pipeline_s3")
+
+
+# ----------------------------------------------------------------------
+
+# build_adfs
+
+
+def test_build_adfs_single_folder(mock_store_params):
+    """Test ADFS of type 'folder' with a single file"""
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
+    adfs = [
+        ("adf1", "folder", "/data/myfolder/file1.txt"),
+    ]
+
+    result = build_adfs(mock_storage_config, adfs)
+
+    assert len(result) == 1
+    assert result[0].id == "adf1"
+    assert result[0].path == "/data/myfolder"
+
+
+def test_build_adfs_single_filename(mock_store_params):
+    """Test ADFS of type 'filename' with a single file"""
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
+    adfs = [
+        ("adf1", "filename", "/data/file1.txt"),
+    ]
+
+    result = build_adfs(mock_storage_config, adfs)
+
+    assert len(result) == 1
+    assert result[0].id == "adf1"
+    assert result[0].path == "/data/file1.txt"
+
+
+def test_build_adfs_multiple_entries(mock_store_params):
+    """Test ADFS with multiple files"""
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
+    adfs = [
+        ("adf1", "filename", "/data/folder/file1.txt"),
+        ("adf1", "filename", "/data/folder/file2.txt"),
+    ]
+
+    result = build_adfs(mock_storage_config, adfs)
+
+    assert len(result) == 1
+    adf = result[0]
+
+    assert adf.id == "adf1"
+    assert adf.path == "/data/folder/"
+    assert isinstance(adf.store_params, StoreParams)
+    assert adf.store_params.multiplicity == "2"
+    assert adf.store_params.regex == r"(file1\.txt|file2\.txt)"
 
 
 # ----------------------------------------------------------------------
@@ -791,22 +900,38 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
     )
 
     # This should raise RuntimeError with the proposed change
-    with pytest.raises(RuntimeError, match="Couldn't find any relation for output product 'output2'"):
+    with pytest.raises(
+        RuntimeError,
+        match="Missing mapping in generated_product_to_collection_identifier for task table entry 'output2'",
+    ):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
 
-def test_build_output_products_missing_mapping_raises(sample_unit, mock_dpr_process_in):
+def test_build_output_products_extra_mapping_is_ignored(sample_unit, mock_dpr_process_in, mock_store_params, mocker):
     """
-    Test that build_output_products raises an error if an output product
-    in dpr_process_in is missing from the unit's output_products.
+    Extra items in generated_product_to_collection_identifier
+    must NOT raise an error and should be ignored.
     """
-    # "UNKNOWN" is in dpr_process_in but NOT in sample_unit.output_products
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
     mock_dpr_process_in.generated_product_to_collection_identifier = [
-        FlowGeneratedProduct(name="UNKNOWN", product_type="type", collection_name="COLL"),
+        FlowGeneratedProduct(name="output1", product_type="type1", collection_name="COLL"),
+        FlowGeneratedProduct(name="output2", product_type="type2", collection_name="COLL"),
+        FlowGeneratedProduct(name="UNKNOWN", product_type="type", collection_name="COLL"),  # extra
     ]
 
-    with pytest.raises(RuntimeError, match="Couldn't find any output for task table entry 'UNKNOWN'"):
-        build_output_products(sample_unit, mock_dpr_process_in, MagicMock(), "test-owner", [])
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid4",
+        return_value="00000000-0000-0000-0000-000000000000",
+    )
+
+    result = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert len(result) == 2
+    assert {r.id for r in result} == {"output1", "output2"}
 
 
 def test_build_output_products_wildcard_collection_raises(sample_unit, mock_dpr_process_in):
@@ -828,3 +953,51 @@ def test_build_output_products_wildcard_collection_raises(sample_unit, mock_dpr_
 
     with pytest.raises(RuntimeError, match="cannot be '\\*' if the collection name is not specified"):
         build_output_products(sample_unit, mock_dpr_process_in, MagicMock(), "test-owner", [])
+
+
+def test_build_output_products_ignores_extra_generated_products(mock_dpr_process_in, mock_store_params, mocker):
+    """
+    Task table contains a single required output (S01SARRAW).
+    generated_product_to_collection_identifier contains that entry + extras per RSPY-1039
+
+    Expected:
+    - No error is raised
+    - Only S01SARRAW is processed
+    - Extra entries are ignored
+    """
+
+    unit = {
+        "output_products": [
+            {
+                "name": "S01SARRAW",
+                "store_type": "s3",
+                "type": "filename",
+                "opening_mode": "CREATE",
+                "final_product": True,
+            },
+        ],
+    }
+
+    # --- Mapping parameter (flow input) ---
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="S01SARRAW", product_type="*", collection_name="s01sarraw"),
+        FlowGeneratedProduct(name="S01GPSRAW", product_type="*", collection_name="s01gpsraw"),
+        FlowGeneratedProduct(name="S01HKMRAW", product_type="*", collection_name="s01hkmraw"),
+        FlowGeneratedProduct(name="S01AISRAW", product_type="*", collection_name="s01aisraw"),
+    ]
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid4",
+        return_value="00000000-0000-0000-0000-000000000000",
+    )
+
+    result = build_output_products(unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert len(result) == 1
+    assert result[0].id == "S01SARRAW"
+    assert "s01sarraw" in result[0].path  # ensures correct collection used
