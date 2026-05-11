@@ -332,6 +332,7 @@ def test_case_8_exact_output():
                     "opening_mode": "CREATE_OVERWRITE",
                 },
             ],
+            "parameters": {"reference_date": "somevalue"},
         },
         {
             "name": "reference_dem.2",

@@ -229,6 +229,7 @@ def _build_single_unit_details(
     external_variables: dict[str, Any] | None,
     full_pipeline: dict[str, Any] | None = None,
     step_id: int = 0,
+    parameters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Build the details of a single unit for the payload.
@@ -243,6 +244,7 @@ def _build_single_unit_details(
         external_variables: dictionary of external variables values from flow's input
         full_pipeline: full definition of the pipeline from the tasktable. Optional, needed only if the flow mode is "pipeline"
         step_id: ID of the step in the pipeline corresponding to the given unit. Optional, needed only if the flow mode is "pipeline" and the pipeline has multiple steps using the same unit
+        parameters: optional parameters included in the step definition in the pipeline, if any
     """
     # Get unit details from "units" section
     unit_details = units_index.get(unit_name)
@@ -320,6 +322,9 @@ def _build_single_unit_details(
         "input_adfs": input_adfs,
         "output_products": output_products,
     }
+    if parameters:
+        out_unit["parameters"] = parameters
+
     return out_unit
 
 
@@ -417,6 +422,7 @@ def build_unit_list(
                 external_variables,
                 full_pipeline=full_pipeline,
                 step_id=step["step_id"],
+                parameters=step.get("parameters", None),
             )
 
             out_units.append(unit_details)

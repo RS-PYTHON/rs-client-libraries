@@ -401,6 +401,9 @@
           },
           "output_products": {
             "cal_slcs": "pipeline_internal"
+          },
+          "parameters": {
+            "reference_date": "somevalue"
           }
         },
         {
