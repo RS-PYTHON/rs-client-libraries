@@ -84,9 +84,8 @@ def _extract_io_origin_from_pipeline(
             # If the unit name matches but NOT the given step_id, we keep searching
             if step_id and step.get("step_id") != step_id:
                 continue
-            else:
-                pipeline_unit = step
-                break
+            pipeline_unit = step
+            break
 
     if not pipeline_unit:
         raise TaskTableError(f"Unit '{unit_name}' not found in given pipeline: {pipeline_full}.")
@@ -129,10 +128,9 @@ def _extract_io_origin_from_pipeline(
                 # If not, keep searching
                 if origin_step_id and step.get("step_id") != origin_step_id:
                     continue
-                else:
-                    origin_unit = step
-                    origin_step_id = step.get("step_id")
-                    break
+                origin_unit = step
+                origin_step_id = step.get("step_id")
+                break
 
         if not origin_unit:
             raise TaskTableError(
@@ -222,7 +220,7 @@ def _build_single_unit_details(
     unit_name: str,
     units_index: dict[str, dict[str, Any]],
     io_index: dict[str, dict[str, Any]],
-    processing_modes: list[str] | None,
+    processing_modes: Iterable[str] | None,
     external_variables: dict[str, Any] | None,
     full_pipeline: dict[str, Any] | None = None,
     step_id: int = 0,
@@ -337,7 +335,7 @@ def build_unit_list(
     unit: str | None = None,
     processing_mode: Iterable[str] | None = None,
     external_variables: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     """
     Build the list of units needed for the payload, from the tasktable given and the flow mode (pipeline or unit).
     If the mode is "unit", the list returned will only contain the requested unit, with its input and output linked
