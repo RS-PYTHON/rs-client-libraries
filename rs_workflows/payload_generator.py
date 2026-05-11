@@ -458,13 +458,20 @@ def build_output_products(
     outputs = []
     processed_products = set()
     logger = get_run_logger()
-    for output_product in dpr_process_in.generated_product_to_collection_identifier:
-        product_name = output_product.name
-        logger.info(f"Configuration bucket: Building output section for name: {product_name}")
-        mapping = next((outp for outp in unit.get("output_products", []) if outp["name"] == product_name), None)
 
-        if not mapping:
-            raise RuntimeError(f"Couldn't find any output for task table entry '{product_name}'")
+    mapping_lookup = {p.name: p for p in dpr_process_in.generated_product_to_collection_identifier}
+
+    for mapping in unit.get("output_products", []):
+        product_name = mapping["name"]
+
+        logger.info(f"Configuration bucket: Building output section for name: {product_name}")
+        output_product = mapping_lookup.get(product_name)
+
+        # Fails ONLY if required mapping is missing
+        if not output_product:
+            raise RuntimeError(
+                f"Missing mapping in generated_product_to_collection_identifier for task table entry '{product_name}'",
+            )
 
         product_type = output_product.product_type
         processed_products.add(product_name)
