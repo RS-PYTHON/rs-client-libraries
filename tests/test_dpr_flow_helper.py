@@ -692,3 +692,35 @@ def test_compute_eopf_origin_datetime_raises_on_catalog_error(mocker):
         match="No valid items found to compute eopf:origin_datetime",
     ):
         compute_eopf_origin_datetime(env, input_products)
+
+
+def test_no_eopf_origin_datetime(mocker):
+    """
+    Verify that compute_eopf_origin_datetime throws a ValueError when
+    none of the items has eopf:origin_datetime field.
+
+    This test mocks:
+    - catalog_flow.get_item.submit to return a mocked future
+    - future.result() to return a mocked item with a predefined eopf:origin_datetime = ''
+    """
+    env = mocker.Mock()
+    env.serialize.return_value = {"env": "data"}
+
+    input_products = [FlowInputProduct(name="input", item_id="CADU_1", collection_name="COLLECTION_1")]
+
+    mock_item = make_mock_item("", mocker)
+
+    mock_future = mocker.Mock()
+    mock_future.result.return_value = mock_item
+
+    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch(
+        "rs_workflows.dpr_flow.catalog_flow.get_item.submit",
+        return_value=mock_future,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Maximum eopf datetime could not be computed",
+    ):
+        compute_eopf_origin_datetime(env, input_products)
