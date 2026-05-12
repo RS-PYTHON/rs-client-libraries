@@ -415,7 +415,11 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
         if (origin_dt := item.to_dict().get("properties", {}).get("eopf:origin_datetime"))
     ]
 
-    max_eopf_datetime = max(dates).isoformat() if dates else "2023-01-01T00:00:00Z"
+    try:
+        max_eopf_datetime = max(dates).isoformat()
+    except ValueError as ve:
+        logger.exception(f"Failed to compute maximum eopf:origin_datetime")
+        raise ValueError("Maximum eopf datetime could not be computed") from ve
 
     logger.info(f"Maximum eopf datetime computed from all items is {max_eopf_datetime}")
     return max_eopf_datetime
