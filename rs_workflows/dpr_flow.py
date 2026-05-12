@@ -418,7 +418,7 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
     try:
         max_eopf_datetime = max(dates).isoformat()
     except ValueError as ve:
-        logger.exception(f"Failed to compute maximum eopf:origin_datetime")
+        logger.exception("Failed to compute maximum eopf:origin_datetime")
         raise ValueError("Maximum eopf datetime could not be computed") from ve
 
     logger.info(f"Maximum eopf datetime computed from all items is {max_eopf_datetime}")
