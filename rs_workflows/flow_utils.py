@@ -491,3 +491,12 @@ class ConversionIn(BaseModel):
         title="Owner ID",
         description="User/owner ID necessary to retrieve the user info from the right Prefect block.",
     )
+    dask_cluster_label: str = Field(
+        title="Dask Cluster Label",
+        description="Label of the Dask cluster to use for SAFE conversion.",
+    )
+    dask_cluster_instance: str | None = Field(
+        default=None,
+        title="Dask Cluster Instance",
+        description="Optional Dask cluster instance ID used by the DPR conversion service.",
+    )
