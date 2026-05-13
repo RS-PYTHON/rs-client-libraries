@@ -45,6 +45,9 @@ RUN pip install -U pip && \
         pandas \
         xarray \
         cfgrib eccodes \
+        scikit-image \
+        matplotlib \
+        rasterio \
         "zarr<3" \
     && layer-cleanup.sh
 

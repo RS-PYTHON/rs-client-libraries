@@ -409,7 +409,7 @@ async def dpr_processing(
         logger.info(build_dask_dashboard_url_message(cluster_info.cluster_instance))
 
         processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
-        out = build_unit_list(
+        unit_list = build_unit_list(
             tasktable=task_table,
             pipeline=dpr_input.pipeline,
             unit=dpr_input.unit,
@@ -420,7 +420,6 @@ async def dpr_processing(
                 "satellite": dpr_input.satellite,
             },
         )
-        unit_list = out["units"]
 
         md = "# List of processing units\n\n```json\n" + json.dumps(unit_list, indent=2) + "\n```"
         # Artifact key must only contain lowercase letters, numbers, and dashes.
