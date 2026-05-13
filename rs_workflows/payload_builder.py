@@ -47,111 +47,286 @@ def _replace_external_variables(obj, external_variables: dict[str, Any] | None):
     return obj
 
 
-def _select_unit_names(tasktable: dict[str, Any], *, pipeline: str | None) -> list[str]:
-    """
-    Return the ordered list of unit names
-    """
-    # Find pipeline by name
-    pl = next((p for p in tasktable["pipelines"] if p.get("name") == pipeline), None)
-    if not pl:
-        available = [p.get("name") for p in tasktable.get("pipelines", []) if p.get("name")]
-        available_str = ", ".join([f'"{n}"' for n in available]) if available else '"<none>"'
-        raise TaskTableError(f'Pipeline "{pipeline}" not found. Available pipelines: {available_str}')
-
-    steps = pl.get("steps")
-    if not isinstance(steps, list) or not steps:
-        raise TaskTableError(f'Pipeline "{pipeline}" has no steps.')
-
-    ordered = sorted(steps, key=lambda s: s.get("order", 0))
-    names: list[str] = [s["unit_name"] for s in ordered if isinstance(s, dict) and isinstance(s.get("unit_name"), str)]
-    if not names:
-        raise TaskTableError(f'Pipeline "{pipeline}" steps do not contain valid "unit_name" entries.')
-    return names
-
-
-def _build_entries(
-    entries: list[dict[str, Any]],
-    io_index: dict[str, dict[str, Any]],
-    processing_mode: Iterable[str] | None,
-    with_origin: bool,
-    *,
+def _extract_io_origin_from_pipeline(
     unit_name: str,
-    origin_kind: str,
-    origin_map_by_unit: dict[str, dict[str, dict[str, Any]]],
-    external_variables: dict[str, Any] | None,
-) -> list[dict[str, Any]]:
+    product_name: str,
+    pipeline_full: dict[str, Any],
+    is_input: bool = True,
+    step_id: int = 0,
+) -> str:
     """
-    Build STEP 1 entries for input_products / input_adfs / output_products.
+    Function to extract the correct origin for the given input or output product of a pipeline step.
+    This function handles fixed external origins ("pipeline.input", "pipeline.output", "pipeline.internal")
+    and dynamic internal origins (basically any input that is the output of another step).
+    In dynamic cases, all checks to ensure that the referenced product is correct and exists in the pipeline
+    are performed.
+
+    Args:
+        unit_name: name of the unit for which we want to extract the origin of one of its products
+        product_name: name of the product for which we want to extract the origin
+        pipeline_full: full description of the pipeline, as defined in the tasktable
+        is_input: whether the product is an input (True, default value) or an output (False)
+        step_id: step_id value in case we have to discriminate between several units with the same name
     """
-    kept: list[dict[str, Any]] = []
-    mode_set = set(processing_mode) if processing_mode else None
+    # Origin name mapping
+    origin_mapping = {
+        "pipeline.input": "pipeline_input",
+        "pipeline.output": "pipeline_output",
+        "pipeline.internal": "pipeline_internal",
+    }
+    # Pattern for origins chaining units inside a pipeline: unit.step_id.output_product_name or unit.output_product_name
+    unit_origin_pattern = r"^[^.]+\.[^.]+(\.[^.]+)?$"
 
-    for e in entries or []:
-        if not isinstance(e, dict):
-            continue
-        name = e.get("name")
-        if not name:
-            continue
+    # Retrieve the details of the step defining the unit and the step_id given (if any) from the pipeline definition
+    pipeline_unit: dict[str, Any] = {}
+    for step in pipeline_full.get("steps", []):
+        if step.get("unit_name") == unit_name:
+            # If the unit name matches but NOT the given step_id, we keep searching
+            if step_id and step.get("step_id") != step_id:
+                continue
+            pipeline_unit = step
+            break
 
-        # Mode filter: keep items with mode="always" or without mode;
-        # if processing_mode is None, drop items that specify a mode;
-        # otherwise keep only if mode ∈ processing_mode.
-        mode = e.get("mode")
-        if mode == "always":
-            pass
-        elif mode is None:
-            # No mode specified
-            pass
+    if not pipeline_unit:
+        raise TaskTableError(f"Unit '{unit_name}' not found in given pipeline: {pipeline_full}.")
+
+    # What field to look at depending on if the product is input or output
+    io_type = "input_products" if is_input else "output_products"
+
+    # Retrieve origin for the product
+    product_origin = pipeline_unit.get(io_type, {}).get(product_name)
+    if not product_origin:
+        raise TaskTableError(
+            f"Product '{product_name}' not found in field '{io_type}' for unit '{unit_name}' "
+            f"defined in pipeline. Unit is: {pipeline_unit}.",
+        )
+
+    # Case 1: origin is one of the normalized cases. We just change it to the internal name
+    if product_origin in origin_mapping:
+        product_origin = origin_mapping[product_origin]
+
+    # Case 2: origin is a product from another unit
+    elif re.fullmatch(unit_origin_pattern, product_origin):
+        all_fields = product_origin.split(".")
+
+        # Origin unit is always the first field.
+        origin_unit_name = all_fields[0]
+        # Origin step_id is the second field if there are 3, else it has to be retrieved from the units map
+        # Origin product name is the last field, no matter if there are 2 or 3 fields
+        if len(all_fields) == 3:
+            origin_step_id = all_fields[1]
+            origin_product_name = all_fields[2]
         else:
-            if mode_set is None or mode not in mode_set:
-                continue
+            origin_step_id = ""
+            origin_product_name = all_fields[1]
 
-        out: dict[str, Any] = {"name": name}
-
-        # origin (only for inputs/outputs)
-        if with_origin:
-            origin_raw = origin_map_by_unit.get(unit_name, {}).get(origin_kind, {}).get(name)
-            if isinstance(origin_raw, str):
-                # Normalize dotted to underscored pipeline refs
-                norm = {
-                    "pipeline.input": "pipeline_input",
-                    "pipeline.output": "pipeline_output",
-                    "pipeline.internal": "pipeline_internal",
-                }.get(origin_raw, origin_raw)
-                out["origin"] = norm
-
-        if "mandatory" not in e:
-            raise TaskTableError(f'Missing "mandatory" for item "{name}" in unit "{unit_name}".')
-        out["mandatory"] = bool(e["mandatory"])
-
-        # Merge IO config
-        io_cfg = io_index.get(name, {}) or {}
-        merged_cfg: dict[str, Any] = {}
-        for k, v in io_cfg.items():
-            if k in ("name", "mandatory"):
-                continue
-            merged_cfg[k] = v
-
-        if merged_cfg:
-            merged_cfg = _replace_external_variables(merged_cfg, external_variables)
-            out.update(merged_cfg)
-
-        # Pass through extra input/output fields without overriding IO-derived values.
-        if with_origin:
-            extra_cfg: dict[str, Any] = {}
-            for k, v in e.items():
-                if k in ("name", "mode", "mandatory", "origin"):
+        #  We check that origin unit name exists in the tasktable and retrieve the associated pipeline step
+        origin_unit: dict[str, Any] = {}
+        for step in pipeline_full.get("steps", []):
+            if step.get("unit_name") == origin_unit_name:
+                # If we have an origin_step_id given, check that the step found matches this value aswell.
+                # If not, keep searching
+                if origin_step_id and step.get("step_id") != origin_step_id:
                     continue
-                if v is None or k in out:
-                    continue
-                extra_cfg[k] = v
-            if extra_cfg:
-                extra_cfg = _replace_external_variables(extra_cfg, external_variables)
-                out.update(extra_cfg)
+                origin_unit = step
+                origin_step_id = step.get("step_id")
+                break
 
-        kept.append(out)
+        if not origin_unit:
+            raise TaskTableError(
+                f"Could not find unit '{origin_unit_name}' needed by input product '{product_name}' of unit "
+                f"'{unit_name}' in pipeline. Available steps are: {pipeline_full.get('steps', [])}.",
+            )
 
-    return kept
+        # Check that the referenced product exists in the outputs of the unit we found
+        if product_name not in origin_unit.get("output_products", {}):
+            raise TaskTableError(
+                f"Unit '{unit_name}' needs product '{product_name}' from unit '{origin_unit_name}' "
+                f"but available outputs are: {origin_unit.get("output_products", {})}.",
+            )
+
+        product_origin = f"{origin_unit_name}.{origin_step_id}.{origin_product_name}"
+
+    return product_origin
+
+
+def _build_entry(
+    io_product: dict,
+    io_index: dict[str, dict[str, Any]],
+    processing_modes: Iterable[str] | None,
+    external_variables: dict[str, Any] | None,
+    origin: str = "",
+) -> dict[str, Any] | None:
+    """
+    Build a dictionary describing an input or an output, using the conditions for this I/O defined
+    in the unit description and the full description of the I/O from the tasktable.
+    The function returns None if the I/O does not match the current processing modes given.
+    This function can be used for input_products, input_adfs or output_products.
+
+    Args:
+        io_product: content of the field "input_products" (or output, or adfs) from the unit's description
+        io_index: dictionary of the I/O descriptions from the "io" section of the tasktable
+        processing_modes: list of processing modes used for this flow
+        origin: origin of the I/O. Needs to be computed beforehand for pipelines. Optional.
+    """
+    # Check that the defined product has the two mandatory fields: name and mandatory
+    for field in ("name", "mandatory"):
+        if field not in io_product:
+            raise TaskTableError(f"Missing '{field}' in IO product definition: {io_product}")
+
+    # Retrieve mode. If there is no "mode" field, we consider that the mode is "always" (default value)
+    mode = io_product.get("mode", "always")
+
+    # Extra fields. All fields from io_product that are not "name", "mandatory" or "mode"
+    extra_fields: dict[str, Any] = {}
+    for field_name, field_value in io_product.items():
+        if field_name not in {"name", "mode", "mandatory"}:
+            extra_fields[field_name] = field_value
+
+    # Filter by processing mode: skip this product if it has a mode that's not "always"
+    # and not in the provided processing modes
+    processing_modes = processing_modes or []
+    if mode != "always" and mode not in processing_modes:
+        return None
+
+    # Retrieve product details from "io" section
+    io_details = io_index.get(io_product["name"], {})
+    if not io_details:
+        raise TaskTableError(
+            f'Could not find details for product "{io_product["name"]}" in "io" section, " \
+                "available products are: {io_index.keys()}.',
+        )
+
+    # Merge info from both to create the final product details
+    product_details = {
+        "name": io_product["name"],
+        "mandatory": bool(io_product["mandatory"]),
+        **extra_fields,
+    }
+    if origin:
+        product_details["origin"] = origin
+    for k, v in io_details.items():
+        # When merging, we don't touch the values already set in "product_details" and also don't keep the "mode" field
+        if k not in [*product_details, "mode"]:
+            product_details[k] = v
+
+    # Finally, replace the external variables with the values given
+    product_details = _replace_external_variables(product_details, external_variables)
+
+    return product_details
+
+
+def _build_single_unit_details(
+    unit_name: str,
+    units_index: dict[str, dict[str, Any]],
+    io_index: dict[str, dict[str, Any]],
+    processing_modes: Iterable[str] | None,
+    external_variables: dict[str, Any] | None,
+    full_pipeline: dict[str, Any] | None = None,
+    step_id: int = 0,
+    parameters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Build the details of a single unit for the payload.
+    This function is suited for both "unit" and "pipeline" modes.
+    In "pipeline" mode, the full pipeline definition has to be given, along with the "step_id" value
+    of the step corresponding to the unit we want to build, for cases when several steps have the same unit name.
+
+    Args:
+        unit_name: name of the unit to build
+        units_index: dictionary of the unit descriptions from the "units" section of the tasktable
+        io_index: dictionary of the I/O descriptions from the "io" section of the tasktable
+        processing_modes: list of processing modes used for this flow
+        external_variables: dictionary of external variables values from flow's input
+        full_pipeline: full definition of the pipeline from the tasktable.
+            Optional, needed only if the flow mode is "pipeline"
+        step_id: ID of the step in the pipeline corresponding to the given unit. Optional, needed only
+            if the flow mode is "pipeline" and the pipeline has multiple steps using the same unit
+        parameters: optional parameters included in the step definition in the pipeline, if any
+    """
+    # Get unit details from "units" section
+    unit_details = units_index.get(unit_name)
+    if not unit_details:
+        raise TaskTableError(f'Unit "{unit_name}" not found in "units". Available units: {units_index.keys()}.')
+
+    # Field "module" is simply retrieved from the unit details
+    module = unit_details.get("module")
+    if not isinstance(module, str) or not module:
+        raise TaskTableError(f'Unit "{unit_name}" is missing a valid "module" string.')
+
+    # Build input products, the origin of the product can be dynamic if the unit is part of a pipeline,
+    # but is always the external input in "unit" mode
+    input_products: list[dict[str, Any]] = []
+    for input_product in unit_details.get("input_products", {}):
+        if full_pipeline:
+            input_product_origin = _extract_io_origin_from_pipeline(
+                unit_name,
+                input_product.get("name", ""),
+                full_pipeline,
+                is_input=True,
+                step_id=step_id,
+            )
+        else:
+            input_product_origin = "pipeline_input"
+
+        input_entry = _build_entry(
+            input_product,
+            io_index,
+            processing_modes,
+            external_variables,
+            origin=input_product_origin,
+        )
+        if input_entry:
+            input_products.append(input_entry)
+
+    # Build input ADFS, only defined by the unit details, does not depend on the mode
+    input_adfs: list[dict[str, Any]] = []
+    for adfs_product in unit_details.get("input_adfs", {}):
+        adfs_entry = _build_entry(adfs_product, io_index, processing_modes, external_variables)
+        if adfs_entry:
+            input_adfs.append(adfs_entry)
+
+    # Build output products, the origin of the product can be dynamic if the unit is part of a pipeline,
+    # but is always the external output in "unit" mode
+    output_products: list[dict[str, Any]] = []
+    for output_product in unit_details.get("output_products", {}):
+        if full_pipeline:
+            output_product_origin = _extract_io_origin_from_pipeline(
+                unit_name,
+                output_product.get("name", ""),
+                full_pipeline,
+                is_input=False,
+            )
+        else:
+            output_product_origin = "pipeline_output"
+
+        output_entry = _build_entry(
+            output_product,
+            io_index,
+            processing_modes,
+            external_variables,
+            origin=output_product_origin,
+        )
+        if output_entry:
+            output_products.append(output_entry)
+
+    # If "pipeline" mode, call the unit <unit_name>.<step_id> to be able to differenciate
+    # between several steps using the same unit
+    if full_pipeline:
+        unit_name = f"{unit_name}.{step_id}"
+
+    # Build the final unit details for the payload
+    out_unit: dict[str, Any] = {
+        "name": unit_name,
+        "module": module,
+        "input_products": input_products,
+        "input_adfs": input_adfs,
+        "output_products": output_products,
+    }
+    if parameters:
+        out_unit["parameters"] = parameters
+
+    return out_unit
 
 
 def build_unit_list(
@@ -160,9 +335,20 @@ def build_unit_list(
     unit: str | None = None,
     processing_mode: Iterable[str] | None = None,
     external_variables: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
     """
-    STEP 1: Build the list of processing units from the Task Table.
+    Build the list of units needed for the payload, from the tasktable given and the flow mode (pipeline or unit).
+    If the mode is "unit", the list returned will only contain the requested unit, with its input and output linked
+    to the external input and output.
+    If the mode is "pipeline", the list will contain all the ordered units of the pipeline, with their inputs and
+    outputs correctly chained if needed.
+
+    Args:
+        tasktable: dictionary containing the content of the tasktable
+        pipeline: name of the pipeline to build, if the mode is "pipeline". If "unit" is given, has to be None.
+        unit: name of the unit to build, if the mode is "unit". If "pipeline" is given, has to be None.
+        processing_mode: list of processing modes used for this flow. Optional
+        external_variables: dictionary of external variables values from flow's input. Optional
     """
     # Validate pipelines shape
     if not isinstance(tasktable, dict):
@@ -174,7 +360,12 @@ def build_unit_list(
     if "io" not in tasktable or not isinstance(tasktable["io"], list):
         raise TaskTableError(f"Missing or invalid 'io' list in task table: {tasktable}")
 
-    # Build indices for quick lookup
+    if pipeline and unit:
+        raise TaskTableError("Provide either 'pipeline' or 'unit', not both.")
+    if not pipeline and not unit:
+        raise TaskTableError("One of 'pipeline' or 'unit' must be provided.")
+
+    # Retrieve list of units from "units" field
     units_index: dict[str, dict[str, Any]] = {}
     for u in tasktable["units"]:
         if isinstance(u, dict) and isinstance(u.get("name"), str):
@@ -182,116 +373,65 @@ def build_unit_list(
     if not units_index:
         raise TaskTableError('No valid unit entries found in "units".')
 
+    # Retrieve details of inputs/outputs from "io" field
     io_index: dict[str, dict[str, Any]] = {}
     for io in tasktable["io"]:
         if isinstance(io, dict) and isinstance(io.get("name"), str):
             io_index[io["name"]] = io
 
-    if pipeline and unit:
-        raise TaskTableError('Provide either "pipeline" or "unit", not both.')
-    if not pipeline and not unit:
-        raise TaskTableError('One of "pipeline" or "unit" must be provided.')
-
-    # Select unit names from pipeline or explicit unit
-    if unit:
-        unit_names = [unit]
-        if unit not in units_index:
-            units = list(units_index)
-            available = ", ".join(f"'{u}'" for u in units)
-            raise TaskTableError(f'Unit "{unit}" not found in "units". Available units: {available}.')
-    else:
-        unit_names = _select_unit_names(tasktable, pipeline=pipeline)
-
-    # pipeline provided: per-step origin maps for each unit in the selected pipeline.
-    origin_map_by_unit: dict[str, dict[str, dict[str, Any]]] = {}
-    if pipeline:
-        pl = next((p for p in tasktable.get("pipelines", []) if p.get("name") == pipeline), None)
-        steps = pl.get("steps", []) if pl else []
-        for s in steps:
-            if not isinstance(s, dict):
-                continue
-            uname = s.get("unit_name")
-            if not uname:
-                continue
-            origin_map_by_unit[uname] = {
-                "in": s.get("input_products", {}) or {},
-                "out": s.get("output_products", {}) or {},
-            }
-    else:
-        # unit provided: take the first pipeline step that defines this unit
-        s = None
-        for p in tasktable.get("pipelines", []):
-            if not isinstance(p, dict):
-                continue
-            for st in p.get("steps") or []:
-                if isinstance(st, dict) and st.get("unit_name") in unit_names:
-                    s = st
-                    break
-            if s:
-                break
-
-        if not s:
-            raise TaskTableError(f'No pipeline step found for unit "{unit_names[0]}" to derive origins.')
-
-        uname = s.get("unit_name")
-        origin_map_by_unit[uname] = {
-            "in": s.get("input_products", {}) or {},
-            "out": s.get("output_products", {}) or {},
-        }
-
-    # Build output units
     out_units: list[dict[str, Any]] = []
-    for uname in unit_names:
-        udef = units_index.get(uname)
-        if not udef:
-            raise TaskTableError(f'Unit "{uname}" not found in "units".')
 
-        module = udef.get("module")
-        if not isinstance(module, str) or not module:
-            raise TaskTableError(f'Unit "{uname}" is missing a valid "module" string.')
-
-        input_products = _build_entries(
-            udef.get("input_products", []),
+    if unit:
+        # Handle only one unit
+        unit_details = _build_single_unit_details(
+            unit,
+            units_index,
             io_index,
             processing_mode,
-            with_origin=True,
-            unit_name=uname,
-            origin_kind="in",
-            origin_map_by_unit=origin_map_by_unit,
-            external_variables=external_variables,
+            external_variables,
         )
-        input_adfs = _build_entries(
-            udef.get("input_adfs", []),
-            io_index,
-            processing_mode,
-            with_origin=False,
-            unit_name=uname,
-            origin_kind="in",
-            origin_map_by_unit=origin_map_by_unit,
-            external_variables=external_variables,
-        )
-        output_products = _build_entries(
-            udef.get("output_products", []),
-            io_index,
-            processing_mode,
-            with_origin=True,
-            unit_name=uname,
-            origin_kind="out",
-            origin_map_by_unit=origin_map_by_unit,
-            external_variables=external_variables,
-        )
+        out_units.append(unit_details)
 
-        out_units.append(
-            {
-                "name": uname,
-                "module": module,
-                "input_products": input_products,
-                "input_adfs": input_adfs,
-                "output_products": output_products,
-            },
-        )
+    if pipeline:
+        # Retrieve pipeline definition from the list of pipelines
+        full_pipeline = next((p for p in tasktable.get("pipelines", []) if p.get("name") == pipeline), None)
 
-    return {"units": out_units}
+        if not full_pipeline:
+            raise TaskTableError(
+                f"Could not find pipeline named '{pipeline}' in tasktable. "
+                f"Existing pipelines: {tasktable.get("pipelines", [])}",
+            )
+
+        # Retrieve list of steps from the pipeline
+        pipeline_steps = full_pipeline.get("steps")
+        if not pipeline_steps or not isinstance(pipeline_steps, list):
+            raise TaskTableError(f"Pipeline '{pipeline}' is missing a valid 'steps' list.")
+
+        for step in pipeline_steps:
+            # Validate step structure
+            if not isinstance(step, dict):
+                raise TaskTableError(
+                    f"Step in pipeline '{pipeline}' doesn't have the expected format (expected JSON dict): {step}",
+                )
+            for field in ("unit_name", "step_id", "input_products", "output_products"):
+                if field not in step:
+                    raise TaskTableError(f"Step in pipeline '{pipeline}' is missing mandatory field '{field}': {step}")
+
+            # Build unit details for this step
+            unit_details = _build_single_unit_details(
+                step["unit_name"],
+                units_index,
+                io_index,
+                processing_mode,
+                external_variables,
+                full_pipeline=full_pipeline,
+                step_id=step["step_id"],
+                parameters=step.get("parameters", None),
+            )
+
+            out_units.append(unit_details)
+
+    return out_units
 
 
 def build_cql2_json(query: dict[str, Any], values: dict[str, Any]):
