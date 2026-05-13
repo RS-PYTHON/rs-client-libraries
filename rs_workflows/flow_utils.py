@@ -17,7 +17,7 @@
 import os
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 
 from opentelemetry import trace
@@ -64,6 +64,14 @@ class ProcessingMode(str, Enum):
     REPROCESSING = "reprocessing"
     SUBS = "subs"
     ALWAYS = "always"
+
+
+class InstrumentMode(str, Enum):
+    """Instrument mode"""
+
+    EW = "EW"
+    IW = "IW"
+    SM = "SM"
 
 
 class SentinelSatellite(str, Enum):
@@ -354,6 +362,18 @@ class DprProcessIn(BaseModel):
         default=None,
         title="Satellite",
         description="Satellite identifier used in certain queries. Can be a string or SentinelSatellite enum.",
+    )
+
+    reference_date: date | None = Field(
+        default=None,
+        title="Reference Date",
+        description="Date used to identify a specific reference/master input product within the list of inputs.",
+    )
+
+    instrument_mode: str | InstrumentMode | None = Field(
+        default=None,
+        title="Instrument Mode",
+        description="Instrument mode used in certain queries. Can be a string or InstrumentMode enum.",
     )
 
     # -----------------------

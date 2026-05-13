@@ -178,19 +178,6 @@ class StoreParams(BasePayloadModel):
             raise ValueError("multiplicity must be a string or an integer")
         return v
 
-    # @classmethod
-    # def from_dict(cls, data):
-    #     """Helper to parse from dict-like YAML structure"""
-    #     if isinstance(data, dict):
-    #         if "s3_secret_alias" in data:
-    #             return cls(s3_secret_alias=data["s3_secret_alias"])
-    #         if "regex" in data or "multiplicity" in data:
-    #             return cls(regex=data.get("regex"), multiplicity=data.get("multiplicity"))
-    #     elif isinstance(data, list):
-    #         wrappers = [StoreOptionsWrapper(**item) for item in data]
-    #         return cls(options=wrappers)
-    #     raise ValueError("Invalid store_params format")
-
 
 class LoggingConfig(BasePayloadModel):
     """Logging configuration used in the general_configuration section"""
