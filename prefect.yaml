@@ -41,7 +41,7 @@ pull:
 deployments:
 - name: On-demand processing
   tags: [on-demand, processing]
-  decsription: |-
+  description: |-
     Generic processing flow. Not meant to be called directly.
   entrypoint: rs_workflows/on_demand_processing.py:dpr_processing
   work_pool:
@@ -49,14 +49,28 @@ deployments:
     work_queue_name: null
     job_variables: {}
   schedules: []
-- name: On-demand S1L1 ARD processing
+- name: Process S1 ARD
   version: null
-  tags: [ard, on-demand, processing]
+  tags: [processing, s1, ard]
   concurrency_limit: null
   description: |-
     Sentinel-1 ARD processing.
     The SLC products should have been staged before.
   entrypoint: rs_workflows/on_demand/sentinel1/s1_ard.py:process_s1ard
+  parameters: {}
+  work_pool:
+    name: eopf-prefect-pool
+    work_queue_name: null
+    job_variables: {}
+  schedules: []
+- name: Process S1 ARD Reference
+  version: null
+  tags: [processing, s1, ard]
+  concurrency_limit: null
+  description: |-
+    Sentinel-1 ARD processing reference pipeline.
+    This flow must be run once to generate the REFERENCE_DB used in on-demand S1 ARD processing flow.
+  entrypoint: rs_workflows/on_demand/sentinel1/s1_ard.py:process_s1ard_reference
   parameters: {}
   work_pool:
     name: eopf-prefect-pool

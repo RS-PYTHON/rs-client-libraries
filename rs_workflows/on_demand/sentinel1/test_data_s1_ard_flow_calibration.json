@@ -10,7 +10,7 @@
     "input_collections": [
       "s01siwslc"
     ],
-    "dask_cluster_label": "dask-s1ard.vprivat.latest"
+    "dask_cluster_label": "dask-s1ard.vprivat.feat-rspy1025-new-s1-ard"
   },
   "reference_date": "2026-04-08"
 }

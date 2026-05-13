@@ -59,25 +59,36 @@ class Level1ArdFlowParams(ProcessingFlowParams):
         return await super()._resolve(mission, "1ard")
 
 
-@flow(name="process sentinel-1 ARD")
-async def process_s1ard(slcs: list[str], reference_date: date, flow_params: Level1ArdFlowParams, verbose: bool = False):
-    """
-    Sentinel-1 ARD processing.
+# Example to retrieve April 2026 S1 SLC (IW) products from CDSE in Toulouse area:
+# https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items?datetime=2026-04-01T00%3A00%3A00.000Z%2F2026-04-30T00%3A00%3A00.000Z&bbox=1.49319102647564%2C43.55965105873602%2C1.5043201542126%2C43.5629914174788&limit=6&sortby=-properties.created
 
-        Args:
-            slcs: STAC item identifiers of S1 SLC input products, already converted to zarr.
-            reference_date: Date of the master (reference) SLC
+
+async def _do_process_s1ard(
+    slcs: list[str],
+    reference_date: date | None,
+    flow_params: Level1ArdFlowParams,
+    verbose: bool = False,
+):
+    """
+    Sentinel-1 ARD processing (common function for reference pipeline and nominal on-demand flow).
+
+    Args:
+        slcs (list[str]): STAC item identifiers of S1 SLC input products, already converted to zarr. A single item for the reference pipeline.
+        reference_date (date | None): Date of the master (reference) SLC. Set to None for reference pipeline
+        flow_params (Level1ArdFlowParams): Flow parameters
+        verbose (bool, optional): not used yet. Defaults to False.
     """
     logger = get_run_logger()
-    logger.info(f"Mode verbose is set to {verbose}")
 
-    # Example to retrieve April 2026 S1 SLC (IW) products from CDSE in Toulouse area:
-    # https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items?datetime=2026-04-01T00%3A00%3A00.000Z%2F2026-04-30T00%3A00%3A00.000Z&bbox=1.49319102647564%2C43.55965105873602%2C1.5043201542126%2C43.5629914174788&limit=6&sortby=-properties.created
-
-    # Specific data used for tests:
-    # https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items/S1D_IW_SLC__1SDV_20260420T055953_20260420T060020_002426_003FB6_3AE6
-    # https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items/S1C_IW_SLC__1SDV_20260408T174632_20260408T174659_007128_00E6F6_E998
-    # https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items/S1C_IW_SLC__1SDV_20260327T174632_20260327T174659_006953_00E115_D167
+    num_slcs = len(slcs)
+    if num_slcs == 0:
+        logger.error("❌ The processing cannot be launched, no SLC provided")
+        return
+    if not reference_date and num_slcs > 1:
+        logger.error("❌ The processing cannot be launched, reference_date is required when providing several slcs")
+        return
+    if reference_date and num_slcs == 1:
+        logger.warning("⚠️ reference_date is not required when providing a single slc")
 
     input_products = [
         FlowInputProduct(
@@ -94,7 +105,8 @@ async def process_s1ard(slcs: list[str], reference_date: date, flow_params: Leve
     mission = "1"
     p = await flow_params.resolve(mission)
     flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
-    with flow_env.start_span(__name__, f"sentinel{mission}-level1ard-processing"):
+    suffix = "-reference" if not reference_date else ""
+    with flow_env.start_span(__name__, f"sentinel{mission}-level1ard-processing{suffix}"):
         item_collection: ItemCollection | None = await get_catalog_items(flow_env, slcs, p.input_collections)
         if not item_collection or len(item_collection) == 0:
             logger.error(f"❌ The processing cannot be launched, no items found for {slcs} in {p.input_collections}")
@@ -116,16 +128,15 @@ async def process_s1ard(slcs: list[str], reference_date: date, flow_params: Leve
             logger.error(f"❌ Items do not share the same sar:instrument_mode: {sorted(unique_modes)}")
             return
 
-        instrument_mode = unique_modes.pop()
+        external_variables = {"instrument_mode": unique_modes.pop()}
+        if reference_date:
+            external_variables["reference_date"] = reference_date
 
         # Call DPR flow
         await call_dpr_flow(
             FlowEnvArgs(owner_id=p.owner_identifier),
             input_products=input_products,
-            external_variables={
-                "reference_date": reference_date,
-                "instrument_mode": instrument_mode,
-            },
+            external_variables=external_variables,
             dask_cluster_label=p.dask_cluster_label,
             processor_name=p.processor_name,
             processor_version=p.processor_version,
@@ -140,7 +151,43 @@ async def process_s1ard(slcs: list[str], reference_date: date, flow_params: Leve
         )
 
 
+@flow(name="process-s1-ard")
+async def process_s1ard(slcs: list[str], reference_date: date, flow_params: Level1ArdFlowParams, verbose: bool = False):
+    """
+    Sentinel-1 ARD processing (nominal on-demand flow).
+
+        Args:
+            slcs: STAC item identifiers of S1 SLC input products, already converted to zarr.
+            reference_date: Date of the master (reference) SLC
+    """
+
+    # Specific data used for tests:
+    # https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items/S1D_IW_SLC__1SDV_20260420T055953_20260420T060020_002426_003FB6_3AE6
+    # https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items/S1C_IW_SLC__1SDV_20260408T174632_20260408T174659_007128_00E6F6_E998
+    # https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items/S1C_IW_SLC__1SDV_20260327T174632_20260327T174659_006953_00E115_D167
+
+    await _do_process_s1ard(slcs, reference_date, flow_params, verbose)
+
+
+@flow(name="process-s1-ard-reference")
+async def process_s1ard_reference(slc: str, flow_params: Level1ArdFlowParams, verbose: bool = False):
+    """
+    Sentinel-1 ARD processing reference pipeline.
+    This flow must be run once to generate the REFERENCE_DB used in on-demand S1 ARD processing flow.
+
+        Args:
+            slc: STAC item identifier of S1 master SLC input product, already converted to zarr.
+    """
+    await _do_process_s1ard([slc], None, flow_params, verbose)
+
+
 @task(name="process sentinel-1 level-1-ard")
 async def process_s1l1ard_task(*args, **kwargs) -> None:
     """See: dpr_processing"""
     return await process_s1ard.fn(*args, **kwargs)
+
+
+@task(name="process sentinel-1 level-1-ard reference pipeline")
+async def process_s1l1ard_reference_task(*args, **kwargs) -> None:
+    """See: dpr_processing"""
+    return await process_s1ard_reference.fn(*args, **kwargs)
