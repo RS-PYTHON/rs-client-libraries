@@ -292,6 +292,17 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 required_types = ["AX___DEM_AX"]
                 generated_prod_type = "S00__ADF_GETAS"
                 script_path = ADF_GETAS_SCRIPT_PATH
+            case AdfType.S00__ADF_WATER:
+                required_types = [
+                    "AX___LWM_AX",
+                    "AX___CLM_AX",
+                    "AX___TRM_AX",
+                    "AX___OOM_AX",
+                    "SR_2_MLM_AX",
+                    "SR_2_SURFAX",
+                ]
+                generated_prod_type = "S00__ADF_WATER"
+                script_path = Path(__file__).parent / "adf_conversion" / "S00__ADF_WATER.py"
             case _:
                 logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
                 return
