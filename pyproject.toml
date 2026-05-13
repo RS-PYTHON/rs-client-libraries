@@ -64,7 +64,7 @@ click = "8.3.1"
 prefect = { version = "3.6.20", extras = ["aws"] }
 prefect-aws = ">=0.7.5"
 requests = "^2.32.4"
-urllib3 = ">=2.6.3"
+urllib3 = ">=2.7.0"
 SQLAlchemy = "^2.0.37"
 dask-gateway = "2025.4.0"
 uv = ">=0.9.7"
