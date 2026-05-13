@@ -344,10 +344,11 @@ def _resolve_specific_input_product_stac_items(
         referenced_input_product_name = next(iter(referenced_input_product_names))
         logger.info(f"ADFS multiplicity 'one_per_input' refers to input '{referenced_input_product_name}'")
         input_product_io: dict[str, Any] = search_by_name(task_table["io"], referenced_input_product_name)
-        input_product_regex: str = input_product_io["store_params"]["regex"]
+        input_product_regex: str = input_product_io.get("store_params", {}).get("regex", None)
         if not input_product_regex:
-            raise ValueError(
-                f"Input product '{referenced_input_product_name}' shall define a regex to perform discrimination",
+            logger.warning(
+                f"Input product '{referenced_input_product_name}' should define a regex "
+                "to perform reliable discrimination",
             )
         result = []
         catalog_client: CatalogClient = rs_client.get_catalog_client()
@@ -357,11 +358,16 @@ def _resolve_specific_input_product_stac_items(
                 input_product.collection_name,
                 input_product.item_id,
             )
-            # Check that first asset path matches input product regex
-            logger.info(f"Checking asset path '{first_asset_path}' against regex '{input_product_regex}'")
-            if not first_asset_path or not re.fullmatch(input_product_regex, first_asset_path):
-                logger.debug(f"Ignore path {first_asset_path} as it doesn't match regex '{input_product_regex}'")
+            if not first_asset_path:
                 continue
+            # Check that first asset path matches input product regex
+            if input_product_regex:
+                logger.info(f"Checking asset path '{first_asset_path}' against regex '{input_product_regex}'")
+                if not re.fullmatch(input_product_regex, first_asset_path):
+                    logger.debug(f"Ignore path {first_asset_path} as it doesn't match regex '{input_product_regex}'")
+                    continue
+            else:
+                logger.warning(f"Adding asset '{first_asset_path}' without regex validation")
             result.append(stac_item)
         if not result:
             logger.error(f"Found no STAC item with assets matching the regex '{input_product_regex}'")
