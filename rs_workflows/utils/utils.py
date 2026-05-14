@@ -173,20 +173,21 @@ async def download_and_extract_assets_task(
 
 async def upload_folder_flat(local_folder: Path, prefix: str):
     """
-    Upload all files under ``local_folder`` to the same S3 prefix.
+    Upload all files under ``local_folder`` to the S3 prefix.
 
-    The upload is intentionally flattened: only the filename is kept in the
-    destination key, regardless of the original nested local path.
+    The relative path below ``local_folder`` is preserved in the destination
+    key so extracted archives keep their original folder structure.
     """
     logger = get_run_logger()
-    files_to_upload = [path for path in local_folder.rglob("*") if path.is_file()]
+    files_to_upload = sorted(path for path in local_folder.rglob("*") if path.is_file())
 
     logger.info(
-        f"Preparing flat upload of {len(files_to_upload)} file(s) from {local_folder} to {prefix}",
+        f"Preparing upload of {len(files_to_upload)} file(s) from {local_folder} to {prefix}",
     )
 
     for file_path in files_to_upload:
-        s3_path = prefix + file_path.name
+        relative_path = file_path.relative_to(local_folder).as_posix()
+        s3_path = prefix + relative_path
         logger.info(f"Uploading {file_path} -> {s3_path}")
         await s3_upload_file(file_path, s3_path)
 
@@ -266,9 +267,13 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
         # Always expose a concrete extracted file in the normalized href.
         # When several files are produced, pick a deterministic "main" payload
         # by preferring the largest file and then the lexicographically smallest
-        selected_file = min(extracted_files, key=lambda path: (-path.stat().st_size, path.name))
-        logger.info(f"Selected extracted file for normalized href: {prefix + selected_file.name}")
-        return prefix + selected_file.name
+        selected_file = min(
+            extracted_files,
+            key=lambda path: (-path.stat().st_size, path.relative_to(upload_dir).as_posix()),
+        )
+        selected_href = prefix + selected_file.relative_to(upload_dir).as_posix()
+        logger.info(f"Selected extracted file for normalized href: {selected_href}")
+        return selected_href
 
 
 @flow(name="Asset unzip and decompress")

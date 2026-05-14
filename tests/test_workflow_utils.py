@@ -36,7 +36,7 @@ def mock_workflow_utils_logger(monkeypatch, mocker):
 
 @pytest.mark.asyncio
 async def test_upload_folder_flat(tmp_path, monkeypatch, mock_workflow_utils_logger):
-    """Test flat upload keeps only file names in destination keys."""
+    """Test upload keeps relative paths in destination keys."""
     folder = tmp_path / "payload"
     nested = folder / "nested"
     nested.mkdir(parents=True)
@@ -49,7 +49,7 @@ async def test_upload_folder_flat(tmp_path, monkeypatch, mock_workflow_utils_log
     await workflow_utils.upload_folder_flat(folder, "s3://bucket/prefix/")
 
     uploaded_targets = [call.args[1] for call in upload_mock.await_args_list]
-    assert uploaded_targets == ["s3://bucket/prefix/a.txt", "s3://bucket/prefix/b.txt"]
+    assert uploaded_targets == ["s3://bucket/prefix/a.txt", "s3://bucket/prefix/nested/b.txt"]
 
 
 @pytest.mark.asyncio
@@ -210,6 +210,38 @@ async def test_process_asset_returns_concrete_extracted_file_for_sen3_payload(
     )
 
     assert result == f"s3://bucket/path/{product_name}/{product_name}.nc"
+    delete_mock.assert_called_once()
+    upload_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_asset_returns_nested_extracted_file_href(
+    monkeypatch,
+    mock_workflow_utils_logger,
+):
+    """Test normalized hrefs preserve nested paths below the upload root."""
+    download_mock = AsyncMock()
+    upload_mock = AsyncMock()
+    delete_mock = MagicMock()
+
+    def fake_extract_zip(_zip_path, extract_to):
+        nested_dir = Path(extract_to) / "nested"
+        nested_dir.mkdir(parents=True, exist_ok=True)
+        (nested_dir / "payload.bin").write_text("payload-content")
+
+    extract_zip_mock = MagicMock(side_effect=fake_extract_zip)
+
+    monkeypatch.setattr(workflow_utils, "s3_download_file", download_mock)
+    monkeypatch.setattr(workflow_utils, "s3_delete", delete_mock)
+    monkeypatch.setattr(workflow_utils, "extract_zip", extract_zip_mock)
+    monkeypatch.setattr(workflow_utils, "recursive_extract", MagicMock(return_value=0))
+    monkeypatch.setattr(workflow_utils, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
+    monkeypatch.setattr(workflow_utils, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(workflow_utils, "get_upload_prefix", MagicMock(return_value="s3://bucket/path/"))
+
+    result = await workflow_utils.process_asset("s3://bucket/path/data.zip", "data.zip")
+
+    assert result == "s3://bucket/path/nested/payload.bin"
     delete_mock.assert_called_once()
     upload_mock.assert_awaited_once()
 
