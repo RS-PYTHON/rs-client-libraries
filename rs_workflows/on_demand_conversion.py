@@ -37,6 +37,7 @@ from rs_workflows.payload_generator import (
     fetch_csv_from_endpoint,
     find_s3_output_bucket,
 )
+from rs_workflows.product_type_mapping import find_product_type
 from rs_workflows.staging_flow import staging_task
 from rs_workflows.utils.utils import (
     asset_unzip_decompress_task,
@@ -187,10 +188,13 @@ async def on_demand_conversion(
 
         # 3. compute the output product type from the product type mapping
 
-        # legacy_product_type = safe_item.properties["product:type"]  # ex: IW_SLC__1S
-        # mapping = find_product_type(legacy_product_type)
-        # output_product_type = mapping["productType"]  # ex: S01SIWSLC
-        output_product_type = "S01SIWSLC"
+        legacy_product_type = safe_item.properties["product:type"]  # ex: IW_SLC__1S
+        logger.info(f"Legacy SAFE product type used for mapping: {legacy_product_type}")
+        mapping = find_product_type(legacy_product_type)
+        output_product_type = mapping["productType"]  # ex: S01SIWSLC
+        if not output_product_type:
+            raise RuntimeError(f"No product type mapping found for legacy product type {legacy_product_type!r}")
+        logger.info(f"Resolved SAFE conversion output product type: {output_product_type}")
 
         # 4. compute the output bucket from the provided generated_product_to_collection_identifier mapping
 
@@ -231,7 +235,7 @@ async def on_demand_conversion(
         if input_asset is None:
             raise RuntimeError(f"No SAFE asset found for item {safe_item.id!r}")
 
-        input_safe_path = input_asset.href
+        input_safe_path = input_asset.href.rstrip("/").rsplit("/", 1)[0]
         logger.info(f"Using input SAFE path for conversion: {input_safe_path}")
 
         # Temporary local workaround: use the original input SAFE location until staging keeps file:local_path.
