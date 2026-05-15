@@ -17,18 +17,19 @@
 import json
 import os
 from urllib.parse import urlparse
-from uuid import uuid4
 
 import fsspec
 from prefect import flow, get_run_logger
-from pystac import Item, ItemCollection
+from pystac import Item, ItemCollection, Link
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
+from rs_workflows import catalog_flow
 from rs_workflows.dpr_flow import create_stac_item
 from rs_workflows.flow_utils import (
     ConversionIn,
+    DprProcessedItemMetadata,
     FlowEnv,
     FlowGeneratedProduct,
     RetryConfig,
@@ -225,7 +226,6 @@ async def on_demand_conversion(
             output_bucket,
             conversion_input.owner_id,
             output_collection,
-            str(uuid4()),
         )
 
         # 5. convert to zarr
@@ -235,7 +235,11 @@ async def on_demand_conversion(
         if input_asset is None:
             raise RuntimeError(f"No SAFE asset found for item {safe_item.id!r}")
 
-        input_safe_path = input_asset.href.rstrip("/").rsplit("/", 1)[0]
+        href = input_asset.href.rstrip("/")
+        marker = f"/{safe_item.id}/"
+        if marker not in href:
+            raise RuntimeError(f"Cannot derive SAFE root path from asset href {href!r} and item id {safe_item.id!r}")
+        input_safe_path = href.split(marker, 1)[0] + f"/{safe_item.id}"
         logger.info(f"Using input SAFE path for conversion: {input_safe_path}")
 
         # Temporary local workaround: use the original input SAFE location until staging keeps file:local_path.
@@ -255,6 +259,7 @@ async def on_demand_conversion(
             cluster_instance=conversion_input.dask_cluster_instance or "",
         )
 
+        # Use the DPR service client to submit and monitor the SAFE-to-Zarr conversion job.
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
         logger.info(f"Triggering SAFE conversion with payload: {payload}")
         job_status = dpr_client.run_conv_safe_zarr(payload, cluster_info)
@@ -264,9 +269,34 @@ async def on_demand_conversion(
         # 6. Read .zattrs to get stac item
         converted_zarr_uri = conversion_result["zarr_uri"]
         converted_item = read_zarr_stac_item(converted_zarr_uri)
+        logger.info(f"Staged SAFE item geometry: {safe_item.geometry}")
+        logger.info(f"Staged SAFE item bbox: {safe_item.bbox}")
+        converted_item.geometry = safe_item.geometry
+        converted_item.bbox = safe_item.bbox
+        converted_item.properties["product:type"] = output_product_type
+
+        # Keep a reference to the original input STAC item for the derived_from link.
+        original_item = conversion_input.stac_input["features"][0]
+        derived_from_href = next(
+            (link["href"] for link in original_item.get("links", []) if link.get("rel") == "self"),
+            original_item["id"],
+        )
+        converted_item.add_link(Link(rel="derived_from", target=derived_from_href, media_type="application/geo+json"))
         logger.info(f"Created STAC item from converted Zarr metadata: {converted_item.to_dict()}")
 
         # 7. upload to S3
         # 8. post / put to catalog
+        processed_item = DprProcessedItemMetadata(
+            output_product_id=generated_product.name,
+            product_type=output_product_type,
+            stac_item=converted_item,
+        )
+        published = catalog_flow.publish.submit(
+            flow_env.serialize(),
+            [conversion_input.generated_product_to_collection_identifier],
+            [processed_item],
+        )
+        published.result()  # type: ignore[unused-coroutine]
+
         # 9. cleanup (legacy files, staging area)
         logger.info("On-demand conversion flow completed successfully.")
