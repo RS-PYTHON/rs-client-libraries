@@ -67,6 +67,27 @@ def sample_adf_ecmwf_process_in():
     )
 
 
+@pytest.fixture
+def sample_adf_water_process_in():
+    """Create a sample AdfProcessIn object for S00__ADF_WATER."""
+    return AdfProcessIn(
+        env=FlowEnvArgs(owner_id="test-user"),
+        adf_type=AdfType.S00__ADF_WATER,
+        auxiliary_product_to_collection_identifier=[
+            AuxiliaryProductMapping(product_type="AX___LWM_AX", collection_name="AUX_LWM"),
+            AuxiliaryProductMapping(product_type="AX___CLM_AX", collection_name="AUX_CLM"),
+            AuxiliaryProductMapping(product_type="AX___TRM_AX", collection_name="AUX_TRM"),
+            AuxiliaryProductMapping(product_type="AX___OOM_AX", collection_name="AUX_OOM"),
+            AuxiliaryProductMapping(product_type="SR_2_MLM_AX", collection_name="AUX_MLM"),
+            AuxiliaryProductMapping(product_type="SR_2_SURFAX", collection_name="AUX_SURF"),
+            AuxiliaryProductMapping(product_type="S00__ADF_WATER", collection_name="ADF_WATER_PUBLISH"),
+            AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
+        ],
+        start_datetime=datetime(2021, 8, 1, 0, 0, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2021, 8, 1, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+
 def test_create_stac_item_from_zarr(tmp_path):
     """Test STAC item creation from ZARR metadata."""
     zarr_dir = tmp_path / "test.zarr"
@@ -404,6 +425,103 @@ async def test_adf_conversion_flow_logic_for_ecmwf(
     assert published_metadata[0].product_type == "S00__ADF_ECMWF"
     assert published_metadata[0].stac_item.properties["product:type"] == "S00__ADF_ECMWF"
     assert publish_mapping[0].collection_name == "ADF_ECMWF_PUBLISH"
+
+
+@pytest.mark.asyncio
+async def test_adf_conversion_flow_logic_for_water(
+    monkeypatch,
+    mocker,
+    sample_adf_water_process_in,
+    tmp_path,
+    _mock_os_env,
+):  # pylint: disable=redefined-outer-name,unused-argument
+    """Test that S00__ADF_WATER stages WATER inputs and uses the WATER conversion script."""
+    mock_logger = MagicMock()
+    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+
+    source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
+    staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
+    monkeypatch.setattr(adf_flow, "auxip_staging_task", staging_mock)
+
+    extract_mock = AsyncMock()
+    monkeypatch.setattr(adf_flow, "download_and_extract_assets_task", extract_mock)
+
+    upload_mock = AsyncMock()
+    monkeypatch.setattr(adf_flow, "s3_upload_dir", upload_mock)
+    monkeypatch.setattr(adf_flow.shutil, "rmtree", MagicMock())
+
+    zarr_path = tmp_path / "mock-water.zarr"
+    zarr_path.mkdir()
+    (zarr_path / ".zattrs").write_text(
+        json.dumps(
+            {
+                "id": "mock-water-adf",
+                "properties": {
+                    "product:type": "ADF_WATER",
+                    "start_datetime": "2021-08-01T00:00:00Z",
+                    "end_datetime": "2021-08-01T12:00:00Z",
+                },
+            },
+        ),
+    )
+    run_script_mock = MagicMock(return_value=zarr_path)
+    monkeypatch.setattr(adf_flow, "run_adf_script", run_script_mock)
+
+    create_stac_item_mock = MagicMock(side_effect=adf_flow.create_stac_item_from_zarr.fn)
+    monkeypatch.setattr(adf_flow, "create_stac_item_from_zarr", create_stac_item_mock)
+
+    monkeypatch.setattr(
+        adf_flow,
+        "fetch_csv_from_endpoint",
+        MagicMock(return_value=[["*", "*", "*", "*", "test-bucket"]]),
+    )
+    monkeypatch.setattr(adf_flow, "find_s3_output_bucket", MagicMock(return_value="test-bucket"))
+
+    publish_mock = AsyncMock()
+    monkeypatch.setattr(adf_flow, "publish", publish_mock)
+
+    flow_env_mock = mocker.MagicMock()
+    flow_env_mock.start_span.return_value = MagicMock()
+    flow_env_mock.start_span.return_value.__enter__.return_value = MagicMock()
+    flow_env_mock.owner_id = "test-user"
+    flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id="test-user")
+    monkeypatch.setattr(adf_flow, "FlowEnv", lambda env: flow_env_mock)
+
+    await adf_flow.adf_conversion.fn(sample_adf_water_process_in)
+
+    assert staging_mock.call_count == 6
+    staged_product_types = [
+        call.kwargs["cql2_filter"]["filter"]["args"][1]["args"][1] for call in staging_mock.call_args_list
+    ]
+    assert staged_product_types == [
+        "AX___LWM_AX",
+        "AX___CLM_AX",
+        "AX___TRM_AX",
+        "AX___OOM_AX",
+        "SR_2_MLM_AX",
+        "SR_2_SURFAX",
+    ]
+    assert [call.kwargs["catalog_collection_identifier"] for call in staging_mock.call_args_list] == [
+        "AUX_LWM",
+        "AUX_CLM",
+        "AUX_TRM",
+        "AUX_OOM",
+        "AUX_MLM",
+        "AUX_SURF",
+    ]
+    extract_mock.assert_awaited_once()
+    assert len(extract_mock.call_args.args[0]) == 6
+    run_script_mock.assert_called_once()
+    assert run_script_mock.call_args.args[0].name == "S00__ADF_WATER.py"
+    create_stac_item_mock.assert_called_once_with(zarr_path, "S00__ADF_WATER")
+    upload_mock.assert_awaited_once()
+
+    published_metadata = publish_mock.call_args[0][2]
+    publish_mapping = publish_mock.call_args[0][1]
+    assert published_metadata[0].product_type == "S00__ADF_WATER"
+    assert published_metadata[0].stac_item.properties["product:type"] == "S00__ADF_WATER"
+    assert publish_mapping[0].collection_name == "ADF_WATER_PUBLISH"
 
 
 @pytest.mark.asyncio

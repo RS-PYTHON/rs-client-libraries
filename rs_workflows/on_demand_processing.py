@@ -417,6 +417,8 @@ async def dpr_processing(
             external_variables={
                 "start_datetime": dpr_input.start_datetime,
                 "end_datetime": dpr_input.end_datetime,
+                "reference_date": dpr_input.reference_date,
+                "instrument_mode": dpr_input.instrument_mode,
                 "satellite": dpr_input.satellite,
             },
         )
