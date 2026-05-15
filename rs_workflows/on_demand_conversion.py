@@ -299,4 +299,8 @@ async def on_demand_conversion(
         published.result()  # type: ignore[unused-coroutine]
 
         # 9. cleanup (legacy files, staging area)
+        logger.info(f"Removing staged SAFE item {safe_item.id!r} from output collection {output_collection!r}.")
+        catalog_client.remove_item(output_collection, safe_item.id, raise_for_status=False)
+        logger.info(f"Removed staged SAFE item {safe_item.id!r} from output collection {output_collection!r}.")
+
         logger.info("On-demand conversion flow completed successfully.")
