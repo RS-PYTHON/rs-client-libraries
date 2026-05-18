@@ -48,6 +48,7 @@ RUN pip install -U pip && \
         scikit-image \
         matplotlib \
         rasterio \
+        sentineltoolbox \
         "zarr<3" \
     && layer-cleanup.sh
 
