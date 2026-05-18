@@ -52,8 +52,9 @@ def get_common_and_relative_paths(paths: list[str]) -> tuple[str, list[str]]:
 # Pattern used in reading from logfile in run_processor()
 # The main line:
 # 2026-04-17 11:56:08 - module - DEBUG - message
-# Compacted regex for debugging in any online website
-# ^(?P<timestamp>\d{4}-\d{2}-\d{2}[^\n]*?)\s+-\s+(?P<logger>.*?)\s*(?:-\s+|:\s+)\[?(?P<level>DEBUG|INFO|WARNING|ERROR|CRITICAL)\]?\s*(?:-\s+|:\s+)?(?P<message>.*)$
+# Compacted regex (2 lines) for debugging in any online website
+# ^(?P<timestamp>\d{4}-\d{2}-\d{2}[^\n]*?)\s+-\s+(?P<logger>.*?)\s*(?:-\s+|:\s+)\[?
+# (?P<level>DEBUG|INFO|WARNING|ERROR|CRITICAL)\]?\s*(?:-\s+|:\s+)?(?P<message>.*)$
 LOG_PATTERN = re.compile(
     r"""
     # positions itself at the start of the line
@@ -107,7 +108,7 @@ def parse_logs(text):
 
     current = None
     # Stores lines found before the first valid log match
-    preamble = []
+    preamble = []  # type: list[str]
 
     for line in text.splitlines():
 
