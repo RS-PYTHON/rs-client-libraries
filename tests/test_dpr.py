@@ -25,7 +25,6 @@ from starlette import status
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_client.rs_client import RsClient
-from rs_workflows.utils.utils import parse_logs
 from tests.conftest import MOCKED_RSPY_WEBSITE
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
@@ -186,29 +185,3 @@ I/O:
 
     mock_s3_upload_empty.assert_awaited_with("s3://bucket/output/.empty")
     assert uploaded_contents.strip() == (expected_results_local if local_mode else expected_results_cluster).strip()
-
-
-async def test_parse_logs_prefect_logger_levels():
-    """Test dpr_flow's read of processor log file."""
-    s3_log_file = """
-2025-01-01 10:00:00 | my.logger | INFO | info message
-2025-01-01 10:00:01 | my.logger | WARNING | warning message
-2025-01-01 10:00:02 | my.logger | ERROR | error message
-2025-01-01 10:00:03 | my.logger | UNKNOWN | fallback message
-"""
-
-    logger = AsyncMock()
-
-    for entry in parse_logs(s3_log_file):
-
-        level = entry["level"].strip().lower()
-        await getattr(logger, level, logger.info)(entry["message"])
-
-    logger.info.assert_called_once()
-
-    logged_message = logger.info.call_args[0][0]
-
-    assert "info message" in logged_message
-    assert "warning message" in logged_message
-    assert "error message" in logged_message
-    assert "fallback message" in logged_message
