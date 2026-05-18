@@ -900,22 +900,38 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
     )
 
     # This should raise RuntimeError with the proposed change
-    with pytest.raises(RuntimeError, match="Couldn't find any relation for output product 'output2'"):
+    with pytest.raises(
+        RuntimeError,
+        match="Missing mapping in generated_product_to_collection_identifier for task table entry 'output2'",
+    ):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
 
-def test_build_output_products_missing_mapping_raises(sample_unit, mock_dpr_process_in):
+def test_build_output_products_extra_mapping_is_ignored(sample_unit, mock_dpr_process_in, mock_store_params, mocker):
     """
-    Test that build_output_products raises an error if an output product
-    in dpr_process_in is missing from the unit's output_products.
+    Extra items in generated_product_to_collection_identifier
+    must NOT raise an error and should be ignored.
     """
-    # "UNKNOWN" is in dpr_process_in but NOT in sample_unit.output_products
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
     mock_dpr_process_in.generated_product_to_collection_identifier = [
-        FlowGeneratedProduct(name="UNKNOWN", product_type="type", collection_name="COLL"),
+        FlowGeneratedProduct(name="output1", product_type="type1", collection_name="COLL"),
+        FlowGeneratedProduct(name="output2", product_type="type2", collection_name="COLL"),
+        FlowGeneratedProduct(name="UNKNOWN", product_type="type", collection_name="COLL"),  # extra
     ]
 
-    with pytest.raises(RuntimeError, match="Couldn't find any output for task table entry 'UNKNOWN'"):
-        build_output_products(sample_unit, mock_dpr_process_in, MagicMock(), "test-owner", [])
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid4",
+        return_value="00000000-0000-0000-0000-000000000000",
+    )
+
+    result = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert len(result) == 2
+    assert {r.id for r in result} == {"output1", "output2"}
 
 
 def test_build_output_products_wildcard_collection_raises(sample_unit, mock_dpr_process_in):
@@ -937,3 +953,51 @@ def test_build_output_products_wildcard_collection_raises(sample_unit, mock_dpr_
 
     with pytest.raises(RuntimeError, match="cannot be '\\*' if the collection name is not specified"):
         build_output_products(sample_unit, mock_dpr_process_in, MagicMock(), "test-owner", [])
+
+
+def test_build_output_products_ignores_extra_generated_products(mock_dpr_process_in, mock_store_params, mocker):
+    """
+    Task table contains a single required output (S01SARRAW).
+    generated_product_to_collection_identifier contains that entry + extras per RSPY-1039
+
+    Expected:
+    - No error is raised
+    - Only S01SARRAW is processed
+    - Extra entries are ignored
+    """
+
+    unit = {
+        "output_products": [
+            {
+                "name": "S01SARRAW",
+                "store_type": "s3",
+                "type": "filename",
+                "opening_mode": "CREATE",
+                "final_product": True,
+            },
+        ],
+    }
+
+    # --- Mapping parameter (flow input) ---
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="S01SARRAW", product_type="*", collection_name="s01sarraw"),
+        FlowGeneratedProduct(name="S01GPSRAW", product_type="*", collection_name="s01gpsraw"),
+        FlowGeneratedProduct(name="S01HKMRAW", product_type="*", collection_name="s01hkmraw"),
+        FlowGeneratedProduct(name="S01AISRAW", product_type="*", collection_name="s01aisraw"),
+    ]
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+    mocker.patch(
+        "rs_workflows.payload_generator.uuid4",
+        return_value="00000000-0000-0000-0000-000000000000",
+    )
+
+    result = build_output_products(unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert len(result) == 1
+    assert result[0].id == "S01SARRAW"
+    assert "s01sarraw" in result[0].path  # ensures correct collection used

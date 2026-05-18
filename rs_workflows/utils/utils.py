@@ -64,7 +64,7 @@ def get_common_and_relative_paths(paths: list[str]) -> tuple[str, list[str]]:
     common_prefix = commonprefix(paths)
     # Ensure prefix stops on folder boundary
     common_folder = common_prefix[: common_prefix.rfind("/") + 1]
-    # Build regex from relative names inside common folder
+    # List from relative names inside common folder
     relative_parts = [re.escape(path.removeprefix(common_folder)) for path in paths]
     return common_folder, relative_parts
 

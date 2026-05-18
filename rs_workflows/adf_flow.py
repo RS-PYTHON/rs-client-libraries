@@ -20,7 +20,7 @@ import shutil
 import subprocess  # nosec B404
 import sys
 import tempfile
-from datetime import timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dateutil.parser import parse as parse_date
@@ -46,6 +46,7 @@ from rs_workflows.utils.utils import download_and_extract_assets_task
 # Path to the conversion scripts
 ADF_ECMWA_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWA.py"
 ADF_ECMWF_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWF.py"
+ADF_GETAS_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_GETAS.py"
 
 STAC_DATETIME_PROPERTY_NAMES = {
     "created",
@@ -99,6 +100,10 @@ def run_adf_script(script_path: Path, data_dir: Path, working_dir: Path, output_
 
     env = os.environ.copy()
     env["ADF_OUTPUT"] = str(output_dir)
+    # ADF_INPUT is used specifically by the script S00__ADF_GETAS.py to find the input data
+    # we also pass it as an argument for the other scripts that don't use this variable, but
+    # they receive it as an argument without causing any issue
+    env["ADF_INPUT"] = str(data_dir)
 
     def log_subprocess_output(output: str):
         """Forward subprocess output to the Prefect logger line by line."""
@@ -156,7 +161,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
         metadata = json.load(f)
 
     # extract STAC properties from metadata.
-    # the script S00__ADF_ECMWA.py puts them in 'properties' attribute.
+    # the scripts put them in 'properties' attribute.
     logger.info(f"ZARR metadata: {metadata.get("properties", {})}")
     stac_props = normalize_stac_properties_datetimes(metadata.get("properties", {}))
     logger.info(f"Extracted STAC properties from ZARR metadata: {stac_props}")
@@ -168,9 +173,14 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     item_id = metadata.get("id", zarr_path.stem)
     logger.info(f"Setting item_id to {item_id}")
 
-    # extract start/end datetime for pystac.Item validation
-    start_dt_str = stac_props.get("start_datetime")
-    end_dt_str = stac_props.get("end_datetime")
+    # extract start/end datetime for pystac.Item validation.
+    # try to find them in the metadata, but if they are not present, fallback to 'created'
+    # or current time to avoid validation issues. The S00__ADF_GETAS.py script doesn't set but
+    # 'created' field in the metadata, but pystac requires at least one of them to be set, so we need
+    # a fallback mechanism in this case.
+    fallback_dt_str = stac_props.get("created") or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    start_dt_str = stac_props.get("start_datetime") or fallback_dt_str
+    end_dt_str = stac_props.get("end_datetime") or fallback_dt_str
 
     start_dt = parse_date(start_dt_str) if start_dt_str else None
     end_dt = parse_date(end_dt_str) if end_dt_str else None
@@ -228,6 +238,21 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 required_types = ["AX___MF1_AX"]
                 generated_prod_type = "S00__ADF_ECMWF"
                 script_path = ADF_ECMWF_SCRIPT_PATH
+            case AdfType.S00__ADF_GETAS:
+                required_types = ["AX___DEM_AX"]
+                generated_prod_type = "S00__ADF_GETAS"
+                script_path = ADF_GETAS_SCRIPT_PATH
+            case AdfType.S00__ADF_WATER:
+                required_types = [
+                    "AX___LWM_AX",
+                    "AX___CLM_AX",
+                    "AX___TRM_AX",
+                    "AX___OOM_AX",
+                    "SR_2_MLM_AX",
+                    "SR_2_SURFAX",
+                ]
+                generated_prod_type = "S00__ADF_WATER"
+                script_path = Path(__file__).parent / "adf_conversion" / "S00__ADF_WATER.py"
             case _:
                 logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
                 return
@@ -240,11 +265,13 @@ async def adf_conversion(adf_input: AdfProcessIn):
                         {
                             "op": "t_intersects",
                             "args": [
-                                {"property": "datetime"},
-                                [
-                                    adf_input.start_datetime.isoformat() if adf_input.start_datetime else None,
-                                    adf_input.end_datetime.isoformat() if adf_input.end_datetime else None,
-                                ],
+                                {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                                {
+                                    "interval": [
+                                        adf_input.start_datetime.isoformat() if adf_input.start_datetime else None,
+                                        adf_input.end_datetime.isoformat() if adf_input.end_datetime else None,
+                                    ],
+                                },
                             ],
                         },
                         {"op": "=", "args": [{"property": "product:type"}, prod_type]},
