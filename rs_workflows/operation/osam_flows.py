@@ -34,7 +34,7 @@ class OSAMRequestError(Exception):
 
 
 @flow(
-    name="OSAM synchronize accounts",
+    name="synchronize-osam-accounts",
     description="Synchronize keycloak and object storage accounts.",
     log_prints=True,
     validate_parameters=True,
@@ -84,7 +84,7 @@ async def create_rights_artifact(rights: dict, username: str) -> None:
     await acreate_markdown_artifact(key="rights", markdown=markdown_report, description="session staging output")
 
 
-@flow(name="OSAM update account", log_prints=True, validate_parameters=True)
+@flow(name="update-osam-account", log_prints=True, validate_parameters=True)
 async def osam_update_user(user_name: str, env: FlowEnvArgs = FlowEnvArgs(owner_id="operator-osam")):
     """
     Flow that update a single OBS account.

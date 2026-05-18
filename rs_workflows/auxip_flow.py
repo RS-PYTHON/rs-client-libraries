@@ -149,7 +149,7 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
 ###############
 
 
-@flow(name="Auxip search")
+@flow(name="search-auxip")
 async def search(
     env: FlowEnvArgs,
     auxip_cql2: dict,
@@ -185,7 +185,7 @@ async def search(
         return found
 
 
-@flow(name="Auxip staging")
+@flow(name="stage-auxip")
 async def auxip_staging(
     env: FlowEnvArgs,
     cql2_filter: dict,
@@ -338,13 +338,13 @@ async def auxip_unzip_decompress(auxip_item: Item) -> Item:
 ###########################
 
 
-@task(name="Auxip search")
+@task(name="search-auxip")
 async def search_task(*args, **kwargs) -> ItemCollection | None:
     """See: search"""
     return await search.fn(*args, **kwargs)
 
 
-@task(name="Auxip staging")
+@task(name="stage-auxip")
 async def auxip_staging_task(*args, **kwargs) -> tuple[bool, ItemCollection | None]:
     """See: auxip_staging"""
     return await auxip_staging.fn(*args, **kwargs)

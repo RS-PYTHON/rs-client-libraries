@@ -91,7 +91,7 @@ def insert_pi_categories(db_url: str):
         session.close()
 
 
-@flow(name="PI db init")
+@flow(name="initialize-pi-db")
 async def init_pi_database(env: FlowEnvArgs):
     """
     Initializes the Performance Indicator (PI) database (named `performance`) schema and populates default categories.

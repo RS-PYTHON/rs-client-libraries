@@ -32,7 +32,7 @@ from rs_workflows.flow_utils import (
 #################
 
 
-@flow(name="Catalog search")
+@flow(name="search-catalog")
 async def catalog_search(
     env: FlowEnvArgs,
     catalog_cql2: dict,
@@ -171,7 +171,7 @@ async def publish(
     logger.info("End catalog publishing")
 
 
-@task(name="Catalog search")
+@task(name="search-catalog")
 async def catalog_search_task(*args, **kwargs) -> ItemCollection | None:
     """See: search"""
     return await catalog_search.fn(*args, **kwargs)

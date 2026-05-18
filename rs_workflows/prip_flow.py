@@ -25,7 +25,7 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, RetryConfig
 from rs_workflows.staging_flow import staging_task
 
 
-@flow(name="Prip search")
+@flow(name="search-prip")
 async def search(
     env: FlowEnvArgs,
     prip_cql2: dict,
@@ -62,7 +62,7 @@ async def search(
         return found
 
 
-@flow(name="On-demand Prip staging")
+@flow(name="stage-prip")
 async def on_demand_prip_staging(
     env: FlowEnvArgs,
     start_datetime: datetime.datetime | str,
@@ -125,7 +125,7 @@ async def on_demand_prip_staging(
 ###########################
 
 
-@task(name="PRIP search")
+@task(name="search-prip")
 async def search_task(*args, **kwargs) -> ItemCollection | None:
     """See: search"""
     return await search.fn(*args, **kwargs)
