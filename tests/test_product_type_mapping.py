@@ -16,7 +16,10 @@
 
 import pytest
 
-from rs_workflows.product_type_mapping import find_product_type, load_product_type_mapping
+from rs_workflows.product_type_mapping import (
+    find_product_type,
+    load_product_type_mapping,
+)
 
 
 @pytest.fixture(autouse=True)
