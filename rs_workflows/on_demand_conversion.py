@@ -158,11 +158,16 @@ async def on_demand_conversion(
     with flow_env.start_span(__name__, "legacy-conversion"):
         # 1. stage
         logger.info("Staging task submitted, waiting for completion...")
+        # stac_input is str | dict; normalize once so all downstream code works uniformly.
+        stac_dict: dict[str, Any] = (
+            conversion_input.stac_input
+            if isinstance(conversion_input.stac_input, dict)
+            else json.loads(conversion_input.stac_input)
+        )
         selected_assets = None
-        if isinstance(conversion_input.stac_input, dict):
-            item = conversion_input.stac_input.get("features", [conversion_input.stac_input])[0]
-            if "product" in item.get("assets", {}):
-                selected_assets = {"product"}
+        item = stac_dict.get("features", [stac_dict])[0]
+        if "product" in item.get("assets", {}):
+            selected_assets = {"product"}
 
         legacy_product = staging_task.with_options(
             retries=retry_config.staging_retries,
@@ -183,12 +188,6 @@ async def on_demand_conversion(
                     f"{job_result.get('message')}",
                 )
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-        # stac_input is str | dict; from_dict requires a dict, so parse if needed.
-        stac_dict: dict = (
-            conversion_input.stac_input
-            if isinstance(conversion_input.stac_input, dict)
-            else json.loads(conversion_input.stac_input)
-        )
         catalog_items = ItemCollection(
             catalog_client.get_items(
                 collection_id=staging_collection,
