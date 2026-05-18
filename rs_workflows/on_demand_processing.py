@@ -223,7 +223,7 @@ async def _stage_input_adfs_alternative(
             retry_delay_seconds=staging_retry_delay,
         )
         .submit(dpr_input.env, auxip_cql2, collection, timeout)
-        .result()
+        .result()  # type: ignore
     )
 
     if not auxip_items:
@@ -306,7 +306,7 @@ def _resolve_specific_input_product_stac_items(
     unit: dict[str, Any],
     provided_input_products: list[FlowInputProduct],
     rs_client: RsClient,
-) -> tuple[str | None, list[Item | None]]:
+) -> tuple[str, list[Item]] | tuple[None, list[None]]:
     input_adfs_io = search_by_name(task_table["io"], input_adfs["name"])
     if input_adfs_io.get("multiplicity", None) == "one_per_input":
         logger = get_run_logger()

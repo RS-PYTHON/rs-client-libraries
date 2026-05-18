@@ -16,6 +16,7 @@
 
 import json
 import os
+from typing import Any, cast
 from urllib.parse import urlparse
 
 import fsspec
@@ -123,7 +124,7 @@ async def safe_conversion_task(
     env: FlowEnvArgs,
     payload: dict,
     cluster_info: ClusterInfo,
-) -> dict:
+) -> dict[str, Any]:
     """Submit and monitor the SAFE-to-Zarr DPR conversion job."""
     logger = get_run_logger()
     flow_env = FlowEnv(env)
@@ -134,18 +135,22 @@ async def safe_conversion_task(
         job_status = dpr_client.run_conv_safe_zarr(payload, cluster_info)
         conversion_result = dpr_client.wait_for_job(job_status, logger, "SAFE conversion")
         logger.info(f"SAFE conversion completed with result: {conversion_result}")
-        return conversion_result
+        # The generic DPR client annotation is list[dict], but conv_safe_zarr returns one result dictionary.
+        return cast(dict[str, Any], conversion_result)
 
 
 @flow
 async def on_demand_conversion(
     conversion_input: ConversionIn,
-    retry_config: RetryConfig = RetryConfig(),
+    retry_config: RetryConfig = RetryConfig(),  # type: ignore
 ):
     """Docstring"""
     logger = get_run_logger()
     logger.info(f"Starting on-demand conversion flow with input: {conversion_input}")
     flow_env = FlowEnv(conversion_input.env)
+    staging_collection = conversion_input.generated_product_to_collection_identifier.collection_name
+    if staging_collection is None:
+        raise ValueError("collection_name is required to stage and retrieve the SAFE item")
 
     # Temporary local-mode workaround until staging preserves file:local_path for SAFE directory assets.
     # original_input_safe_path = conversion_input.stac_input["features"][0]["assets"]["product"]["href"]
@@ -165,7 +170,7 @@ async def on_demand_conversion(
         ).submit(
             flow_env.serialize(),
             stac_input=conversion_input.stac_input,
-            catalog_collection_identifier=conversion_input.generated_product_to_collection_identifier.collection_name,
+            catalog_collection_identifier=staging_collection,
             asset_names=selected_assets,
             poll_interval=10,
         )
@@ -178,10 +183,16 @@ async def on_demand_conversion(
                     f"{job_result.get('message')}",
                 )
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+        # stac_input is str | dict; from_dict requires a dict, so parse if needed.
+        stac_dict: dict = (
+            conversion_input.stac_input
+            if isinstance(conversion_input.stac_input, dict)
+            else json.loads(conversion_input.stac_input)
+        )
         catalog_items = ItemCollection(
             catalog_client.get_items(
-                collection_id=conversion_input.generated_product_to_collection_identifier.collection_name,
-                items_ids=[item.id for item in ItemCollection.from_dict(conversion_input.stac_input).items],
+                collection_id=staging_collection,
+                items_ids=[item.id for item in ItemCollection.from_dict(stac_dict).items],
             ),
         )
         logger.info(f"Retrieved catalog items after staging: {catalog_items.to_dict()}")
@@ -196,7 +207,7 @@ async def on_demand_conversion(
                 safe_zipped_item = catalog_items.items[idx]
                 logger.info(f"Processing item {safe_zipped_item.id} for asset extraction...")
                 safe_unzipped_item = asset_unzip_decompress_task.submit(safe_zipped_item)
-                safe_item = safe_unzipped_item.result()
+                safe_item = safe_unzipped_item.result()  # type: ignore[assignment]
                 catalog_client.update_item(safe_item)
         except Exception as err:
             raise RuntimeError(
@@ -284,7 +295,7 @@ async def on_demand_conversion(
             payload,
             cluster_info,
         )
-        conversion_result = conversion.result()
+        conversion_result: dict[str, Any] = conversion.result()  # type: ignore[assignment]
 
         # 6. Read .zattrs to get stac item
         converted_zarr_uri = conversion_result["zarr_uri"]
@@ -296,7 +307,7 @@ async def on_demand_conversion(
         converted_item.properties["product:type"] = output_product_type
 
         # Keep a reference to the original input STAC item for the derived_from link.
-        original_item = conversion_input.stac_input["features"][0]
+        original_item = stac_dict["features"][0]
         derived_from_href = next(
             (link["href"] for link in original_item.get("links", []) if link.get("rel") == "self"),
             original_item["id"],

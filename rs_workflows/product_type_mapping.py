@@ -30,7 +30,8 @@ DEFAULT_PTYPE_MAPPING_FILE = Path(__file__).resolve().parents[1] / "config" / "p
 def load_product_type_mapping(path: str | None = None) -> list[dict]:
     """Load product type mapping data from the packaged YAML file or an override path."""
     # PTYPE_MAPPING_CONFIG lets deployments override the packaged mapping without changing code.
-    mapping_file = Path(path or os.environ.get("PTYPE_MAPPING_CONFIG", DEFAULT_PTYPE_MAPPING_FILE))
+    mapping_path = path or os.environ.get("PTYPE_MAPPING_CONFIG")
+    mapping_file = Path(mapping_path) if mapping_path else DEFAULT_PTYPE_MAPPING_FILE
     with mapping_file.open("r", encoding="utf-8") as file:
         mapping_data = yaml.safe_load(file)
 

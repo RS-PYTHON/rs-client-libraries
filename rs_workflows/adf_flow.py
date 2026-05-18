@@ -315,7 +315,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
             output_dir.mkdir()
 
             # 2. Download and unzip assets locally
-            await download_and_extract_assets_task(staged_items, input_dir)
+            await download_and_extract_assets_task(staged_items, input_dir)  # type: ignore[arg-type]
 
             # 3. Call the conversion script
             try:
