@@ -19,7 +19,7 @@ import os
 from urllib.parse import urlparse
 
 import fsspec
-from prefect import flow, get_run_logger
+from prefect import flow, get_run_logger, task
 from pystac import Item, ItemCollection, Link
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient
@@ -31,6 +31,7 @@ from rs_workflows.flow_utils import (
     ConversionIn,
     DprProcessedItemMetadata,
     FlowEnv,
+    FlowEnvArgs,
     FlowGeneratedProduct,
     RetryConfig,
 )
@@ -115,6 +116,25 @@ def read_zarr_stac_item(zarr_uri: str) -> Item:
         product_name=item_id,
         dpr_processor="safe_to_zarr",
     )
+
+
+@task(name="SAFE conversion")
+async def safe_conversion_task(
+    env: FlowEnvArgs,
+    payload: dict,
+    cluster_info: ClusterInfo,
+) -> dict:
+    """Submit and monitor the SAFE-to-Zarr DPR conversion job."""
+    logger = get_run_logger()
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "safe-conversion"):
+        # Use the DPR service client to submit and monitor the SAFE-to-Zarr conversion job.
+        dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
+        logger.info(f"Triggering SAFE conversion with payload: {payload}")
+        job_status = dpr_client.run_conv_safe_zarr(payload, cluster_info)
+        conversion_result = dpr_client.wait_for_job(job_status, logger, "SAFE conversion")
+        logger.info(f"SAFE conversion completed with result: {conversion_result}")
+        return conversion_result
 
 
 @flow
@@ -259,12 +279,12 @@ async def on_demand_conversion(
             cluster_instance=conversion_input.dask_cluster_instance or "",
         )
 
-        # Use the DPR service client to submit and monitor the SAFE-to-Zarr conversion job.
-        dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
-        logger.info(f"Triggering SAFE conversion with payload: {payload}")
-        job_status = dpr_client.run_conv_safe_zarr(payload, cluster_info)
-        conversion_result = dpr_client.wait_for_job(job_status, logger, "SAFE conversion")
-        logger.info(f"SAFE conversion completed with result: {conversion_result}")
+        conversion = safe_conversion_task.submit(
+            flow_env.serialize(),
+            payload,
+            cluster_info,
+        )
+        conversion_result = conversion.result()
 
         # 6. Read .zattrs to get stac item
         converted_zarr_uri = conversion_result["zarr_uri"]
