@@ -28,7 +28,7 @@ from dateutil.parser import parse as parse_date
 from prefect import flow, get_run_logger, task
 from pystac import Asset, Item
 
-from rs_common.prefect_utils import s3_download_file, s3_upload_dir
+from rs_common.prefect_utils import s3_download_file, s3_upload_dir, s3_upload_file
 from rs_common.utils import extract_tar, extract_zip, recursive_extract
 from rs_workflows.auxip_flow import auxip_staging_task
 from rs_workflows.catalog_flow import publish
@@ -48,6 +48,21 @@ from rs_workflows.payload_generator import (
 ADF_ECMWA_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWA.py"
 ADF_ECMWF_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWF.py"
 ADF_GETAS_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_GETAS.py"
+ADF_WATER_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_WATER.py"
+
+# Sentinel value indicating the stb_convert_products tool should be used
+STB_CONVERT_PRODUCTS = "stb_convert_products"
+
+# Mapping from S03_ADF_OL* AdfType to required auxiliary product type
+S03_OL_ADF_TYPE_TO_AUX: dict[str, str] = {
+    AdfType.S03_ADF_OLCAL: "OL_1_CAL_AX",
+    AdfType.S03_ADF_OLEOP: "OL_1_EO__AX",
+    AdfType.S03_ADF_OLINS: "OL_1_INS_AX",
+    AdfType.S03_ADF_OLLUT: "OL_1_CLUTAX",
+    AdfType.S03_ADF_OLPRG: "OL_1_PRG_AX",
+    AdfType.S03_ADF_OLRAC: "OL_1_RAC_AX",
+    AdfType.S03_ADF_OLSPC: "OL_1_SPC_AX",
+}
 
 STAC_DATETIME_PROPERTY_NAMES = {
     "created",
@@ -139,33 +154,42 @@ async def download_and_extract_assets_task(items: list[Item], extract_to: Path):
                     tmp_path.unlink()
 
 
-@task(name="Run ADF conversion script")
-def run_adf_script(script_path: Path, data_dir: Path, working_dir: Path, output_dir: Path) -> Path:
+@task(name="Run ADF conversion")
+def run_adf_script(script_path: Path | str, data_dir: Path, working_dir: Path, output_dir: Path) -> list[Path]:
     """
-    Run the ADF conversion script with the given input and output directories.
-    Returns the path to the generated ZARR product.
+    Run an ADF conversion tool with the given input and output directories.
+
+    When *script_path* is a Path, the corresponding Python script is executed
+    with the current interpreter.  When it equals :data:`STB_CONVERT_PRODUCTS`,
+    the ``stb_convert_products`` executable is called instead.
+
+    Returns the list of generated ZARR product directories and JSON files.
     """
     logger = get_run_logger()
-    logger.info(f"Running ADF conversion script: {script_path}")
-
-    env = os.environ.copy()
-    env["ADF_OUTPUT"] = str(output_dir)
-    # ADF_INPUT is used specifically by the script S00__ADF_GETAS.py to find the input data
-    # we also pass it as an argument for the other scripts that don't use this variable, but
-    # they receive it as an argument without causing any issue
-    env["ADF_INPUT"] = str(data_dir)
+    logger.info(f"Running ADF conversion: {script_path}")
 
     def log_subprocess_output(output: str):
         """Forward subprocess output to the Prefect logger line by line."""
         for line in output.splitlines():
-            logger.info(f"Conversion script log: {line}")
+            logger.info(f"Conversion log: {line}")
 
-    # the script expects data_dir as first argument
+    # Build command depending on the conversion tool
+    if script_path == STB_CONVERT_PRODUCTS:
+        command = ["stb_convert_products", "-i", str(data_dir), "-o", str(output_dir)]
+        env = None  # inherit current environment
+    else:
+        env = os.environ.copy()
+        env["ADF_OUTPUT"] = str(output_dir)
+        # ADF_INPUT is used specifically by the script S00__ADF_GETAS.py to find the input data
+        # we also pass it as an argument for the other scripts that don't use this variable, but
+        # they receive it as an argument without causing any issue
+        env["ADF_INPUT"] = str(data_dir)
+        command = [sys.executable, str(script_path), str(data_dir), "--working_dir", str(working_dir)]
+
     try:
         result = subprocess.run(  # nosec B603
-            # trusted local script executed with the current interpreter and flow-created paths
-            # if B603 is not used, the bandit complains about using a list with shell=True, which is not the case here
-            [sys.executable, str(script_path), str(data_dir), "--working_dir", str(working_dir)],
+            # trusted local script / executable with flow-created paths
+            command,
             env=env,
             check=True,
             capture_output=True,
@@ -176,51 +200,71 @@ def run_adf_script(script_path: Path, data_dir: Path, working_dir: Path, output_
     except subprocess.CalledProcessError as e:
         log_subprocess_output(e.stdout or "")
         log_subprocess_output(e.stderr or "")
-        logger.error(f"ADF conversion script failed with exit code {e.returncode}")
+        logger.error(f"ADF conversion failed with exit code {e.returncode}")
         raise
 
-    # find the generated ZARR directory in output_dir
-    zarr_products = list(output_dir.glob("*.zarr"))
-    if not zarr_products:
+    # find the generated ZARR directories and JSON files in output_dir
+    zarr_products = sorted(output_dir.glob("*.zarr"))
+    json_products = sorted(output_dir.glob("*.json"))
+    all_products = zarr_products + json_products
+    if not all_products:
         raise RuntimeError(
-            f"No ZARR product generated in {output_dir}. The content of this dir is: " f"{list(output_dir.glob('*'))}",
+            f"No ZARR or JSON product generated in {output_dir}. The content of this dir is: "
+            f"{list(output_dir.glob('*'))}",
         )
 
-    # should be only one
-    return zarr_products[0]
+    return all_products
 
 
 @task(name="Create STAC Item from ZARR metadata")
 def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Item:
     """
-    Create a STAC Item from the .zattrs or zarr.json in the generated ZARR tree.
+    Create a STAC Item from a generated ZARR directory or JSON file.
+
+    For ZARR directories, metadata is read from .zattrs or zarr.json.
+    For JSON files, the file itself is the metadata and the item ID is
+    taken from stac_discovery.id when present, otherwise it is derived
+    from the filename (minus the .json extension).
     """
     logger = get_run_logger()
-    logger.info(f"Creating STAC item from ZARR: {zarr_path}")
+    is_json_product = zarr_path.suffix == ".json"
 
-    # read .zattrs for global attributes
-    zattrs_path = zarr_path / ".zattrs"
-    if not zattrs_path.exists():
-        # try zarr.json if .zattrs doesn't exist (though xarray usually creates .zattrs)
-        zattrs_path = zarr_path / "zarr.json"
+    if is_json_product:
+        logger.info(f"Creating STAC item from JSON file: {zarr_path}")
+        metadata_path = zarr_path
+    else:
+        logger.info(f"Creating STAC item from ZARR: {zarr_path}")
+        # read .zattrs for global attributes
+        metadata_path = zarr_path / ".zattrs"
+        if not metadata_path.exists():
+            # try zarr.json if .zattrs doesn't exist
+            metadata_path = zarr_path / "zarr.json"
 
-    if not zattrs_path.exists():
+    if not metadata_path.exists():
         raise RuntimeError(f"Metadata file (.zattrs or zarr.json) not found in {zarr_path}")
 
-    with open(zattrs_path, encoding="utf-8") as f:
+    with open(metadata_path, encoding="utf-8") as f:
         metadata = json.load(f)
+
+    stac_discovery = metadata.get("stac_discovery") if isinstance(metadata.get("stac_discovery"), dict) else {}
+    stac_metadata = stac_discovery if is_json_product and stac_discovery else metadata
 
     # extract STAC properties from metadata.
     # the scripts put them in 'properties' attribute.
-    logger.info(f"ZARR metadata: {metadata.get("properties", {})}")
-    stac_props = normalize_stac_properties_datetimes(metadata.get("properties", {}))
-    logger.info(f"Extracted STAC properties from ZARR metadata: {stac_props}")
+    logger.info(f"Product metadata: {stac_metadata.get("properties", {})}")
+    stac_props = normalize_stac_properties_datetimes(stac_metadata.get("properties", {}))
+    logger.info(f"Extracted STAC properties from product metadata: {stac_props}")
 
     # requirement: "Create a STAC item ... with generated product type as product:type"
     # but the script may set it differently
     stac_props["product:type"] = generated_prod_type
 
-    item_id = metadata.get("id", zarr_path.stem)
+    # For JSON files prefer the STAC discovery item ID, otherwise use the filename
+    # without the .json extension. For ZARR directories fall back to metadata ID.
+    if is_json_product:
+        item_id = stac_discovery.get("id") or zarr_path.stem
+    else:
+        item_id = metadata.get("id", zarr_path.stem)
     logger.info(f"Setting item_id to {item_id}")
 
     # extract start/end datetime for pystac.Item validation.
@@ -238,24 +282,35 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     # build basic STAC item
     item = Item(
         id=item_id,
-        geometry=None,
-        bbox=None,
+        geometry=stac_metadata.get("geometry", None),
+        bbox=stac_metadata.get("bbox", None),
         datetime=None,
         start_datetime=start_dt,
         end_datetime=end_dt,
         properties=stac_props,
     )
 
-    # add ZARR folder as an asset
-    item.add_asset(
-        key="data",
-        asset=Asset(
-            href=str(zarr_path),
-            title=item_id,
-            media_type="application/vnd+zarr",
-            roles=["data", "metadata"],
-        ),
-    )
+    # add product as an asset
+    if is_json_product:
+        item.add_asset(
+            key="data",
+            asset=Asset(
+                href=str(zarr_path),
+                title=item_id,
+                media_type="application/json",
+                roles=["data", "metadata"],
+            ),
+        )
+    else:
+        item.add_asset(
+            key="data",
+            asset=Asset(
+                href=str(zarr_path),
+                title=item_id,
+                media_type="application/vnd+zarr",
+                roles=["data", "metadata"],
+            ),
+        )
 
     return item
 
@@ -302,7 +357,11 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     "SR_2_SURFAX",
                 ]
                 generated_prod_type = "S00__ADF_WATER"
-                script_path = Path(__file__).parent / "adf_conversion" / "S00__ADF_WATER.py"
+                script_path = ADF_WATER_SCRIPT_PATH
+            case adf_type if adf_type in S03_OL_ADF_TYPE_TO_AUX:
+                required_types = [S03_OL_ADF_TYPE_TO_AUX[adf_type]]
+                generated_prod_type = adf_type
+                script_path = STB_CONVERT_PRODUCTS
             case _:
                 logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
                 return
@@ -367,68 +426,70 @@ async def adf_conversion(adf_input: AdfProcessIn):
             # 2. Download and unzip assets locally
             await download_and_extract_assets_task(staged_items, input_dir)
 
-            # 3. Call the conversion script
+            # 3. Call the conversion tool
             try:
-                zarr_product_path = run_adf_script(script_path, input_dir, work_dir, output_dir)
+                zarr_product_paths = run_adf_script(script_path, input_dir, work_dir, output_dir)
             finally:
                 shutil.rmtree(input_dir, ignore_errors=True)
 
-            # 4. Create STAC item for the generated ZARR
-            stac_item = create_stac_item_from_zarr(zarr_product_path, generated_prod_type)
-
-            # 5. Copy ZARR to catalog bucket
-            # compute location using find_s3_output_bucket
+            # 4. Process each generated ZARR product
+            # compute bucket configuration once for all products
             bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
-
-            # find destination collection and product type for the generated ADF
             owner_id = flow_env.owner_id
 
-            target_collection = resolve_collection_name(
-                adf_input.auxiliary_product_to_collection_identifier,
-                generated_prod_type,
-            )
-            if target_collection is None:
-                raise RuntimeError(
-                    "No target collection found for generated product type "
-                    f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
+            items_metadata: list[DprProcessedItemMetadata] = []
+            publish_mapping: list[FlowGeneratedProduct] = []
+
+            for zarr_product_path in zarr_product_paths:
+                # Create STAC item for this ZARR
+                stac_item = create_stac_item_from_zarr(zarr_product_path, generated_prod_type)
+
+                # Resolve destination collection
+                target_collection = resolve_collection_name(
+                    adf_input.auxiliary_product_to_collection_identifier,
+                    generated_prod_type,
+                )
+                if target_collection is None:
+                    raise RuntimeError(
+                        "No target collection found for generated product type "
+                        f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
+                    )
+
+                bucket_name = find_s3_output_bucket(
+                    bucket_configuration,
+                    owner_id,
+                    target_collection,
+                    generated_prod_type,
                 )
 
-            bucket_name = find_s3_output_bucket(
-                bucket_configuration,
-                owner_id,
-                target_collection,
-                generated_prod_type,
-            )
+                # Upload product to S3 and update STAC item href
+                if zarr_product_path.suffix == ".json":
+                    s3_dest = f"s3://{bucket_name}/{owner_id}/{target_collection}/{zarr_product_path.name}"
+                    logger.info(f"Uploading JSON to {s3_dest}")
+                    await s3_upload_file(zarr_product_path, s3_dest)
+                    stac_item.assets["data"].href = s3_dest
+                else:
+                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}/"
+                    logger.info(f"Uploading ZARR to {s3_dest_prefix}")
+                    await s3_upload_dir(zarr_product_path, s3_dest_prefix)
+                    stac_item.assets["data"].href = s3_dest_prefix
 
-            s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}/"
-            logger.info(f"Uploading ZARR to {s3_dest_prefix}")
+                items_metadata.append(
+                    DprProcessedItemMetadata(
+                        output_product_id=stac_item.id,
+                        product_type=generated_prod_type,
+                        stac_item=stac_item,
+                    ),
+                )
+                publish_mapping.append(
+                    FlowGeneratedProduct(
+                        name=stac_item.id,
+                        product_type=generated_prod_type,
+                        collection_name=target_collection,
+                    ),
+                )
 
-            # upload folder
-            await s3_upload_dir(zarr_product_path, s3_dest_prefix)
-
-            # update STAC item href to point to S3
-            stac_item.assets["data"].href = s3_dest_prefix
-
-            # 8. Publish to catalog
-            # items_metadata: list[DprProcessedItemMetadata]
-            items_metadata = [
-                DprProcessedItemMetadata(
-                    output_product_id=stac_item.id,
-                    product_type=generated_prod_type,
-                    stac_item=stac_item,
-                ),
-            ]
-
-            # generated_product_to_collection_identifier: list[FlowGeneratedProduct]
-            # we reuse the mapping from AdfProcessIn
-            publish_mapping = [
-                FlowGeneratedProduct(
-                    name=stac_item.id,
-                    product_type=generated_prod_type,
-                    collection_name=target_collection,
-                ),
-            ]
-
+            # Publish all items to catalog
             try:
                 await publish(
                     adf_input.env,
