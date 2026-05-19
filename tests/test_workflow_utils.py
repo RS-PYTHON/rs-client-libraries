@@ -207,11 +207,12 @@ async def test_process_asset_returns_concrete_extracted_file_for_sen3_payload(
     result = await workflow_utils.process_asset(
         f"s3://bucket/path/{product_name}.zip",
         f"{product_name}.zip",
+        use_extension=True,
     )
 
-    assert result == f"s3://bucket/path/{product_name}/{product_name}.nc"
+    assert result == f"s3://bucket/path/{product_name}.SEN3/{product_name}.nc"
+    assert upload_mock.await_args.args[1] == f"s3://bucket/path/{product_name}.SEN3/"
     delete_mock.assert_called_once()
-    upload_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio

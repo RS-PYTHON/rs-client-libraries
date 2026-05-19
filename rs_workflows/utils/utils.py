@@ -256,7 +256,7 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
         # 6. Upload the extracted payload back to the original S3 prefix.
         prefix = get_upload_prefix(asset_href, asset_name)
         if use_extension:
-            prefix = prefix.rstrip("/") + f".{upload_dir.split(".")[-1]}/"  # .SAFE or .SEN3 for example
+            prefix = prefix.rstrip("/") + f"{upload_dir.suffix}/"  # .SAFE or .SEN3 for example
         logger.info(f"Uploading to prefix: {prefix}")
 
         await upload_folder_flat(upload_dir, prefix)
