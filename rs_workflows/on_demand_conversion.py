@@ -274,10 +274,13 @@ async def on_demand_conversion(
             raise RuntimeError(f"No SAFE asset found for item {safe_item.id!r}")
 
         href = input_asset.href.rstrip("/")
-        marker = f"/{safe_item.id}/"
-        if marker not in href:
-            raise RuntimeError(f"Cannot derive SAFE root path from asset href {href!r} and item id {safe_item.id!r}")
-        input_safe_path = href.split(marker, 1)[0] + f"/{safe_item.id}"
+        if ".SAFE/" in href:
+            input_safe_path = href.split(".SAFE/", 1)[0] + ".SAFE"
+        else:
+            marker = f"/{safe_item.id}/"
+            if marker not in href:
+                raise RuntimeError(f"Cannot derive SAFE root path from asset href {href!r} and item id {safe_item.id!r}")
+            input_safe_path = href.split(marker, 1)[0] + f"/{safe_item.id}"
         logger.info(f"Using input SAFE path for conversion: {input_safe_path}")
 
         # Temporary local workaround: use the original input SAFE location until staging keeps file:local_path.
