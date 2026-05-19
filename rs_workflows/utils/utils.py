@@ -194,7 +194,7 @@ async def upload_folder_flat(local_folder: Path, prefix: str):
     logger.info(f"Finished uploading {len(files_to_upload)} file(s) to {prefix}")
 
 
-async def process_asset(asset_href: str, asset_name: str) -> str:
+async def process_asset(asset_href: str, asset_name: str, use_extension=False) -> str:
     """
     Process an archived AUXIP asset stored in S3 and replace it with its extracted content.
 
@@ -255,6 +255,8 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
 
         # 6. Upload the extracted payload back to the original S3 prefix.
         prefix = get_upload_prefix(asset_href, asset_name)
+        if use_extension:
+            prefix = prefix.rstrip("/") + f".{upload_dir.split(".")[-1]}/"  # .SAFE or .SEN3 for example
         logger.info(f"Uploading to prefix: {prefix}")
 
         await upload_folder_flat(upload_dir, prefix)
@@ -277,7 +279,7 @@ async def process_asset(asset_href: str, asset_name: str) -> str:
 
 
 @flow(name="Asset unzip and decompress")
-async def asset_unzip_decompress(stac_item: Item) -> Item:
+async def asset_unzip_decompress(stac_item: Item, use_extension: bool = False) -> Item:
     """Prefect flow used to unzip and decompress catalog store assets."""
     logger = get_run_logger()
     updated_assets = {}
@@ -286,7 +288,7 @@ async def asset_unzip_decompress(stac_item: Item) -> Item:
         # After normalisation (unzip / decompress) the href is changed with the new s3 path.
         # Therefore asset name should also be updated for supported archive types.
         if asset_name.lower().endswith(ARCHIVE_SUFFIXES):
-            new_href = await process_asset(asset.href, asset_name)
+            new_href = await process_asset(asset.href, asset_name, use_extension)
             asset.href = new_href
             updated_assets[strip_archive_suffix(asset_name)] = asset
         else:

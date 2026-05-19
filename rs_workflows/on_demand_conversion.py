@@ -212,7 +212,7 @@ async def on_demand_conversion(
             for idx in get_archived_item_indexes(catalog_items):
                 safe_zipped_item = catalog_items.items[idx]
                 logger.info(f"Processing item {safe_zipped_item.id} for asset extraction...")
-                safe_unzipped_item = asset_unzip_decompress_task.submit(safe_zipped_item)
+                safe_unzipped_item = asset_unzip_decompress_task.submit(safe_zipped_item, True)
                 safe_item = safe_unzipped_item.result()  # type: ignore[assignment]
                 safe_item.assets.pop("product", None)
                 catalog_client.update_item(safe_item)
