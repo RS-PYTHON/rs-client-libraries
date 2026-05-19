@@ -23,6 +23,7 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 
 from dateutil.parser import parse as parse_date
 from prefect import flow, get_run_logger, task
@@ -53,15 +54,73 @@ ADF_WATER_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_WAT
 # Sentinel value indicating the stb_convert_products tool should be used
 STB_CONVERT_PRODUCTS = "stb_convert_products"
 
-# Mapping from S03_ADF_OL* AdfType to required auxiliary product type
-S03_OL_ADF_TYPE_TO_AUX: dict[str, str] = {
-    AdfType.S03_ADF_OLCAL: "OL_1_CAL_AX",
-    AdfType.S03_ADF_OLEOP: "OL_1_EO__AX",
-    AdfType.S03_ADF_OLINS: "OL_1_INS_AX",
-    AdfType.S03_ADF_OLLUT: "OL_1_CLUTAX",
-    AdfType.S03_ADF_OLPRG: "OL_1_PRG_AX",
-    AdfType.S03_ADF_OLRAC: "OL_1_RAC_AX",
-    AdfType.S03_ADF_OLSPC: "OL_1_SPC_AX",
+
+class AdfConversionConfig(NamedTuple):
+    """Configuration needed to run one ADF conversion type."""
+
+    required_types: list[str]
+    generated_prod_type: str
+    script_path: Path | str
+
+
+class S03OlAdfConfig(NamedTuple):
+    """Configuration specific to one S03 OL ADF type."""
+
+    required_type: str
+    generated_prod_type: str
+
+
+S03_OL_ADF_TYPE_CONFIG: dict[str, S03OlAdfConfig] = {
+    AdfType.S03_ADF_OLCAL: S03OlAdfConfig(required_type="OL_1_CAL_AX", generated_prod_type="ADF_OLCAL"),
+    AdfType.S03_ADF_OLEOP: S03OlAdfConfig(required_type="OL_1_EO__AX", generated_prod_type="ADF_OLEOP"),
+    AdfType.S03_ADF_OLINS: S03OlAdfConfig(required_type="OL_1_INS_AX", generated_prod_type="ADF_OLINS"),
+    AdfType.S03_ADF_OLLUT: S03OlAdfConfig(required_type="OL_1_CLUTAX", generated_prod_type="ADF_OLLUT"),
+    AdfType.S03_ADF_OLPRG: S03OlAdfConfig(required_type="OL_1_PRG_AX", generated_prod_type="ADF_OLPRG"),
+    AdfType.S03_ADF_OLRAC: S03OlAdfConfig(required_type="OL_1_RAC_AX", generated_prod_type="ADF_OLRAC"),
+    AdfType.S03_ADF_OLSPC: S03OlAdfConfig(required_type="OL_1_SPC_AX", generated_prod_type="ADF_OLSPC"),
+}
+
+
+ADF_TYPE_CONFIG: dict[str, AdfConversionConfig] = {
+    # We need AX___MA1_AX and AX___MA2_AX for S00__ADF_ECMWA.
+    # AX___MA2_AX is not used anymore in S00__ADF_ECMWA.py. Add it back here if the script uses it again.
+    AdfType.S00__ADF_ECMWA: AdfConversionConfig(
+        required_types=["AX___MA1_AX"],
+        generated_prod_type="ADF_ECMWA",
+        script_path=ADF_ECMWA_SCRIPT_PATH,
+    ),
+    # We need AX___MF1_AX and AX___MF2_AX for S00__ADF_ECMWF.
+    # AX___MF2_AX is not used anymore in S00__ADF_ECMWF.py. Add it back here if the script uses it again.
+    AdfType.S00__ADF_ECMWF: AdfConversionConfig(
+        required_types=["AX___MF1_AX"],
+        generated_prod_type="ADF_ECMWF",
+        script_path=ADF_ECMWF_SCRIPT_PATH,
+    ),
+    AdfType.S00__ADF_GETAS: AdfConversionConfig(
+        required_types=["AX___DEM_AX"],
+        generated_prod_type="ADF_GETAS",
+        script_path=ADF_GETAS_SCRIPT_PATH,
+    ),
+    AdfType.S00__ADF_WATER: AdfConversionConfig(
+        required_types=[
+            "AX___LWM_AX",
+            "AX___CLM_AX",
+            "AX___TRM_AX",
+            "AX___OOM_AX",
+            "SR_2_MLM_AX",
+            "SR_2_SURFAX",
+        ],
+        generated_prod_type="ADF_WATER",
+        script_path=ADF_WATER_SCRIPT_PATH,
+    ),
+    **{
+        adf_type: AdfConversionConfig(
+            required_types=[s03_config.required_type],
+            generated_prod_type=s03_config.generated_prod_type,
+            script_path=STB_CONVERT_PRODUCTS,
+        )
+        for adf_type, s03_config in S03_OL_ADF_TYPE_CONFIG.items()
+    },
 }
 
 STAC_DATETIME_PROPERTY_NAMES = {
@@ -326,45 +385,15 @@ async def adf_conversion(adf_input: AdfProcessIn):
     flow_env = FlowEnv(adf_input.env)
     with flow_env.start_span(__name__, "adf_conversion"):
         # 1. Build CQL2 filters for required auxiliary types
-        match adf_input.adf_type:
-            case AdfType.S00__ADF_ECMWA:
-                # We need AX___MA1_AX and AX___MA2_AX for S00__ADF_ECMWA
-                # required_types = ["AX___MA1_AX", "AX___MA2_AX"]
-                # AX___MA2_AX is not used anymore in S00__ADF_ECMWA.py. uncomment the prev line and
-                # remove the next one if a change in the script is made to use it again
-                required_types = ["AX___MA1_AX"]
-                generated_prod_type = "S00__ADF_ECMWA"
-                script_path = ADF_ECMWA_SCRIPT_PATH
-            case AdfType.S00__ADF_ECMWF:
-                # We need AX___MF1_AX and AX___MF2_AX for S00__ADF_ECMWF
-                # required_types = ["AX___MF1_AX", "AX___MF2_AX"]
-                # AX___MF2_AX is not used anymore in S00__ADF_ECMWF.py. uncomment the prev line and
-                # remove the next one if a change in the script is made to use it again
-                required_types = ["AX___MF1_AX"]
-                generated_prod_type = "S00__ADF_ECMWF"
-                script_path = ADF_ECMWF_SCRIPT_PATH
-            case AdfType.S00__ADF_GETAS:
-                required_types = ["AX___DEM_AX"]
-                generated_prod_type = "S00__ADF_GETAS"
-                script_path = ADF_GETAS_SCRIPT_PATH
-            case AdfType.S00__ADF_WATER:
-                required_types = [
-                    "AX___LWM_AX",
-                    "AX___CLM_AX",
-                    "AX___TRM_AX",
-                    "AX___OOM_AX",
-                    "SR_2_MLM_AX",
-                    "SR_2_SURFAX",
-                ]
-                generated_prod_type = "S00__ADF_WATER"
-                script_path = ADF_WATER_SCRIPT_PATH
-            case adf_type if adf_type in S03_OL_ADF_TYPE_TO_AUX:
-                required_types = [S03_OL_ADF_TYPE_TO_AUX[adf_type]]
-                generated_prod_type = adf_type
-                script_path = STB_CONVERT_PRODUCTS
-            case _:
-                logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
-                return
+        adf_config = ADF_TYPE_CONFIG.get(adf_input.adf_type)
+        if adf_config is None:
+            logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
+            return
+
+        required_types = adf_config.required_types
+        generated_prod_type = adf_config.generated_prod_type
+        script_path = adf_config.script_path
+
         staged_items: list[Item] = []
         for prod_type in required_types:
             cql2_filter = {

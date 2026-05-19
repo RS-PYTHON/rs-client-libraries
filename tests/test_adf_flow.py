@@ -42,7 +42,7 @@ def sample_adf_process_in():
         adf_type=AdfType.S00__ADF_ECMWA,
         auxiliary_product_to_collection_identifier=[
             AuxiliaryProductMapping(product_type="AX___MA1_AX", collection_name="AUX_EXACT"),
-            AuxiliaryProductMapping(product_type="S00__ADF_ECMWA", collection_name="ADF_PUBLISH"),
+            AuxiliaryProductMapping(product_type="ADF_ECMWA", collection_name="ADF_PUBLISH"),
             AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
         ],
         start_datetime=datetime(2021, 3, 21, 3, 0, 0, tzinfo=timezone.utc),
@@ -59,7 +59,7 @@ def sample_adf_ecmwf_process_in():
         auxiliary_product_to_collection_identifier=[
             AuxiliaryProductMapping(product_type="AX___MF1_AX", collection_name="AUX_MF1"),
             AuxiliaryProductMapping(product_type="AX___MF2_AX", collection_name="AUX_MF2"),
-            AuxiliaryProductMapping(product_type="S00__ADF_ECMWF", collection_name="ADF_ECMWF_PUBLISH"),
+            AuxiliaryProductMapping(product_type="ADF_ECMWF", collection_name="ADF_ECMWF_PUBLISH"),
             AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
         ],
         start_datetime=datetime(2021, 1, 21, 0, 0, 0, tzinfo=timezone.utc),
@@ -80,12 +80,20 @@ def sample_adf_water_process_in():
             AuxiliaryProductMapping(product_type="AX___OOM_AX", collection_name="AUX_OOM"),
             AuxiliaryProductMapping(product_type="SR_2_MLM_AX", collection_name="AUX_MLM"),
             AuxiliaryProductMapping(product_type="SR_2_SURFAX", collection_name="AUX_SURF"),
-            AuxiliaryProductMapping(product_type="S00__ADF_WATER", collection_name="ADF_WATER_PUBLISH"),
+            AuxiliaryProductMapping(product_type="ADF_WATER", collection_name="ADF_WATER_PUBLISH"),
             AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
         ],
         start_datetime=datetime(2021, 8, 1, 0, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2021, 8, 1, 12, 0, 0, tzinfo=timezone.utc),
     )
+
+
+@pytest.fixture
+def create_stac_item_mock(monkeypatch):
+    """Run STAC item creation synchronously in flow tests without Prefect orchestration."""
+    mock = MagicMock(side_effect=adf_flow.create_stac_item_from_zarr.fn)
+    monkeypatch.setattr(adf_flow, "create_stac_item_from_zarr", mock)
+    return mock
 
 
 def test_create_stac_item_from_zarr(mocker, tmp_path):
@@ -105,10 +113,10 @@ def test_create_stac_item_from_zarr(mocker, tmp_path):
     }
     zattrs_file.write_text(json.dumps(zattrs_content))
 
-    item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "S00__ADF_ECMWA")
+    item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_ECMWA")
 
     assert item.id == "S00__ADF_ECMWA_20210321T030000_20210321T150000"
-    assert item.properties["product:type"] == "S00__ADF_ECMWA"  # Workaround applied
+    assert item.properties["product:type"] == "ADF_ECMWA"  # Workaround applied
     assert item.properties["created"] == "2026-04-27T13:30:05Z"
     assert "data" in item.assets
     assert item.assets["data"].href == str(zarr_dir)
@@ -135,10 +143,10 @@ def test_create_stac_item_from_json_uses_stac_discovery(mocker, tmp_path):
         ),
     )
 
-    item = adf_flow.create_stac_item_from_zarr.fn(json_file, "S00__ADF_WATER")
+    item = adf_flow.create_stac_item_from_zarr.fn(json_file, "ADF_WATER")
 
     assert item.id == "discovery-id"
-    assert item.properties["product:type"] == "S00__ADF_WATER"
+    assert item.properties["product:type"] == "ADF_WATER"
     assert item.properties["created"] == "2026-04-27T13:30:05Z"
     assert "data" in item.assets
     assert item.assets["data"].href == str(json_file)
@@ -163,10 +171,10 @@ def test_create_stac_item_from_json_falls_back_to_filename(mocker, tmp_path):
         ),
     )
 
-    item = adf_flow.create_stac_item_from_zarr.fn(json_file, "S00__ADF_WATER")
+    item = adf_flow.create_stac_item_from_zarr.fn(json_file, "ADF_WATER")
 
     assert item.id == "fallback-id"
-    assert item.properties["product:type"] == "S00__ADF_WATER"
+    assert item.properties["product:type"] == "ADF_WATER"
 
 
 def test_run_adf_script_returns_generated_zarr(monkeypatch, mocker, tmp_path):
@@ -314,6 +322,7 @@ async def test_adf_conversion_flow_logic(
     monkeypatch,
     mocker,
     sample_adf_process_in,
+    create_stac_item_mock,
     tmp_path,
     _mock_os_env,
 ):  # pylint: disable=redefined-outer-name,unused-argument
@@ -393,7 +402,8 @@ async def test_adf_conversion_flow_logic(
     # Check that workaround was applied before publishing
     published_metadata = publish_mock.call_args[0][2]
     publish_mapping = publish_mock.call_args[0][1]
-    assert published_metadata[0].stac_item.properties["product:type"] == "S00__ADF_ECMWA"
+    assert published_metadata[0].product_type == "ADF_ECMWA"
+    assert published_metadata[0].stac_item.properties["product:type"] == "ADF_ECMWA"
     assert published_metadata[0].stac_item.assets["data"].href.startswith("s3://test-bucket/")
     assert publish_mapping[0].collection_name == "ADF_PUBLISH"
     rmtree_calls = [
@@ -408,6 +418,7 @@ async def test_adf_conversion_flow_logic_for_ecmwf(
     monkeypatch,
     mocker,
     sample_adf_ecmwf_process_in,
+    create_stac_item_mock,
     tmp_path,
     _mock_os_env,
 ):  # pylint: disable=redefined-outer-name,unused-argument
@@ -478,8 +489,8 @@ async def test_adf_conversion_flow_logic_for_ecmwf(
 
     published_metadata = publish_mock.call_args[0][2]
     publish_mapping = publish_mock.call_args[0][1]
-    assert published_metadata[0].product_type == "S00__ADF_ECMWF"
-    assert published_metadata[0].stac_item.properties["product:type"] == "S00__ADF_ECMWF"
+    assert published_metadata[0].product_type == "ADF_ECMWF"
+    assert published_metadata[0].stac_item.properties["product:type"] == "ADF_ECMWF"
     assert publish_mapping[0].collection_name == "ADF_ECMWF_PUBLISH"
 
 
@@ -488,6 +499,7 @@ async def test_adf_conversion_flow_logic_for_water(
     monkeypatch,
     mocker,
     sample_adf_water_process_in,
+    create_stac_item_mock,
     tmp_path,
     _mock_os_env,
 ):  # pylint: disable=redefined-outer-name,unused-argument
@@ -523,9 +535,6 @@ async def test_adf_conversion_flow_logic_for_water(
     )
     run_script_mock = MagicMock(return_value=[zarr_path])
     monkeypatch.setattr(adf_flow, "run_adf_script", run_script_mock)
-
-    create_stac_item_mock = MagicMock(side_effect=adf_flow.create_stac_item_from_zarr.fn)
-    monkeypatch.setattr(adf_flow, "create_stac_item_from_zarr", create_stac_item_mock)
 
     monkeypatch.setattr(
         adf_flow,
@@ -570,13 +579,13 @@ async def test_adf_conversion_flow_logic_for_water(
     assert len(extract_mock.call_args.args[0]) == 6
     run_script_mock.assert_called_once()
     assert run_script_mock.call_args.args[0].name == "S00__ADF_WATER.py"
-    create_stac_item_mock.assert_called_once_with(zarr_path, "S00__ADF_WATER")
+    create_stac_item_mock.assert_called_once_with(zarr_path, "ADF_WATER")
     upload_mock.assert_awaited_once()
 
     published_metadata = publish_mock.call_args[0][2]
     publish_mapping = publish_mock.call_args[0][1]
-    assert published_metadata[0].product_type == "S00__ADF_WATER"
-    assert published_metadata[0].stac_item.properties["product:type"] == "S00__ADF_WATER"
+    assert published_metadata[0].product_type == "ADF_WATER"
+    assert published_metadata[0].stac_item.properties["product:type"] == "ADF_WATER"
     assert publish_mapping[0].collection_name == "ADF_WATER_PUBLISH"
 
 
@@ -585,6 +594,7 @@ async def test_adf_conversion_raises_when_publish_collection_not_found(
     monkeypatch,
     mocker,
     sample_adf_process_in,
+    create_stac_item_mock,
     tmp_path,
     _mock_os_env,
 ):  # pylint: disable=redefined-outer-name,unused-argument
@@ -656,7 +666,7 @@ def sample_adf_getas_process_in():
         adf_type=AdfType.S00__ADF_GETAS,
         auxiliary_product_to_collection_identifier=[
             AuxiliaryProductMapping(product_type="AX___DEM_AX", collection_name="AUX_DEM"),
-            AuxiliaryProductMapping(product_type="S00__ADF_GETAS", collection_name="ADF_GETAS_PUBLISH"),
+            AuxiliaryProductMapping(product_type="ADF_GETAS", collection_name="ADF_GETAS_PUBLISH"),
             AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
         ],
         start_datetime=datetime(2021, 6, 15, 0, 0, 0, tzinfo=timezone.utc),
@@ -669,6 +679,7 @@ async def test_adf_conversion_flow_logic_for_getas(
     monkeypatch,
     mocker,
     sample_adf_getas_process_in,
+    create_stac_item_mock,
     tmp_path,
     _mock_os_env,
 ):  # pylint: disable=redefined-outer-name,unused-argument
@@ -743,8 +754,8 @@ async def test_adf_conversion_flow_logic_for_getas(
     # Verify published metadata
     published_metadata = publish_mock.call_args[0][2]
     publish_mapping = publish_mock.call_args[0][1]
-    assert published_metadata[0].product_type == "S00__ADF_GETAS"
-    assert published_metadata[0].stac_item.properties["product:type"] == "S00__ADF_GETAS"
+    assert published_metadata[0].product_type == "ADF_GETAS"
+    assert published_metadata[0].stac_item.properties["product:type"] == "ADF_GETAS"
     assert publish_mapping[0].collection_name == "ADF_GETAS_PUBLISH"
 
 
@@ -782,15 +793,15 @@ def test_run_adf_script_stb_convert_products(monkeypatch, mocker, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "adf_type, expected_aux_type",
+    "adf_type, expected_aux_type, expected_generated_type",
     [
-        (AdfType.S03_ADF_OLCAL, "OL_1_CAL_AX"),
-        (AdfType.S03_ADF_OLEOP, "OL_1_EO__AX"),
-        (AdfType.S03_ADF_OLINS, "OL_1_INS_AX"),
-        (AdfType.S03_ADF_OLLUT, "OL_1_CLUTAX"),
-        (AdfType.S03_ADF_OLPRG, "OL_1_PRG_AX"),
-        (AdfType.S03_ADF_OLRAC, "OL_1_RAC_AX"),
-        (AdfType.S03_ADF_OLSPC, "OL_1_SPC_AX"),
+        (AdfType.S03_ADF_OLCAL, "OL_1_CAL_AX", "ADF_OLCAL"),
+        (AdfType.S03_ADF_OLEOP, "OL_1_EO__AX", "ADF_OLEOP"),
+        (AdfType.S03_ADF_OLINS, "OL_1_INS_AX", "ADF_OLINS"),
+        (AdfType.S03_ADF_OLLUT, "OL_1_CLUTAX", "ADF_OLLUT"),
+        (AdfType.S03_ADF_OLPRG, "OL_1_PRG_AX", "ADF_OLPRG"),
+        (AdfType.S03_ADF_OLRAC, "OL_1_RAC_AX", "ADF_OLRAC"),
+        (AdfType.S03_ADF_OLSPC, "OL_1_SPC_AX", "ADF_OLSPC"),
     ],
 )
 @pytest.mark.asyncio
@@ -799,8 +810,10 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
     mocker,
     tmp_path,
     _mock_os_env,
+    create_stac_item_mock,
     adf_type,
     expected_aux_type,
+    expected_generated_type,
 ):  # pylint: disable=redefined-outer-name,unused-argument
     """Test that S03_ADF_OL* types stage the correct auxiliary file and use stb_convert_products."""
     mock_logger = MagicMock()
@@ -811,7 +824,7 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
         adf_type=adf_type,
         auxiliary_product_to_collection_identifier=[
             AuxiliaryProductMapping(product_type=expected_aux_type, collection_name="AUX_OL_INPUT"),
-            AuxiliaryProductMapping(product_type=adf_type, collection_name="ADF_OL_PUBLISH"),
+            AuxiliaryProductMapping(product_type=expected_generated_type, collection_name="ADF_OL_PUBLISH"),
             AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
         ],
         start_datetime=datetime(2021, 10, 27, 0, 0, 0, tzinfo=timezone.utc),
@@ -837,7 +850,7 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
             {
                 "id": f"mock-{adf_type}-adf",
                 "properties": {
-                    "product:type": adf_type,
+                    "product:type": expected_generated_type,
                     "start_datetime": "2021-10-27T00:00:00Z",
                     "end_datetime": "2021-10-27T12:00:00Z",
                 },
@@ -885,6 +898,6 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
     # Verify published metadata
     published_metadata = publish_mock.call_args[0][2]
     publish_mapping_arg = publish_mock.call_args[0][1]
-    assert published_metadata[0].product_type == adf_type
-    assert published_metadata[0].stac_item.properties["product:type"] == adf_type
+    assert published_metadata[0].product_type == expected_generated_type
+    assert published_metadata[0].stac_item.properties["product:type"] == expected_generated_type
     assert publish_mapping_arg[0].collection_name == "ADF_OL_PUBLISH"
