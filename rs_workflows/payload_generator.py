@@ -527,10 +527,19 @@ def build_output_products(
         store_params = deepcopy(storage_configuration.get_store_params(store_name))
         opening_mode = mapping.get("opening_mode", "CREATE")
         autoclean = None
+        engine: str = mapping["engine"]
 
         if kind == "obs":
             bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
-            output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
+            # CPM v3 zarr engines (zarr/cpm_zarr) for the output path to end by ".zarr"
+            # Otherwise we face error "Engine zarr is not able to write ..."
+            output_path = os.path.join(
+                "s3://",
+                bucket_name,
+                owner_id,
+                output_collection,
+                str(uuid4()) + ".zarr" if engine.endswith("zarr") else "",
+            )
         elif kind in ("shared_disk", "local_disk"):
             disk_config = storage_configuration.get_disk_storage(store_name)
             if disk_config and disk_config.get("path"):
@@ -550,8 +559,8 @@ def build_output_products(
             OutputProduct(
                 id=mapping["name"],
                 path=output_path,
-                engine=mapping["engine"],  # FIXME quick and dirty CPM v3 test
-                store_params=store_params,
+                engine=engine,  # FIXME quick and dirty CPM v3 test
+                writer_params=store_params,  # FIXME quick and dirty CPM v3 test
                 # FIXME https://cpm.pages.eopf.copernicus.eu/eopf-cpm/v3.X.Y/v3/triggering_migration.html
                 type=mapping.get("type", "file"),  # FIXME quick and dirty CPM v3 test
                 # opening_mode=opening_mode,  # FIXME quick and dirty CPM v3 test
