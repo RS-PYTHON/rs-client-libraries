@@ -139,6 +139,22 @@ async def safe_conversion_task(
         return cast(dict[str, Any], conversion_result)
 
 
+@task(name="Cleanup staged SAFE item")
+async def cleanup_staged_safe_item_task(
+    env: FlowEnvArgs,
+    collection_id: str,
+    item_id: str,
+) -> None:
+    """Remove the staged SAFE item from the catalog after conversion."""
+    logger = get_run_logger()
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "cleanup-staged-safe-item"):
+        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+        logger.info(f"Removing staged SAFE item {item_id!r} from output collection {collection_id!r}.")
+        catalog_client.remove_item(collection_id, item_id, raise_for_status=False)
+        logger.info(f"Removed staged SAFE item {item_id!r} from output collection {collection_id!r}.")
+
+
 @flow
 async def on_demand_conversion(
     conversion_input: ConversionIn,
@@ -151,9 +167,6 @@ async def on_demand_conversion(
     staging_collection = conversion_input.generated_product_to_collection_identifier.collection_name
     if staging_collection is None:
         raise ValueError("collection_name is required to stage and retrieve the SAFE item")
-
-    # Temporary local-mode workaround until staging preserves file:local_path for SAFE directory assets.
-    # original_input_safe_path = conversion_input.stac_input["features"][0]["assets"]["product"]["href"]
 
     with flow_env.start_span(__name__, "legacy-conversion"):
         # 1. stage
@@ -329,8 +342,7 @@ async def on_demand_conversion(
         published.result()  # type: ignore[unused-coroutine]
 
         # 9. cleanup (legacy files, staging area)
-        logger.info(f"Removing staged SAFE item {safe_item.id!r} from output collection {output_collection!r}.")
-        catalog_client.remove_item(output_collection, safe_item.id, raise_for_status=False)
-        logger.info(f"Removed staged SAFE item {safe_item.id!r} from output collection {output_collection!r}.")
+        cleanup = cleanup_staged_safe_item_task.submit(flow_env.serialize(), output_collection, safe_item.id)
+        cleanup.result()  # type: ignore[unused-coroutine]
 
         logger.info("On-demand conversion flow completed successfully.")

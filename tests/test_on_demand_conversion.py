@@ -280,6 +280,13 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
         "submit",
         return_value=publish_future,
     )
+    cleanup_future = MagicMock()
+    cleanup_future.result.return_value = None
+    cleanup_submit_mock = mocker.patch.object(
+        on_demand_conversion_flow.cleanup_staged_safe_item_task,
+        "submit",
+        return_value=cleanup_future,
+    )
 
     await on_demand_conversion_flow.on_demand_conversion.fn(conversion_input)
 
@@ -332,4 +339,5 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
     assert published_items[0].stac_item is converted_item
     publish_future.result.assert_called_once()
 
-    catalog_client_mock.remove_item.assert_called_once_with(output_collection, safe_item_id, raise_for_status=False)
+    cleanup_submit_mock.assert_called_once_with(serialized_env, output_collection, safe_item_id)
+    cleanup_future.result.assert_called_once()
