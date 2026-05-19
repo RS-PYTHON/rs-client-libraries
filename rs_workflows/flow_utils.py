@@ -522,3 +522,9 @@ class ConversionIn(BaseModel):
         title="Dask Cluster Instance",
         description="Optional Dask cluster instance ID used by the DPR conversion service.",
     )
+
+    selected_assets: list[str] | None = Field(
+        default=None,
+        title="Selected Assets",
+        description=("Set of selected asset keys to stage. If not provided, all assets will be converted"),
+    )
