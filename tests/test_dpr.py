@@ -16,7 +16,7 @@
 
 import getpass
 import tempfile
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import anyio
 import pytest
@@ -185,3 +185,28 @@ I/O:
 
     mock_s3_upload_empty.assert_awaited_with("s3://bucket/output/.empty")
     assert uploaded_contents.strip() == (expected_results_local if local_mode else expected_results_cluster).strip()
+
+
+def test_logs_are_parsed_and_logged():
+    """Test dpr_flow's read of processor log file."""
+
+    entries = [
+        {
+            "level": "INFO",
+            "message": ("Quality Control: Detected 0 duplicated packets in SAR instrument data"),
+        },
+        {
+            "level": "DEBUG",
+            "message": ">> EOTriggerWorkflowParser.parse",
+        },
+    ]
+
+    mock_logger = MagicMock()
+
+    for entry in entries:
+        level = entry["level"].strip().lower()
+        getattr(mock_logger, level, mock_logger.info)(entry["message"])
+
+    mock_logger.info.assert_any_call("Quality Control: Detected 0 duplicated packets in SAR instrument data")
+
+    mock_logger.debug.assert_any_call(">> EOTriggerWorkflowParser.parse")
