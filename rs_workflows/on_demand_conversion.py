@@ -312,11 +312,11 @@ async def on_demand_conversion(
         converted_item.bbox = safe_item.bbox
         converted_item.properties["product:type"] = output_product_type
 
-        # Keep a reference to the original input STAC item for the derived_from link.
-        original_item = stac_dict["features"][0]
+        # Keep a reference to the staged SAFE item used as conversion input.
+        staged_item = catalog_items.to_dict()["features"][0]
         derived_from_href = next(
-            (link["href"] for link in original_item.get("links", []) if link.get("rel") == "self"),
-            original_item["id"],
+            (link["href"] for link in staged_item.get("links", []) if link.get("rel") == "self"),
+            staged_item["id"],
         )
         converted_item.add_link(Link(rel="derived_from", target=derived_from_href, media_type="application/geo+json"))
         logger.info(f"Created STAC item from converted Zarr metadata: {converted_item.to_dict()}")
