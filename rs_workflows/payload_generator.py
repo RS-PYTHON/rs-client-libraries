@@ -813,7 +813,7 @@ def generate_payload(  # pylint: disable=unused-argument
                         workflow_step.parameters = extra_parameters
     elif dpr_process_in.processor_name == DprProcessor.S1ARD:
         for workflow_step in workflow_steps:
-            if workflow_step.processing_unit == "Calibration":
+            if workflow_step.processing_unit == "Calibration" and dpr_process_in.reference_date:
                 workflow_step.parameters = {
                     "reference_date": str(dpr_process_in.reference_date),
                 }
