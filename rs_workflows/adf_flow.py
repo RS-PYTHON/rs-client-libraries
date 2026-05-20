@@ -310,6 +310,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
 
     # extract STAC properties from metadata.
     # the scripts put them in 'properties' attribute.
+    logger.info(f"Stac discovery metadata: {stac_discovery}")
     logger.info(f"Product metadata: {stac_metadata.get("properties", {})}")
     stac_props = normalize_stac_properties_datetimes(stac_metadata.get("properties", {}))
     logger.info(f"Extracted STAC properties from product metadata: {stac_props}")
@@ -374,7 +375,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     return item
 
 
-@flow(name="adf_conversion")
+@flow(name="convert-adf")
 async def adf_conversion(adf_input: AdfProcessIn):
     """
     Prefect flow for ADF conversion.
@@ -470,10 +471,10 @@ async def adf_conversion(adf_input: AdfProcessIn):
             publish_mapping: list[FlowGeneratedProduct] = []
 
             for zarr_product_path in zarr_product_paths:
-                # Create STAC item for this ZARR
+                # 5. Create STAC item for this ZARR
                 stac_item = create_stac_item_from_zarr(zarr_product_path, generated_prod_type)
 
-                # Resolve destination collection
+                # 6. Resolve destination collection
                 target_collection = resolve_collection_name(
                     adf_input.auxiliary_product_to_collection_identifier,
                     generated_prod_type,
@@ -491,7 +492,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     generated_prod_type,
                 )
 
-                # Upload product to S3 and update STAC item href
+                # 7. Upload product to S3 and update STAC item href
                 if zarr_product_path.suffix == ".json":
                     s3_dest = f"s3://{bucket_name}/{owner_id}/{target_collection}/{zarr_product_path.name}"
                     logger.info(f"Uploading JSON to {s3_dest}")
@@ -518,7 +519,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     ),
                 )
 
-            # Publish all items to catalog
+            # 8. Publish all items to catalog
             try:
                 await publish(
                     adf_input.env,
