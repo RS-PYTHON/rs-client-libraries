@@ -21,6 +21,7 @@ import os
 import re
 from copy import deepcopy
 from typing import Any
+from uuid import uuid4
 
 import yaml
 from prefect import flow, get_run_logger, task
@@ -41,7 +42,12 @@ from rs_workflows.flow_utils import (
     RetryConfig,
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
-from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
+from rs_workflows.payload_generator import (
+    fetch_csv_from_endpoint,
+    find_s3_output_bucket,
+    generate_payload,
+    resolve_stac_input_path,
+)
 from rs_workflows.utils.utils import get_archived_item_indexes, search_by_name
 
 SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
@@ -454,6 +460,8 @@ async def dpr_processing(
                     flow_env.rs_client,
                 )
                 for specific_input_product_stac_item in product_stac_items:
+                    if input_adfs["name"] == "REFERENCE_DB":
+                        continue
                     if specific_input_product_stac_item:
                         logger.info(
                             f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product_stac_item}",
@@ -487,6 +495,20 @@ async def dpr_processing(
                     adfs.add((name, adf_type, asset.href))
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
+        # HACK for S1-ARD
+        if dpr_input.pipeline == "ARD_REFERENCE_PIPELINE":
+            owner_id: str = dpr_input.env.owner_id
+            output_collection = "s1-ard-reference-db"
+            adf_type = "ARD_REFERENCE_DB"
+            bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
+            bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, adf_type)
+            adfs.add(
+                (
+                    "REFERENCE_DB",
+                    adf_type,
+                    os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4())),
+                ),
+            )
         # generate the dpr payload file
         task_future = generate_payload.submit(flow_env, unit_list, list(adfs), dpr_input)
         # get the payload generation result
