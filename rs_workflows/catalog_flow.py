@@ -138,7 +138,7 @@ async def publish(
                     item.properties["providers"] = valid_providers
                 # TEMPFIX END
                 logger.info(
-                    "Writing product %s to %s. This may take a while...",
+                    "Publishing product %s to %s. This may take a while...",
                     item.id,
                     target_collection,
                 )
@@ -149,7 +149,7 @@ async def publish(
                 )
                 response = catalog_client.add_item(target_collection, item, timeout=21600)
                 logger.info(
-                    "Writing product %s to %s done. Response %s with message: %s",
+                    "Publishing product %s to %s done. Response %s with message: \n%s",
                     item.id,
                     target_collection,
                     response.status_code,
@@ -161,12 +161,6 @@ async def publish(
                 raise RuntimeError(
                     f"Exception while publishing item: {json.dumps(item.to_dict(), indent=2)}",
                 ) from e
-
-    # list collections for logging
-    collections = catalog_client.get_collections()
-    logger.info("\nCollections response:")
-    for collection in collections:
-        logger.info(f"ID: {collection.id}, Title: {collection.title}")
 
     logger.info("End catalog publishing")
 

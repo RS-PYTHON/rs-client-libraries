@@ -460,6 +460,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
             try:
                 zarr_product_paths = run_adf_script(script_path, input_dir, work_dir, output_dir)
             finally:
+                logger.info(f"Cleaning up input directory {input_dir}")
                 shutil.rmtree(input_dir, ignore_errors=True)
 
             # 4. Process each generated ZARR product
@@ -499,7 +500,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     await s3_upload_file(zarr_product_path, s3_dest)
                     stac_item.assets["data"].href = s3_dest
                 else:
-                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}/"
+                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{zarr_product_path.name}/"
                     logger.info(f"Uploading ZARR to {s3_dest_prefix}")
                     await s3_upload_dir(zarr_product_path, s3_dest_prefix)
                     stac_item.assets["data"].href = s3_dest_prefix
@@ -527,6 +528,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     items_metadata,
                 )
             finally:
+                logger.info(f"Cleaning up output directory {output_dir}")
                 shutil.rmtree(output_dir, ignore_errors=True)
 
 
