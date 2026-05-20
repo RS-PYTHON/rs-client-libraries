@@ -294,9 +294,8 @@ async def process_input_adfs(
     logger = get_run_logger()
     logger.info(f"Starting processing input ADFS for {input_adfs}")
     try:
-
         # For each "alternative" ( get it following the "order" )
-        for alternative in input_adfs["alternatives"]:
+        for alternative in input_adfs.get("alternatives", []):
             result = await _stage_input_adfs_alternative(
                 alternative,
                 input_adfs,

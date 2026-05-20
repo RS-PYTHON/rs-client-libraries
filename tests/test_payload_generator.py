@@ -61,7 +61,7 @@ def test_build_workflow_step_valid(sample_unit):
     assert step.name == "unit1"
     assert step.module == "module1"
     assert step.inputs == {"S1CADUS": "S1CADUS", "S3CADUS": "external_proc"}
-    assert step.adfs == {"adf1": "ADF1"}
+    assert step.adfs == {"ADF1": "ADF1"}
     assert step.outputs == {"*.tif": "output1", "output2": "output2"}
 
 
