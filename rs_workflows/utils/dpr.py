@@ -56,7 +56,7 @@ async def call_dpr_flow(
     processor_name: str,
     processor_version: str,
     pipeline: DprPipeline | None,
-    unit: str,
+    unit: str | None,
     priority: Priority | None,
     processing_mode: list[ProcessingMode],
     workflow: WorkflowType | None,
