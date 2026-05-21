@@ -374,7 +374,7 @@ def _resolve_specific_input_product_stac_items(
     return None, [None]
 
 
-@flow
+@flow(name="process-generic")
 async def dpr_processing(
     dpr_input: DprProcessIn,
     retry_config: RetryConfig = RetryConfig(),  # type: ignore

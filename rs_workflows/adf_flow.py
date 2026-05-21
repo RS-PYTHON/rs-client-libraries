@@ -260,7 +260,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     return item
 
 
-@flow(name="adf_conversion")
+@flow(name="convert-adf")
 async def adf_conversion(adf_input: AdfProcessIn):
     """
     Prefect flow for ADF conversion.

@@ -23,7 +23,7 @@ from rs_workflows.on_demand.common.l0_last_steps import process_l0_last_steps
 from rs_workflows.on_demand.common.types import Level0FlowParams
 
 
-@flow(name="process sentinel-1 level-0")
+@flow(name="process-s1-l0")
 async def process_s1l0(session: str, flow_params: Level0FlowParams, verbose: bool = False):
     """
     Sentinel-1 L0 processing.
@@ -47,7 +47,7 @@ async def process_s1l0(session: str, flow_params: Level0FlowParams, verbose: boo
     )
 
 
-@task(name="process sentinel-1 level-0")
+@task(name="process-s1-l0")
 async def process_s1l0_task(*args, **kwargs) -> None:
     """See: dpr_processing"""
     return await process_s1l0.fn(*args, **kwargs)

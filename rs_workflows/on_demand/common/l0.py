@@ -32,7 +32,7 @@ from rs_workflows.utils.catalog import get_single_catalog_item, is_evicted, is_p
 from rs_workflows.utils.dask import is_dask_cluster_running
 
 
-@flow(name="process level-0")
+@flow(name="process-l0")
 async def process_l0(
     session: str,
     flow_params: Level0FlowParams | None = None,

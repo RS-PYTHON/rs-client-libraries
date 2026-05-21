@@ -89,8 +89,8 @@ async def cadip_session_stage(env: FlowEnvArgs, cadip_search_url: str, catalog_c
     Parameters:
         env:
             Flow environment arguments (owner, credentials, etc.).
-        cadip_items:
-            Either a pystac.ItemCollection or a JSON string representing CADIP items.
+        cadip_search_url:
+            URL for the item to be stagged.
         catalog_cadip_collection:
             Target catalog collection identifier where sessions will be staged.
     """
@@ -158,7 +158,7 @@ class CadipCollections(str, Enum):
     S3_SGS = "s3_sgs"
 
 
-@flow(name="select and stage a session")
+@flow(name="stage-cadip-selection")
 async def stage_selected_session(cadip_collection: CadipCollections, owner_identifier: str = "copernicus"):
     """
     Stage a selected CADIP session for processing.
@@ -223,7 +223,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
             logger.info("No session has been found.")
 
 
-@flow(name="select and stage latest session")
+@flow(name="stage-cadip-latest")
 async def stage_latest_session(
     cadip_collection: CadipCollections,
     owner_identifier: str = "copernicus",
@@ -278,7 +278,7 @@ async def stage_latest_session(
         await report_verbose.push_report("test-report", "Step by step results")
 
 
-@task(name="stage CADIP session")
+@task(name="stage-cadip")
 async def stage_session_common(
     flow_env: FlowEnv,
     cadip_collection: CadipCollections | str,
