@@ -166,6 +166,8 @@ async def process_s1ard(slcs: list[str], reference_date: date, flow_params: Leve
     # https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items/S1C_IW_SLC__1SDV_20260408T174632_20260408T174659_007128_00E6F6_E998
     # https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items/S1C_IW_SLC__1SDV_20260327T174632_20260327T174659_006953_00E115_D167
 
+    # https://earthdatahub.destine.eu/api/stac/v1/collections/copernicus-dem/items/GLO-30
+
     await _do_process_s1ard(slcs, reference_date, flow_params, verbose)
 
 
