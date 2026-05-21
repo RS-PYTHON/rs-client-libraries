@@ -175,6 +175,15 @@ async def on_demand_conversion(
         # stac_input is str | dict; normalize once so all downstream code works uniformly.
         stac_item: str | dict[str, Any] = conversion_input.stac_input
         stac_item_id = stac_item.split("/")[-1] if isinstance(stac_item, str) else stac_item["features"][0]["id"]
+        original_stac_href = None
+        if isinstance(stac_item, str):
+            original_stac_href = stac_item
+        else:
+            input_feature = stac_item["features"][0]
+            original_stac_href = next(
+                (link["href"] for link in input_feature.get("links", []) if link.get("rel") == "self"),
+                input_feature["id"],
+            )
 
         legacy_product = staging_task.with_options(
             retries=retry_config.staging_retries,
@@ -279,7 +288,9 @@ async def on_demand_conversion(
         else:
             marker = f"/{safe_item.id}/"
             if marker not in href:
-                raise RuntimeError(f"Cannot derive SAFE root path from asset href {href!r} and item id {safe_item.id!r}")
+                raise RuntimeError(
+                    f"Cannot derive SAFE root path from asset href {href!r} and item id {safe_item.id!r}",
+                )
             input_safe_path = href.split(marker, 1)[0] + f"/{safe_item.id}"
         logger.info(f"Using input SAFE path for conversion: {input_safe_path}")
 
@@ -320,7 +331,7 @@ async def on_demand_conversion(
         staged_item = catalog_items.to_dict()["features"][0]
         derived_from_href = next(
             (link["href"] for link in staged_item.get("links", []) if link.get("rel") == "self"),
-            staged_item["id"],
+            original_stac_href or staged_item["id"],
         )
         converted_item.add_link(Link(rel="derived_from", target=derived_from_href, media_type="application/geo+json"))
         logger.info(f"Created STAC item from converted Zarr metadata: {converted_item.to_dict()}")

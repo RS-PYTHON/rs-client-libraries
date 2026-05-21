@@ -211,6 +211,7 @@ async def test_process_asset_returns_concrete_extracted_file_for_sen3_payload(
     )
 
     assert result == f"s3://bucket/path/{product_name}.SEN3/{product_name}.nc"
+    assert upload_mock.await_args is not None
     assert upload_mock.await_args.args[1] == f"s3://bucket/path/{product_name}.SEN3/"
     delete_mock.assert_called_once()
 
