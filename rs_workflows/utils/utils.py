@@ -114,9 +114,8 @@ def parse_logs(text):
 
         match = LOG_PATTERN.match(line)
 
-        # If text exists before the first valid log entry, return INFO log entry
         if match:
-
+            # If text exists before the first valid log entry, return INFO log entry
             if preamble:
 
                 yield {"timestamp": "", "logger": "system", "level": "INFO", "message": "\n".join(preamble)}
@@ -124,6 +123,7 @@ def parse_logs(text):
                 # Reset buffer
                 preamble = []
 
+            # When a new log entry starts, the previous one is now complete
             if current:
                 yield current
 
@@ -133,7 +133,7 @@ def parse_logs(text):
                 "level": match.group("level"),
                 "message": match.group("message"),
             }
-
+        # The line is either preamble text or continuation of a multiline message
         else:
 
             if current is None:
@@ -143,8 +143,11 @@ def parse_logs(text):
             else:
                 current["message"] += "\n" + line
 
+    # The last entry still hasn't been emitted yet
+    # Entries are emitted when the next entry begins
     if current:
         yield current
 
+    # Edge case when only preabmle exists
     elif preamble:
         yield {"timestamp": "", "logger": "system", "level": "INFO", "message": "\n".join(preamble)}
