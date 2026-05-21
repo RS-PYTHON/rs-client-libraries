@@ -351,6 +351,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     )
 
     # add product as an asset
+    logger.info(f"Adding asset to STAC item with href {str(zarr_path)}")
     if is_json_product:
         item.add_asset(
             key="data",
