@@ -501,7 +501,8 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     await s3_upload_file(zarr_product_path, s3_dest)
                     stac_item.assets["data"].href = s3_dest
                 else:
-                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}.zarr/"
+                    zarr_suffix = ".zarr" if zarr_product_path.suffix == ".zarr" else ""
+                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}{zarr_suffix}/"
                     logger.info(f"Uploading ZARR to {s3_dest_prefix}")
                     await s3_upload_dir(zarr_product_path, s3_dest_prefix)
                     stac_item.assets["data"].href = s3_dest_prefix
