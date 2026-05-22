@@ -35,6 +35,10 @@
         "storage": "s3-dem-s1"
       },
       {
+        "product_name": "DEM",
+        "storage": "s3"
+      },
+      {
         "product_name": "Orbit",
         "storage": "shared_disk"
       }
