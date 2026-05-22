@@ -425,6 +425,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
             for zarr_product_path in zarr_product_paths:
                 # 5. Create STAC item for this ZARR
                 stac_item = create_stac_item_from_zarr(zarr_product_path, generated_prod_type)
+                stac_item.properties["product:type"] = generated_prod_type
 
                 # 6. Resolve destination collection
                 target_collection = resolve_collection_name(
