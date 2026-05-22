@@ -67,13 +67,14 @@ async def _do_process_s1ard(
     slcs: list[str],
     reference_date: date | None,
     flow_params: Level1ArdFlowParams,
-    verbose: bool = False,
+    verbose: bool = False,  # pylint: disable=unused-argument
 ):
     """
     Sentinel-1 ARD processing (common function for reference pipeline and nominal on-demand flow).
 
     Args:
-        slcs (list[str]): STAC item identifiers of S1 SLC input products, already converted to zarr. A single item for the reference pipeline.
+        slcs (list[str]): STAC item identifiers of S1 SLC input products, already converted to zarr.
+        A single item for the reference pipeline.
         reference_date (date | None): Date of the master (reference) SLC. Set to None for reference pipeline
         flow_params (Level1ArdFlowParams): Flow parameters
         verbose (bool, optional): not used yet. Defaults to False.
@@ -130,7 +131,7 @@ async def _do_process_s1ard(
 
         external_variables = {"instrument_mode": unique_modes.pop()}
         if reference_date:
-            external_variables["reference_date"] = reference_date
+            external_variables["reference_date"] = str(reference_date)
 
         # Call DPR flow
         await call_dpr_flow(
