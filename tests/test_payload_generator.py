@@ -58,11 +58,13 @@ def test_build_workflow_step_valid(sample_unit):
     step = build_workflow_step(sample_unit)
 
     assert isinstance(step, WorkflowStep)
-    assert step.name == "unit1"
+    assert step.name == "unit1.1"
     assert step.module == "module1"
     assert step.inputs == {"S1CADUS": "S1CADUS", "S3CADUS": "external_proc"}
     assert step.adfs == {"ADF1": "ADF1"}
     assert step.outputs == {"*.tif": "output1", "output2": "output2"}
+    assert step.processing_unit == "unit1"
+    assert step.parameters == {"testparam": "testvalue"}
 
 
 def test_build_workflow_step_missing_key_raises():

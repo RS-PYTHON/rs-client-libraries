@@ -857,7 +857,7 @@ def _patch_prefect_logger(monkeypatch):
 def _sample_unit():
     """Fixture that builds a test sample unit"""
     return {
-        "name": "unit1",
+        "name": "unit1.1",
         "module": "module1",
         "input_products": [
             {"name": "S1CADUS", "origin": "pipeline_input_1", "store_type": "S3"},
@@ -870,6 +870,9 @@ def _sample_unit():
             {"name": "output1", "regex": "*.tif", "store_type": "S3"},
             {"name": "output2", "store_type": "S3"},
         ],
+        "parameters": {
+            "testparam": "testvalue",
+        },
     }
 
 
