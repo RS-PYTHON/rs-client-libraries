@@ -19,7 +19,6 @@ import os
 import re
 import shutil
 import tempfile
-from collections.abc import Collection
 from os.path import commonprefix
 from pathlib import Path
 from typing import Any
@@ -113,48 +112,38 @@ def _normalize_stac_items(items: Item | ItemCollection | dict[str, Any] | list[I
 
 
 @task(name="download_and_extract_assets")
-async def download_and_extract_assets_task(
-    items: Item | ItemCollection | dict[str, Any] | list[Item | dict[str, Any]],
-    extract_to: Path,
-    asset: str | Collection[str] | None = None,
-):
+async def download_and_extract_assets_task(items: list[Item], extract_to: Path):
     """
-    Download and extract assets from the given items to the destination directory.
+    Download and extract all assets from the given items to the destination directory.
 
     Args:
         items: List of STAC items containing assets to download.
         extract_to: Local directory where assets should be extracted.
-        asset: Optional asset name, or asset names, to download. If omitted, all assets are downloaded.
     """
     logger = get_run_logger()
-    selected_assets = {asset} if isinstance(asset, str) else set(asset) if asset else None
-    stac_items = _normalize_stac_items(items)
 
-    for item in stac_items:
-        for asset_name, item_asset in item.assets.items():
-            if selected_assets and asset_name not in selected_assets:
-                continue
-
-            if not item_asset.href.startswith("s3://"):
-                logger.warning(f"Skipping non-S3 asset: {asset_name} ({item_asset.href})")
+    for item in items:
+        for asset_name, asset in item.assets.items():
+            if not asset.href.startswith("s3://"):
+                logger.warning(f"Skipping non-S3 asset: {asset_name} ({asset.href})")
                 continue
 
             # create the temporary file off the event loop
             tmp_fd, tmp_name = await asyncio.to_thread(
                 tempfile.mkstemp,
-                suffix=Path(item_asset.href).suffix,
+                suffix=Path(asset.href).suffix,
             )
             os.close(tmp_fd)
             tmp_path = Path(tmp_name)
 
             try:
-                logger.info(f"Downloading asset {asset_name} from {item_asset.href}")
-                await s3_download_file(item_asset.href, tmp_path)
+                logger.info(f"Downloading asset {asset_name} from {asset.href}")
+                await s3_download_file(asset.href, tmp_path)
 
                 # extract or move to destination
-                if item_asset.href.lower().endswith((".zip", ".tar", ".tgz", ".tar.gz")):
-                    logger.info(f"Extracting {item_asset.href} to {extract_to}")
-                    if item_asset.href.lower().endswith(".zip"):
+                if asset.href.lower().endswith((".zip", ".tar", ".tgz", ".tar.gz")):
+                    logger.info(f"Extracting {asset.href} to {extract_to}")
+                    if asset.href.lower().endswith(".zip"):
                         extract_zip(tmp_path, extract_to)
                     else:
                         extract_tar(tmp_path, extract_to)
@@ -163,8 +152,8 @@ async def download_and_extract_assets_task(
                     recursive_extract(extract_to)
                 else:
                     # not an archive, just copy/move to destination
-                    dest_path = extract_to / Path(item_asset.href).name
-                    logger.info(f"Copying {item_asset.href} to {dest_path}")
+                    dest_path = extract_to / Path(asset.href).name
+                    logger.info(f"Copying {asset.href} to {dest_path}")
                     shutil.copy(tmp_path, dest_path)
             finally:
                 if tmp_path.exists():

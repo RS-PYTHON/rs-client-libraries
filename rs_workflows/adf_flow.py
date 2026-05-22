@@ -28,8 +28,7 @@ from dateutil.parser import parse as parse_date
 from prefect import flow, get_run_logger, task
 from pystac import Asset, Item
 
-from rs_common.prefect_utils import s3_download_file, s3_upload_dir, s3_upload_file
-from rs_common.utils import extract_tar, extract_zip, recursive_extract
+from rs_common.prefect_utils import s3_upload_dir, s3_upload_file
 from rs_workflows.auxip_flow import auxip_staging_task
 from rs_workflows.catalog_flow import publish
 from rs_workflows.flow_utils import (
@@ -162,55 +161,6 @@ def normalize_stac_properties_datetimes(stac_props: dict) -> dict:
         if isinstance(value, str):
             normalized_props[key] = normalize_stac_datetime_value(value)
     return normalized_props
-
-
-@task(name="download_and_extract_assets")
-async def download_and_extract_assets_task(items: list[Item], extract_to: Path):
-    """
-    Download and extract all assets from the given items to the destination directory.
-
-    Args:
-        items: List of STAC items containing assets to download.
-        extract_to: Local directory where assets should be extracted.
-    """
-    logger = get_run_logger()
-
-    for item in items:
-        for asset_name, asset in item.assets.items():
-            if not asset.href.startswith("s3://"):
-                logger.warning(f"Skipping non-S3 asset: {asset_name} ({asset.href})")
-                continue
-
-            # create the temporary file off the event loop
-            tmp_fd, tmp_name = await asyncio.to_thread(
-                tempfile.mkstemp,
-                suffix=Path(asset.href).suffix,
-            )
-            os.close(tmp_fd)
-            tmp_path = Path(tmp_name)
-
-            try:
-                logger.info(f"Downloading asset {asset_name} from {asset.href}")
-                await s3_download_file(asset.href, tmp_path)
-
-                # extract or move to destination
-                if asset.href.lower().endswith((".zip", ".tar", ".tgz", ".tar.gz")):
-                    logger.info(f"Extracting {asset.href} to {extract_to}")
-                    if asset.href.lower().endswith(".zip"):
-                        extract_zip(tmp_path, extract_to)
-                    else:
-                        extract_tar(tmp_path, extract_to)
-
-                    # handle nested archives (common in AUXIP)
-                    recursive_extract(extract_to)
-                else:
-                    # not an archive, just copy/move to destination
-                    dest_path = extract_to / Path(asset.href).name
-                    logger.info(f"Copying {asset.href} to {dest_path}")
-                    shutil.copy(tmp_path, dest_path)
-            finally:
-                if tmp_path.exists():
-                    tmp_path.unlink()
 
 
 @task(name="Run ADF conversion")
