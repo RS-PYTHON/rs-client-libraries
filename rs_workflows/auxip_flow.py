@@ -33,7 +33,7 @@ from rs_workflows.utils.utils import asset_unzip_decompress
 ###############
 
 
-@flow(name="Auxip search")
+@flow(name="search-auxip")
 async def search(
     env: FlowEnvArgs,
     auxip_cql2: dict,
@@ -69,7 +69,7 @@ async def search(
         return found
 
 
-@flow(name="Auxip staging")
+@flow(name="stage-auxip")
 async def auxip_staging(
     env: FlowEnvArgs,
     cql2_filter: dict,
@@ -201,13 +201,13 @@ async def on_demand_auxip_staging(
 ###########################
 
 
-@task(name="Auxip search")
+@task(name="search-auxip")
 async def search_task(*args, **kwargs) -> ItemCollection | None:
     """See: search"""
     return await search.fn(*args, **kwargs)
 
 
-@task(name="Auxip staging")
+@task(name="stage-auxip")
 async def auxip_staging_task(*args, **kwargs) -> tuple[bool, ItemCollection | None]:
     """See: auxip_staging"""
     return await auxip_staging.fn(*args, **kwargs)

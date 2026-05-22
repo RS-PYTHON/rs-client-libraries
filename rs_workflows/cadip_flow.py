@@ -22,7 +22,7 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task
 
 
-@flow(name="Cadip search")
+@flow(name="search-cadip")
 async def search(
     env: FlowEnvArgs,
     cadip_collection_identifier: str,
@@ -62,7 +62,7 @@ async def search(
         return found
 
 
-@flow(name="On-demand Cadip staging")
+@flow(name="stage-cadip-with-options")
 async def on_demand_cadip_staging(
     env: FlowEnvArgs,
     cadip_collection_identifier: str,
@@ -117,7 +117,7 @@ async def on_demand_cadip_staging(
 ###########################
 
 
-@task(name="Cadip search")
+@task(name="search-cadip")
 async def search_task(*args, **kwargs) -> ItemCollection | None:
     """See: search"""
     return await search.fn(*args, **kwargs)

@@ -77,8 +77,8 @@ class ProcessingFlowParams(BaseModel):
         json_schema_extra={"order": 6},
     )
 
-    unit: str = Field(
-        default="",
+    unit: str | None = Field(
+        default=None,
         title="Unit",
         description="Processing unit or internal identifier.",
         json_schema_extra={"order": 7},

@@ -90,7 +90,7 @@ def build_workflow_step(unit):
     adfs: dict[str, str] = {}
     for input_adf in unit.get("input_adfs", []):
         if isinstance(input_adf, dict) and "name" in input_adf:
-            adfs[input_adf["name"].lower()] = input_adf["name"]
+            adfs[input_adf["name"]] = input_adf["name"]
     # get outputs
     outputs: dict[str, str] = {}
     for output_product in unit.get("output_products", []):
@@ -106,7 +106,7 @@ def build_workflow_step(unit):
             active=True,
             validate_output=False,
             module=unit["module"],
-            processing_unit=unit["name"],
+            processing_unit=unit["name"].split(".")[0] if "." in unit["name"] else unit["name"],
             inputs=inputs or None,
             adfs=adfs or None,
             outputs=outputs or None,

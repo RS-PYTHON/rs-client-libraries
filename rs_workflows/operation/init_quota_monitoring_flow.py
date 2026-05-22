@@ -43,7 +43,7 @@ def create_schema(db_url: str):
     Base.metadata.create_all(engine)
 
 
-@flow(name="quota-monitoring-db-create")
+@flow(name="initialize-obs-db")
 async def init_quota_monitoring_database(env: FlowEnvArgs = FlowEnvArgs(owner_id="operator-quota")):
     """
     Initializes the Quota Monitoring database schema.
