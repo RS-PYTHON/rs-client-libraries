@@ -170,6 +170,8 @@ def parse_logs(text):
     # Edge case when only preabmle exists
     elif preamble:
         yield {"timestamp": "", "logger": "system", "level": "INFO", "message": "\n".join(preamble)}
+
+
 def get_archived_item_indexes(item_collection) -> list[int]:
     """
     Return the indexes of staged items that still reference archive assets.
