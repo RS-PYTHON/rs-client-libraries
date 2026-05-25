@@ -426,7 +426,7 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
     return max_eopf_datetime
 
 
-@task(name="Run DPR processor")
+@task(name="run-processor")
 async def run_processor(
     env: FlowEnvArgs,
     processor: str,

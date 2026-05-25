@@ -37,7 +37,6 @@ from rs_common import prefect_utils
 from rs_workflows import auxip_flow, catalog_flow
 from rs_workflows.dpr_flow import run_processor
 from rs_workflows.flow_utils import (
-    ARCHIVE_SUFFIXES,
     DprProcessIn,
     FlowEnv,
     FlowInputProduct,
@@ -45,7 +44,7 @@ from rs_workflows.flow_utils import (
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
-from rs_workflows.utils.utils import search_by_name
+from rs_workflows.utils.utils import get_archived_item_indexes, search_by_name
 
 SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
@@ -136,22 +135,6 @@ async def _build_auxip_request(
     return auxip_cql2, collection, timeout if timeout else -1
 
 
-def _get_archived_item_indexes(item_collection) -> list[int]:
-    """
-    Return the indexes of staged items that still reference archive assets.
-
-    Only items whose asset hrefs end with one of the known archive suffixes need
-    the extra unzip/decompress normalization step. Returning indexes instead of
-    copying items allows the caller to update the existing collection in place
-    after normalization completes.
-    """
-    archived_indexes = []
-    for idx, auxip_item in enumerate(item_collection.items):
-        if any(asset.href.endswith(ARCHIVE_SUFFIXES) for asset in auxip_item.assets.values()):
-            archived_indexes.append(idx)
-    return archived_indexes
-
-
 async def _normalize_archived_auxip_items(item_collection: ItemCollection, dpr_input: DprProcessIn) -> ItemCollection:
     """
     Normalize archived AUXIP items and persist the updated metadata to the catalog.
@@ -167,7 +150,7 @@ async def _normalize_archived_auxip_items(item_collection: ItemCollection, dpr_i
     unchanged.
     """
     logger = get_run_logger()
-    archived_indexes = _get_archived_item_indexes(item_collection)
+    archived_indexes = get_archived_item_indexes(item_collection)
 
     if not archived_indexes:
         return item_collection
@@ -240,7 +223,7 @@ async def _stage_input_adfs_alternative(
             retry_delay_seconds=staging_retry_delay,
         )
         .submit(dpr_input.env, auxip_cql2, collection, timeout)
-        .result()
+        .result()  # type: ignore
     )
 
     if not auxip_items:
@@ -294,9 +277,8 @@ async def process_input_adfs(
     logger = get_run_logger()
     logger.info(f"Starting processing input ADFS for {input_adfs}")
     try:
-
         # For each "alternative" ( get it following the "order" )
-        for alternative in input_adfs["alternatives"]:
+        for alternative in input_adfs.get("alternatives", []):
             result = await _stage_input_adfs_alternative(
                 alternative,
                 input_adfs,
@@ -323,7 +305,7 @@ def _resolve_specific_input_product_stac_items(
     unit: dict[str, Any],
     provided_input_products: list[FlowInputProduct],
     rs_client: RsClient,
-) -> tuple[str | None, list[Item | None]]:
+) -> tuple[str, list[Item]] | tuple[None, list[None]]:
     input_adfs_io = search_by_name(task_table["io"], input_adfs["name"])
     if input_adfs_io.get("multiplicity", None) == "one_per_input":
         logger = get_run_logger()
@@ -375,7 +357,7 @@ def _resolve_specific_input_product_stac_items(
     return None, [None]
 
 
-@flow
+@flow(name="process-generic")
 async def dpr_processing(
     dpr_input: DprProcessIn,
     retry_config: RetryConfig = RetryConfig(),  # type: ignore

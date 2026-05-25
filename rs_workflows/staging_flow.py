@@ -21,7 +21,7 @@ from rs_client.ogcapi.staging_client import StagingClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
-@flow(name="Staging")
+@flow(name="stage-generic")
 async def staging(
     env: FlowEnvArgs,
     stac_input: str | ItemCollection | dict,  # warning: dict as last choice for prefect ui
@@ -75,7 +75,7 @@ async def staging(
 ###########################
 
 
-@task(name="Staging")
+@task(name="stage-generic")
 async def staging_task(*args, **kwargs):
     """See: staging"""
     return await staging.fn(*args, **kwargs)

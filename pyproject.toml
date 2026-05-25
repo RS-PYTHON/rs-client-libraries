@@ -51,8 +51,8 @@ include = [
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.15"
-opentelemetry-distro = "^0.62b0" # then run 'poetry run opentelemetry-bootstrap -a install'
-opentelemetry-exporter-otlp = "^1.41.0"
+opentelemetry-distro = "^0.63b1" # then run 'poetry run opentelemetry-bootstrap -a install'
+opentelemetry-exporter-otlp = "^1.42.1"
 protobuf = ">=5.29.5"
 cachetools = ">=5.5.2"
 pystac = "^1.13.0"
@@ -63,6 +63,8 @@ openapi-core = "0.22.0"
 click = "8.3.1"
 prefect = { version = "3.6.20", extras = ["aws"] }
 prefect-aws = ">=0.7.5"
+# importlib_metadata required with prefect < 3.7.2 see https://github.com/PrefectHQ/prefect/pull/22012
+importlib_metadata = ">=7.0"
 requests = "^2.32.4"
 urllib3 = ">=2.7.0"
 SQLAlchemy = "^2.0.37"
