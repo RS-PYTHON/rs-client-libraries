@@ -16,8 +16,6 @@
 
 import datetime
 import json
-import tempfile
-from pathlib import Path
 
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
@@ -25,124 +23,10 @@ from pystac import Item, ItemCollection
 
 from rs_client.stac.auxip_client import AuxipClient
 from rs_client.stac.catalog_client import CatalogClient
-from rs_common.prefect_utils import s3_delete, s3_download_file, s3_upload_file
-from rs_common.utils import (
-    create_valcover_filter,
-    extract_tar,
-    extract_zip,
-    get_upload_prefix,
-    normalize_extract_dir,
-    recursive_extract,
-    strip_archive_suffix,
-)
-from rs_workflows.flow_utils import ARCHIVE_SUFFIXES, FlowEnv, FlowEnvArgs
+from rs_common.utils import create_valcover_filter
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task
-
-####################################################
-# Auxip unzip and decompress convenience functions #
-####################################################
-
-
-# this can't be in rs_common.utils because of circular imports with prefect_utils
-async def upload_folder_flat(local_folder: Path, prefix: str):
-    """
-    Upload all files under ``local_folder`` to the same S3 prefix.
-
-    The upload is intentionally flattened: only the filename is kept in the
-    destination key, regardless of the original nested local path.
-    """
-    logger = get_run_logger()
-    files_to_upload = [path for path in local_folder.rglob("*") if path.is_file()]
-
-    logger.info(
-        f"Preparing flat upload of {len(files_to_upload)} file(s) from {local_folder} to {prefix}",
-    )
-
-    for file_path in files_to_upload:
-        s3_path = prefix + file_path.name
-        logger.info(f"Uploading {file_path} -> {s3_path}")
-        await s3_upload_file(file_path, s3_path)
-
-    logger.info(f"Finished uploading {len(files_to_upload)} file(s) to {prefix}")
-
-
-async def process_asset(asset_href: str, asset_name: str) -> str:
-    """
-    Process an archived AUXIP asset stored in S3 and replace it with its extracted content.
-
-    If the asset href points to a `.zip`, `.tar`, `.tgz`, or `.tar.gz` object in S3,
-    the archive is downloaded to a temporary local directory and extracted. If the
-    extracted content contains nested `.tar`, `.tgz`, or `.tar.gz` archives, those
-    archives are also extracted in place.
-
-    The extracted payload is then uploaded back to the same S3 parent prefix using a
-    folder-like target derived from the original ZIP name. In this context,
-    "normalization" means replacing the original archive object with the extracted
-    directory content under its corresponding S3 prefix.
-
-    Example:
-    - input href: `s3://bucket/path/some_adfs.zip`
-    - extracted content: `file.xml` and `content.tar.gz`
-    - final S3 result: `s3://bucket/path/some_adfs/` containing `file.xml` and the
-    extracted content from `content.tar.gz`
-
-    The function returns the new S3 prefix pointing to the extracted content.
-    """
-    logger = get_run_logger()
-    logger.info(f"Processing asset: {asset_href}")
-
-    if not asset_name.lower().endswith(ARCHIVE_SUFFIXES):
-        raise ValueError(f"Unsupported archive type for asset '{asset_name}'")
-
-    is_zip = asset_name.lower().endswith(".zip")
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_dir = Path(tmp_dir)  # type: ignore
-
-        archive_local = tmp_dir / ("archive.zip" if is_zip else Path(asset_href).name)  # type: ignore
-        extract_dir = tmp_dir / "extracted"  # type: ignore
-        extract_dir.mkdir()
-
-        # 1. Download
-        logger.info(f"Downloading {asset_href} -> {archive_local}")
-        await s3_download_file(asset_href, archive_local)
-
-        # 2. Remove the original archive before publishing the extracted content.
-        logger.info(f"Deleting original archive from S3: {asset_href}")
-        s3_delete(asset_href)
-
-        # 3. Extract the main archive first.
-        if is_zip:
-            extract_zip(archive_local, extract_dir)
-        else:
-            extract_tar(archive_local, extract_dir)
-
-        # 4. Some AUXIP deliveries contain nested TAR/TGZ/TAR.GZ payloads.
-        nested_archives = recursive_extract(extract_dir)
-        logger.info(f"Nested extraction complete, processed {nested_archives} archive(s)")
-
-        # 5. Pick the most appropriate directory root for the upload step.
-        upload_dir = normalize_extract_dir(extract_dir)
-        logger.info(f"Selected upload root: {upload_dir}")
-
-        # 6. Upload the extracted payload back to the original S3 prefix.
-        prefix = get_upload_prefix(asset_href, asset_name)
-        logger.info(f"Uploading to prefix: {prefix}")
-
-        await upload_folder_flat(upload_dir, prefix)
-
-        extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
-        if not extracted_files:
-            logger.info(f"No extracted files found, returning normalized folder prefix: {prefix}")
-            return prefix
-
-        # Always expose a concrete extracted file in the normalized href.
-        # When several files are produced, pick a deterministic "main" payload
-        # by preferring the largest file and then the lexicographically smallest
-        selected_file = min(extracted_files, key=lambda path: (-path.stat().st_size, path.name))
-        logger.info(f"Selected extracted file for normalized href: {prefix + selected_file.name}")
-        return prefix + selected_file.name
-
+from rs_workflows.utils.utils import asset_unzip_decompress
 
 ###############
 # Auxip flows #
@@ -312,27 +196,6 @@ async def on_demand_auxip_staging(
     )
 
 
-@flow(name="Auxip unzip and decompress")
-async def auxip_unzip_decompress(auxip_item: Item) -> Item:
-    """Prefect flow used to unzip and decompress ADFS."""
-    logger = get_run_logger()
-    updated_assets = {}
-
-    for asset_name, asset in auxip_item.assets.items():
-        # After normalisation (unzip / decompress) the href is changed with the new s3 path.
-        # Therefore asset name should also be updated for supported archive types.
-        if asset_name.lower().endswith(ARCHIVE_SUFFIXES):
-            new_href = await process_asset(asset.href, asset_name)
-            asset.href = new_href
-            updated_assets[strip_archive_suffix(asset_name)] = asset
-        else:
-            updated_assets[asset_name] = asset
-
-    logger.info(f"Updated the following asset {updated_assets} for item {auxip_item.id}")
-    auxip_item.assets = updated_assets
-    return auxip_item
-
-
 ###########################
 # Call the flows as tasks #
 ###########################
@@ -353,4 +216,4 @@ async def auxip_staging_task(*args, **kwargs) -> tuple[bool, ItemCollection | No
 @task(name="Auxip unzip and decompress")
 async def auxip_unzip_decompress_task(*args, **kwargs) -> Item:
     """See: auxip_unzip_decompress"""
-    return await auxip_unzip_decompress.fn(*args, **kwargs)
+    return await asset_unzip_decompress.fn(*args, **kwargs)

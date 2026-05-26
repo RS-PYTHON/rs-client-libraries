@@ -492,3 +492,46 @@ class RetryConfig(BaseModel):
 
     staging_retries: int = Field(3, description="Number of retry attempts for staging operations.")
     staging_retry_delay: int = Field(60, description="Delay in seconds between retry attempts.")
+
+
+class ConversionIn(BaseModel):
+    """
+    Input parameters for executing the 'on_demand_conversion' flow.
+
+    This model defines all the configuration needed to run an on-demand conversion flow,
+    including input datasets, generated outputs, and scheduling parameters.
+    """
+
+    env: FlowEnvArgs = Field(
+        title="Flow Environment",
+        description="Environment configuration for Prefect flow. Includes identifiers like owner_id.",
+    )
+    stac_input: str | dict = Field(
+        title="STAC Input Product",
+        description=("Input product for the conversion. Specifies the STAC item or href."),
+    )
+    generated_product_to_collection_identifier: FlowGeneratedProduct = Field(
+        title="Generated Product",
+        description=(
+            "Generated product. Specifies a name, the product type, and the collection where the output will be stored."
+        ),
+    )
+    owner_id: str = Field(
+        title="Owner ID",
+        description="User/owner ID necessary to retrieve the user info from the right Prefect block.",
+    )
+    dask_cluster_label: str = Field(
+        title="Dask Cluster Label",
+        description="Label of the Dask cluster to use for SAFE conversion.",
+    )
+    dask_cluster_instance: str | None = Field(
+        default=None,
+        title="Dask Cluster Instance",
+        description="Optional Dask cluster instance ID used by the DPR conversion service.",
+    )
+
+    selected_assets: list[str] | None = Field(
+        default=None,
+        title="Selected Assets",
+        description=("Set of selected asset keys to stage. If not provided, all assets will be converted"),
+    )

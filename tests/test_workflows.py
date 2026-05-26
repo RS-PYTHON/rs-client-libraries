@@ -380,8 +380,8 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
 
     # --- Provided input products ---
     provided_input_products = [
-        MagicMock(collection_name="stac_collection", item_id="item1"),
-        MagicMock(collection_name="stac_collection", item_id="item2"),
+        FlowInputProduct(name="S1CADUS", collection_name="stac_collection", item_id="item1"),
+        FlowInputProduct(name="S1CADUS", collection_name="stac_collection", item_id="item2"),
     ]
 
     # --- Call ---
