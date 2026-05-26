@@ -61,8 +61,8 @@ python-dateutil = "^2.9.0.post0"
 stac-pydantic = "^3.4.0"
 openapi-core = "0.22.0"
 click = "8.3.1"
-prefect = { version = "3.6.20", extras = ["aws"] }
-prefect-aws = ">=0.7.5"
+prefect = { version = "3.6.29", extras = ["aws"] }
+prefect-aws = ">=0.7.7"
 # importlib_metadata required with prefect < 3.7.2 see https://github.com/PrefectHQ/prefect/pull/22012
 importlib_metadata = ">=7.0"
 requests = "^2.32.4"
