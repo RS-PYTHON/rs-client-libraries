@@ -348,6 +348,7 @@ def build_input_products(
         RuntimeError: If an expected input product or STAC item cannot be found.
     """
     inputs = []
+    logger = get_run_logger()
 
     # Group input products by name (needed for inputs of type regex)
     grouped_products = defaultdict(list)
@@ -363,6 +364,7 @@ def build_input_products(
 
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
+        logger.info(f"initial input store_name for name: {product_name} => {store_name}")
         if not store_name:
             if dpr_process_in.unit:
                 store_name = storage_configuration.get_storage_for_unit_section("input_products")
@@ -374,6 +376,7 @@ def build_input_products(
                 # Delete the following line once the things will be clarified with other store_names
                 # This is due to the internal discussions, disregard any other store_name but s3
                 store_name = "s3"
+        logger.info(f"final input store_name for name: {product_name} => {store_name}")
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for input product '{product_name}'")
 
@@ -512,6 +515,7 @@ def build_output_products(
 
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
+        logger.info(f"initial output store_name for name: {product_name} => {store_name}")
         if not store_name:
             if dpr_process_in.unit:
                 store_name = storage_configuration.get_storage_for_unit_section("output_products")
@@ -519,6 +523,7 @@ def build_output_products(
                 store_name = storage_configuration.get_storage_for_pipeline_section(
                     mapping.get("origin", ""),
                 ) or storage_configuration.get_storage_for_pipeline_section("other")
+        logger.info(f"final output store_name for name: {product_name} => {store_name}")
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
 
