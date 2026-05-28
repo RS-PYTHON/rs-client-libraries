@@ -19,6 +19,8 @@ from collections.abc import Iterable
 from copy import deepcopy
 from typing import Any
 
+from prefect import get_run_logger
+
 from rs_common.utils import strftime_millis
 
 EXTERNAL_VAR_PATTERN = re.compile(r"\{external_variable\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
@@ -68,6 +70,8 @@ def _extract_io_origin_from_pipeline(
         is_input: whether the product is an input (True, default value) or an output (False)
         step_id: step_id value in case we have to discriminate between several units with the same name
     """
+    logger = get_run_logger()
+
     # Origin name mapping
     origin_mapping = {
         "pipeline.input": "pipeline_input",
@@ -127,6 +131,9 @@ def _extract_io_origin_from_pipeline(
                 # If we have an origin_step_id given, check that the step found matches this value aswell.
                 # If not, keep searching
                 if origin_step_id and step.get("step_id") != origin_step_id:
+                    logger.info(
+                        f"Found unit {origin_unit_name} but its step_id {step.get("step_id")} != {origin_step_id}",
+                    )
                     continue
                 origin_unit = step
                 origin_step_id = step.get("step_id")
