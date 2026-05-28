@@ -501,8 +501,8 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         self,
         collection_id: str,
         item_id: str,
-        owner_id: str,
         patch_values: dict,
+        owner_id: str | None = None,
         timeout: int = TIMEOUT,
         raise_for_status: bool = True,
     ) -> Response:
@@ -512,7 +512,7 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
         Args:
             collection_id (str): ID of the Collection containing the item.
             item_id (str): ID of the item to patch.
-            owner_id (str): Name of the item's owner.
+            owner_id (str): Name of the item's owner. If missing, we use self.owner_id.
             patch_values (dict): Dictionary of values to patch in the STAC description of the item.
             timeout (int): Timeout value for the HTTP request (optional, defaults to 30s).
             raise_for_status (bool): If True, raise HTTPError in case of server error (optional, defaults to True).
