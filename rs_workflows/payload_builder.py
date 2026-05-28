@@ -114,10 +114,10 @@ def _extract_io_origin_from_pipeline(
         # Origin step_id is the second field if there are 3, else it has to be retrieved from the units map
         # Origin product name is the last field, no matter if there are 2 or 3 fields
         if len(all_fields) == 3:
-            origin_step_id = all_fields[1]
+            origin_step_id = int(all_fields[1])
             origin_product_name = all_fields[2]
         else:
-            origin_step_id = ""
+            origin_step_id = 0
             origin_product_name = all_fields[1]
 
         #  We check that origin unit name exists in the tasktable and retrieve the associated pipeline step
