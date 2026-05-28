@@ -15,10 +15,10 @@
 """Catalog flow implementation"""
 
 import json
-
-from prefect import flow, get_run_logger, task, runtime
-from pystac import ItemCollection, Link
 import os
+
+from prefect import flow, get_run_logger, runtime, task
+from pystac import ItemCollection, Link
 
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import (
@@ -140,13 +140,13 @@ async def publish(
                 # TEMPFIX END
 
                 # Add processing url link for each STAC item
-                platform = os.environ['RSPY_PREFECT_URL']
+                platform = os.environ["RSPY_PREFECT_URL"]
                 item.add_link(
                     Link(
                         rel="processing-execution",
                         media_type="application/json",
-                        target=f"{platform}/runs/flow-run/{runtime.flow_run.id}"
-                    )
+                        target=f"{platform}/runs/flow-run/{runtime.flow_run.id}",
+                    ),
                 )
 
                 logger.info(
