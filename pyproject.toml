@@ -59,8 +59,8 @@ pystac = "^1.13.0"
 pystac-client = "^0.9.0"
 python-dateutil = "^2.9.0.post0"
 stac-pydantic = "^3.4.0"
-openapi-core = "0.22.0"
-click = "8.3.1"
+openapi-core = ">=0.23.1"
+click = "8.4.1"
 prefect = { version = "3.6.29", extras = ["aws"] }
 prefect-aws = ">=0.7.7"
 # importlib_metadata required with prefect < 3.7.2 see https://github.com/PrefectHQ/prefect/pull/22012
@@ -100,7 +100,7 @@ moto = "^5.1.22"
 
 [tool.poetry.group.demo.dependencies] # for hybrid mode
 jupyterlab = "^4.5.0"
-boto3 = "^1.42.5"
+boto3 = "^1.43.0"
 papermill = "^2.6.0"
 tornado = "^6.5" # fix trivy vulnerability
 
