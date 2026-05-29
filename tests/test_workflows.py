@@ -230,7 +230,7 @@ async def test_dpr_processing(
 
     # Verify the two artifact calls use the correct keys
     keys = [c.kwargs.get("key") for c in artifact_mock.await_args_list]
-    assert artifact_mock.await_count == 5
+    assert artifact_mock.await_count == 4
     assert keys == ["dpr-task-table", "aux-cql2-filter", "aux-cql2-filter", "dpr-payload"]
 
 
