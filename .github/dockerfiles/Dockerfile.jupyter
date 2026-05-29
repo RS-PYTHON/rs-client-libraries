@@ -48,9 +48,6 @@ ADD ./*.whl /tmp/whl
 RUN pip install --no-cache-dir /tmp/whl/rs_client_libraries-*.whl && opentelemetry-bootstrap -a install && \
     layer-cleanup.sh
 
-# Install other useful dependencies for rs-demo in local mode.
-RUN pip install --no-cache-dir papermill && layer-cleanup.sh
-
 # Remove custom scripts
 RUN rm -f /usr/local/bin/layer-cleanup.sh /usr/local/bin/restore-apt.sh
 
