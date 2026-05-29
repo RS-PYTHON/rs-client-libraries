@@ -17,7 +17,6 @@
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from urllib.parse import urlencode, urlparse
-from venv import logger
 
 from prefect import (
     apause_flow_run,
@@ -68,6 +67,7 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
         markdown=markdown_report,
         description="session staging output",
     )
+    logger = get_run_logger()
     logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
     # Base Grafana URL
@@ -85,7 +85,7 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
 
     # Build the encoded URL
     url = f"{base_url}?{urlencode(params)}"
-    artifact_key_name: str = "monitoring-url"
+    artifact_key_name = "monitoring-url"
     await acreate_link_artifact(key=artifact_key_name, link=url, description="# see session item from the catalog")
     logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 

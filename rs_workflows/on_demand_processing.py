@@ -29,7 +29,6 @@ import yaml
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
 from pystac import Item, ItemCollection
-from setproctitle import logger
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_client.rs_client import RsClient
@@ -108,6 +107,7 @@ async def _build_auxip_request(
     The returned tuple contains everything needed by the staging call:
     ``(auxip_cql2, collection, timeout)``.
     """
+    logger = get_run_logger()
     timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
     name = alternative["query"]["name"]
     specific_input_name, stac_item = specific_input_product
@@ -416,10 +416,6 @@ async def dpr_processing(
             },
         )
 
-        # md = "# List of processing units\n\n```json\n" + json.dumps(unit_list, indent=2) + "\n```"
-        # Artifact key must only contain lowercase letters, numbers, and dashes.
-        # await acreate_markdown_artifact(key="processing-unit-list", markdown=md, description="List of processing units")
-
         tasks = []
         for unit in unit_list:
             # For each input_adfs element computed on STEP 1
@@ -475,7 +471,7 @@ async def dpr_processing(
         yaml_str = yaml.dump(generated_payload_res_as_dict, default_flow_style=False, sort_keys=False)
         # Write the payload as prefect artifact
         pretty_markdown = f"```yaml\n{yaml_str}\n```"
-        artifact_key_name: str = "dpr-payload"
+        artifact_key_name = "dpr-payload"
         await acreate_markdown_artifact(
             key=artifact_key_name,
             markdown=pretty_markdown,

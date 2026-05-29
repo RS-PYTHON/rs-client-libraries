@@ -16,7 +16,6 @@
 
 import json
 import os
-from venv import logger
 
 from dask_gateway import Gateway
 from dask_gateway.auth import JupyterHubAuth
