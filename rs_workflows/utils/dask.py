@@ -50,7 +50,7 @@ async def is_dask_cluster_running(dask_cluster_label: str) -> bool:
     if cluster_id is None:
         logger.error(f"❌ '{dask_cluster_label}' is not part of deployed dask clusters {cluster_names}.")
     else:
-        logger.info(f"✔️ '{dask_cluster_label}' is part of deployed dask clusters {cluster_names}.")
+        logger.info(f"✅ '{dask_cluster_label}' is part of deployed dask clusters {cluster_names}.")
         status_map = {0: "UNKNOWN", 1: "PENDING", 2: "RUNNING", 3: "STOPPING", 4: "STOPPED", 5: "FAILED"}
         if cluster_id.status == 2:
             result = True
@@ -63,11 +63,14 @@ async def is_dask_cluster_running(dask_cluster_label: str) -> bool:
             + json.dumps(cluster_id.options, indent=2)
             + "\n```"
         )
+        artifact_key_name: str = "dask-cluster-configuration"
         await acreate_markdown_artifact(
             markdown=md,
-            key="dask-cluster-options",
+            key=artifact_key_name,
             description=f"Options associated to the running dask cluster {dask_cluster_label}.",
         )
+        logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
+
         logger.info(
             "📈 You can monitor the execution from dask dashboard: "
             f"{os.environ["DASK_GATEWAY_PUBLIC"]}/clusters/{cluster_id.name}/status",

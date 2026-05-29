@@ -63,9 +63,9 @@ async def search(
         )
         if (not found) and error_if_empty:
             raise ValueError(
-                f"No Auxip product found for CQL2 filter: {json.dumps(auxip_cql2, indent=2)}",
+                f"❌ No Auxip product found for CQL2 filter: {json.dumps(auxip_cql2, indent=2)}",
             )
-        logger.info(f"Auxip search found {len(found)} result(s): {found.to_dict()}")
+        logger.info(f"🔍 Auxip search found {len(found)} result(s): {found.to_dict()}")
         return found
 
 
@@ -130,7 +130,7 @@ async def auxip_staging(
             job_result = staging_results[job_name]
             if "status" not in job_result or job_result["status"] != "successful":
                 logger.info(
-                    f"Staging job '{job_name}' with ID {job_result['jobID']} FAILED.\n"
+                    f"❌ Staging job '{job_name}' with ID {job_result['jobID']} FAILED.\n"
                     f"Status: {job_result['status']} - Reason: {job_result['message']}",
                 )
                 logger.debug({job_name: job_result})
@@ -147,12 +147,15 @@ async def auxip_staging(
 
         # Create artifact if all jobs succeeded
         if return_status:
-            logger.info("Staging successful, creating artifact with a list of staged items.")
+            logger.info("✅ Staging successful, creating artifact with a list of staged items.")
+            artifact_key_name: str = "auxiliary-stac-item"
+            md = "# Auxiliary file \n\n```json\n" + json.dumps(catalog_items.to_dict(), indent=2) + "\n```"
             await acreate_markdown_artifact(
-                markdown=f"{json.dumps(catalog_items.to_dict(), indent=2)}",
-                key="auxiliary-files",
+                markdown=md,
+                key=artifact_key_name,
                 description="Auxiliary files added to catalog.",
             )
+            logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
         return return_status, catalog_items
 
