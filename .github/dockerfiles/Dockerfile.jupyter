@@ -24,7 +24,7 @@
 ARG PYTHON_VERSION=3.13.12
 ARG JUPYTER_HUB_VERSION=5.4.3
 
-FROM ghcr.io/rs-python/quay.io/jupyter/base-notebook:feat-rspy1044-multiple-dask-versions
+FROM ghcr.io/rs-python/quay.io/jupyter/base-notebook:hub-${JUPYTER_HUB_VERSION}-py${PYTHON_VERSION}
 
 USER root
 
