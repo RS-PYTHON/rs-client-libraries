@@ -63,7 +63,7 @@ async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections: 
                 if collection_links:
                     href = collection_links[0].href
                     result = href.rstrip("/").split("/")[-1]
-                    logger.info(f"✔️ The session '{session}' is available at station {result}")
+                    logger.info(f"✅ The session '{session}' is available at station {result}")
             else:
                 logger.error(f"❌ The session '{session}' has not been published yet.")
     if result is None:
@@ -130,7 +130,7 @@ async def cadip_session_search(
 
         # Log query for debugging
         logger.info(f"CQL2 query={json.dumps(cadip_cql2_query, indent=2)}")
-        logger.info("Start request on CADIP station")
+        logger.info("📡 Start request on CADIP station")
 
         # Execute search request
         found = cadip_client.search(

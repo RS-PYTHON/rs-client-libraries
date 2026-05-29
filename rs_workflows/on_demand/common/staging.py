@@ -17,6 +17,7 @@
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from urllib.parse import urlencode, urlparse
+from venv import logger
 
 from prefect import (
     apause_flow_run,
@@ -61,7 +62,13 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
 | Duration    | {duration_str}    |
 
 """
-    await acreate_markdown_artifact(key="result", markdown=markdown_report, description="session staging output")
+    artifact_key_name: str = "staging-result"
+    await acreate_markdown_artifact(
+        key=artifact_key_name,
+        markdown=markdown_report,
+        description="session staging output",
+    )
+    logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
     # Base Grafana URL
     base_url = "https://monitoring.ops.rs-python.eu/d/1a2758bd-a984-4dc8-9a6a-ee7694526850/2-stac-requests"
@@ -78,7 +85,9 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
 
     # Build the encoded URL
     url = f"{base_url}?{urlencode(params)}"
-    await acreate_link_artifact(key="grafana-dashboard", link=url, description="# see session item from the catalog")
+    artifact_key_name: str = "monitoring-url"
+    await acreate_link_artifact(key=artifact_key_name, link=url, description="# see session item from the catalog")
+    logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
 
 @task(name="Cadip session stage")
@@ -344,12 +353,12 @@ async def stage_session_common(
     result_artifact.result()  # type: ignore[unused-coroutine]
 
     if status == "successful":
-        logger.info(f"✔️ Session {selected_session} staged successfully.")
+        logger.info(f"✅ Session {selected_session} staged successfully.")
         if report_verbose is not None:
             report_verbose.success_step(2, "Staging completed successfully.")
         return True
 
     logger.error(f"❌ Session {selected_session} staged failed (status is '{status}').")
     if report_verbose is not None:
-        report_verbose.failed_step(2, f"Staging failed (status is '{status}').")
+        report_verbose.failed_step(2, f"❌ Staging failed (status is '{status}').")
     return False

@@ -29,6 +29,7 @@ import yaml
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
 from pystac import Item, ItemCollection
+from setproctitle import logger
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_client.rs_client import RsClient
@@ -125,12 +126,14 @@ async def _build_auxip_request(
     auxip_cql2 = build_cql2_json(query, parameters)
 
     md = "# Auxip CQL2 filter \n\n```json\n" + json.dumps(auxip_cql2, indent=2) + "\n```"
-    await acreate_markdown_artifact(key="auxip-cql2", markdown=md, description="Auxip CQL2 filter")
+    artifact_key_name: str = "aux-cql2-filter"
+    await acreate_markdown_artifact(key=artifact_key_name, markdown=md, description="Auxip CQL2 filter")
+    logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
     product_type = parameters.get("product_type", "*")
     collection = _select_aux_collection(dpr_input, product_type)
     get_run_logger().info(
-        f"Prepared AUXIP request for input {input_adfs['name']} using collection {collection}: {auxip_cql2}",
+        f"🚧 Prepared AUXIP request for input {input_adfs['name']} using collection {collection}:🧹 {auxip_cql2}",
     )
     return auxip_cql2, collection, timeout if timeout else -1
 
@@ -170,7 +173,7 @@ async def _normalize_archived_auxip_items(item_collection: ItemCollection, dpr_i
         flow_env = FlowEnv(dpr_input.env)
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
         for idx, new_item in zip(archived_indexes, results):
-            logger.info(f"Results after processing ADFS assets: {new_item.to_dict()}")  # type: ignore
+            logger.debug(f"Results after processing ADFS assets: {new_item.to_dict()}")  # type: ignore
             item_collection.items[idx] = new_item
             catalog_client.update_item(new_item)  # type: ignore[arg-type]
     except Exception as err:
@@ -275,7 +278,7 @@ async def process_input_adfs(
             cannot be read as expected.
     """
     logger = get_run_logger()
-    logger.info(f"Starting processing input ADFS for {input_adfs}")
+    logger.info(f"🚧 Starting processing input ADFS for {input_adfs}")
     try:
         # For each "alternative" ( get it following the "order" )
         for alternative in input_adfs.get("alternatives", []):
@@ -329,7 +332,7 @@ def _resolve_specific_input_product_stac_items(
         input_product_regex: str = input_product_io.get("store_params", {}).get("regex", None)
         if not input_product_regex:
             logger.warning(
-                f"Input product '{referenced_input_product_name}' should define a regex "
+                f"⚠️ Input product '{referenced_input_product_name}' should define a regex "
                 "to perform reliable discrimination",
             )
         result = []
@@ -352,7 +355,7 @@ def _resolve_specific_input_product_stac_items(
                 logger.warning(f"Adding asset '{first_asset_path}' without regex validation")
             result.append(stac_item)
         if not result:
-            logger.error(f"Found no STAC item with assets matching the regex '{input_product_regex}'")
+            logger.error(f"❌ Found no STAC item with assets matching the regex '{input_product_regex}'")
         return referenced_input_product_name, result
     return None, [None]
 
@@ -392,7 +395,9 @@ async def dpr_processing(
 
         # Persist the full task table as a Prefect artifact for later investigation.
         md = "# Task table\n\n```json\n" + json.dumps(task_table, indent=2) + "\n```"
-        await acreate_markdown_artifact(key="task-table", markdown=md, description="DPR task table")
+        artifact_key_name: str = "dpr-task-table"
+        await acreate_markdown_artifact(key=artifact_key_name, markdown=md, description="DPR task table")
+        logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
         # Log the public Dask dashboard URL when the flow input provides the cluster instance.
         logger.info(build_dask_dashboard_url_message(cluster_info.cluster_instance))
 
@@ -411,9 +416,9 @@ async def dpr_processing(
             },
         )
 
-        md = "# List of processing units\n\n```json\n" + json.dumps(unit_list, indent=2) + "\n```"
+        # md = "# List of processing units\n\n```json\n" + json.dumps(unit_list, indent=2) + "\n```"
         # Artifact key must only contain lowercase letters, numbers, and dashes.
-        await acreate_markdown_artifact(key="processing-unit-list", markdown=md, description="List of processing units")
+        # await acreate_markdown_artifact(key="processing-unit-list", markdown=md, description="List of processing units")
 
         tasks = []
         for unit in unit_list:
@@ -470,11 +475,14 @@ async def dpr_processing(
         yaml_str = yaml.dump(generated_payload_res_as_dict, default_flow_style=False, sort_keys=False)
         # Write the payload as prefect artifact
         pretty_markdown = f"```yaml\n{yaml_str}\n```"
+        artifact_key_name: str = "dpr-payload"
         await acreate_markdown_artifact(
-            key="dpr-payload-file",
+            key=artifact_key_name,
             markdown=pretty_markdown,
             description="DPR Payload file",
         )
+        logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
+
         # re-create the generated payload as a dictionary, as it will be used for
         # the payload file to upload to S3. here, the secrets are revealed
         generated_payload_res_with_secrets = generated_payload_res.dump(reveal_secrets=True)
