@@ -151,6 +151,7 @@ class StoragePath(BasePayloadModel):
     name: str = Field(exclude=True)
     opening_mode: str | None = Field(default="CREATE_OVERWRITE")
     relative_path: str
+    autoclean: bool | None = Field(default=False, exclude=True)
 
 
 class StoreParams(BasePayloadModel):

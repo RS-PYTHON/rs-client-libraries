@@ -385,9 +385,9 @@ def build_input_products(
                     id=mapping["name"],
                     path=stac_item_path,
                     # TODO: The value for this field in the tasktable (from where the unit is built) should be
-                    # 'filename' in case of s1 l0 processor, otherwise the s1 l0 processor is failing in starting.
-                    # check in the tasktable from rs-dpr-service (config/TaskTable_S1_L0_generated_by_rs_python_v1.json)
-                    # that in section io, the type field is set to 'filename' for input_products (S1ACADUS).
+                    # set to 'filename' for the s1 l0 processor, otherwise the processor fails to start.
+                    # Verify in the rs-dpr-service tasktable (config/TaskTable_S1_L0_generated_by_rs_python_v1.json)
+                    # that in the io section, the type field for input_products (S1ACADUS) is set to 'filename'.
                     # To be fixed in future iterations !
                     type=mapping.get("type", "filename"),
                     store_type=mapping["store_type"],
@@ -464,7 +464,7 @@ def build_output_products(
     for mapping in unit.get("output_products", []):
         product_name = mapping["name"]
 
-        logger.info(f"Configuration bucket: Building output section for name: {product_name}")
+        logger.info(f"Building output section for name: {product_name}")
         output_product = mapping_lookup.get(product_name)
 
         # Fails ONLY if required mapping is missing
@@ -485,8 +485,6 @@ def build_output_products(
                 f"cannot be '*' if the collection name is not specified for product '{product_name}'",
             )
 
-        bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
-        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
         if not store_name:
@@ -496,18 +494,33 @@ def build_output_products(
                 store_name = storage_configuration.get_storage_for_pipeline_section(
                     mapping.get("origin", ""),
                 ) or storage_configuration.get_storage_for_pipeline_section("other")
-                # TODO: the following line is temporary and for tests only ! Force eveything to s3 !
-                # Delete the following line once the things will be clarified with other store_names
-                # This is due to the internal discussions, disregard any other store_name but s3
-                store_name = "s3"
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
+
+        # Determine the output path based on the storage kind
+        kind = storage_configuration.get_storage_kind(store_name)
+        store_params = deepcopy(storage_configuration.get_store_params(store_name))
+        if kind == "obs":
+            bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
+            output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
+        elif kind in ("shared_disk", "local_disk"):
+            # For disk-based storage, the path is built from the absolute_path + JOB_IDENTIFIER
+            if store_params and store_params.storage_path:
+                output_path = os.path.join(store_params.storage_path.relative_path, output_collection, str(uuid4()))
+            else:
+                raise RuntimeError(
+                    f"Storage '{store_name}' of kind '{kind}' has no storage_path configured "
+                    f"for output product '{product_name}'",
+                )
+        else:
+            raise RuntimeError(f"Unknown storage kind '{kind}' for output product '{product_name}'")
+
         outputs.append(
             OutputProduct(
                 id=mapping["name"],
                 path=output_path,
                 store_type=mapping["store_type"],
-                store_params=storage_configuration.get_store_params(store_name),
+                store_params=store_params,
                 type=mapping.get("type", "filename"),
                 opening_mode=mapping.get("opening_mode", "CREATE"),
                 final_product=mapping.get("final_product", True),

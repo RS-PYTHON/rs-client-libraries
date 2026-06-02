@@ -25,7 +25,7 @@
         },
         {
           "section": "other",
-          "storage": "shared_disk"
+          "storage": "my_shared_disk_1"
         }
       ]
     },
@@ -36,38 +36,43 @@
       },
       {
         "product_name": "Orbit",
-        "storage": "shared_disk"
+        "storage": "my_shared_disk_1"
       }
     ]
   },
   "storage_configuration": [
     {
       "name": "s3",
+      "kind" : "obs",
       "storage_options": {
-        "key": "${S3_ACCESSKEY}",
-        "secret": "${S3_SECRETKEY}",
+        "key": "${S3_ACCESS_KEY}",
+        "secret": "${S3_SECRET_KEY}",
         "endpoint_url": "${S3_ENDPOINT}",
         "region_name": "${S3_REGION}"
       }
     },
     {
       "name": "s3-dem-s1",
+      "kind" : "obs",
       "storage_options": {
-        "key": "${S3_DEMS1_ACCESSKEY}",
-        "secret": "${S3_DEMS1_SECRETKEY}",
+        "key": "${S3_DEMS1_ACCESS_KEY}",
+        "secret": "${S3_DEMS1_SECRET_KEY}",
         "endpoint_url": "${S3_DEMS1_ENDPOINT}",
         "region_name": "${S3_DEMS1_REGION}"
       }
     },
     {
-      "name": "shared_disk",
+      "name": "my_shared_disk_1",
+      "kind" : "shared_disk",
       "opening_mode": "CREATE_OVERWRITE",
-      "relative_path": "/my_share_directory/here/${JOB_IDENTIFIER}"
+      "absolute_path": "/my_share_directory/here/",
+      "autoclean" : true
     },
     {
-      "name": "local_disk",
+      "name": "my_local_disk1",
+      "kind" : "local_disk",
       "opening_mode": "CREATE_OVERWRITE",
-      "relative_path": "/my_local_path/here/${JOB_IDENTIFIER}"
+      "absolute_path": "/my_local_path/here/"
     }
   ]
 }
