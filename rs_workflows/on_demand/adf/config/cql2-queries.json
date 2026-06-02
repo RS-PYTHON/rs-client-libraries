@@ -1,0 +1,196 @@
+[
+    {
+        "name": "Published",
+        "parameters": [
+            "product_type",
+            "start_datetime",
+            "end_datetime"
+        ],
+        "stac": {
+            "filter": {
+                "op": "and",
+                "args": [
+                    {
+                        "op": "=",
+                        "args": [
+                            {
+                                "property": "product:type"
+                            },
+                            "{product_type}"
+                        ]
+                    },
+                    {
+                        "op": "t_contains",
+                        "args": [
+                            {
+                                "interval": [
+                                    {
+                                        "property": "start_datetime"
+                                    },
+                                    {
+                                        "property": "end_datetime"
+                                    }
+                                ]
+                            },
+                            {
+                                "interval": [
+                                    "{start_datetime}",
+                                    "{end_datetime}"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        "sortby": [
+            {
+                "field": "created",
+                "direction": "desc"
+            }
+        ],
+        "limit": 1
+    },
+    {
+        "name": "LatestValCover",
+        "parameters": [
+            "product_type",
+            "start_datetime",
+            "end_datetime",
+            "dTa",
+            "dTb"
+        ],
+        "stac": {
+            "filter": {
+                "op": "and",
+                "args": [
+                    {
+                        "op": "=",
+                        "args": [
+                            {
+                                "property": "product:type"
+                            },
+                            "{product_type}"
+                        ]
+                    },
+                    {
+                        "op": "t_intersects",
+                        "args": [
+                            {
+                                "interval": [
+                                    {
+                                        "property": "start_datetime"
+                                    },
+                                    {
+                                        "property": "end_datetime"
+                                    }
+                                ]
+                            },
+                            {
+                                "interval": [
+                                    {
+                                        "op": "-",
+                                        "args": [
+                                            "{start_datetime}",
+                                            "{dTa}"
+                                        ]
+                                    },
+                                    {
+                                        "op": "+",
+                                        "args": [
+                                            "{end_datetime}",
+                                            "{dTb}"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "sortby": [
+                {
+                    "field": "created",
+                    "direction": "desc"
+                }
+            ],
+            "limit": 1
+        }
+    },
+    {
+        "name": "LatestValIntersectWithSatellite",
+        "parameters": [
+            "product_type",
+            "satellite",
+            "start_datetime",
+            "end_datetime",
+            "dTa",
+            "dTb"
+        ],
+        "stac": {
+            "filter": {
+                "op": "and",
+                "args": [
+                    {
+                        "op": "=",
+                        "args": [
+                            {
+                                "property": "product:type"
+                            },
+                            "{product_type}"
+                        ]
+                    },
+                    {
+                        "op": "=",
+                        "args": [
+                            {
+                                "property": "platform"
+                            },
+                            "{satellite}"
+                        ]
+                    },
+                    {
+                        "op": "t_intersects",
+                        "args": [
+                            {
+                                "interval": [
+                                    {
+                                        "property": "start_datetime"
+                                    },
+                                    {
+                                        "property": "end_datetime"
+                                    }
+                                ]
+                            },
+                            {
+                                "interval": [
+                                    {
+                                        "op": "-",
+                                        "args": [
+                                            "{start_datetime}",
+                                            "{dTa}"
+                                        ]
+                                    },
+                                    {
+                                        "op": "+",
+                                        "args": [
+                                            "{end_datetime}",
+                                            "{dTb}"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "sortby": [
+                {
+                    "field": "created",
+                    "direction": "desc"
+                }
+            ],
+            "limit": 1
+        }
+    }
+]

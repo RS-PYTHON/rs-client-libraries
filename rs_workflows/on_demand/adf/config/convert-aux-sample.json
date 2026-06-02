@@ -1,0 +1,19 @@
+{
+    "satellite": "all",
+    "aux-to-be-generated": [
+        {
+            "product-type": "S00__ADF_WATER",
+            "cql2-query-name": "LatestValCover",
+            "dtA": 0,
+            "dtB": 0,
+            "period-in-hours": 0
+        },
+        {
+            "product-type": "S00__ADF_ECMWF",
+            "cql2-query-name": "Published",
+            "dtA": 0,
+            "dtB": 0,
+            "period-in-hours": 4
+        }
+    ]
+}
