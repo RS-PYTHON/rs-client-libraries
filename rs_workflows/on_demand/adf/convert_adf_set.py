@@ -17,7 +17,7 @@
 from datetime import datetime
 
 from dateutil.rrule import HOURLY, rrule
-from prefect import flow, task
+from prefect import flow, get_run_logger
 
 
 @flow(name="convert-adf-group")
@@ -33,6 +33,7 @@ async def convert_adf_data(adf_group_name: str, period_start_datetime: datetime,
 
     """
 
+    logger = get_run_logger()
     schedule_rule = rrule(freq=HOURLY, interval=2, dtstart=period_start_datetime, until=period_end_datetime)
     for dt in schedule_rule:
-        print(dt.strftime("%Y-%m-%d %H:%M"))
+        logger.info(dt.strftime("%Y-%m-%d %H:%M"))
