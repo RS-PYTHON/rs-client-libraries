@@ -18,7 +18,7 @@ import json
 from datetime import datetime
 
 from dateutil.rrule import HOURLY, rrule
-from prefect import flow, get_run_logger
+from prefect import flow, get_run_logger, task
 from prefect.variables import get_variable
 
 
