@@ -15,11 +15,13 @@
 """Convert a set of ADF data."""
 
 import json
+from collections.abc import Awaitable
 from datetime import datetime
+from typing import Any, cast
 
 from dateutil.rrule import HOURLY, rrule
 from prefect import flow, get_run_logger, task
-from prefect.variables import get_variable
+from prefect.variables import Variable
 
 
 @flow(name="convert-adf-group")
@@ -39,10 +41,15 @@ async def convert_adf_data(period_start_datetime: datetime, period_end_datetime:
     schedule_rule = rrule(freq=HOURLY, interval=2, dtstart=period_start_datetime, until=period_end_datetime)
 
     # read the Prefect Variable and extract data
-    prefect_var = get_variable("adf_group_name")
-    data = json.loads(prefect_var)
-    satellite = data.get("satellite")
-    aux_to_be_generated = data.get("aux-to-be-generated", [])
+    raw_data = await cast(Awaitable[Any], Variable.get(adf_group_name))
+    if raw_data is None:
+        raise FileExistsError(f"Prefect variable '{adf_group_name}' is missing.")
+    if not isinstance(raw_data, dict):
+        raw_data = {}
+    settings: dict[str, Any] = raw_data
+
+    satellite = settings.get("satellite", "")
+    aux_to_be_generated = settings.get("aux-to-be-generated", [])
 
     logger.info(f"Satellite: {satellite}")
     for item in aux_to_be_generated:
