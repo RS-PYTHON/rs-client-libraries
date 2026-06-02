@@ -65,7 +65,7 @@
       "name": "my_shared_disk_1",
       "kind" : "shared_disk",
       "opening_mode": "CREATE_OVERWRITE",
-      "absolute_path": "/my_share_directory/here/",
+      "absolute_path": "/mnt/share/cs-01/",
       "autoclean" : true
     },
     {
