@@ -89,7 +89,7 @@ def custom_cluster_info_repr(self):
     )
 
 
-ClusterInfo.__repr__ = custom_cluster_info_repr
+ClusterInfo.__repr__ = custom_cluster_info_repr  # type: ignore
 
 
 class DprClient(OgcApiClient):
