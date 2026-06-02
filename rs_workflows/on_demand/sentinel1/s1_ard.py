@@ -66,6 +66,7 @@ class Level1ArdFlowParams(ProcessingFlowParams):
 async def _do_process_s1ard(
     slcs: list[str],
     reference_date: date | None,
+    edh_api_key: str,
     flow_params: Level1ArdFlowParams,
     verbose: bool = False,  # pylint: disable=unused-argument
 ):
@@ -76,6 +77,7 @@ async def _do_process_s1ard(
         slcs (list[str]): STAC item identifiers of S1 SLC input products, already converted to zarr.
         A single item for the reference pipeline.
         reference_date (date | None): Date of the master (reference) SLC. Set to None for reference pipeline
+        edh_api_key: Destination Earth / EarthDataHub standard API key used to access Copernicus DEM
         flow_params (Level1ArdFlowParams): Flow parameters
         verbose (bool, optional): not used yet. Defaults to False.
     """
@@ -132,6 +134,8 @@ async def _do_process_s1ard(
         external_variables = {"instrument_mode": unique_modes.pop()}
         if reference_date:
             external_variables["reference_date"] = str(reference_date)
+        if edh_api_key:
+            external_variables["edh_api_key"] = edh_api_key
 
         # Call DPR flow
         await call_dpr_flow(
@@ -153,13 +157,20 @@ async def _do_process_s1ard(
 
 
 @flow(name="process-s1-ard")
-async def process_s1ard(slcs: list[str], reference_date: date, flow_params: Level1ArdFlowParams, verbose: bool = False):
+async def process_s1ard(
+    slcs: list[str],
+    reference_date: date,
+    edh_api_key: str,
+    flow_params: Level1ArdFlowParams,
+    verbose: bool = False,
+):
     """
     Sentinel-1 ARD processing (nominal on-demand flow).
 
         Args:
             slcs: STAC item identifiers of S1 SLC input products, already converted to zarr.
             reference_date: Date of the master (reference) SLC
+            edh_api_key: Destination Earth / EarthDataHub standard API key used to access Copernicus DEM
     """
 
     # Specific data used for tests:
@@ -169,19 +180,20 @@ async def process_s1ard(slcs: list[str], reference_date: date, flow_params: Leve
 
     # https://earthdatahub.destine.eu/api/stac/v1/collections/copernicus-dem/items/GLO-30
 
-    await _do_process_s1ard(slcs, reference_date, flow_params, verbose)
+    await _do_process_s1ard(slcs, reference_date, edh_api_key, flow_params, verbose)
 
 
 @flow(name="process-s1-ard-reference")
-async def process_s1ard_reference(slc: str, flow_params: Level1ArdFlowParams, verbose: bool = False):
+async def process_s1ard_reference(slc: str, edh_api_key: str, flow_params: Level1ArdFlowParams, verbose: bool = False):
     """
     Sentinel-1 ARD processing reference pipeline.
     This flow must be run once to generate the REFERENCE_DB used in on-demand S1 ARD processing flow.
 
         Args:
             slc: STAC item identifier of S1 master SLC input product, already converted to zarr.
+            edh_api_key: Destination Earth / EarthDataHub standard API key used to access Copernicus DEM
     """
-    await _do_process_s1ard([slc], None, flow_params, verbose)
+    await _do_process_s1ard([slc], None, edh_api_key, flow_params, verbose)
 
 
 @task(name="process sentinel-1 level-1-ard")
