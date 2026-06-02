@@ -52,7 +52,7 @@ def handle_api_error(func):
         try:
             return func(self, *args, **kwargs)
         except APIError as e:
-            error_message = f"Pystac client returned exception: {e}"
+            error_message = f"❌ Pystac client returned exception: {e}"
             if hasattr(self, "logger") and self.logger:
                 self.logger.exception(error_message)
             else:
@@ -216,7 +216,7 @@ class StacBase(RsClient):
             if items_ids and "ids" not in params:
                 params["ids"] = ",".join(items_ids)
             self.logger.info(
-                "Retrieving items from collection '%s' with query params: %s.",
+                "🔍 Retrieving items from collection '%s' with query params: %s.",
                 collection_id,
                 params,
             )
@@ -247,7 +247,7 @@ class StacBase(RsClient):
 
         # Retrieve a list of items
         if items_ids:
-            self.logger.info(f"Retrieving specific items from collection '{collection_id}'.")
+            self.logger.info(f"🔍 Retrieving specific items from collection '{collection_id}'.")
 
             try:
                 return collection.get_items(*items_ids)
@@ -255,7 +255,7 @@ class StacBase(RsClient):
             # Avoid pystac-client fallback through /search ; fetch items one by one.
             # collection.get_items(*ids) internally triggers a search request.
             except (APIError, requests.HTTPError, STACError, ValueError, TypeError) as exc:
-                self.logger.debug("Direct retrieval failed, fallback to per-item: %s", exc)
+                self.logger.debug("❌ Direct retrieval failed, fallback to per-item: %s", exc)
 
                 def iter_items():
                     for item_id in items_ids:
@@ -333,17 +333,17 @@ class StacBase(RsClient):
                 timeout=TIMEOUT,
             )
         except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
-            self.logger.exception(f"Could not get the response from the endpoint {href_queryables}: {e}")
+            self.logger.exception(f"❌ Could not get the response from the endpoint {href_queryables}: {e}")
             raise RuntimeError(
-                f"Could not get the response from the endpoint {href_queryables}",
+                f"❌ Could not get the response from the endpoint {href_queryables}",
             ) from e
         if not response.ok:
-            raise RuntimeError(f"Could not get queryables from {href_queryables}")
+            raise RuntimeError(f"❌ Could not get queryables from {href_queryables}")
         try:
             json_data = response.json()
             return cast(dict[str, Any], json_data)  # Explicitly cast to Dict[str, Any]
         except ValueError as e:
-            raise RuntimeError(f"Invalid JSON response from {href_queryables}") from e
+            raise RuntimeError(f"❌ Invalid JSON response from {href_queryables}") from e
 
     @handle_api_error
     def search(  # pylint: disable=too-many-arguments, too-many-positional-arguments
@@ -362,7 +362,7 @@ class StacBase(RsClient):
         kwargs.pop("owner_id", None)
         kwargs["datetime"] = kwargs.pop("timestamp", None)
         kwargs["filter"] = kwargs.pop("stac_filter", None)
-        self.logger.info(f"Performing STAC search with parameters: {kwargs}")
+        self.logger.info(f"🔍 Performing STAC search with parameters: {kwargs}")
 
         try:
             items_search = self.ps_client.search(**kwargs)
@@ -370,7 +370,7 @@ class StacBase(RsClient):
             return items_search.item_collection()
         except NotImplementedError:
             self.logger.exception(
-                "The API does not conform to the STAC API Item Search spec"
+                "❌ The API does not conform to the STAC API Item Search spec"
                 "or does not have a link with a 'rel' type of 'search' ",
             )
         return None

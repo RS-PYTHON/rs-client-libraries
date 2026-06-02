@@ -62,7 +62,7 @@ async def osam_synchronize_accounts(env: FlowEnvArgs = FlowEnvArgs(owner_id="ope
             raise OSAMRequestError(
                 f"❌ Unexpected HTTP status {response.status_code} while synchronising accounts ({response.text}).",
             )
-        print("✔️ The synchronization process is now running. Allow a few minutes before reviewing the changes.")
+        print("✅ The synchronization process is now running. Allow a few minutes before reviewing the changes.")
 
 
 @task(name="create artifact with JSON OBS rights")
@@ -115,7 +115,7 @@ async def osam_update_user(user_name: str, env: FlowEnvArgs = FlowEnvArgs(owner_
             raise OSAMRequestError(
                 f"❌ Unexpected HTTP status {response.status_code} while updating user '{user_name}': {response.text}.",
             )
-        print(f"✔️ Rights for user '{user_name}' successfully applied.")
+        print(f"✅ Rights for user '{user_name}' successfully applied.")
 
         print("Regiser the new rights...")
         # Make the request for user's access rights

@@ -243,7 +243,7 @@ def find_s3_output_bucket(
 
     for row in config_rows:
         # the expiration_delay (the fourth field) is not used
-        logger.info(f"Configuration bucket: Checking row {row}")
+        logger.debug(f"Configuration bucket: Checking row {row}")
         owner_pat, coll_pat, prod_type_pat, _, bucket = row
 
         # Basic compatibility check using wildcard_match
@@ -771,7 +771,7 @@ def generate_payload(  # pylint: disable=unused-argument
         # output_mockup_path=build_output_products(unit_list[0], dpr_process_in, store_params, flow_env, config_rows)
         return build_mockup_payload(flow_env.owner_id)
 
-    logger.info(f"Starting payload generation for DPR processor '{dpr_process_in.processor_name}'")
+    logger.info(f"🚧 Starting payload generation for DPR processor '{dpr_process_in.processor_name}'")
     logger.info("Loading storage configuration template from file")
     secrets = Secret.load(
         prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, flow_env.owner_id),
@@ -851,5 +851,5 @@ def generate_payload(  # pylint: disable=unused-argument
         logging=logging,
         config=config,
     )
-    logger.info(f"Generated payload: \n {payload}")
+    logger.debug(f"Generated payload: \n {payload}")
     return payload
