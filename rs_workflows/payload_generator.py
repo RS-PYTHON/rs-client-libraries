@@ -16,6 +16,7 @@
 
 import fnmatch
 import os
+import re
 from collections import defaultdict
 from copy import deepcopy
 from os.path import commonprefix
@@ -109,7 +110,10 @@ def build_workflow_step(unit):
             active=True,
             validate_output=False,
             module=unit["module"],
-            processing_unit=unit["name"].split(".")[0] if "." in unit["name"] else unit["name"],
+            # workaround for https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/issues/1103
+            processing_unit=(
+                re.split(r"[._]", unit["name"])[0] if "." in unit["name"] or "_" in unit["name"] else unit["name"]
+            ),
             inputs=inputs or None,
             adfs=adfs or None,
             outputs=outputs or None,
