@@ -18,10 +18,25 @@ from datetime import datetime
 
 from dateutil.rrule import HOURLY, rrule
 from prefect import flow, get_run_logger
+from prefect.input import select
+from prefect.variables import get_variable, list_variables
+
+
+def filter_variables(pattern: str = "s1"):
+    """Filter Prefect Variable."""
+    all_vars = list_variables()
+    return [var.name for var in all_vars if var.name.startswith(pattern)]
+
+
+filtered_vars = filter_variables("AA")
 
 
 @flow(name="convert-adf-group")
-async def convert_adf_data(adf_group_name: str, period_start_datetime: datetime, period_end_datetime: datetime) -> None:
+async def convert_adf_data(
+    period_start_datetime: datetime,
+    period_end_datetime: datetime,
+    adf_group_name: str = select(filter_variables()),
+) -> None:
     """
     Convert a set of ADF data.
      - adf_group_name: name of the ADF group to convert.
