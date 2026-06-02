@@ -14,29 +14,16 @@
 
 """Convert a set of ADF data."""
 
+import json
 from datetime import datetime
 
 from dateutil.rrule import HOURLY, rrule
 from prefect import flow, get_run_logger
-from prefect.input import select
-from prefect.variables import get_variable, list_variables
-
-
-def filter_variables(pattern: str = "s1"):
-    """Filter Prefect Variable."""
-    all_vars = list_variables()
-    return [var.name for var in all_vars if var.name.startswith(pattern)]
-
-
-filtered_vars = filter_variables("AA")
+from prefect.variables import get_variable
 
 
 @flow(name="convert-adf-group")
-async def convert_adf_data(
-    period_start_datetime: datetime,
-    period_end_datetime: datetime,
-    adf_group_name: str = select(filter_variables()),
-) -> None:
+async def convert_adf_data(period_start_datetime: datetime, period_end_datetime: datetime, adf_group_name: str) -> None:
     """
     Convert a set of ADF data.
      - adf_group_name: name of the ADF group to convert.
@@ -50,5 +37,34 @@ async def convert_adf_data(
 
     logger = get_run_logger()
     schedule_rule = rrule(freq=HOURLY, interval=2, dtstart=period_start_datetime, until=period_end_datetime)
-    for dt in schedule_rule:
-        logger.info(dt.strftime("%Y-%m-%d %H:%M"))
+
+    # read the Prefect Variable and extract data
+    prefect_var = get_variable("adf_group_name")
+    data = json.loads(prefect_var)
+    satellite = data.get("satellite")
+    aux_to_be_generated = data.get("aux-to-be-generated", [])
+
+    logger.info(f"Satellite: {satellite}")
+    for item in aux_to_be_generated:
+        logger.info(
+            f"Scheduling conversion for aux type: {item.product_type} with conversion rule: {item.cql2_query_name} every {item.period_in_hours} hours",
+        )
+
+
+@task(name="convert-adf-single-type")
+async def convert_adf_single_type(
+    product_type: str,
+    start: datetime,
+    stop: datetime,
+) -> None:
+    """
+    Convert a single ADF data.
+     - product_type: type of the product to convert.
+     - start: start datetime of the period to convert.
+     - stop: end datetime of the period to convert.
+
+    """
+    logger = get_run_logger()
+    logger.info(
+        f"Converting ADF data for product type {product_type} from {start.strftime('%Y-%m-%d %H:%M')} to {stop.strftime('%Y-%m-%d %H:%M')}",
+    )

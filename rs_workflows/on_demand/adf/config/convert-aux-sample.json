@@ -2,18 +2,18 @@
     "satellite": "all",
     "aux-to-be-generated": [
         {
-            "product-type": "S00__ADF_WATER",
-            "cql2-query-name": "LatestValCover",
+            "product_type": "S00__ADF_WATER",
+            "cql2_query_name": "LatestValCover",
             "dtA": 0,
             "dtB": 0,
-            "period-in-hours": 0
+            "period_in_hours": 0
         },
         {
-            "product-type": "S00__ADF_ECMWF",
-            "cql2-query-name": "Published",
+            "product_type": "S00__ADF_ECMWF",
+            "cql2_query_name": "Published",
             "dtA": 0,
             "dtB": 0,
-            "period-in-hours": 4
+            "period_in_hours": 4
         }
     ]
 }
