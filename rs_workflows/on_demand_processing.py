@@ -496,19 +496,26 @@ async def dpr_processing(
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
         # HACK for S1-ARD
-        if dpr_input.pipeline == "ARD_REFERENCE_PIPELINE":
+        if dpr_input.pipeline in ["ARD_REFERENCE_PIPELINE", "ARD_DEM_ONLY_PIPELINE"]:
+            logger.warning(f"ARD HACK FOR PIPELINE {dpr_input.pipeline}")
             owner_id: str = dpr_input.env.owner_id
             output_collection = "s1-ard-reference-db"
             adf_type = "ARD_REFERENCE_DB"
             bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
             bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, adf_type)
-            adfs.add(
+            ref_db_path = os.path.join(
+                "s3://",
+                bucket_name,
+                owner_id,
+                output_collection,
                 (
-                    "REFERENCE_DB",
-                    adf_type,
-                    os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4())),
+                    "8d013730-3c8b-4c04-aafe-be234e27dd90"
+                    if dpr_input.pipeline == "ARD_DEM_ONLY_PIPELINE"
+                    else str(uuid4())
                 ),
             )
+            logger.warning(f"ARD REFERENCE_DB: {ref_db_path}")
+            adfs.add(("REFERENCE_DB", adf_type, ref_db_path))
         # generate the dpr payload file
         task_future = generate_payload.submit(flow_env, unit_list, list(adfs), dpr_input)
         # get the payload generation result
