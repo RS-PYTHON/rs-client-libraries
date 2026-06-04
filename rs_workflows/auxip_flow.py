@@ -16,15 +16,16 @@
 
 import datetime
 import json
+from typing import Any
 
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
 from pystac import Item, ItemCollection
 
-from rs_client.stac.auxip_client import AuxipClient
 from rs_client.stac.catalog_client import CatalogClient
+from rs_client.stac.stac_base import StacBase
 from rs_common.utils import create_valcover_filter
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.flow_utils import AuxiliarySource, FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task
 from rs_workflows.utils.utils import asset_unzip_decompress
 
@@ -33,11 +34,28 @@ from rs_workflows.utils.utils import asset_unzip_decompress
 ###############
 
 
-@flow(name="search-auxip")
+def select_search_client_and_kwargs(
+    flow_env: FlowEnv,
+    source: AuxiliarySource,
+) -> tuple[StacBase, dict[str, Any]]:
+    """Select the STAC client and source-specific search kwargs."""
+    if source == AuxiliarySource.AUXIP:
+        return flow_env.rs_client.get_auxip_client(), {}
+    if source == AuxiliarySource.CATALOG:
+        return flow_env.rs_client.get_catalog_client(), {"owner_id": flow_env.owner_id}
+    if source == AuxiliarySource.PRIP:
+        return flow_env.rs_client.get_prip_client(), {}
+    if source == AuxiliarySource.CADIP:
+        return flow_env.rs_client.get_cadip_client(), {}
+    raise ValueError(f"Unsupported auxiliary product source: {source.value!r}")
+
+
+@flow(name="search-aux")
 async def search(
     env: FlowEnvArgs,
-    auxip_cql2: dict,
+    aux_cql2: dict,
     error_if_empty: bool = False,
+    source: AuxiliarySource = AuxiliarySource.AUXIP,
 ) -> ItemCollection | None:
     """
     Search Auxip products.
@@ -46,35 +64,41 @@ async def search(
         env: Prefect flow environment (at least the owner_id is required)
         auxip_cql2: Auxip CQL2 filter read from the processor tasktable.
         error_if_empty: Raise a ValueError if the results are empty.
+        source: STAC source where auxiliary products are searched.
     """
     logger = get_run_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "auxip-search"):
+    with flow_env.start_span(__name__, "aux-search"):
 
-        logger.info(f"Start Auxip search: {auxip_cql2}")
-        auxip_client: AuxipClient = flow_env.rs_client.get_auxip_client()
-        found = auxip_client.search(
+        logger.info(f"Start AUX search from {source.value}: {aux_cql2}")
+        search_client, source_search_kwargs = select_search_client_and_kwargs(
+            flow_env,
+            source,
+        )
+        found = search_client.search(
             method="POST",
-            stac_filter=auxip_cql2.get("filter"),
-            max_items=auxip_cql2.get("limit"),
-            sortby=auxip_cql2.get("sortby"),
+            stac_filter=aux_cql2.get("filter"),
+            max_items=aux_cql2.get("limit"),
+            sortby=aux_cql2.get("sortby"),
+            **source_search_kwargs,
         )
         if (not found) and error_if_empty:
             raise ValueError(
-                f"❌ No Auxip product found for CQL2 filter: {json.dumps(auxip_cql2, indent=2)}",
+                f"❌ No AUX product found for CQL2 filter: {json.dumps(aux_cql2, indent=2)}",
             )
-        logger.info(f"🔍 Auxip search found {len(found)} result(s): {found.to_dict()}")
+        logger.info(f"🔍 AUX search found {len(found)} result(s): {found.to_dict()}")
         return found
 
 
-@flow(name="stage-auxip")
-async def auxip_staging(
+@flow(name="stage-aux")
+async def aux_staging(
     env: FlowEnvArgs,
     cql2_filter: dict,
     catalog_collection_identifier: str,
     timeout_seconds: int = -1,
+    source: AuxiliarySource = AuxiliarySource.AUXIP,
 ) -> tuple[bool, ItemCollection | None]:
     """
     Generic flow to retrieve a list of items matching the STAC CQL2 filter given, and to stage the ones
@@ -86,6 +110,7 @@ async def auxip_staging(
         catalog_collection_identifier (str): Catalog collection identifier where CADIP sessions and AUX data are staged
         timeout_seconds (int): Timeout value for the Auxip search task.
             Optional, if no value is given the process will run until it is completed
+        source (str): STAC source where auxiliary products are searched.
 
     Returns:
         bool: Return status: False if staging failed, True otherwise
@@ -95,28 +120,29 @@ async def auxip_staging(
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "auxip-staging"):
+    with flow_env.start_span(__name__, "aux-staging"):
 
         # Search Auxip products
-        auxip_items: ItemCollection | None = (
+        aux_items: ItemCollection | None = (
             search_task.with_options(timeout_seconds=timeout_seconds if timeout_seconds >= 0 else None)
             .submit(
                 flow_env.serialize(),
-                auxip_cql2=cql2_filter,
+                aux_cql2=cql2_filter,
                 error_if_empty=False,
+                source=source,
             )
             .result()  # type: ignore
         )
 
         # Stop process if search task didn't return any item
-        if not auxip_items or len(auxip_items) == 0:
-            logger.info("Nothing to stage: Auxip search with given filter returned empty result.")
+        if not aux_items or len(aux_items) == 0:
+            logger.info("Nothing to stage: AUX search with given filter returned empty result.")
             return True, None
 
         # Stage Auxip items
         staged = staging_task.submit(
             flow_env.serialize(),
-            auxip_items,
+            aux_items,
             catalog_collection_identifier,
         )
 
@@ -141,7 +167,7 @@ async def auxip_staging(
         catalog_items = ItemCollection(
             catalog_client.get_items(
                 collection_id=catalog_collection_identifier,
-                items_ids=[item.id for item in auxip_items],
+                items_ids=[item.id for item in aux_items],
             ),
         )
 
@@ -160,8 +186,8 @@ async def auxip_staging(
         return return_status, catalog_items
 
 
-@flow(name="On-demand Auxip staging")
-async def on_demand_auxip_staging(
+@flow(name="On-demand AUX staging")
+async def on_demand_aux_staging(
     env: FlowEnvArgs,
     start_datetime: datetime.datetime | str,
     end_datetime: datetime.datetime | str,
@@ -192,7 +218,7 @@ async def on_demand_auxip_staging(
     # CQL2 filter: we use a filter combining a ValCover filter and a product type filter
     cql2_filter = create_valcover_filter(start_datetime, end_datetime, product_type)
 
-    return await auxip_staging.fn(
+    return await aux_staging.fn(
         env=env,
         cql2_filter={"filter": cql2_filter},
         catalog_collection_identifier=catalog_collection_identifier,
@@ -204,19 +230,19 @@ async def on_demand_auxip_staging(
 ###########################
 
 
-@task(name="search-auxip")
+@task(name="search-aux")
 async def search_task(*args, **kwargs) -> ItemCollection | None:
     """See: search"""
     return await search.fn(*args, **kwargs)
 
 
-@task(name="stage-auxip")
-async def auxip_staging_task(*args, **kwargs) -> tuple[bool, ItemCollection | None]:
-    """See: auxip_staging"""
-    return await auxip_staging.fn(*args, **kwargs)
+@task(name="stage-aux")
+async def aux_staging_task(*args, **kwargs) -> tuple[bool, ItemCollection | None]:
+    """See: aux_staging"""
+    return await aux_staging.fn(*args, **kwargs)
 
 
-@task(name="Auxip unzip and decompress")
-async def auxip_unzip_decompress_task(*args, **kwargs) -> Item:
-    """See: auxip_unzip_decompress"""
+@task(name="Aux unzip and decompress")
+async def aux_unzip_decompress_task(*args, **kwargs) -> Item:
+    """See: aux_unzip_decompress"""
     return await asset_unzip_decompress.fn(*args, **kwargs)
