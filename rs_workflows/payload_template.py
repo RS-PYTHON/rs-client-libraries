@@ -144,16 +144,6 @@ class StorageOptions(BasePayloadModel):
     client_kwargs: dict[str, SecretStr]
 
 
-class StoragePath(BasePayloadModel):
-    """Wrapper for a list of storage options"""
-
-    # TODO: check if we need to exclude name here as well as for StorageOptions
-    name: str = Field(exclude=True)
-    opening_mode: str | None = Field(default="CREATE_OVERWRITE")
-    relative_path: str
-    autoclean: bool | None = Field(default=False, exclude=True)
-
-
 class StoreParams(BasePayloadModel):
     """Flexible store_params representation for payloads"""
 
@@ -161,8 +151,6 @@ class StoreParams(BasePayloadModel):
     s3_secret_alias: str | None = None
     # Or a storage options used for s3
     storage_options: StorageOptions | None = None
-    # Or a disk path
-    storage_path: StoragePath | None = None
     # Or a regex + multiplicity
     regex: str | None = None
     multiplicity: str | int | None = None
@@ -256,6 +244,7 @@ class InputProduct(BasePayloadModel):
     type: str | None = Field(default="filename")
     store_type: str
     store_params: StoreParams | None = None
+    opening_mode: str | None = Field(default=None)
 
 
 class OutputProduct(BasePayloadModel):
@@ -268,6 +257,7 @@ class OutputProduct(BasePayloadModel):
     type: str | None = Field(default="filename")
     opening_mode: str | None = Field(default="CREATE")
     apply_eoqc: bool | None = Field(default=False)
+    autoclean: bool | None = Field(default=False, exclude=True)
     # Excluded from serialization by default
     # This is because the "final product" concept exists only in the tasktable and
     # is is not recognized by the processor. The processor simply fails if it finds an unknown

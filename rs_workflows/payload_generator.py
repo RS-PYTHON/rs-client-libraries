@@ -369,6 +369,8 @@ def build_input_products(
                 ) or storage_configuration.get_storage_for_pipeline_section("other")
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for input product '{product_name}'")
+
+        kind = storage_configuration.get_storage_kind(store_name)
         store_params = deepcopy(storage_configuration.get_store_params(store_name))
 
         if len(products) == 1:
@@ -379,6 +381,13 @@ def build_input_products(
                 input_product.collection_name,
                 input_product.item_id,
             )
+
+            opening_mode = None
+            if kind in ("shared_disk", "local_disk"):
+                disk_config = storage_configuration.get_disk_storage(store_name)
+                if disk_config:
+                    opening_mode = disk_config.get("opening_mode")
+                store_params = None
 
             inputs.append(
                 InputProduct(
@@ -392,6 +401,7 @@ def build_input_products(
                     type=mapping.get("type", "filename"),
                     store_type=mapping["store_type"],
                     store_params=store_params,
+                    opening_mode=opening_mode,
                 ),
             )
         elif isinstance(store_params, StoreParams):
@@ -500,18 +510,24 @@ def build_output_products(
         # Determine the output path based on the storage kind
         kind = storage_configuration.get_storage_kind(store_name)
         store_params = deepcopy(storage_configuration.get_store_params(store_name))
+        opening_mode = mapping.get("opening_mode", "CREATE")
+        autoclean = None
+
         if kind == "obs":
             bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
             output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
         elif kind in ("shared_disk", "local_disk"):
-            # For disk-based storage, the path is built from the absolute_path + JOB_IDENTIFIER
-            if store_params and store_params.storage_path:
-                output_path = os.path.join(store_params.storage_path.relative_path, output_collection, str(uuid4()))
+            disk_config = storage_configuration.get_disk_storage(store_name)
+            if disk_config and disk_config.get("path"):
+                output_path = disk_config["path"]
+                opening_mode = disk_config.get("opening_mode", opening_mode)
+                autoclean = disk_config.get("autoclean", False)
             else:
                 raise RuntimeError(
-                    f"Storage '{store_name}' of kind '{kind}' has no storage_path configured "
+                    f"Storage '{store_name}' of kind '{kind}' has no storage path configured "
                     f"for output product '{product_name}'",
                 )
+            store_params = None
         else:
             raise RuntimeError(f"Unknown storage kind '{kind}' for output product '{product_name}'")
 
@@ -522,8 +538,9 @@ def build_output_products(
                 store_type=mapping["store_type"],
                 store_params=store_params,
                 type=mapping.get("type", "filename"),
-                opening_mode=mapping.get("opening_mode", "CREATE"),
+                opening_mode=opening_mode,
                 final_product=mapping.get("final_product", True),
+                autoclean=autoclean,
             ),
         )
 

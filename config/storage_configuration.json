@@ -35,7 +35,7 @@
         "storage": "s3-dem-s1"
       },
       {
-        "product_name": "Orbit",
+        "product_name": "S03CACHE",
         "storage": "my_shared_disk_1"
       }
     ]

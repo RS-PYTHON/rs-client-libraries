@@ -16,6 +16,7 @@
 
 import datetime
 import json
+import shutil
 import tempfile
 import time
 from datetime import timedelta
@@ -232,6 +233,22 @@ def create_stac_item(
         assets={product_name: build_asset(s3_data_location, product_name)},
     )
     return item
+
+
+def clean_paths(paths: list[str], logger) -> None:
+    """Delete directories or files listed in paths, logging outcomes.
+
+    Args:
+        paths: List of filesystem paths to remove.
+        logger: Prefect logger for informational messages.
+    """
+    for path in paths:
+        try:
+            if osp.isdir(path):
+                shutil.rmtree(path)
+                logger.info(f"Autoclean: removed directory {path}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.error(f"Autoclean failed for {path}: {e}")
 
 
 @task(name="Update eopf assets")
@@ -453,6 +470,8 @@ async def run_processor(
         # the payload to avoid triggering the catalog registration for them
         # Create a temporary list for keeping track of products to keep
         kept_products = []
+        # List of paths to delete if autoclean is enabled
+        paths_to_delete: list[str] = []
 
         # Iterate over the original products
         for prod in payload.io.output_products:
@@ -460,6 +479,9 @@ async def run_processor(
                 kept_products.append(prod)
             else:
                 logger.info(f"Output product {prod.id} is not marked as final_product, skipping catalog registration.")
+            # Record autoclean path for any product with autoclean=True
+            if prod.autoclean:
+                paths_to_delete.append(prod.path)
 
         # Update the original output_products list with the kept products
         payload.io.output_products[:] = kept_products
@@ -511,6 +533,10 @@ async def run_processor(
                         logger.info(f"Log file {s3_log_file!r}:\n{await opened.read()}")
                 except FileNotFoundError:
                     logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
+
+        # After processing, clean up autoclean paths. IMPORTANT : the shared disk has to be mounted
+        # in the current flow environment (prefect workker) for this to work !
+        clean_paths(paths_to_delete, logger)
 
         items_metadata = update_eopf_assets(flow_env, input_products, payload, processor)
         eopf_stac_items = [asset.stac_item for asset in items_metadata]
