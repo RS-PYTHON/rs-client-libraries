@@ -17,6 +17,7 @@
 import json
 from collections.abc import Awaitable
 from datetime import datetime
+from http.cookies import CookieError
 from typing import Any, cast
 
 from dateutil.rrule import HOURLY, rrule
@@ -46,6 +47,7 @@ async def convert_adf_data(period_start_datetime: datetime, period_end_datetime:
         raise FileExistsError(f"Prefect variable '{adf_group_name}' is missing.")
     if not isinstance(raw_data, dict):
         raw_data = {}
+        raise ValueError(f"Prefect variable '{adf_group_name}' is not a dict as expected, got {type(raw_data)}.")
     settings: dict[str, Any] = raw_data
 
     satellite = settings.get("satellite", "")

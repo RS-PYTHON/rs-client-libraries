@@ -25,10 +25,7 @@
                             {
                                 "interval": [
                                     {
-                                        "property": "start_datetime"
-                                    },
-                                    {
-                                        "property": "end_datetime"
+                                        "property": "published"
                                     }
                                 ]
                             },
