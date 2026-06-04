@@ -159,6 +159,7 @@ class CadipCollections(str, Enum):
     S1_NSG = "s1_nsg"
     S1_PAR = "s1_par"
     S1_INS = "s1_ins"
+    S2_MPS = "s2_mps"
     S1_KSE = "s1_kse"
     S2_PAR = "s2_par"
     S2_SGS = "s2_sgs"
