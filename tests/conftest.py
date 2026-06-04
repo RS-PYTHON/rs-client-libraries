@@ -1304,3 +1304,9 @@ def __mock_get_row_wrong_length_too_long(monkeypatch):
 
     monkeypatch.setattr(requests, "get", _mock_get)
     return _mock_get
+
+
+@pytest.fixture(autouse=True)
+def prefect_env(monkeypatch):
+    """Mock RSPY_PREFECT_URL"""
+    monkeypatch.setenv("RSPY_PREFECT_URL", "http://localhost:4200")
