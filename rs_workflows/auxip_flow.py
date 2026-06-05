@@ -82,6 +82,7 @@ async def search(
             stac_filter=aux_cql2.get("filter"),
             max_items=aux_cql2.get("limit"),
             sortby=aux_cql2.get("sortby"),
+            timestamp=aux_cql2.get("timestamp"),
             **source_search_kwargs,
         )
         if (not found) and error_if_empty:

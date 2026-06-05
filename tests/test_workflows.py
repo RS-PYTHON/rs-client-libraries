@@ -249,7 +249,7 @@ async def test_normalize_archived_auxip_items_updates_collection_and_catalog(moc
     future_mock = MagicMock()
     future_mock.result.return_value = normalized_item
     submit_mock = MagicMock(return_value=future_mock)
-    mocker.patch.object(on_demand_processing.auxip_flow.auxip_unzip_decompress_task, "submit", submit_mock)
+    mocker.patch.object(on_demand_processing.auxip_flow.aux_unzip_decompress_task, "submit", submit_mock)
 
     catalog_client_mock = MagicMock()
     flow_env_mock = MagicMock()
@@ -259,7 +259,7 @@ async def test_normalize_archived_auxip_items_updates_collection_and_catalog(moc
     dpr_input = MagicMock()
     dpr_input.env = FlowEnvArgs(owner_id=OWNER_ID)
 
-    result = await on_demand_processing._normalize_archived_auxip_items(  # pylint: disable=protected-access
+    result = await on_demand_processing._normalize_archived_aux_items(  # pylint: disable=protected-access
         item_collection,
         dpr_input,
     )
@@ -288,7 +288,7 @@ async def test_normalize_archived_auxip_items_wraps_catalog_update_errors(mocker
     future_mock = MagicMock()
     future_mock.result.return_value = normalized_item
     submit_mock = MagicMock(return_value=future_mock)
-    mocker.patch.object(on_demand_processing.auxip_flow.auxip_unzip_decompress_task, "submit", submit_mock)
+    mocker.patch.object(on_demand_processing.auxip_flow.aux_unzip_decompress_task, "submit", submit_mock)
 
     catalog_client_mock = MagicMock()
     catalog_client_mock.update_item.side_effect = ValueError("boom")
@@ -300,7 +300,7 @@ async def test_normalize_archived_auxip_items_wraps_catalog_update_errors(mocker
     dpr_input.env = FlowEnvArgs(owner_id=OWNER_ID)
 
     with pytest.raises(RuntimeError, match="Error while trying to update the item collection"):
-        await on_demand_processing._normalize_archived_auxip_items(  # pylint: disable=protected-access
+        await on_demand_processing._normalize_archived_aux_items(  # pylint: disable=protected-access
             item_collection,
             dpr_input,
         )
@@ -522,7 +522,7 @@ async def test_on_demand_auxip_staging(
 ):  # pylint: disable=unused-argument
     """Test the on_demand_auxip_staging flow"""
     await setup_worklow_test_env()
-    await auxip_flow.on_demand_auxip_staging(
+    await auxip_flow.on_demand_aux_staging(
         env=FlowEnvArgs(owner_id=OWNER_ID),
         start_datetime="2024-05-27T09:44:09.509000Z",
         end_datetime="2024-05-27T09:44:19.509000Z",

@@ -37,7 +37,6 @@ from rs_common import prefect_utils
 from rs_workflows import auxip_flow, catalog_flow
 from rs_workflows.dpr_flow import run_processor
 from rs_workflows.flow_utils import (
-    AuxiliaryProductMapping,
     AuxiliarySource,
     DprProcessIn,
     FlowEnv,
@@ -91,7 +90,7 @@ def _select_aux_collection_and_source(dpr_input: DprProcessIn, product_type: str
             ),
             (
                 default_aux_collection,
-                AuxiliaryProductMapping.model_fields["source"].default,
+                AuxiliarySource.AUXIP,
             ),
         ),
     )

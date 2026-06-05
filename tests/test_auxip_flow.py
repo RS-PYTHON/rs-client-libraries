@@ -109,7 +109,7 @@ async def test_auxip_staging_returns_early_when_search_is_empty(monkeypatch, moc
     search_stub = _TaskStub(ItemCollection([]))
     monkeypatch.setattr(auxip_flow, "search_task", search_stub)
 
-    result = await auxip_flow.auxip_staging.fn(env, {"filter": {}}, "collection")
+    result = await auxip_flow.aux_staging.fn(env, {"filter": {}}, "collection")
 
     assert result == (True, None)
 
@@ -137,7 +137,7 @@ async def test_auxip_staging_success(monkeypatch, mocker, mock_auxip_logger):
     artifact_mock = AsyncMock()
     monkeypatch.setattr(auxip_flow, "acreate_markdown_artifact", artifact_mock)
 
-    status_ok, items = await auxip_flow.auxip_staging.fn(env, {"filter": {}}, "collection")
+    status_ok, items = await auxip_flow.aux_staging.fn(env, {"filter": {}}, "collection")
 
     assert status_ok is True
     assert items is not None
@@ -168,7 +168,7 @@ async def test_auxip_staging_failure_skips_artifact(monkeypatch, mocker, mock_au
     artifact_mock = AsyncMock()
     monkeypatch.setattr(auxip_flow, "acreate_markdown_artifact", artifact_mock)
 
-    status_ok, items = await auxip_flow.auxip_staging.fn(env, {"filter": {}}, "collection")
+    status_ok, items = await auxip_flow.aux_staging.fn(env, {"filter": {}}, "collection")
 
     assert status_ok is False
     assert items is not None
@@ -182,12 +182,12 @@ async def test_on_demand_auxip_staging_builds_valcover_filter(monkeypatch):
     create_filter_mock = MagicMock(return_value={"op": "and"})
     staged_items = ItemCollection([])
     staging_mock = AsyncMock(return_value=(True, staged_items))
-    auxip_staging_task = MagicMock()
-    auxip_staging_task.fn = staging_mock
+    aux_staging_task = MagicMock()
+    aux_staging_task.fn = staging_mock
     monkeypatch.setattr(auxip_flow, "create_valcover_filter", create_filter_mock)
-    monkeypatch.setattr(auxip_flow, "auxip_staging", auxip_staging_task)
+    monkeypatch.setattr(auxip_flow, "aux_staging", aux_staging_task)
 
-    result = await auxip_flow.on_demand_auxip_staging.fn(
+    result = await auxip_flow.on_demand_aux_staging.fn(
         env,
         "2024-01-01T00:00:00Z",
         "2024-01-02T00:00:00Z",
@@ -211,9 +211,9 @@ async def test_task_wrappers_delegate_to_underlying_flows(monkeypatch):
     staging_mock = AsyncMock(return_value=("ok", None))
     unzip_mock = AsyncMock(return_value="item")
     monkeypatch.setattr(auxip_flow.search, "fn", search_mock)
-    monkeypatch.setattr(auxip_flow.auxip_staging, "fn", staging_mock)
+    monkeypatch.setattr(auxip_flow.aux_staging, "fn", staging_mock)
     monkeypatch.setattr(auxip_flow.asset_unzip_decompress, "fn", unzip_mock)
 
     assert await auxip_flow.search_task.fn(1, a=2) == "search-result"
-    assert await auxip_flow.auxip_staging_task.fn(3, b=4) == ("ok", None)
-    assert await auxip_flow.auxip_unzip_decompress_task.fn(5, c=6) == "item"
+    assert await auxip_flow.aux_staging_task.fn(3, b=4) == ("ok", None)
+    assert await auxip_flow.aux_unzip_decompress_task.fn(5, c=6) == "item"
