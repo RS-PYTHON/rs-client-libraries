@@ -248,7 +248,7 @@ def clean_paths(paths: list[str], logger) -> None:
                 shutil.rmtree(path)
                 logger.info(f"Autoclean: removed directory {path}")
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error(f"Autoclean failed for {path}: {e}")
+            logger.warning(f"Autoclean failed for the shared path {path}: {e}")
 
 
 @task(name="Update eopf assets")
@@ -480,7 +480,7 @@ async def run_processor(
             else:
                 logger.info(f"Output product {prod.id} is not marked as final_product, skipping catalog registration.")
             # Record autoclean path for any product with autoclean=True
-            if prod.autoclean:
+            if prod.autoclean and prod.path not in paths_to_delete:
                 paths_to_delete.append(prod.path)
 
         # Update the original output_products list with the kept products
