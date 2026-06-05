@@ -242,11 +242,17 @@ def clean_paths(paths: list[str], logger) -> None:
         paths: List of filesystem paths to remove.
         logger: Prefect logger for informational messages.
     """
+    logger.info(f"Cleaning up temporary paths: {paths}")
     for path in paths:
         try:
+            if not osp.exists(path):
+                logger.warning(f"Autoclean: path does not exist {path}, skipping.")
+                continue
             if osp.isdir(path):
                 shutil.rmtree(path)
                 logger.info(f"Autoclean: removed directory {path}")
+            else:
+                logger.warning(f"Autoclean: expected directory but found file {path}, skipping.")
         except Exception as e:  # pylint: disable=broad-exception-caught
             logger.warning(f"Autoclean failed for the shared path {path}: {e}")
 
@@ -535,7 +541,9 @@ async def run_processor(
                     logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
 
         # After processing, clean up autoclean paths. IMPORTANT : the shared disk has to be mounted
-        # in the current flow environment (prefect workker) for this to work !
+        # in the current flow environment (prefect workker) for this to work ! So, the shared_disk has to be
+        # mounted in both dask worker environment (where the processor runs) and in the prefect worker
+        # environment (where this flow runs)
         clean_paths(paths_to_delete, logger)
 
         items_metadata = update_eopf_assets(flow_env, input_products, payload, processor)

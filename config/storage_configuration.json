@@ -45,8 +45,8 @@
       "name": "s3",
       "kind" : "obs",
       "storage_options": {
-        "key": "${S3_ACCESS_KEY}",
-        "secret": "${S3_SECRET_KEY}",
+        "key": "${S3_ACCESSKEY}",
+        "secret": "${S3_SECRETKEY}",
         "endpoint_url": "${S3_ENDPOINT}",
         "region_name": "${S3_REGION}"
       }
@@ -55,8 +55,8 @@
       "name": "s3-dem-s1",
       "kind" : "obs",
       "storage_options": {
-        "key": "${S3_DEMS1_ACCESS_KEY}",
-        "secret": "${S3_DEMS1_SECRET_KEY}",
+        "key": "${S3_DEMS1_ACCESSKEY}",
+        "secret": "${S3_DEMS1_SECRETKEY}",
         "endpoint_url": "${S3_DEMS1_ENDPOINT}",
         "region_name": "${S3_DEMS1_REGION}"
       }
