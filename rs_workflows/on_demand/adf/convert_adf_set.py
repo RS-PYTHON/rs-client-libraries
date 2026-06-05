@@ -190,7 +190,7 @@ async def schedule_adf_conversion(
         start_rule: datetime = period_start + period_corrected
         stop_rule: datetime = period_end
         rule: str = (
-            f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=HOURLY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}"
+            f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=MINUTELY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}"
         )
         logger.debug(f"rule = {rule}")
 
