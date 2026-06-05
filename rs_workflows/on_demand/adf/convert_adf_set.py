@@ -20,8 +20,9 @@ from collections.abc import Awaitable
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
-from prefect import flow, flow_run, get_run_logger, task
+from prefect import flow, get_run_logger, task
 from prefect.runner.storage import GitRepository
+from prefect.runtime import flow_run
 from prefect.variables import Variable
 
 from rs_workflows.flow_utils import AuxiliaryProductMapping, FlowEnv, FlowEnvArgs
