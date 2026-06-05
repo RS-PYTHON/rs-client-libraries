@@ -457,11 +457,14 @@ async def dpr_processing(
             auxip_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [t.result() for t in tasks]
         except (RuntimeError, KeyError) as err:
             raise err
-
         # Set of ADFS. Each tuple includes the adfs name, type and the s3 storage path
+        source_items: list[Item] = []
         adfs: set[tuple[str, str, str]] = set()
         for name, adf_type, (status, item_collection) in auxip_items:
             for item in item_collection.items:
+                # list with links to be added in derived_from
+                source_items.append(item)
+
                 if status:
                     asset = next(iter(item.assets.values()))
                     adfs.add((name, adf_type, asset.href))
@@ -520,7 +523,12 @@ async def dpr_processing(
         finally:
             prefect_utils.s3_delete(dpr_input.s3_payload_file)
 
-        logger.debug(processed_items.result())
+        # add derived_from link
+        processed = processed_items.result()
+        logger.debug(f"processed_items: {processed}")
+
+        for processed_item in processed:
+            processed_item.stac_item.add_derived_from(*source_items)
 
         # Publish processed items to the catalog
         published = catalog_flow.publish.submit(
