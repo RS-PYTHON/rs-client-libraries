@@ -15,56 +15,139 @@
 """Convert a set of ADF data."""
 
 import json
+import logging
 from collections.abc import Awaitable
-from datetime import datetime
-from http.cookies import CookieError
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
-from dateutil.rrule import HOURLY, rrule
 from prefect import flow, get_run_logger, task
+from prefect.schedules import RRule, Schedule
 from prefect.variables import Variable
+
+from rs_workflows.flow_utils import AuxiliaryProductMapping, FlowEnv, FlowEnvArgs
+
+CQL2_FILTERS_PATH: str = "./config/cql2_filters.json"
 
 
 @flow(name="convert-adf-group")
-async def convert_adf_data(period_start_datetime: datetime, period_end_datetime: datetime, adf_group_name: str) -> None:
+async def convert_adf_data(
+    owner_identifier: str,
+    period_start_datetime: datetime,
+    period_end_datetime: datetime,
+    adf_group_name: str,
+) -> None:
     """
-    Convert a set of ADF data.
-     - adf_group_name: name of the ADF group to convert.
-     - period_start_datetime: start datetime of the period to convert.
-     - period_end_datetime: end datetime of the period to convert.
+    Convert a set of ADF (Auxiliary Data Files) data for a specified group and time period.
 
-     The part of the period in the past will be treated immediately.
-     The part of the period in the future will be scheduled.
+    Args:
+        period_start_datetime: Start datetime of the period to convert (UTC).
+        period_end_datetime: End datetime of the period to convert (UTC).
+        adf_group_name: Name of the ADF group (Prefect Variable) containing the configuration.
 
+    Behavior:
+        - The part of the period in the past is processed immediately.
+        - The part of the period in the future is scheduled for later execution.
+
+    Raises:
+        ValueError: If `period_start_datetime` is not before `period_end_datetime` or if the Prefect Variable format is invalid.
+        FileNotFoundError: If the Prefect Variable does not exist.
     """
 
     logger = get_run_logger()
-    schedule_rule = rrule(freq=HOURLY, interval=2, dtstart=period_start_datetime, until=period_end_datetime)
+    # logger.level = logging.DEBUG
+    # logger.propagate = True
+    logger.setLevel(logging.DEBUG)
 
-    # read the Prefect Variable and extract data
+    # Check input chronology
+    if period_start_datetime >= period_end_datetime:
+        raise ValueError(
+            f"❌ period_start_datetime should be before period_end_datetime ( here {period_start_datetime} >= {period_end_datetime})",
+        )
+
+    # Read the Prefect Variable and extract list of aux to manage
     raw_data = await cast(Awaitable[Any], Variable.get(adf_group_name))
     if raw_data is None:
-        raise FileExistsError(f"Prefect variable '{adf_group_name}' is missing.")
+        raise FileExistsError(f"❌ Prefect variable '{adf_group_name}' does not exist.")
     if not isinstance(raw_data, dict):
-        raw_data = {}
-        raise ValueError(f"Prefect variable '{adf_group_name}' is not a dict as expected, got {type(raw_data)}.")
+        raise ValueError(f"❌ Prefect variable '{adf_group_name}' has got an invalid format.")
     settings: dict[str, Any] = raw_data
-
     satellite = settings.get("satellite", "")
     aux_to_be_generated = settings.get("aux-to-be-generated", [])
 
-    logger.info(f"Satellite: {satellite}")
-    for item in aux_to_be_generated:
-        logger.info(
-            f"Scheduling conversion for aux type: {item.product_type} with conversion rule: {item.cql2_query_name} every {item.period_in_hours} hours",
-        )
+    # Split the problem in two : past and future period.
+    now_utc = datetime.now(timezone.utc)
+
+    # 1) Let's start with future period
+    if period_end_datetime > now_utc:
+        schedule_start = now_utc if period_start_datetime < now_utc else period_start_datetime
+        logger.info(f"Scheduling ADF conversion for the period [{schedule_start} - {period_end_datetime}]")
+        for item in aux_to_be_generated:
+            # renamed_task = schedule_adf_conversion.rename("titi")
+            await schedule_adf_conversion.with_options(name=f"schedule {item['product_type']}  ")(
+                owner_identifier,
+                item["product_type"],
+                item["cql2_query_name"],
+                item.get("dTa", 0),
+                item.get("dTb", 0),
+                item["period_in_hours"],
+                schedule_start,
+                period_end_datetime,
+            )
+        else:
+            logger.info("No future period to schedule. All AUX data retrieval is for past dates.")
 
 
-@task(name="convert-adf-single-type")
-async def convert_adf_single_type(
+class SafeDict(dict):
+    def __missing__(self, key):
+        return "{" + key + "}"
+
+
+def substitute_values(obj, values):
+    if isinstance(obj, dict):
+        return {k: substitute_values(v, values) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [substitute_values(v, values) for v in obj]
+    if isinstance(obj, str):
+        return obj.format_map(SafeDict(values))
+    return obj
+
+
+def compute_filter(product_type: str, cql2_query_name: str, dTa: int, dTb: int) -> dict:
+
+    logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
+
+    try:
+        # Read the file and load its content into a variable
+        with open(CQL2_FILTERS_PATH, encoding="utf-8") as file:
+            cql2_json = json.load(file)  # json_data is a Python dictionary
+
+    except FileNotFoundError:
+        logger.error(f"❌ Error: The file '{CQL2_FILTERS_PATH}' does not exist.")
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Error: The file '{CQL2_FILTERS_PATH}' is not valid JSON. Details: {e}")
+    except Exception as e:
+        logger.error(f"❌ Unexpected error while reading file '{CQL2_FILTERS_PATH}' : {e}")
+
+    logger.debug(f"Read CQL2 filter content from file '{CQL2_FILTERS_PATH}' : {cql2_json}")
+
+    # Find the filter
+    filter_temp = next(entry for entry in cql2_json if entry["name"] == cql2_query_name)
+    filter_json = {"filter": filter_temp["stac"]["filter"]}
+
+    return substitute_values(filter_json, {"product_type": product_type, "dTa": dTa, "dTb": dTb})
+
+
+@task(name="schedule conversion")
+async def schedule_adf_conversion(
+    owner_identifier: str,
     product_type: str,
-    start: datetime,
-    stop: datetime,
+    cql2_query_name: str,
+    dTa: int,
+    dTb: int,
+    period_in_hours: int,
+    period_start: datetime,
+    period_end: datetime,
 ) -> None:
     """
     Convert a single ADF data.
@@ -74,6 +157,79 @@ async def convert_adf_single_type(
 
     """
     logger = get_run_logger()
-    logger.info(
-        f"Converting ADF data for product type {product_type} from {start.strftime('%Y-%m-%d %H:%M')} to {stop.strftime('%Y-%m-%d %H:%M')}",
+    logger.setLevel(logging.DEBUG)
+
+    logger.info("Computing cql2_filter without start stop dates...")
+    cql2_filter_without_date = compute_filter(product_type, cql2_query_name, dTa, dTb)
+
+    # Scheduling according to the period_in_hours
+    if period_in_hours == 0:
+        # special case where a single run is requested
+        logger.info(
+            f"Schedule the flow conversion to start at {period_start,} for a time range {period_start}-{period_end}.",
+        )
+        logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
+        await schedule_conversion_flow(
+            owner_identifier,
+            period_start,
+            cql2_filter_without_date,
+            product_type,
+            period_start,
+            period_end,
+        )
+    else:
+        duration_hours = timedelta(hours=period_in_hours)
+        start = period_start
+        while start < period_end:
+            stop = min(start + duration_hours, period_end)
+            logger.info(f"Schedule the flow conversion to start at {stop} for a time range {start}-{stop}.")
+            logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
+            await schedule_conversion_flow(owner_identifier, stop, cql2_filter_without_date, product_type, start, stop)
+            start += duration_hours
+
+
+async def schedule_conversion_flow(
+    owner_identifier: str,
+    schedule_start: datetime,
+    cql2_filter_without_date: dict,
+    product_type: str,
+    start: datetime,
+    stop: datetime,
+) -> None:
+
+    logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
+
+    # add the sceduling of the  conversion @flow
+    # Create the rrule object
+    # formatted = schedule_start.strftime("%Y%m%dT%H%M%SZ")
+    # rrule = RRule(
+    #     dtstart="20260604T180300Z",
+    #     freq="DAILY",
+    #    count=1,
+    # )
+
+    await adf_conversion_fake.deploy(
+        name="one-shot-flow",
+        parameters={
+            "env": FlowEnvArgs(owner_id=owner_identifier),
+            "adf_type": product_type,
+            "auxiliary_product_to_collection_identifier": [],
+            "cql2filter": cql2_filter_without_date,
+        },
+        # rrule="DTSTART:20260801T090000Z\nFREQ=WEEKLY;BYDAY=MO",
+        work_pool_name="on-demand-k8s-pool-prefect",
     )
+
+
+@flow(name="FAKE-convert-adf-FAKE")
+async def adf_conversion_fake(
+    env: FlowEnvArgs,
+    adf_type: str,
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
+    cql2filter: dict,
+) -> None:
+    logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
+
+    logger.info(f"Starting the conversion for {adf_type}")
