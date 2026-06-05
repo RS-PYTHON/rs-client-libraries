@@ -186,7 +186,7 @@ async def schedule_adf_conversion(
         )
 
     else:
-        period_corrected: timedelta = min(period_end - period_start, timedelta(hours=period_in_hours))
+        period_corrected: timedelta = min(period_end - period_start, timedelta(minutes=period_in_hours))
         logger.debug(f"period_corrected = {period_corrected}")
         start_rule: datetime = period_start + period_corrected
         stop_rule: datetime = period_end
@@ -245,6 +245,7 @@ async def adf_conversion_fake(
     logger.setLevel(logging.DEBUG)
 
     logger.info(f"Starting the conversion for {adf_type}")
-    start: datetime = flow_run.scheduled_start_time
-    cql2_filter = substitute_values(cql2_filter_without_date, {"start_datetime": start, "end_datetime": start + period})
+    start: datetime = flow_run.scheduled_start_time - period
+    stop: datetime = flow_run.scheduled_start_time
+    cql2_filter = substitute_values(cql2_filter_without_date, {"start_datetime": start, "end_datetime": stop})
     logger.debug(f"The CQL2 used for the conversion is {cql2_filter}")
