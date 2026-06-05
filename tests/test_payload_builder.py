@@ -509,7 +509,7 @@ def test_case_s1_l0_exact_output_with_regex():
             ],
             "input_adfs": [
                 {
-                    "name": "OSF",
+                    "name": "osf",
                     "mandatory": False,
                     "type": "filename",
                     "store_type": "safe",
@@ -531,7 +531,7 @@ def test_case_s1_l0_exact_output_with_regex():
                     ],
                 },
                 {
-                    "name": "FRO",
+                    "name": "fro",
                     "mandatory": False,
                     "type": "filename",
                     "store_type": "safe",
