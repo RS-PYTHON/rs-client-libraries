@@ -86,7 +86,6 @@ async def convert_adf_data(
         schedule_start = now_utc if period_start_datetime < now_utc else period_start_datetime
         logger.info(f"Scheduling ADF conversion for the period [{schedule_start} - {period_end_datetime}]")
         for item in aux_to_be_generated:
-            # renamed_task = schedule_adf_conversion.rename("titi")
             await schedule_adf_conversion.with_options(name=f"schedule {item['product_type']}  ")(
                 owner_identifier,
                 item["product_type"],
@@ -99,6 +98,26 @@ async def convert_adf_data(
             )
         else:
             logger.info("No future period to schedule. All AUX data retrieval is for past dates.")
+
+    # 2) Continue with transformation on the past
+    if period_start_datetime < now_utc:
+        retrieve_past_start = period_start_datetime
+        retrieve_past_end = now_utc if period_end_datetime > now_utc else period_end_datetime
+
+        logger.info(f"Convert ADF for the period [{retrieve_past_start} - {retrieve_past_end}]")
+        for item in aux_to_be_generated:
+            await past_adf_conversion.with_options(name=f"convert {item['product_type']}  ")(
+                owner_identifier,
+                item["product_type"],
+                item["cql2_query_name"],
+                item.get("dTa", 0),
+                item.get("dTb", 0),
+                item["period_in_hours"],
+                retrieve_past_start,
+                retrieve_past_end,
+            )
+        else:
+            logger.info("No AUX data to retrieve in the past. Flows have been scheduled to retrieved them later on.")
 
 
 class SafeDict(dict):
@@ -142,6 +161,57 @@ def compute_filter(product_type: str, cql2_query_name: str, dTa: int, dTb: int) 
     return substitute_values(filter_json, {"product_type": product_type, "dTa": dTa, "dTb": dTb})
 
 
+@task(name="conversion from the past")
+async def past_adf_conversion(
+    owner_identifier: str,
+    product_type: str,
+    cql2_query_name: str,
+    dTa: int,
+    dTb: int,
+    period_in_hours: int,
+    period_start: datetime,
+    period_end: datetime,
+) -> None:
+    """ """
+    logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
+
+    logger.info("Computing cql2_filter without start_datetime and end_datetime...")
+    cql2_filter_without_date = compute_filter(product_type, cql2_query_name, dTa, dTb)
+
+    # Scheduling according to the period_in_hours
+    if period_in_hours == 0:
+        # special case where a single run is requested
+        logger.info(
+            f"Run the conversion task to start at {period_start} for a time range [{period_start}-{period_end}].",
+        )
+        logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
+
+        await schedule_conversion_flow(
+            owner_identifier,
+            rule,
+            cql2_filter_without_date,
+            product_type,
+            period_end - period_start,
+        )
+
+    else:
+        period_corrected: timedelta = min(period_end - period_start, timedelta(minutes=period_in_hours))
+        logger.debug(f"period_corrected = {period_corrected}")
+        start_rule: datetime = period_start + period_corrected
+        stop_rule: datetime = period_end
+        rule: str = (
+            f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=MINUTELY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}"
+        )
+        logger.debug(f"rule = {rule}")
+
+        logger.info(
+            f"Schedule the flow conversion to start at {start_rule} for a time range [{period_start}-{period_end}].",
+        )
+        logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
+        await schedule_conversion_flow(owner_identifier, rule, cql2_filter_without_date, product_type, period_corrected)
+
+
 @task(name="schedule conversion")
 async def schedule_adf_conversion(
     owner_identifier: str,
@@ -163,7 +233,7 @@ async def schedule_adf_conversion(
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
-    logger.info("Computing cql2_filter without start stop dates...")
+    logger.info("Computing cql2_filter without start_datetime and end_datetime...")
     cql2_filter_without_date = compute_filter(product_type, cql2_query_name, dTa, dTb)
 
     # Scheduling according to the period_in_hours
@@ -215,11 +285,11 @@ async def schedule_conversion_flow(
 
     flow_obj = await flow.from_source(
         source=GitRepository(url=GITHUB_URL, branch=GITHUB_BRANCH),
-        entrypoint="rs_workflows/on_demand/adf/convert_adf_set.py:adf_conversion_fake",
+        entrypoint="rs_workflows/on_demand/adf/convert_adf_set.py:adf_conversion_scheduled",
     )
 
     await flow_obj.deploy(
-        name=f"FAKE conversion-{product_type}",
+        name=f"Convert ADF {product_type}",
         work_pool_name=PREFECT_WORKPOOL,
         rrule=rule,
         tags=["auxip", "conversion"],
@@ -233,8 +303,8 @@ async def schedule_conversion_flow(
     )
 
 
-@flow(name="FAKE-convert-adf-FAKE")
-async def adf_conversion_fake(
+@flow(name="convert-adf-scheduled")
+async def adf_conversion_scheduled(
     env: FlowEnvArgs,
     adf_type: str,
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
@@ -249,3 +319,5 @@ async def adf_conversion_fake(
     stop: datetime = flow_run.scheduled_start_time
     cql2_filter = substitute_values(cql2_filter_without_date, {"start_datetime": start, "end_datetime": stop})
     logger.debug(f"The CQL2 used for the conversion is {cql2_filter}")
+
+    ## CALL the conversion task with env, auxilliary_product_to_collection_identifier and cql2_filter
