@@ -309,13 +309,15 @@ async def adf_conversion_scheduled(
     adf_type: str,
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
     cql2_filter_without_date: dict,
-    period: timedelta,
+    period: str,
 ) -> None:
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
+    decoded_period: timedelta = timedelta(seconds=int(period))
+
     logger.info(f"Starting the conversion for {adf_type}")
-    start: datetime = flow_run.scheduled_start_time - period
+    start: datetime = flow_run.scheduled_start_time - decoded_period
     stop: datetime = flow_run.scheduled_start_time
     cql2_filter = substitute_values(cql2_filter_without_date, {"start_datetime": start, "end_datetime": stop})
     logger.debug(f"The CQL2 used for the conversion is {cql2_filter}")
