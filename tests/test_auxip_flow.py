@@ -50,7 +50,13 @@ async def test_search_returns_found_items(monkeypatch, mocker, mock_auxip_logger
     result = await auxip_flow.search.fn(env, {"filter": {"foo": "bar"}, "limit": 3, "sortby": []})
 
     assert result is found
-    auxip_client.search.assert_called_once_with(method="POST", stac_filter={"foo": "bar"}, max_items=3, sortby=[])
+    auxip_client.search.assert_called_once_with(
+        method="POST",
+        stac_filter={"foo": "bar"},
+        max_items=3,
+        sortby=[],
+        timestamp=None,
+    )
 
 
 @pytest.mark.asyncio
@@ -64,7 +70,7 @@ async def test_search_raises_when_empty_and_error_if_empty(monkeypatch, mocker, 
     flow_env.rs_client.get_auxip_client.return_value = auxip_client
     monkeypatch.setattr(auxip_flow, "FlowEnv", lambda env: flow_env)
 
-    with pytest.raises(ValueError, match="No Auxip product found"):
+    with pytest.raises(ValueError, match="No AUX product found"):
         await auxip_flow.search.fn(env, {"filter": {"foo": "bar"}}, error_if_empty=True)
 
 
