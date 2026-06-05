@@ -140,6 +140,11 @@ async def aux_staging(
             logger.info("Nothing to stage: AUX search with given filter returned empty result.")
             return True, None
 
+        # Catalog results are already staged items, so pass them directly to the next processing step.
+        if source == AuxiliarySource.CATALOG:
+            logger.info("AUX items found in catalog; skipping staging.")
+            return True, aux_items
+
         # Stage Auxip items
         staged = staging_task.submit(
             flow_env.serialize(),
