@@ -21,12 +21,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 from prefect import flow, get_run_logger, task
-from prefect.schedules import RRule, Schedule
+from prefect.runner.storage import GitRepository
 from prefect.variables import Variable
 
 from rs_workflows.flow_utils import AuxiliaryProductMapping, FlowEnv, FlowEnvArgs
 
 CQL2_FILTERS_PATH: str = "./config/cql2_filters.json"
+PREFECT_WORKPOOL: str = "on-demand-k8s-pool-prefect"
+GITHUB_URL: str = "https://github.com/RS-PYTHON/rs-client-libraries.git"
+GITHUB_BRANCH: str = "rspy-1074/create-flow-convert-adf-group"
 
 
 @flow(name="convert-adf-group")
@@ -166,59 +169,66 @@ async def schedule_adf_conversion(
     if period_in_hours == 0:
         # special case where a single run is requested
         logger.info(
-            f"Schedule the flow conversion to start at {period_start,} for a time range {period_start}-{period_end}.",
+            f"Schedule the flow conversion to start at {period_start} for a time range [{period_start}-{period_end}].",
         )
         logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
+        rule: str = (
+            f"DTSTART:{period_start.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=HOURLY;UNTIL={period_start.strftime("%Y%m%dT%H%M%SZ")}"
+        )
+
         await schedule_conversion_flow(
             owner_identifier,
-            period_start,
+            rule,
             cql2_filter_without_date,
             product_type,
-            period_start,
-            period_end,
+            period_end - period_start,
         )
+
     else:
-        duration_hours = timedelta(hours=period_in_hours)
-        start = period_start
-        while start < period_end:
-            stop = min(start + duration_hours, period_end)
-            logger.info(f"Schedule the flow conversion to start at {stop} for a time range {start}-{stop}.")
-            logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
-            await schedule_conversion_flow(owner_identifier, stop, cql2_filter_without_date, product_type, start, stop)
-            start += duration_hours
+        period_corrected: timedelta = min(period_end - period_start, timedelta(hours=period_in_hours))
+        logger.debug(f"period_corrected = {period_corrected}")
+        start_rule: datetime = period_start + period_corrected
+        stop_rule: datetime = period_end
+        rule: str = (
+            f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=HOURLY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}"
+        )
+        logger.debug(f"rule = {rule}")
+
+        logger.info(
+            f"Schedule the flow conversion to start at {start_rule} for a time range [{period_start}-{period_end}].",
+        )
+        logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
+        await schedule_conversion_flow(owner_identifier, rule, cql2_filter_without_date, product_type, period_corrected)
 
 
 async def schedule_conversion_flow(
     owner_identifier: str,
-    schedule_start: datetime,
+    rule: str,
     cql2_filter_without_date: dict,
     product_type: str,
-    start: datetime,
-    stop: datetime,
+    period: timedelta,
 ) -> None:
 
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
-    # add the sceduling of the  conversion @flow
-    # Create the rrule object
-    # formatted = schedule_start.strftime("%Y%m%dT%H%M%SZ")
-    # rrule = RRule(
-    #     dtstart="20260604T180300Z",
-    #     freq="DAILY",
-    #    count=1,
-    # )
+    flow_obj = await flow.from_source(
+        source=GitRepository(url=GITHUB_URL, branch=GITHUB_BRANCH),
+        entrypoint="rs_workflows/on_demand/adf/convert_adf_set.py:adf_conversion_fake",
+    )
 
-    await adf_conversion_fake.deploy(
-        name="one-shot-flow",
+    await flow_obj.deploy(
+        name=f"FAKE conversion-{product_type}",
+        work_pool_name=PREFECT_WORKPOOL,
+        rrule=rule,
+        tags=["auxip", "conversion"],
         parameters={
             "env": FlowEnvArgs(owner_id=owner_identifier),
             "adf_type": product_type,
             "auxiliary_product_to_collection_identifier": [],
-            "cql2filter": cql2_filter_without_date,
+            "cql2_filter_without_date": cql2_filter_without_date,
+            "period": period,
         },
-        # rrule="DTSTART:20260801T090000Z\nFREQ=WEEKLY;BYDAY=MO",
-        work_pool_name="on-demand-k8s-pool-prefect",
     )
 
 
@@ -227,9 +237,13 @@ async def adf_conversion_fake(
     env: FlowEnvArgs,
     adf_type: str,
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
-    cql2filter: dict,
+    cql2_filter_without_date: dict,
+    period: timedelta,
 ) -> None:
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
     logger.info(f"Starting the conversion for {adf_type}")
+    start: datetime = flow_run.scheduled_start_time
+    cql2_filter = substitute_values(cql2_filter_without_date, {"start_datetime": start, "end_datetime": start + period})
+    logger.debug(f"The CQL2 used for the conversion is {cql2_filter}")
