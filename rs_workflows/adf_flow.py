@@ -12,479 +12,312 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Adf conversion flow implementation."""
+"""Convert a set of ADF data."""
 
 import json
-import os
-import shutil
-import subprocess  # nosec B404
-import sys
-import tempfile
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import NamedTuple
+import logging
+from collections.abc import Awaitable
+from datetime import datetime, timedelta, timezone
+from typing import Any, cast
 
-from dateutil.parser import parse as parse_date
 from prefect import flow, get_run_logger, task
-from pystac import Asset, Item
+from prefect.runner.storage import GitRepository
+from prefect.runtime import flow_run
+from prefect.variables import Variable
 
-from rs_common.prefect_utils import s3_upload_dir, s3_upload_file
-from rs_workflows.auxip_flow import auxip_staging_task
-from rs_workflows.catalog_flow import publish
-from rs_workflows.flow_utils import (
-    AdfProcessIn,
-    AdfType,
-    DprProcessedItemMetadata,
-    FlowEnv,
-    FlowGeneratedProduct,
-)
-from rs_workflows.payload_generator import (
-    fetch_csv_from_endpoint,
-    find_s3_output_bucket,
-)
-from rs_workflows.utils.utils import download_and_extract_assets_task
+from rs_workflows.flow_utils import AuxiliaryProductMapping, FlowEnv, FlowEnvArgs
 
-# Path to the conversion scripts
-ADF_ECMWA_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWA.py"
-ADF_ECMWF_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWF.py"
-ADF_GETAS_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_GETAS.py"
-ADF_WATER_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_WATER.py"
-
-# Sentinel value indicating the stb_convert_products tool should be used
-STB_CONVERT_PRODUCTS = "stb_convert_products"
+CQL2_FILTERS_PATH: str = "./config/cql2_filters.json"
+PREFECT_WORKPOOL: str = "on-demand-k8s-pool-prefect"
+GITHUB_URL: str = "https://github.com/RS-PYTHON/rs-client-libraries.git"
+GITHUB_BRANCH: str = "rspy-1074/create-flow-convert-adf-group"
 
 
-class AdfConversionConfig(NamedTuple):
-    """Configuration needed to run one ADF conversion type."""
-
-    required_types: list[str]
-    generated_prod_type: str
-    script_path: Path | str
-
-
-class S03OlAdfConfig(NamedTuple):
-    """Configuration specific to one S03 OL ADF type."""
-
-    required_type: str
-    generated_prod_type: str
-
-
-S03_OL_ADF_TYPE_CONFIG: dict[str, S03OlAdfConfig] = {
-    AdfType.S03_ADF_OLCAL: S03OlAdfConfig(required_type="OL_1_CAL_AX", generated_prod_type="ADF_OLCAL"),
-    AdfType.S03_ADF_OLEOP: S03OlAdfConfig(required_type="OL_1_EO__AX", generated_prod_type="ADF_OLEOP"),
-    AdfType.S03_ADF_OLINS: S03OlAdfConfig(required_type="OL_1_INS_AX", generated_prod_type="ADF_OLINS"),
-    AdfType.S03_ADF_OLLUT: S03OlAdfConfig(required_type="OL_1_CLUTAX", generated_prod_type="ADF_OLLUT"),
-    AdfType.S03_ADF_OLPRG: S03OlAdfConfig(required_type="OL_1_PRG_AX", generated_prod_type="ADF_OLPRG"),
-    AdfType.S03_ADF_OLRAC: S03OlAdfConfig(required_type="OL_1_RAC_AX", generated_prod_type="ADF_OLRAC"),
-    AdfType.S03_ADF_OLSPC: S03OlAdfConfig(required_type="OL_1_SPC_AX", generated_prod_type="ADF_OLSPC"),
-}
-
-
-ADF_TYPE_CONFIG: dict[str, AdfConversionConfig] = {
-    # We need AX___MA1_AX and AX___MA2_AX for S00__ADF_ECMWA.
-    # AX___MA2_AX is not used anymore in S00__ADF_ECMWA.py. Add it back here if the script uses it again.
-    AdfType.S00__ADF_ECMWA: AdfConversionConfig(
-        required_types=["AX___MA1_AX"],
-        generated_prod_type="ADF_ECMWA",
-        script_path=ADF_ECMWA_SCRIPT_PATH,
-    ),
-    # We need AX___MF1_AX and AX___MF2_AX for S00__ADF_ECMWF.
-    # AX___MF2_AX is not used anymore in S00__ADF_ECMWF.py. Add it back here if the script uses it again.
-    AdfType.S00__ADF_ECMWF: AdfConversionConfig(
-        required_types=["AX___MF1_AX"],
-        generated_prod_type="ADF_ECMWF",
-        script_path=ADF_ECMWF_SCRIPT_PATH,
-    ),
-    AdfType.S00__ADF_GETAS: AdfConversionConfig(
-        required_types=["AX___DEM_AX"],
-        generated_prod_type="ADF_GETAS",
-        script_path=ADF_GETAS_SCRIPT_PATH,
-    ),
-    AdfType.S00__ADF_WATER: AdfConversionConfig(
-        required_types=[
-            "AX___LWM_AX",
-            "AX___CLM_AX",
-            "AX___TRM_AX",
-            "AX___OOM_AX",
-            "SR_2_MLM_AX",
-            "SR_2_SURFAX",
-        ],
-        generated_prod_type="ADF_WATER",
-        script_path=ADF_WATER_SCRIPT_PATH,
-    ),
-    **{
-        adf_type: AdfConversionConfig(
-            required_types=[s03_config.required_type],
-            generated_prod_type=s03_config.generated_prod_type,
-            script_path=STB_CONVERT_PRODUCTS,
-        )
-        for adf_type, s03_config in S03_OL_ADF_TYPE_CONFIG.items()
-    },
-}
-
-STAC_DATETIME_PROPERTY_NAMES = {
-    "created",
-    "updated",
-    "published",
-    "datetime",
-    "start_datetime",
-    "end_datetime",
-}
-
-
-def resolve_collection_name(mappings, product_type: str) -> str | None:
-    """Resolve a collection name from mappings, preferring an exact match over '*'."""
-    fallback_collection = None
-    for mapping in mappings:
-        if mapping.product_type == product_type:
-            return mapping.collection_name
-        if mapping.product_type == "*" and fallback_collection is None:
-            fallback_collection = mapping.collection_name
-    return fallback_collection
-
-
-def normalize_stac_datetime_value(value: str) -> str:
-    """Normalize a datetime string to an RFC 3339 UTC representation."""
-    parsed_value = parse_date(value)
-    if parsed_value.tzinfo is None:
-        parsed_value = parsed_value.replace(tzinfo=timezone.utc)
-    else:
-        parsed_value = parsed_value.astimezone(timezone.utc)
-    return parsed_value.isoformat().replace("+00:00", "Z")
-
-
-def normalize_stac_properties_datetimes(stac_props: dict) -> dict:
-    """Normalize STAC datetime-like property values to include an explicit timezone."""
-    normalized_props = dict(stac_props)
-    for key in STAC_DATETIME_PROPERTY_NAMES:
-        value = normalized_props.get(key)
-        if isinstance(value, str):
-            normalized_props[key] = normalize_stac_datetime_value(value)
-    return normalized_props
-
-
-@task(name="Run ADF conversion")
-def run_adf_script(script_path: Path | str, data_dir: Path, working_dir: Path, output_dir: Path) -> list[Path]:
+@flow(name="convert-adf-group")
+async def convert_adf_data(
+    owner_identifier: str,
+    period_start_datetime: datetime,
+    period_end_datetime: datetime,
+    adf_group_name: str,
+) -> None:
     """
-    Run an ADF conversion tool with the given input and output directories.
+    Convert a set of ADF (Auxiliary Data Files) data for a specified group and time period.
 
-    When *script_path* is a Path, the corresponding Python script is executed
-    with the current interpreter.  When it equals :data:`STB_CONVERT_PRODUCTS`,
-    the ``stb_convert_products`` executable is called instead.
+    Args:
+        period_start_datetime: Start datetime of the period to convert (UTC).
+        period_end_datetime: End datetime of the period to convert (UTC).
+        adf_group_name: Name of the ADF group (Prefect Variable) containing the configuration.
 
-    Returns the list of generated ZARR product directories and JSON files.
+    Behavior:
+        - The part of the period in the past is processed immediately.
+        - The part of the period in the future is scheduled for later execution.
+
+    Raises:
+        ValueError: If `period_start_datetime` is not before `period_end_datetime` or if the Prefect Variable format is invalid.
+        FileNotFoundError: If the Prefect Variable does not exist.
     """
+
     logger = get_run_logger()
-    logger.info(f"Running ADF conversion: {script_path}")
+    # logger.level = logging.DEBUG
+    # logger.propagate = True
+    logger.setLevel(logging.DEBUG)
 
-    def log_subprocess_output(output: str):
-        """Forward subprocess output to the Prefect logger line by line."""
-        for line in output.splitlines():
-            logger.info(f"Conversion log: {line}")
+    # Check input chronology
+    if period_start_datetime >= period_end_datetime:
+        raise ValueError(
+            f"❌ period_start_datetime should be before period_end_datetime ( here {period_start_datetime} >= {period_end_datetime})",
+        )
 
-    # Build command depending on the conversion tool
-    if script_path == STB_CONVERT_PRODUCTS:
-        command = ["stb_convert_products", "-i", str(data_dir), "-o", str(output_dir)]
-        env = None  # inherit current environment
-    else:
-        env = os.environ.copy()
-        env["ADF_OUTPUT"] = str(output_dir)
-        # ADF_INPUT is used specifically by the script S00__ADF_GETAS.py to find the input data
-        # we also pass it as an argument for the other scripts that don't use this variable, but
-        # they receive it as an argument without causing any issue
-        env["ADF_INPUT"] = str(data_dir)
-        command = [sys.executable, str(script_path), str(data_dir), "--working_dir", str(working_dir)]
+    # Read the Prefect Variable and extract list of aux to manage
+    raw_data = await cast(Awaitable[Any], Variable.get(adf_group_name))
+    if raw_data is None:
+        raise FileExistsError(f"❌ Prefect variable '{adf_group_name}' does not exist.")
+    if not isinstance(raw_data, dict):
+        raise ValueError(f"❌ Prefect variable '{adf_group_name}' has got an invalid format.")
+    settings: dict[str, Any] = raw_data
+    satellite = settings.get("satellite", "")
+    aux_to_be_generated = settings.get("aux-to-be-generated", [])
+
+    # Split the problem in two : past and future period.
+    now_utc = datetime.now(timezone.utc)
+
+    # 1) Let's start with future period
+    if period_end_datetime > now_utc:
+        schedule_start = now_utc if period_start_datetime < now_utc else period_start_datetime
+        logger.info(f"Scheduling ADF conversion for the period [{schedule_start} - {period_end_datetime}]")
+        for item in aux_to_be_generated:
+            await schedule_adf_conversion.with_options(name=f"schedule {item['product_type']}  ")(
+                owner_identifier,
+                item["product_type"],
+                item["cql2_query_name"],
+                item.get("dTa", 0),
+                item.get("dTb", 0),
+                item["period_in_hours"],
+                schedule_start,
+                period_end_datetime,
+            )
+        else:
+            logger.info("No future period to schedule. All AUX data retrieval is for past dates.")
+
+    # 2) Continue with transformation on the past
+    if period_start_datetime < now_utc:
+        retrieve_past_start = period_start_datetime
+        retrieve_past_end = now_utc if period_end_datetime > now_utc else period_end_datetime
+
+        logger.info(f"Convert ADF for the period [{retrieve_past_start} - {retrieve_past_end}]")
+        for item in aux_to_be_generated:
+            await past_adf_conversion.with_options(name=f"convert {item['product_type']}  ")(
+                owner_identifier,
+                item["product_type"],
+                item["cql2_query_name"],
+                item.get("dTa", 0),
+                item.get("dTb", 0),
+                item["period_in_hours"],
+                retrieve_past_start,
+                retrieve_past_end,
+            )
+        else:
+            logger.info("No AUX data to retrieve in the past. Flows have been scheduled to retrieved them later on.")
+
+
+class SafeDict(dict):
+    def __missing__(self, key):
+        return "{" + key + "}"
+
+
+def substitute_values(obj, values):
+    if isinstance(obj, dict):
+        return {k: substitute_values(v, values) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [substitute_values(v, values) for v in obj]
+    if isinstance(obj, str):
+        return obj.format_map(SafeDict(values))
+    return obj
+
+
+def compute_filter(product_type: str, cql2_query_name: str, dTa: int, dTb: int) -> dict:
+
+    logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
 
     try:
-        result = subprocess.run(  # nosec B603
-            # trusted local script / executable with flow-created paths
-            command,
-            env=env,
-            check=True,
-            capture_output=True,
-            text=True,
+        # Read the file and load its content into a variable
+        with open(CQL2_FILTERS_PATH, encoding="utf-8") as file:
+            cql2_json = json.load(file)  # json_data is a Python dictionary
+
+    except FileNotFoundError:
+        logger.error(f"❌ Error: The file '{CQL2_FILTERS_PATH}' does not exist.")
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Error: The file '{CQL2_FILTERS_PATH}' is not valid JSON. Details: {e}")
+    except Exception as e:
+        logger.error(f"❌ Unexpected error while reading file '{CQL2_FILTERS_PATH}' : {e}")
+
+    logger.debug(f"Read CQL2 filter content from file '{CQL2_FILTERS_PATH}' : {cql2_json}")
+
+    # Find the filter
+    filter_temp = next(entry for entry in cql2_json if entry["name"] == cql2_query_name)
+    filter_json = {"filter": filter_temp["stac"]["filter"]}
+
+    return substitute_values(filter_json, {"product_type": product_type, "dTa": dTa, "dTb": dTb})
+
+
+@task(name="conversion from the past")
+async def past_adf_conversion(
+    owner_identifier: str,
+    product_type: str,
+    cql2_query_name: str,
+    dTa: int,
+    dTb: int,
+    period_in_hours: int,
+    period_start: datetime,
+    period_end: datetime,
+) -> None:
+    """ """
+    logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
+
+    logger.info("Computing cql2_filter without start_datetime and end_datetime...")
+    cql2_filter_without_date = compute_filter(product_type, cql2_query_name, dTa, dTb)
+
+    # Scheduling according to the period_in_hours
+    if period_in_hours == 0:
+        # special case where a single run is requested
+        logger.info(
+            f"Run the conversion task to start at {period_start} for a time range [{period_start}-{period_end}].",
         )
-        log_subprocess_output(result.stdout)
-        log_subprocess_output(result.stderr)
-    except subprocess.CalledProcessError as e:
-        log_subprocess_output(e.stdout or "")
-        log_subprocess_output(e.stderr or "")
-        logger.error(f"ADF conversion failed with exit code {e.returncode}")
-        raise
+        logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
 
-    # find the generated ZARR directories and JSON files in output_dir
-    zarr_products = sorted(output_dir.glob("*.zarr"))
-    json_products = sorted(output_dir.glob("*.json"))
-    all_products = zarr_products + json_products
-    if not all_products:
-        raise RuntimeError(
-            f"No ZARR or JSON product generated in {output_dir}. The content of this dir is: "
-            f"{list(output_dir.glob('*'))}",
+        await schedule_conversion_flow(
+            owner_identifier,
+            rule,
+            cql2_filter_without_date,
+            product_type,
+            period_end - period_start,
         )
 
-    return all_products
+    else:
+        period_corrected: timedelta = min(period_end - period_start, timedelta(minutes=period_in_hours))
+        logger.debug(f"period_corrected = {period_corrected}")
+        start_rule: datetime = period_start + period_corrected
+        stop_rule: datetime = period_end
+        rule: str = (
+            f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=MINUTELY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}"
+        )
+        logger.debug(f"rule = {rule}")
+
+        logger.info(
+            f"Schedule the flow conversion to start at {start_rule} for a time range [{period_start}-{period_end}].",
+        )
+        logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
+        await schedule_conversion_flow(owner_identifier, rule, cql2_filter_without_date, product_type, period_corrected)
 
 
-@task(name="Create STAC Item from ZARR metadata")
-def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Item:
+@task(name="schedule conversion")
+async def schedule_adf_conversion(
+    owner_identifier: str,
+    product_type: str,
+    cql2_query_name: str,
+    dTa: int,
+    dTb: int,
+    period_in_hours: int,
+    period_start: datetime,
+    period_end: datetime,
+) -> None:
     """
-    Create a STAC Item from a generated ZARR directory or JSON file.
+    Convert a single ADF data.
+     - product_type: type of the product to convert.
+     - start: start datetime of the period to convert.
+     - stop: end datetime of the period to convert.
 
-    For ZARR directories, metadata is read from .zattrs or zarr.json.
-    For JSON files, the file itself is the metadata and the item ID is
-    taken from stac_discovery.id when present, otherwise it is derived
-    from the filename (minus the .json extension).
     """
     logger = get_run_logger()
-    is_json_product = zarr_path.suffix == ".json"
+    logger.setLevel(logging.DEBUG)
 
-    if is_json_product:
-        logger.info(f"Creating STAC item from JSON file: {zarr_path}")
-        metadata_path = zarr_path
+    logger.info("Computing cql2_filter without start_datetime and end_datetime...")
+    cql2_filter_without_date = compute_filter(product_type, cql2_query_name, dTa, dTb)
+
+    # Scheduling according to the period_in_hours
+    if period_in_hours == 0:
+        # special case where a single run is requested
+        logger.info(
+            f"Schedule the flow conversion to start at {period_start} for a time range [{period_start}-{period_end}].",
+        )
+        logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
+        rule: str = (
+            f"DTSTART:{period_start.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=HOURLY;UNTIL={period_start.strftime("%Y%m%dT%H%M%SZ")}"
+        )
+
+        await schedule_conversion_flow(
+            owner_identifier,
+            rule,
+            cql2_filter_without_date,
+            product_type,
+            period_end - period_start,
+        )
+
     else:
-        logger.info(f"Creating STAC item from ZARR: {zarr_path}")
-        # read .zattrs for global attributes
-        metadata_path = zarr_path / ".zattrs"
-        if not metadata_path.exists():
-            # try zarr.json if .zattrs doesn't exist
-            metadata_path = zarr_path / "zarr.json"
+        period_corrected: timedelta = min(period_end - period_start, timedelta(minutes=period_in_hours))
+        logger.debug(f"period_corrected = {period_corrected}")
+        start_rule: datetime = period_start + period_corrected
+        stop_rule: datetime = period_end
+        rule: str = (
+            f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=MINUTELY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}"
+        )
+        logger.debug(f"rule = {rule}")
 
-    if not metadata_path.exists():
-        raise RuntimeError(f"Metadata file (.zattrs or zarr.json) not found in {zarr_path}")
+        logger.info(
+            f"Schedule the flow conversion to start at {start_rule} for a time range [{period_start}-{period_end}].",
+        )
+        logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
+        await schedule_conversion_flow(owner_identifier, rule, cql2_filter_without_date, product_type, period_corrected)
 
-    with open(metadata_path, encoding="utf-8") as f:
-        metadata = json.load(f)
 
-    stac_discovery = metadata.get("stac_discovery") if isinstance(metadata.get("stac_discovery"), dict) else {}
-    stac_metadata = stac_discovery if is_json_product and stac_discovery else metadata
+async def schedule_conversion_flow(
+    owner_identifier: str,
+    rule: str,
+    cql2_filter_without_date: dict,
+    product_type: str,
+    period: timedelta,
+) -> None:
 
-    # extract STAC properties from metadata.
-    # the scripts put them in 'properties' attribute.
-    logger.info(f"Stac discovery metadata: {stac_discovery}")
-    logger.info(f'Product metadata: {stac_metadata.get("properties", {})}')
-    stac_props = normalize_stac_properties_datetimes(stac_metadata.get("properties", {}))
-    logger.info(f"Extracted STAC properties from product metadata: {stac_props}")
+    logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
 
-    # requirement: "Create a STAC item ... with generated product type as product:type"
-    # but the script may set it differently
-    stac_props["product:type"] = generated_prod_type
-
-    # For JSON files prefer the STAC discovery item ID, otherwise use the filename
-    # without the .json extension. For ZARR directories fall back to metadata ID.
-    if is_json_product:
-        item_id = stac_discovery.get("id") or zarr_path.stem
-    else:
-        item_id = metadata.get("id", zarr_path.stem)
-    logger.info(f"Setting item_id to {item_id}")
-
-    # extract start/end datetime for pystac.Item validation.
-    # try to find them in the metadata, but if they are not present, fallback to 'created'
-    # or current time to avoid validation issues. The S00__ADF_GETAS.py script doesn't set but
-    # 'created' field in the metadata, but pystac requires at least one of them to be set, so we need
-    # a fallback mechanism in this case.
-    fallback_dt_str = stac_props.get("created") or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    start_dt_str = stac_props.get("start_datetime") or fallback_dt_str
-    end_dt_str = stac_props.get("end_datetime") or fallback_dt_str
-
-    start_dt = parse_date(start_dt_str) if start_dt_str else None
-    end_dt = parse_date(end_dt_str) if end_dt_str else None
-
-    # build basic STAC item
-    item = Item(
-        id=item_id,
-        geometry=stac_metadata.get("geometry", None),
-        bbox=stac_metadata.get("bbox", None),
-        datetime=None,
-        start_datetime=start_dt,
-        end_datetime=end_dt,
-        properties=stac_props,
+    flow_obj = await flow.from_source(
+        source=GitRepository(url=GITHUB_URL, branch=GITHUB_BRANCH),
+        entrypoint="rs_workflows/on_demand/adf/convert_adf_set.py:adf_conversion_scheduled",
     )
 
-    # add product as an asset
-    logger.info(f"Adding asset to STAC item with href {str(zarr_path)}")
-    if is_json_product:
-        item.add_asset(
-            key="data",
-            asset=Asset(
-                href=str(zarr_path),
-                title=item_id,
-                media_type="application/json",
-                roles=["data", "metadata"],
-            ),
-        )
-    else:
-        item.add_asset(
-            key="data",
-            asset=Asset(
-                href=str(zarr_path),
-                title=item_id,
-                media_type="application/vnd+zarr",
-                roles=["data", "metadata"],
-            ),
-        )
-
-    return item
+    await flow_obj.deploy(
+        name=f"Convert ADF {product_type}",
+        work_pool_name=PREFECT_WORKPOOL,
+        rrule=rule,
+        tags=["auxip", "conversion"],
+        parameters={
+            "env": FlowEnvArgs(owner_id=owner_identifier),
+            "adf_type": product_type,
+            "auxiliary_product_to_collection_identifier": [],
+            "cql2_filter_without_date": cql2_filter_without_date,
+            "period": period,
+        },
+    )
 
 
-@flow(name="convert-adf")
-async def adf_conversion(adf_input: AdfProcessIn):
-    """
-    Prefect flow for ADF conversion.
-    """
+@flow(name="convert-adf-scheduled")
+async def adf_conversion_scheduled(
+    env: FlowEnvArgs,
+    adf_type: str,
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
+    cql2_filter_without_date: dict,
+    period: timedelta,
+) -> None:
     logger = get_run_logger()
-    logger.info(f"Starting adf_conversion flow for adf_type: {adf_input.adf_type}")
+    logger.setLevel(logging.DEBUG)
 
-    flow_env = FlowEnv(adf_input.env)
-    with flow_env.start_span(__name__, "adf_conversion"):
-        # 1. Build CQL2 filters for required auxiliary types
-        adf_config = ADF_TYPE_CONFIG.get(adf_input.adf_type)
-        if adf_config is None:
-            logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
-            return
+    logger.info(f"Starting the conversion for {adf_type}")
+    start: datetime = flow_run.scheduled_start_time - period
+    stop: datetime = flow_run.scheduled_start_time
+    cql2_filter = substitute_values(cql2_filter_without_date, {"start_datetime": start, "end_datetime": stop})
+    logger.debug(f"The CQL2 used for the conversion is {cql2_filter}")
 
-        required_types = adf_config.required_types
-        generated_prod_type = adf_config.generated_prod_type
-        script_path = adf_config.script_path
-
-        staged_items: list[Item] = []
-        for prod_type in required_types:
-            cql2_filter = {
-                "filter": {
-                    "op": "and",
-                    "args": [
-                        {
-                            "op": "t_intersects",
-                            "args": [
-                                {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                                {
-                                    "interval": [
-                                        adf_input.start_datetime.isoformat() if adf_input.start_datetime else None,
-                                        adf_input.end_datetime.isoformat() if adf_input.end_datetime else None,
-                                    ],
-                                },
-                            ],
-                        },
-                        {"op": "=", "args": [{"property": "product:type"}, prod_type]},
-                    ],
-                },
-            }
-            logger.info(f"Built CQL2 filter for product type {prod_type}: {cql2_filter}")
-
-            # find target collection from mapping, preferring an exact product type match
-            target_collection = resolve_collection_name(
-                adf_input.auxiliary_product_to_collection_identifier,
-                prod_type,
-            )
-            if target_collection is None:
-                raise RuntimeError(
-                    "No target collection found for input product type "
-                    f"{prod_type!r} in auxiliary_product_to_collection_identifier.",
-                )
-
-            logger.info(f"Staging {prod_type} to collection {target_collection}")
-            success, items = await auxip_staging_task(
-                env=adf_input.env,
-                cql2_filter=cql2_filter,
-                catalog_collection_identifier=target_collection,
-            )
-            if success and items:
-                staged_items.extend(items)
-
-        if not staged_items:
-            logger.error("No staged items found to process.")
-            return
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            input_dir = temp_path / "INPUT"
-            work_dir = temp_path / "WORK"
-            output_dir = temp_path / "OUTPUT"
-
-            input_dir.mkdir()
-            work_dir.mkdir()
-            output_dir.mkdir()
-
-            # 2. Download and unzip assets locally
-            await download_and_extract_assets_task(staged_items, input_dir)  # type: ignore[arg-type]
-
-            # 3. Call the conversion tool
-            try:
-                zarr_product_paths = run_adf_script(script_path, input_dir, work_dir, output_dir)
-            finally:
-                logger.info(f"Cleaning up input directory {input_dir}")
-                shutil.rmtree(input_dir, ignore_errors=True)
-
-            # 4. Process each generated ZARR product
-            # compute bucket configuration once for all products
-            bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
-            owner_id = flow_env.owner_id
-
-            items_metadata: list[DprProcessedItemMetadata] = []
-            publish_mapping: list[FlowGeneratedProduct] = []
-
-            for zarr_product_path in zarr_product_paths:
-                # 5. Create STAC item for this ZARR
-                stac_item = create_stac_item_from_zarr(zarr_product_path, generated_prod_type)
-                stac_item.properties["product:type"] = generated_prod_type
-
-                # 6. Resolve destination collection
-                target_collection = resolve_collection_name(
-                    adf_input.auxiliary_product_to_collection_identifier,
-                    generated_prod_type,
-                )
-                if target_collection is None:
-                    raise RuntimeError(
-                        "No target collection found for generated product type "
-                        f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
-                    )
-
-                bucket_name = find_s3_output_bucket(
-                    bucket_configuration,
-                    owner_id,
-                    target_collection,
-                    generated_prod_type,
-                )
-
-                # 7. Upload product to S3 and update STAC item href
-                if zarr_product_path.suffix == ".json":
-                    s3_dest = f"s3://{bucket_name}/{owner_id}/{target_collection}/{zarr_product_path.name}"
-                    logger.info(f"Uploading JSON to {s3_dest}")
-                    await s3_upload_file(zarr_product_path, s3_dest)
-                    stac_item.assets["data"].href = s3_dest
-                else:
-                    zarr_suffix = ".zarr" if zarr_product_path.suffix == ".zarr" else ""
-                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}{zarr_suffix}/"
-                    logger.info(f"Uploading ZARR to {s3_dest_prefix}")
-                    await s3_upload_dir(zarr_product_path, s3_dest_prefix)
-                    stac_item.assets["data"].href = s3_dest_prefix
-
-                items_metadata.append(
-                    DprProcessedItemMetadata(
-                        output_product_id=stac_item.id,
-                        product_type=generated_prod_type,
-                        stac_item=stac_item,
-                    ),
-                )
-                publish_mapping.append(
-                    FlowGeneratedProduct(
-                        name=stac_item.id,
-                        product_type=generated_prod_type,
-                        collection_name=target_collection,
-                    ),
-                )
-
-            # 8. Publish all items to catalog
-            try:
-                await publish(
-                    adf_input.env,
-                    publish_mapping,
-                    items_metadata,
-                )
-            finally:
-                logger.info(f"Cleaning up output directory {output_dir}")
-                shutil.rmtree(output_dir, ignore_errors=True)
-
-
-if __name__ == "__main__":
-    # For testing purposes
-    pass
+    ## CALL the conversion task with env, auxilliary_product_to_collection_identifier and cql2_filter
