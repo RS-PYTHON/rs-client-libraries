@@ -807,7 +807,7 @@ def generate_payload(  # pylint: disable=unused-argument
     logging = None
     config = None
     if dpr_process_in.processor_name in (DprProcessor.S1L0, DprProcessor.S3L0):
-        logging = "/opt/dask-l0/logging_config.yaml"
+        logging = ["/opt/dask-l0/logging_config.yaml"]
         match dpr_process_in.processor_name:
             case DprProcessor.S1L0:
                 config = ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
