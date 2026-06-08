@@ -174,12 +174,12 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
     [
         (
             DprProcessor.S1L0,
-            "/opt/dask-l0/logging_config.yaml",
+            ["/opt/dask-l0/logging_config.yaml"],
             ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"],
         ),
         (
             DprProcessor.S3L0,
-            "/opt/dask-l0/logging_config.yaml",
+            ["/opt/dask-l0/logging_config.yaml"],
             ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"],
         ),
     ],
