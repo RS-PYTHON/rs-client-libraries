@@ -1008,3 +1008,201 @@ def test_build_output_products_ignores_extra_generated_products(mock_dpr_process
     assert len(result) == 1
     assert result[0].id == "S01SARRAW"
     assert "s01sarraw" in result[0].path  # ensures correct collection used
+
+
+# ----------------------------------------------------------------------
+# shared_disk / local_disk paths
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_input_products_disk_store_params_cleared(sample_unit, kind, mocker):
+    """
+    For shared_disk and local_disk input products the store_params must be None (disk
+    storages don't use S3 credentials)
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value=(None, "/mnt/shared/path/to/item"),
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", item_id="item_id", collection_name="coll_id")]
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None  # disk storages have no StoreParams
+    mock_storage.get_disk_storage.return_value = {
+        "path": "/mnt/shared/job-uuid",
+        "opening_mode": "READ_ONLY",
+        "autoclean": False,
+    }
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    assert len(inputs) == 1
+    inp = inputs[0]
+    assert inp.id == "S1CADUS"
+    assert inp.path == "/mnt/shared/path/to/item"  # path comes from STAC, not from disk_config
+    assert inp.store_params is None  # cleared for disk storages
+    assert inp.opening_mode == "READ_ONLY"
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_input_products_disk_no_disk_config(sample_unit, kind, mocker):
+    """
+    When get_disk_storage returns None for a disk kind storage, the opening_mode
+    should remain None and store_params should still be None.
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value=(None, "/mnt/shared/path/to/item"),
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", item_id="item_id", collection_name="coll_id")]
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None
+    mock_storage.get_disk_storage.return_value = None  # no disk config entry
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    assert len(inputs) == 1
+    inp = inputs[0]
+    assert inp.store_params is None
+    assert inp.opening_mode is None  # no disk_config → opening_mode stays None
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_output_products_disk_uses_disk_path(
+    sample_unit,
+    mock_dpr_process_in,
+    kind,
+    mocker,
+):
+    """
+    For shared_disk and local_disk output products path must come from disk_config["path"],
+    not from a bucket lookup and store_params must be None
+    """
+    disk_path = "/mnt/shared/job-uuid"
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None
+    mock_storage.get_disk_storage.return_value = {
+        "path": disk_path,
+        "opening_mode": "CREATE_OVERWRITE",
+        "autoclean": True,
+    }
+
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="out_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="out_type2", collection_name="OUT_COLL2"),
+    ]
+
+    mock_find_bucket = mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket")
+
+    outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    mock_find_bucket.assert_not_called()  # disk path → no S3 bucket resolution
+
+    assert len(outputs) == 2
+    for out in outputs:
+        assert out.path == disk_path
+        assert out.store_params is None
+        assert out.opening_mode == "CREATE_OVERWRITE"
+        assert out.autoclean is True
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_output_products_disk_autoclean_false(
+    sample_unit,
+    mock_dpr_process_in,
+    kind,
+    mocker,
+):
+    """
+    When autoclean is False in disk_config the OutputProduct must reflect that.
+    This is in case for shared_disk (it seems that the local_disk may be discarded in future,
+    according to our internal discussions)
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None
+    mock_storage.get_disk_storage.return_value = {
+        "path": "/mnt/shared/job-uuid",
+        "opening_mode": "CREATE",
+        "autoclean": False,
+    }
+
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="out_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="out_type2", collection_name="OUT_COLL2"),
+    ]
+
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket")
+
+    outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert len(outputs) == 2
+    for out in outputs:
+        assert out.autoclean is False
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_output_products_disk_missing_path_raises(
+    sample_unit,
+    mock_dpr_process_in,
+    kind,
+):
+    """
+    When the disk_config entry exists but contains no 'path' key,
+    a RuntimeError must be raised explaining which storage and product are affected.
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None
+    mock_storage.get_disk_storage.return_value = {
+        # 'path' key is intentionally absent
+        "opening_mode": "CREATE_OVERWRITE",
+        "autoclean": False,
+    }
+
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="out_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="out_type2", collection_name="OUT_COLL2"),
+    ]
+
+    with pytest.raises(RuntimeError, match="has no storage path configured"):
+        build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_output_products_disk_no_disk_config_raises(
+    sample_unit,
+    mock_dpr_process_in,
+    kind,
+):
+    """
+    When get_disk_storage returns None for a disk kind storage,
+    a RuntimeError must be raised (the processor has nowhere to write).
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None
+    mock_storage.get_disk_storage.return_value = None  # no disk config at all
+
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="out_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="out_type2", collection_name="OUT_COLL2"),
+    ]
+
+    with pytest.raises(RuntimeError, match="has no storage path configured"):
+        build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
