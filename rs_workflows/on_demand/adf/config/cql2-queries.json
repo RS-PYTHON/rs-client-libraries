@@ -20,21 +20,21 @@
                         ]
                     },
                     {
-                        "op": "lte",
+                        "op": "t_contains",
                         "args": [
                             {
                                 "property": "published"
                             },
-                            "{end_datetime}"
-                        ]
-                    },
-                    {
-                        "op": "gte",
-                        "args": [
                             {
-                                "property": "published"
-                            },
-                            "{start_datetime}"
+                                "interval": [
+                                    {
+                                        "property": "start_datetime"
+                                    },
+                                    {
+                                        "property": "end_datetime"
+                                    }
+                                ]
+                            }
                         ]
                     }
                 ]
