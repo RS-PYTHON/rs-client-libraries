@@ -113,6 +113,7 @@ def test_get_io_builds_input_and_output(
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
     mock_storage_config.get_storage_for_specific_product.return_value = "s3"
+    mock_storage_config.get_storage_kind.return_value = "obs"
 
     inputs, outputs = get_io(
         sample_unit,
@@ -767,6 +768,7 @@ def test_build_output_products_specific_storage(
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     # Provide mappings for BOTH output1 and output2
     mock_dpr_process_in.generated_product_to_collection_identifier = [
@@ -807,6 +809,7 @@ def test_build_output_products_fallback_unit(
     mock_storage.get_storage_for_specific_product.return_value = None
     mock_storage.get_storage_for_unit_section.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     mock_dpr_process_in.generated_product_to_collection_identifier = [
         FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
@@ -837,6 +840,7 @@ def test_build_output_products_fallback_pipeline(
     mock_storage.get_storage_for_specific_product.return_value = None
     mock_storage.get_storage_for_pipeline_section.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     mock_dpr_process_in.generated_product_to_collection_identifier = [
         FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
@@ -874,7 +878,7 @@ def test_build_output_products_error_no_storage(
     mock_dpr_process_in.unit = False
     mock_dpr_process_in.pipeline = False
 
-    with pytest.raises(RuntimeError, match="Unable to determine the output bucket"):
+    with pytest.raises(RuntimeError, match="Couldn't find any storage configuration for output product"):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
 
@@ -886,6 +890,7 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     # sample_unit has "output1" and "output2"
     # We provide only "output1" in generated_product_to_collection_identifier, so "output2" should trigger the error
@@ -915,6 +920,7 @@ def test_build_output_products_extra_mapping_is_ignored(sample_unit, mock_dpr_pr
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     mock_dpr_process_in.generated_product_to_collection_identifier = [
         FlowGeneratedProduct(name="output1", product_type="type1", collection_name="COLL"),
@@ -989,6 +995,7 @@ def test_build_output_products_ignores_extra_generated_products(mock_dpr_process
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
     mocker.patch(
