@@ -28,14 +28,7 @@
                                     "{end_datetime}"
                                 ]
                             },
-                            {
-                                "interval": [
-                                    {
-                                        "property": "published"
-                                    }
-
-                                ]
-                            }
+                            { "property": "published" }
 
                         ]
                     }
