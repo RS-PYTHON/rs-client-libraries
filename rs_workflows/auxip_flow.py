@@ -16,6 +16,7 @@
 
 import datetime
 import json
+import logging
 
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
@@ -48,6 +49,7 @@ async def search(
         error_if_empty: Raise a ValueError if the results are empty.
     """
     logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
@@ -55,6 +57,7 @@ async def search(
 
         logger.info(f"Start Auxip search: {auxip_cql2}")
         auxip_client: AuxipClient = flow_env.rs_client.get_auxip_client()
+        logger.debug(f"auxip client to be called with stac_filter {auxip_cql2.get("filter")})")
         found = auxip_client.search(
             method="POST",
             stac_filter=auxip_cql2.get("filter"),
@@ -92,6 +95,7 @@ async def auxip_staging(
         ItemCollection: List of catalog Items staged from Auxip station
     """
     logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
