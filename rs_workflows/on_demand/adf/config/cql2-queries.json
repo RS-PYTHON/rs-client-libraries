@@ -32,9 +32,6 @@
                                 "interval": [
                                     {
                                         "property": "published"
-                                    },
-                                    {
-                                        "property": "published"
                                     }
 
                                 ]
