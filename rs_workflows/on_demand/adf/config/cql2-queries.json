@@ -29,14 +29,7 @@
                                 ]
                             },
                             {
-                                "interval": [
-                                    {
-                                        "property": "published"
-                                    },
-                                    {
-                                        "property": "published"
-                                    }
-                                ]
+                                "property": "published"
                             }
                         ]
                     }
