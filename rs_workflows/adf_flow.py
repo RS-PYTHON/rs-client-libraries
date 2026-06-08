@@ -369,6 +369,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
             if adf_input.cql2_filter is not None:
                 logger.info("Use the provided CQL2 filter for auxiliary data retrieval")
                 cql2_filter = substitute_values(adf_input.cql2_filter, {"product_type": prod_type})
+                logger.debug(f"Substituted CQL2 filter for product type {prod_type}: {cql2_filter}")
             else:
                 logger.info("Build a default CQL2 filter for auxiliary data retrieval with operator t_intersects")
                 cql2_filter = {
