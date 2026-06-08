@@ -183,6 +183,7 @@ async def past_adf_conversion(
     period_in_hours: int,
     period_start: datetime,
     period_end: datetime,
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
 ) -> None:
     """ """
     logger = get_run_logger()
