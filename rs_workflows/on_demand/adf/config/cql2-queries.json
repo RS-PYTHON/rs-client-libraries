@@ -23,13 +23,13 @@
                         "op": "t_contains",
                         "args": [
                             {
-                                "property": "published"
-                            },
-                            {
                                 "interval": [
                                     "{start_datetime}",
                                     "{end_datetime}"
                                 ]
+                            },
+                            {
+                                "property": "published"
                             }
                         ]
                     }
