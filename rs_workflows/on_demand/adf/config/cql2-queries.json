@@ -23,7 +23,7 @@
                         "op": "t_contains",
                         "args": [
                             {
-                                "property": "created"
+                                "property": "published"
                             },
                             {
                                 "interval": [
