@@ -152,7 +152,7 @@ def substitute_values(obj, values):
     return obj
 
 
-def compute_filter(cql2_query_name: str, dTa: int, dTb: int) -> dict:
+def compute_cql2(cql2_query_name: str, dTa: int, dTb: int) -> dict:
 
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
@@ -172,10 +172,14 @@ def compute_filter(cql2_query_name: str, dTa: int, dTb: int) -> dict:
     logger.debug(f"Read CQL2 filter content from file '{CQL2_FILTERS_PATH}' : {cql2_json}")
 
     # Find the filter
-    filter_temp = next(entry for entry in cql2_json if entry["name"] == cql2_query_name)
-    filter_json = {"filter": filter_temp["stac"]["filter"]}
+    cql2_temp = next(entry for entry in cql2_json if entry["name"] == cql2_query_name)
+    cql2_json = {
+        "filter": cql2_temp["stac"]["filter"],
+        "sortby": cql2_temp["stac"]["sortby"],
+        "limit": cql2_temp["stac"]["limit"],
+    }
 
-    return substitute_values(filter_json, {"dTa": dTa, "dTb": dTb})
+    return substitute_values(cql2_json, {"dTa": dTa, "dTb": dTb})
 
 
 @task(name="conversion from the past")
@@ -195,7 +199,7 @@ async def past_adf_conversion(
     logger.setLevel(logging.DEBUG)
 
     logger.info("Computing cql2_filter without start_datetime and end_datetime...")
-    cql2_filter_without_date = compute_filter(cql2_query_name, dTa, dTb)
+    cql2_filter_without_date = compute_cql2(cql2_query_name, dTa, dTb)
 
     # Scheduling according to the period_in_hours
     if period_in_hours == 0:
@@ -280,7 +284,7 @@ async def schedule_adf_conversion(
     logger.setLevel(logging.DEBUG)
 
     logger.info("Computing cql2_filter without start_datetime and end_datetime...")
-    cql2_filter_without_date = compute_filter(cql2_query_name, dTa, dTb)
+    cql2_filter_without_date = compute_cql2(cql2_query_name, dTa, dTb)
 
     # Scheduling according to the period_in_hours
     if period_in_hours == 0:

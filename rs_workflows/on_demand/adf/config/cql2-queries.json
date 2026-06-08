@@ -34,15 +34,15 @@
                         ]
                     }
                 ]
-            }
-        },
-        "sortby": [
-            {
-                "field": "published",
-                "direction": "desc"
-            }
-        ],
-        "limit": 10
+            },
+            "sortby": [
+                {
+                    "field": "published",
+                    "direction": "desc"
+                }
+            ],
+            "limit": 10
+        }
     },
     {
         "name": "LatestValCover",
