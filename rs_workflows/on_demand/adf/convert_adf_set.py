@@ -79,10 +79,12 @@ async def convert_adf_group(
     settings: dict[str, Any] = raw_data
     satellite = settings.get("satellite", "")
     aux_to_be_generated: list = settings.get("aux-to-be-generated", [])
+    logger.debug(f"aux_to_be_generated = {aux_to_be_generated}")
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] = settings.get(
         "auxiliary-product-to-collection-identifier",
         [],
     )
+    logger.debug(f"auxiliary_product_to_collection_identifier = {auxiliary_product_to_collection_identifier}")
 
     # Split the problem in two : past and future period.
     now_utc = datetime.now(timezone.utc)
