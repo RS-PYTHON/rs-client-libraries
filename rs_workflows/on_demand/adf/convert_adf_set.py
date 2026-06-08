@@ -26,7 +26,7 @@ from prefect.runner.storage import GitRepository
 from prefect.runtime import flow_run
 from prefect.variables import Variable
 
-from rs_workflows.adf_flow import adf_conversion
+from rs_workflows.adf_flow import adf_conversion_task
 from rs_workflows.flow_utils import AdfProcessIn, AuxiliaryProductMapping, FlowEnvArgs
 
 CQL2_FILTERS_PATH: str = "./config/cql2_filters.json"
@@ -211,7 +211,9 @@ async def past_adf_conversion(
             auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
             cql2_filter=cql2_filter,
         )
-        await adf_conversion.with_options(name=f"[{period_start}-{period_end}]")(flow_parameters)
+        await adf_conversion_task.with_options(
+            name=f"convert {product_type} on the period [{period_start}-{period_end}]",
+        )(flow_parameters)
 
     else:
         start = period_start
@@ -229,7 +231,9 @@ async def past_adf_conversion(
                 auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
                 cql2_filter=cql2_filter,
             )
-            await adf_conversion.with_options(name=f"[{start}-{stop}]")(flow_parameters)
+            await adf_conversion_task.with_options(name=f"convert {product_type} on the period [{start}-{stop}]")(
+                flow_parameters,
+            )
             start += duration
 
 
@@ -368,4 +372,4 @@ async def adf_conversion_scheduled(
         auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
         cql2_filter=cql2_filter,
     )
-    await adf_conversion.with_options(name=f"[{start}-{stop}]")(flow_parameters)
+    await adf_conversion_task.with_options(name=f"convert {adf_type} on the period [{start}-{stop}]")(flow_parameters)
