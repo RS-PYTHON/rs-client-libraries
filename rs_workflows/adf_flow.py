@@ -414,7 +414,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 staged_items.extend(items)
 
         if not staged_items:
-            logger.error("No staged items found to process.")
+            logger.warning("⚠️ No staged items found to process.")
             return
 
         with tempfile.TemporaryDirectory() as temp_dir:

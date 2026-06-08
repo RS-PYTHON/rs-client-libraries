@@ -205,7 +205,7 @@ async def past_adf_conversion(
         )
         cql2_filter = substitute_values(
             cql2_filter_without_date,
-            {"start_datetime": period_start, "end_datetime": period_end},
+            {"start_datetime": period_start.isoformat(), "end_datetime": period_end.isoformat()},
         )
         logger.debug(f"Associated cql2 filter is: {cql2_filter}")
         flow_parameters: AdfProcessIn = AdfProcessIn(
@@ -226,8 +226,11 @@ async def past_adf_conversion(
             logger.info(
                 f"Run the conversion task time range [{start}-{stop}].",
             )
-            cql2_filter = substitute_values(cql2_filter_without_date, {"start_datetime": start, "end_datetime": stop})
-            logger.debug(f"Associated cql2 filter is: {cql2_filter}")
+            cql2_filter = substitute_values(
+                cql2_filter_without_date,
+                {"start_datetime": start.isoformat(), "end_datetime": stop.isoformat()},
+            )
+            logger.debug(f"( past ) Associated cql2 filter is: {cql2_filter}")
             flow_parameters: AdfProcessIn = AdfProcessIn(
                 env=FlowEnvArgs(owner_id=owner_identifier),
                 adf_type=product_type,
@@ -366,7 +369,10 @@ async def adf_conversion_scheduled(
     logger.info(f"Starting the conversion for {adf_type}")
     start: datetime = flow_run.scheduled_start_time - decoded_period
     stop: datetime = flow_run.scheduled_start_time
-    cql2_filter = substitute_values(cql2_filter_without_date, {"start_datetime": start, "end_datetime": stop})
+    cql2_filter = substitute_values(
+        cql2_filter_without_date,
+        {"start_datetime": start.isoformat(), "end_datetime": stop.isoformat().isoformat()},
+    )
     logger.debug(f"The CQL2 used for the conversion is {cql2_filter}")
 
     flow_parameters: AdfProcessIn = AdfProcessIn(
