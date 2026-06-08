@@ -410,6 +410,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 cql2_filter=cql2_filter,
                 catalog_collection_identifier=target_collection,
             )
+            logger.debug(f"Staging result for product type {prod_type}: success={success}, items={items}")
             if success and items:
                 staged_items.extend(items)
 
