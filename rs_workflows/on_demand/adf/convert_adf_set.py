@@ -26,7 +26,8 @@ from prefect.runner.storage import GitRepository
 from prefect.runtime import flow_run
 from prefect.variables import Variable
 
-from rs_workflows.flow_utils import AuxiliaryProductMapping, FlowEnvArgs
+from rs_workflows.adf_flow import adf_conversion
+from rs_workflows.flow_utils import AdfProcessIn, AuxiliaryProductMapping, FlowEnvArgs
 
 CQL2_FILTERS_PATH: str = "./config/cql2_filters.json"
 PREFECT_WORKPOOL: str = "on-demand-k8s-pool-prefect"
@@ -35,7 +36,7 @@ GITHUB_BRANCH: str = "rspy-1074/create-flow-convert-adf-group"
 
 
 @flow(name="convert-adf-group")
-async def convert_adf_data(
+async def convert_adf_group(
     owner_identifier: str,
     period_start_datetime: datetime,
     period_end_datetime: datetime,
@@ -77,7 +78,11 @@ async def convert_adf_data(
         raise ValueError(f"❌ Prefect variable '{adf_group_name}' has got an invalid format.")
     settings: dict[str, Any] = raw_data
     satellite = settings.get("satellite", "")
-    aux_to_be_generated = settings.get("aux-to-be-generated", [])
+    aux_to_be_generated: list = settings.get("aux-to-be-generated", [])
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] = settings.get(
+        "auxiliary-product-to-collection-identifier",
+        [],
+    )
 
     # Split the problem in two : past and future period.
     now_utc = datetime.now(timezone.utc)
@@ -96,6 +101,7 @@ async def convert_adf_data(
                 item["period_in_hours"],
                 schedule_start,
                 period_end_datetime,
+                auxiliary_product_to_collection_identifier,
             )
         else:
             logger.info("No future period to schedule. All AUX data retrieval is for past dates.")
@@ -117,6 +123,7 @@ async def convert_adf_data(
                 item["period_in_hours"],
                 retrieve_past_start,
                 retrieve_past_end,
+                auxiliary_product_to_collection_identifier,
             )
             for item in aux_to_be_generated
         ]
@@ -195,7 +202,13 @@ async def past_adf_conversion(
             {"start_datetime": period_start, "end_datetime": period_end},
         )
         logger.debug(f"Associated cql2 filter is: {cql2_filter}")
-        await fake_adf_conversion.with_options(name=f"[{period_start}-{period_end}]")()
+        flow_parameters: AdfProcessIn = AdfProcessIn(
+            env=FlowEnvArgs(owner_id=owner_identifier),
+            adf_type=product_type,
+            auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
+            cql2_filter=cql2_filter,
+        )
+        await adf_conversion.with_options(name=f"[{period_start}-{period_end}]")(flow_parameters)
 
     else:
         start = period_start
@@ -207,12 +220,18 @@ async def past_adf_conversion(
             )
             cql2_filter = substitute_values(cql2_filter_without_date, {"start_datetime": start, "end_datetime": stop})
             logger.debug(f"Associated cql2 filter is: {cql2_filter}")
-            await fake_adf_conversion.with_options(name=f"[{start}-{stop}]")()
+            flow_parameters: AdfProcessIn = AdfProcessIn(
+                env=FlowEnvArgs(owner_id=owner_identifier),
+                adf_type=product_type,
+                auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
+                cql2_filter=cql2_filter,
+            )
+            await adf_conversion.with_options(name=f"[{start}-{stop}]")(flow_parameters)
             start += duration
 
 
 @task(name="fake conversion in the past")
-async def fake_adf_conversion():
+async def fake_adf_conversion_no_more_used():
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
     logger.info(" single conversion task ...")
@@ -229,6 +248,7 @@ async def schedule_adf_conversion(
     period_in_hours: int,
     period_start: datetime,
     period_end: datetime,
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
 ) -> None:
     """
     Convert a single ADF data.
@@ -260,6 +280,7 @@ async def schedule_adf_conversion(
             cql2_filter_without_date,
             product_type,
             period_end - period_start,
+            auxiliary_product_to_collection_identifier,
         )
 
     else:
@@ -276,7 +297,14 @@ async def schedule_adf_conversion(
             f"Schedule the flow conversion to start at {start_rule} for a time range [{period_start}-{period_end}].",
         )
         logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
-        await schedule_conversion_flow(owner_identifier, rule, cql2_filter_without_date, product_type, period_corrected)
+        await schedule_conversion_flow(
+            owner_identifier,
+            rule,
+            cql2_filter_without_date,
+            product_type,
+            period_corrected,
+            auxiliary_product_to_collection_identifier,
+        )
 
 
 async def schedule_conversion_flow(
@@ -285,6 +313,7 @@ async def schedule_conversion_flow(
     cql2_filter_without_date: dict,
     product_type: str,
     period: timedelta,
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
 ) -> None:
 
     logger = get_run_logger()
@@ -304,9 +333,9 @@ async def schedule_conversion_flow(
         parameters={
             "env": FlowEnvArgs(owner_id=owner_identifier),
             "adf_type": product_type,
-            "auxiliary_product_to_collection_identifier": [],
             "cql2_filter_without_date": cql2_filter_without_date,
             "period": encoded_period,
+            "auxiliary_product_to_collection_identifier": auxiliary_product_to_collection_identifier,
         },
     )
 
@@ -315,9 +344,9 @@ async def schedule_conversion_flow(
 async def adf_conversion_scheduled(
     env: FlowEnvArgs,
     adf_type: str,
-    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
     cql2_filter_without_date: dict,
     period: str,
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
 ) -> None:
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
@@ -330,4 +359,10 @@ async def adf_conversion_scheduled(
     cql2_filter = substitute_values(cql2_filter_without_date, {"start_datetime": start, "end_datetime": stop})
     logger.debug(f"The CQL2 used for the conversion is {cql2_filter}")
 
-    ## CALL the conversion task with env, auxilliary_product_to_collection_identifier and cql2_filter
+    flow_parameters: AdfProcessIn = AdfProcessIn(
+        env=env,
+        adf_type=adf_type,
+        auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
+        cql2_filter=cql2_filter,
+    )
+    await adf_conversion.with_options(name=f"[{start}-{stop}]")(flow_parameters)
