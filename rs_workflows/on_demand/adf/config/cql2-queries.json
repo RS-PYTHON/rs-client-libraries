@@ -37,7 +37,7 @@
             },
             "sortby": [
                 {
-                    "field": "published",
+                    "field": "created",
                     "direction": "desc"
                 }
             ],
