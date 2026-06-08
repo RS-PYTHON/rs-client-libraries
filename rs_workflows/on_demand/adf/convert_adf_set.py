@@ -17,6 +17,7 @@
 import asyncio
 import json
 import logging
+import os
 from collections.abc import Awaitable
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
@@ -29,7 +30,9 @@ from prefect.variables import Variable
 from rs_workflows.adf_flow import adf_conversion_task
 from rs_workflows.flow_utils import AdfProcessIn, AuxiliaryProductMapping, FlowEnvArgs
 
-CQL2_FILTERS_PATH: str = "./config/cql2-queries.json"
+script_dir = os.path.dirname(os.path.abspath(__file__))
+CQL2_FILTERS_PATH = os.path.join(script_dir, "config", "cql2-queries.json")
+
 PREFECT_WORKPOOL: str = "on-demand-k8s-pool-prefect"
 GITHUB_URL: str = "https://github.com/RS-PYTHON/rs-client-libraries.git"
 GITHUB_BRANCH: str = "rspy-1074/create-flow-convert-adf-group"
