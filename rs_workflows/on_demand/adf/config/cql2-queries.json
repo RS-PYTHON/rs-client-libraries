@@ -22,6 +22,12 @@
                     {
                         "op": "t_contains",
                         "args": [
+                                                        {
+                                "interval": [
+                                    "{start_datetime}",
+                                    "{end_datetime}"
+                                ]
+                            },
                             {
                                 "interval": [
                                     {
@@ -32,13 +38,8 @@
                                     }
 
                                 ]
-                            },
-                            {
-                                "interval": [
-                                    "{start_datetime}",
-                                    "{end_datetime}"
-                                ]
                             }
+
                         ]
                     }
                 ]
