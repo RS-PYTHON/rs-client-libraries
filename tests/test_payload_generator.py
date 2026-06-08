@@ -1011,8 +1011,8 @@ def test_build_output_products_ignores_extra_generated_products(mock_dpr_process
 
 
 # ----------------------------------------------------------------------
+
 # shared_disk / local_disk paths
-# ----------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])

@@ -516,7 +516,6 @@ async def run_processor(
             dpr_client.wait_for_job(job_status, logger, f"{processor!r} processor")
         finally:
             logger.info(f"Processor execution time: {str(timedelta(seconds=time.time() - start_time))}")
-
             # Download reports folder from the s3 bucket
             with tempfile.TemporaryDirectory() as tmpdir:
                 await prefect_utils.s3_download_dir(s3_payload_dir, tmpdir)
@@ -539,12 +538,11 @@ async def run_processor(
                         logger.info(f"Log file {s3_log_file!r}:\n{await opened.read()}")
                 except FileNotFoundError:
                     logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
-
-        # After processing, clean up autoclean paths. IMPORTANT : the shared disk has to be mounted
-        # in the current flow environment (prefect workker) for this to work ! So, the shared_disk has to be
-        # mounted in both dask worker environment (where the processor runs) and in the prefect worker
-        # environment (where this flow runs)
-        clean_paths(paths_to_delete, logger)
+            # After processing, clean up autoclean paths. IMPORTANT : the shared disk has to be mounted
+            # in the current flow environment (prefect workker) for this to work ! So, the shared_disk has to be
+            # mounted in both dask worker environment (where the processor runs) and in the prefect worker
+            # environment (where this flow runs)
+            clean_paths(paths_to_delete, logger)
 
         items_metadata = update_eopf_assets(flow_env, input_products, payload, processor)
         eopf_stac_items = [asset.stac_item for asset in items_metadata]
