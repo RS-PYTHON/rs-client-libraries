@@ -38,11 +38,11 @@
         },
         "sortby": [
             {
-                "field": "created",
+                "field": "published",
                 "direction": "desc"
             }
         ],
-        "limit": 1
+        "limit": 10
     },
     {
         "name": "LatestValCover",
