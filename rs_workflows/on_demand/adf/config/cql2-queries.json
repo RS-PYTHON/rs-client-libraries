@@ -27,12 +27,8 @@
                             },
                             {
                                 "interval": [
-                                    {
-                                        "property": "start_datetime"
-                                    },
-                                    {
-                                        "property": "end_datetime"
-                                    }
+                                    "{start_datetime}",
+                                    "{end_datetime}"
                                 ]
                             }
                         ]
