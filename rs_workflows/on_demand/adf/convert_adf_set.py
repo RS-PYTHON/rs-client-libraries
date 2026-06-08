@@ -26,7 +26,7 @@ from prefect.runner.storage import GitRepository
 from prefect.runtime import flow_run
 from prefect.variables import Variable
 
-from rs_workflows.flow_utils import AuxiliaryProductMapping, FlowEnv, FlowEnvArgs
+from rs_workflows.flow_utils import AuxiliaryProductMapping, FlowEnvArgs
 
 CQL2_FILTERS_PATH: str = "./config/cql2_filters.json"
 PREFECT_WORKPOOL: str = "on-demand-k8s-pool-prefect"
