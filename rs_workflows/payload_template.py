@@ -279,7 +279,7 @@ class AdfConfig(BasePayloadModel):
     """Definition of an ADF configuration entry"""
 
     id: str
-    path: str
+    path: str | SecretStr
     store_params: StoreParams | None = None
 
 
