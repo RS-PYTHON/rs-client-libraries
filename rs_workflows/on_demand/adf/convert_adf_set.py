@@ -40,10 +40,10 @@ GITHUB_BRANCH: str = "rspy-1074/create-flow-convert-adf-group"
 
 @flow(name="convert-adf-group")
 async def convert_adf_group(
-    owner_identifier: str,
     period_start_datetime: datetime,
     period_end_datetime: datetime,
-    adf_group_name: str,
+    adf_group_name: str = "convert-aux-s3-olci-l1",
+    owner_identifier: str = "copernicus",
 ) -> None:
     """
     Convert a set of ADF (Auxiliary Data Files) data for a specified group and time period.
