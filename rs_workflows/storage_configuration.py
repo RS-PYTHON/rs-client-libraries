@@ -68,12 +68,12 @@ class StorageConfig:  # pylint: disable=too-many-instance-attributes
         # map storage name kind
         self._storage_kinds: dict[str, str] = {}
 
-        for conf in self.data["storage_configuration"]:
+        for idx, conf in enumerate(self.data["storage_configuration"]):
             if "name" not in conf or "kind" not in conf:
                 if logger:
                     logger.warning(
-                        f"Storage configuration entry {conf} is missing "
-                        "required 'name' or 'kind' field. This entry will be ignored.",
+                        f"Storage configuration entry at index {idx} is missing required "
+                        "'name' or 'kind' field. This entry will be ignored.",
                     )
                 continue
 
