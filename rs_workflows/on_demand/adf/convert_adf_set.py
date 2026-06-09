@@ -173,6 +173,8 @@ def compute_cql2(cql2_query_name: str, dTa: int, dTb: int) -> dict:
 
     # Find the filter
     cql2_temp = next(entry for entry in cql2_json if entry["name"] == cql2_query_name)
+    if cql2_temp is None:
+        raise RuntimeError(f"❌ cql2 query '{cql2_query_name}' not found on configuration.")
     cql2_json = {
         "filter": cql2_temp["stac"]["filter"],
         "sortby": cql2_temp["stac"]["sortby"],
