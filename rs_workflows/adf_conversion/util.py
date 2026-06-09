@@ -19,6 +19,9 @@
 Util functions for ADF scripts
 """
 
+import logging
+from prefect import get_run_logger
+
 import os.path as osp
 import shutil
 from datetime import datetime
@@ -196,6 +199,11 @@ def get_all_grib_files(
     :param date: Date to search for in the products names
     :return: A list with all grib files corresponding to the set filters (file type and date)
     """
+    logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
+    logger.debug(f"Call get_all_grib_files with products_dir='{products_dir}', file_type='{file_type}' and date='{date}'")
+
+
     if file_type is None:
         file_type = [""]
     elif isinstance(file_type, str):
@@ -209,6 +217,7 @@ def get_all_grib_files(
                 if product_item.suffix == "":
                     all_files.append(product_item)
 
+    logger.debug(f"return '{all_files}'")
     return all_files
 
 

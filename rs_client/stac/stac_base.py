@@ -365,11 +365,8 @@ class StacBase(RsClient):
         self.logger.info(f"🔍 Performing STAC search with parameters: {kwargs}")
 
         try:
-            self.logger.info("COUCOU TEST 1")
             items_search = self.ps_client.search(**kwargs)
-            self.logger.info("COUCOU TEST 2")
             self.logger.info(f"STAC search raw response: {items_search.item_collection()}")
-            self.logger.info("COUCOU TEST 3")
             return items_search.item_collection()
         except NotImplementedError:
             self.logger.exception(
