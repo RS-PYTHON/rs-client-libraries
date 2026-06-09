@@ -401,7 +401,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
             )
             if target_collection is None:
                 raise RuntimeError(
-                    "No target collection found for input product type "
+                    "❌ No target collection found for input product type "
                     f"{prod_type!r} in auxiliary_product_to_collection_identifier.",
                 )
 
@@ -459,7 +459,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 )
                 if target_collection is None:
                     raise RuntimeError(
-                        "No target collection found for generated product type "
+                        "❌ No target collection found for generated product type "
                         f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
                     )
 

@@ -731,7 +731,7 @@ async def test_adf_conversion_raises_when_publish_collection_not_found(
     flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id="test-user")
     monkeypatch.setattr(adf_flow, "FlowEnv", lambda env: flow_env_mock)
 
-    with pytest.raises(RuntimeError, match="No target collection found for generated product type"):
+    with pytest.raises(RuntimeError, match="❌ No target collection found for generated product type"):
         await adf_flow.adf_conversion.fn(sample_adf_process_in)
 
     assert not find_bucket_mock.called
