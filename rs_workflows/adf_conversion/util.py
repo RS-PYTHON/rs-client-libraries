@@ -20,7 +20,6 @@ Util functions for ADF scripts
 """
 
 import logging
-from prefect import get_run_logger, task
 
 import os.path as osp
 import shutil
@@ -166,7 +165,6 @@ def reshape_dataset(ds):
     ds["longitude"] = ds["longitude"].astype(np.float32)
     return ds
 
-@task (name="get_all_grib_files")
 def get_all_grib_files(
     products_dir: Path,
     file_type: list[str] | str | None = None,
@@ -199,9 +197,7 @@ def get_all_grib_files(
     :param date: Date to search for in the products names
     :return: A list with all grib files corresponding to the set filters (file type and date)
     """
-    logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
-    logger.debug(f"Call get_all_grib_files with products_dir='{products_dir}', file_type='{file_type}' and date='{date}'")
+    print(f"Call get_all_grib_files with products_dir='{products_dir}', file_type='{file_type}' and date='{date}'")
 
 
     if file_type is None:
@@ -217,7 +213,7 @@ def get_all_grib_files(
                 if product_item.suffix == "":
                     all_files.append(product_item)
 
-    logger.debug(f"return '{all_files}'")
+    print(f"return '{all_files}'")
     return all_files
 
 

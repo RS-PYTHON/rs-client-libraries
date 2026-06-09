@@ -23,8 +23,6 @@ import shutil
 from datetime import datetime
 from os import environ
 from pathlib import Path
-from prefect import get_run_logger, task
-
 
 import dask
 import numpy as np
@@ -207,7 +205,7 @@ def merge_mf1_mf2_files(ds_mf1, ds_mf2):
 
     return merged_dataset
 
-@task(name="script-ecmwf")
+
 def main(data_directory, tmp_dir=None, keep_tmp_dir=False):
     # We discard hybrid data, contained in MF2 files, but keep the code commented if needed, see
     # https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file/-/merge_requests/30#note_67577
@@ -217,10 +215,12 @@ def main(data_directory, tmp_dir=None, keep_tmp_dir=False):
 
     files_by_ref_date = get_all_mf_ref_times(files)
     print(f"files_by_ref_date='{files_by_ref_date}'")
+    
     # Filter only "full" products: 4 MF1 files
     full_products = {
         ref_date: products_paths for ref_date, products_paths in files_by_ref_date.items() if len(products_paths) == 4
     }
+    print(f"full_products='{full_products}'")
     print(f"Found {len(full_products)} full products with the following reference times: {list(full_products.keys())}")
 
     if not tmp_dir:
