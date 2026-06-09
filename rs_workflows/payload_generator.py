@@ -793,8 +793,10 @@ def generate_payload(  # pylint: disable=unused-argument
                 storage_configuration,
                 bucket_configuration,
             )
-            io_config.input_products += input_products
-            io_config.output_products += output_products
+            seen_inputs = {p.id for p in io_config.input_products}
+            io_config.input_products += [p for p in input_products if p.id not in seen_inputs]
+            seen_outputs = {p.id for p in io_config.output_products}
+            io_config.output_products += [p for p in output_products if p.id not in seen_outputs]
         except KeyError as ke:
             raise ValueError(f"Key {ke} not found in unit list") from ke
 

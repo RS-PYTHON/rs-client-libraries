@@ -284,6 +284,43 @@ def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_e
         )
 
 
+def test_generate_payload_deduplicates_io(mocker, sample_unit, mock_dpr_process_in, flow_env, _mock_os_env):
+    """
+    When two units share the same input/output product id, generate_payload must
+    include each id only once in the payload (regression test for the duplicate
+    input_products bug).
+    """
+    shared_input = InputProduct(id="slcs", path="s3://bucket/slcs", store_type="s3")
+    shared_output = OutputProduct(id="out1", path="s3://bucket/out1", store_type="s3")
+
+    mocker.patch(
+        "rs_workflows.payload_generator.load_storage_configuration",
+        return_value=MagicMock(default_adfs_storage="s3"),
+    )
+    mocker.patch(
+        "rs_workflows.payload_generator.get_io",
+        return_value=([shared_input], [shared_output]),
+    )
+    mocker.patch("rs_workflows.payload_generator.fetch_csv_from_endpoint", return_value=[])
+    mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=MagicMock())
+    mock_secret = MagicMock()
+    mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
+    mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
+
+    payload = generate_payload.fn(
+        flow_env=flow_env,
+        unit_list=[sample_unit, sample_unit],
+        adfs=[],
+        dpr_process_in=mock_dpr_process_in,
+    )
+
+    assert payload.io is not None
+    assert len(payload.io.input_products) == 1
+    assert payload.io.input_products[0].id == "slcs"
+    assert len(payload.io.output_products) == 1
+    assert payload.io.output_products[0].id == "out1"
+
+
 # ----------------------------------------------------------------------
 
 # Mock-up processor path
