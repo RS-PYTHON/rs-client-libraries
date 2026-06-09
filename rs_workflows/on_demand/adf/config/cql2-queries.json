@@ -1,4 +1,49 @@
 [
+     {
+        "name": "Published_Intersect",
+        "parameters": [
+            "product_type",
+            "start_datetime",
+            "end_datetime"
+        ],
+        "stac": {
+            "filter": {
+                "op": "and",
+                "args": [
+                    {
+                        "op": "=",
+                        "args": [
+                            {
+                                "property": "product:type"
+                            },
+                            "{product_type}"
+                        ]
+                    },
+                    {
+                        "op": "t_intersects",
+                        "args": [
+                            {
+                                "property": "published"
+                            },
+                            {
+                                "interval": [
+                                    "{start_datetime}",
+                                    "{end_datetime}"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "sortby": [
+                {
+                    "field": "created",
+                    "direction": "desc"
+                }
+            ],
+            "limit": 10
+        }
+    },
     {
         "name": "Published",
         "parameters": [
