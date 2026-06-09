@@ -23,6 +23,8 @@ import shutil
 from datetime import datetime
 from os import environ
 from pathlib import Path
+from prefect import get_run_logger, task
+
 
 import dask
 import numpy as np
@@ -205,7 +207,7 @@ def merge_mf1_mf2_files(ds_mf1, ds_mf2):
 
     return merged_dataset
 
-
+@task(name="script-ecmwf")
 def main(data_directory, tmp_dir=None, keep_tmp_dir=False):
     # We discard hybrid data, contained in MF2 files, but keep the code commented if needed, see
     # https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file/-/merge_requests/30#note_67577

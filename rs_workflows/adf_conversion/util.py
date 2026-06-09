@@ -20,7 +20,7 @@ Util functions for ADF scripts
 """
 
 import logging
-from prefect import get_run_logger
+from prefect import get_run_logger, task
 
 import os.path as osp
 import shutil
@@ -166,7 +166,7 @@ def reshape_dataset(ds):
     ds["longitude"] = ds["longitude"].astype(np.float32)
     return ds
 
-
+@task (name="get_all_grib_files")
 def get_all_grib_files(
     products_dir: Path,
     file_type: list[str] | str | None = None,
