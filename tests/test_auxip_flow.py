@@ -32,6 +32,7 @@ def mock_auxip_logger(monkeypatch, mocker):
     """Replace Prefect run logger with a plain mock."""
     logger = mocker.Mock()
     monkeypatch.setattr(auxip_flow, "get_run_logger", lambda: logger)
+    monkeypatch.setattr(auxip_flow.stac, "get_run_logger", lambda: logger)
     return logger
 
 
@@ -45,7 +46,7 @@ async def test_search_returns_found_items(monkeypatch, mocker, mock_auxip_logger
     flow_env = mocker.Mock()
     flow_env.start_span.return_value = nullcontext()
     flow_env.rs_client.get_auxip_client.return_value = auxip_client
-    monkeypatch.setattr(auxip_flow, "FlowEnv", lambda env: flow_env)
+    monkeypatch.setattr(auxip_flow.stac, "FlowEnv", lambda env: flow_env)
 
     result = await auxip_flow.search.fn(env, {"filter": {"foo": "bar"}, "limit": 3, "sortby": []})
 
@@ -62,9 +63,9 @@ async def test_search_raises_when_empty_and_error_if_empty(monkeypatch, mocker, 
     flow_env = mocker.Mock()
     flow_env.start_span.return_value = nullcontext()
     flow_env.rs_client.get_auxip_client.return_value = auxip_client
-    monkeypatch.setattr(auxip_flow, "FlowEnv", lambda env: flow_env)
+    monkeypatch.setattr(auxip_flow.stac, "FlowEnv", lambda env: flow_env)
 
-    with pytest.raises(ValueError, match="No Auxip product found"):
+    with pytest.raises(ValueError, match="No item found for CQL2"):
         await auxip_flow.search.fn(env, {"filter": {"foo": "bar"}}, error_if_empty=True)
 
 

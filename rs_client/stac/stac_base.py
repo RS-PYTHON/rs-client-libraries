@@ -361,7 +361,17 @@ class StacBase(RsClient):
         """
         kwargs.pop("owner_id", None)
         kwargs["datetime"] = kwargs.pop("timestamp", None)
-        kwargs["filter"] = kwargs.pop("stac_filter", None)
+        stac_filter = kwargs.pop("stac_filter", None)
+        if (
+            isinstance(stac_filter, dict)
+            and stac_filter.get("op", "") == "="
+            and len(stac_filter.get("args", [])) == 2
+            and stac_filter["args"][0] == {"property": "id"}
+        ):
+            # Optim/Fix required for EarthDataHub
+            kwargs["ids"] = stac_filter["args"][1]
+        else:
+            kwargs["filter"] = stac_filter
         self.logger.info(f"🔍 Performing STAC search with parameters: {kwargs}")
 
         try:
