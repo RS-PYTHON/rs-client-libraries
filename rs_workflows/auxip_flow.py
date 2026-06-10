@@ -21,11 +21,11 @@ from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
 from pystac import Item, ItemCollection
 
-from rs_client.stac.auxip_client import AuxipClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common.utils import create_valcover_filter
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task
+from rs_workflows.utils import stac
 from rs_workflows.utils.utils import asset_unzip_decompress
 
 ###############
@@ -47,26 +47,13 @@ async def search(
         auxip_cql2: Auxip CQL2 filter read from the processor tasktable.
         error_if_empty: Raise a ValueError if the results are empty.
     """
-    logger = get_run_logger()
-
-    # Init flow environment and opentelemetry span
-    flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "auxip-search"):
-
-        logger.info(f"Start Auxip search: {auxip_cql2}")
-        auxip_client: AuxipClient = flow_env.rs_client.get_auxip_client()
-        found = auxip_client.search(
-            method="POST",
-            stac_filter=auxip_cql2.get("filter"),
-            max_items=auxip_cql2.get("limit"),
-            sortby=auxip_cql2.get("sortby"),
-        )
-        if (not found) and error_if_empty:
-            raise ValueError(
-                f"No Auxip product found for CQL2 filter: {json.dumps(auxip_cql2, indent=2)}",
-            )
-        logger.info(f"Auxip search found {len(found)} result(s): {found.to_dict()}")
-        return found
+    return await stac.search(
+        env,
+        auxip_cql2,
+        "auxip-search",
+        lambda rs_client: rs_client.get_auxip_client(),
+        error_if_empty,
+    )
 
 
 @flow(name="stage-auxip")
@@ -130,7 +117,7 @@ async def auxip_staging(
             job_result = staging_results[job_name]
             if "status" not in job_result or job_result["status"] != "successful":
                 logger.info(
-                    f"Staging job '{job_name}' with ID {job_result['jobID']} FAILED.\n"
+                    f"❌ Staging job '{job_name}' with ID {job_result['jobID']} FAILED.\n"
                     f"Status: {job_result['status']} - Reason: {job_result['message']}",
                 )
                 logger.debug({job_name: job_result})
@@ -147,12 +134,15 @@ async def auxip_staging(
 
         # Create artifact if all jobs succeeded
         if return_status:
-            logger.info("Staging successful, creating artifact with a list of staged items.")
+            logger.info("✅ Staging successful, creating artifact with a list of staged items.")
+            artifact_key_name: str = "auxiliary-stac-item"
+            md = "# Auxiliary file \n\n```json\n" + json.dumps(catalog_items.to_dict(), indent=2) + "\n```"
             await acreate_markdown_artifact(
-                markdown=f"{json.dumps(catalog_items.to_dict(), indent=2)}",
-                key="auxiliary-files",
+                markdown=md,
+                key=artifact_key_name,
                 description="Auxiliary files added to catalog.",
             )
+            logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
         return return_status, catalog_items
 

@@ -20,7 +20,7 @@
 #
 
 ARG PYTHON_VERSION=3.13.12
-ARG PREFECT_TAG=3.6.20
+ARG PREFECT_TAG=3.6.29
 
 # K8S image suffix: -k8s or empty
 ARG K8S_IMAGE=xxx
@@ -30,7 +30,7 @@ FROM ghcr.io/rs-python/prefecthq/prefect:${PREFECT_TAG}-py${PYTHON_VERSION}${K8S
 COPY ./layer-cleanup.sh /usr/local/bin/
 RUN chmod 755 /usr/local/bin/layer-cleanup.sh
 
-ARG PREFECT_AWS_TAG=0.7.5
+ARG PREFECT_AWS_TAG=0.7.7
 
 # Upgrade pip and install dependencies.
 # NOTES:

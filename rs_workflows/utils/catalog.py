@@ -39,7 +39,7 @@ async def get_single_catalog_item(flow_env: FlowEnv, item_id: str, collections: 
     if count == 1:
         # One item was found on the rs-catalog
         logger.info(
-            f"✔️ The STAC item 🧊 '{item_id}' has been found on the rs-catalog collections {', '.join(collections)}.",
+            f"✅ The STAC item 🧊 '{item_id}' has been found on the rs-catalog collections {', '.join(collections)}.",
         )
         if item_collection is not None:
             result = item_collection.items[0]

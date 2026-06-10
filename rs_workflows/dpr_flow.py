@@ -36,6 +36,7 @@ from rs_workflows import catalog_flow
 from rs_workflows.flow_utils import DprProcessedItemMetadata, FlowEnv, FlowEnvArgs
 from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
+from rs_workflows.utils.utils import parse_logs
 
 
 def s3_list(s3_prefix: str):
@@ -534,8 +535,15 @@ async def run_processor(
                 )
                 try:
                     async with await anyio.open_file(local_log_file, encoding="utf-8") as opened:
-                        s3_log_file = osp.join(s3_payload_dir, osp.relpath(local_log_file, tmpdir))
-                        logger.info(f"Log file {s3_log_file!r}:\n{await opened.read()}")
+
+                        s3_log_file = await opened.read()
+
+                        # Parse each line from s3_log_file and display it asa a Prefect log level
+                        for entry in parse_logs(s3_log_file):
+
+                            level = entry["level"].strip().lower()
+                            getattr(logger, level, logger.info)(entry["message"])
+
                 except FileNotFoundError:
                     logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
             # After processing, clean up autoclean paths. IMPORTANT : the shared disk has to be mounted

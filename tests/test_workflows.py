@@ -213,6 +213,18 @@ async def test_dpr_processing(
         result_items[result_item.id] = result_item.to_dict()
 
     assert sorted(result_collection_ids) == sorted([col["collection_name"] for col in MAP_PRODUCT_TO_COLLECTION])
+
+    links = result_items["GRD"]["links"]
+    assert any(link["rel"] == "derived_from" for link in links)
+
+    assert any(link["rel"] == "processing-execution" for link in links)
+
+    for item in result_items.values():
+        item.pop("links", None)
+
+    for item in expected_items.values():
+        item.pop("links", None)
+
     assert result_items == expected_items
 
     # --- verify s3_upload_file was called with the expected destination (second arg) ---
@@ -230,8 +242,8 @@ async def test_dpr_processing(
 
     # Verify the two artifact calls use the correct keys
     keys = [c.kwargs.get("key") for c in artifact_mock.await_args_list]
-    assert artifact_mock.await_count == 5
-    assert keys == ["task-table", "processing-unit-list", "auxip-cql2", "auxip-cql2", "dpr-payload-file"]
+    assert artifact_mock.await_count == 4
+    assert keys == ["dpr-task-table", "aux-cql2-filter", "aux-cql2-filter", "dpr-payload"]
 
 
 @pytest.mark.asyncio

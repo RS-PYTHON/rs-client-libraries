@@ -79,6 +79,19 @@ class ClusterInfo:
     cluster_instance: str | None = ""
 
 
+default_cluster_info_repr = ClusterInfo.__repr__
+
+
+def custom_cluster_info_repr(self):
+    """Obfuscate the jupyter token in the string representation of the dataclass"""
+    return default_cluster_info_repr(
+        ClusterInfo(f"{self.jupyter_token[:8]}***", self.cluster_label, self.cluster_instance),
+    )
+
+
+ClusterInfo.__repr__ = custom_cluster_info_repr  # type: ignore
+
+
 class DprClient(OgcApiClient):
     """Implement the OGC API client for 'DPR as a service'."""
 

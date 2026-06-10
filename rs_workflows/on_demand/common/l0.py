@@ -58,7 +58,7 @@ async def process_l0(
 
     # We detect the mission
     mission: str = session[1]
-    logger.info(f"✔️ Sentinel-{mission} session name is correct.")
+    logger.info(f"✅ Sentinel-{mission} session name is correct.")
 
     # Override of some parameters with default configuration
     if flow_params is None:
@@ -87,7 +87,7 @@ async def process_l0(
                 logger.error(f"❌ The session '{session}' has not been published yet")
                 raise ValueError(f"'{session}' has not been publised")
         else:
-            logger.info(f"Try to stage session  {session} from {mission} stations :{p.cadip_collections}")
+            logger.info(f"📥 Try to stage session {session} from {mission} stations :{p.cadip_collections}")
             station = await get_cadip_station(
                 flow_env,
                 session,
@@ -98,7 +98,7 @@ async def process_l0(
 
         # The session is stagged at this step.
         # We can call the flow
-        logger.info(f"We start Sentinel-{mission} processing.")
+        logger.info(f"🚧 We start Sentinel-{mission} processing.")
         if found:
             match int(mission):
                 case 1:

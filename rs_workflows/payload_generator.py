@@ -25,6 +25,7 @@ from uuid import uuid4
 import requests
 from prefect import get_run_logger, task
 from prefect.blocks.system import Secret
+from pydantic import SecretStr
 from pystac import Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
@@ -51,6 +52,7 @@ from rs_workflows.utils.utils import get_common_and_relative_paths, search_by_na
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
 DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
 RSPY_CATALOG_BUCKET = "rs-dev-cluster-catalog"
+DATA_EDH_DOMAIN = "data.earthdatahub.destine.eu"
 
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
@@ -110,7 +112,7 @@ def build_workflow_step(unit):
             inputs=inputs or None,
             adfs=adfs or None,
             outputs=outputs or None,
-            parameters=None,
+            parameters=unit.get("parameters", None),
         )
     except KeyError as ke:
         raise ValueError(f"Key {ke} not found in unit list") from ke
@@ -243,7 +245,7 @@ def find_s3_output_bucket(
 
     for row in config_rows:
         # the expiration_delay (the fourth field) is not used
-        logger.info(f"Configuration bucket: Checking row {row}")
+        logger.debug(f"Configuration bucket: Checking row {row}")
         owner_pat, coll_pat, prod_type_pat, _, bucket = row
 
         # Basic compatibility check using wildcard_match
@@ -367,6 +369,10 @@ def build_input_products(
                 store_name = storage_configuration.get_storage_for_pipeline_section(
                     mapping.get("origin", ""),
                 ) or storage_configuration.get_storage_for_pipeline_section("other")
+                # TODO: the following line is temporary and for tests only ! Force eveything to s3 !
+                # Delete the following line once the things will be clarified with other store_names
+                # This is due to the internal discussions, disregard any other store_name but s3
+                store_name = "s3"
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for input product '{product_name}'")
 
@@ -594,6 +600,7 @@ def get_io(
 def build_adfs(
     storage_configuration: StorageConfig,
     adfs: list[tuple[str, str, str]],
+    dpr_process_in: DprProcessIn,
 ) -> list[AdfConfig]:
     """
     Build a list of AdfConfig objects from input ADF definitions.
@@ -607,6 +614,7 @@ def build_adfs(
         storage_configuration (StorageConfig): Configuration object used to
             retrieve default storage parameters.
         adfs (list[tuple[str, str, str]]): List of (adf_id, adfs_type, path) tuples.
+        dpr_process_in (DprProcessIn): DPR input process definition
 
     Returns:
         list[AdfConfig]: List of constructed AdfConfig objects, one per group
@@ -628,6 +636,12 @@ def build_adfs(
             path, adfs_type = adfs_entries[0]
             if adfs_type == "folder":
                 path = os.path.dirname(path)
+            # Inject EarthDataHub API Key in path, as per documentation at
+            # https://earthdatahub.destine.eu/collections/copernicus-dem/datasets/GLO-30
+            if dpr_process_in.edh_api_key and path.startswith(f"https://{DATA_EDH_DOMAIN}/"):
+                path = SecretStr(
+                    path.replace(DATA_EDH_DOMAIN, f"edh:{dpr_process_in.edh_api_key}@api.earthdatahub.destine.eu"),
+                )
             result.append(AdfConfig(id=adfs_id, path=path, store_params=store_params))
         elif isinstance(store_params, StoreParams):
             # Advanced case where several adfs share the same id (i.e. several files)
@@ -801,7 +815,7 @@ def generate_payload(  # pylint: disable=unused-argument
         # output_mockup_path=build_output_products(unit_list[0], dpr_process_in, store_params, flow_env, config_rows)
         return build_mockup_payload(flow_env.owner_id)
 
-    logger.info(f"Starting payload generation for DPR processor '{dpr_process_in.processor_name}'")
+    logger.info(f"🚧 Starting payload generation for DPR processor '{dpr_process_in.processor_name}'")
     logger.info("Loading storage configuration template from file")
     secrets = Secret.load(
         prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, flow_env.owner_id),
@@ -823,13 +837,15 @@ def generate_payload(  # pylint: disable=unused-argument
                 storage_configuration,
                 bucket_configuration,
             )
-            io_config.input_products += input_products
-            io_config.output_products += output_products
+            seen_inputs = {p.id for p in io_config.input_products}
+            io_config.input_products += [p for p in input_products if p.id not in seen_inputs]
+            seen_outputs = {p.id for p in io_config.output_products}
+            io_config.output_products += [p for p in output_products if p.id not in seen_outputs]
         except KeyError as ke:
             raise ValueError(f"Key {ke} not found in unit list") from ke
 
     logger.info("Building ADFs section")
-    io_config.adfs = build_adfs(storage_configuration, adfs)
+    io_config.adfs = build_adfs(storage_configuration, adfs, dpr_process_in)
 
     # Add the logging config for l0 and s1 / s3 configurations. These configurations
     # are hardcoded in the l0 eopf dask worker image. The path where these files are stored is given
@@ -844,21 +860,29 @@ def generate_payload(  # pylint: disable=unused-argument
                 # TODO: this section is temporary, should be removed when the S1 L0 processor doesn't need it anymore
                 # the processor doesn't start without these parameters
                 for workflow_step in workflow_steps:
-                    workflow_step.parameters = {
+                    extra_parameters = {
                         "streaming_mode": False,
                         "temporary_path": "./output_params/tmp",
                         "acquisition_report_output_path": "./output_params/s1",
                     }
+                    if workflow_step.parameters:
+                        workflow_step.parameters.update(extra_parameters)
+                    else:
+                        workflow_step.parameters = extra_parameters
             case DprProcessor.S3L0:
                 config = ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
                 # TODO: this section is temporary, should be removed when the S3 L0 processor doesn't need it anymore
                 # the processor doesn't start without these parameters
                 for workflow_step in workflow_steps:
-                    workflow_step.parameters = {
+                    extra_parameters = {
                         "temporary_path": "./S3_D_TDS_1/output/tmp",
                         "acquisition_report_output_path": "./S3_D_TDS_1/output/default/Report/",
                         "ignore_output": "S03CACHE",
                     }
+                    if workflow_step.parameters:
+                        workflow_step.parameters.update(extra_parameters)
+                    else:
+                        workflow_step.parameters = extra_parameters
 
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
@@ -873,5 +897,5 @@ def generate_payload(  # pylint: disable=unused-argument
         logging=logging,
         config=config,
     )
-    logger.info(f"Generated payload: \n {payload}")
+    logger.debug(f"Generated payload: \n {payload}")
     return payload

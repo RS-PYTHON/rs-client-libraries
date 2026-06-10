@@ -261,7 +261,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     # extract STAC properties from metadata.
     # the scripts put them in 'properties' attribute.
     logger.info(f"Stac discovery metadata: {stac_discovery}")
-    logger.info(f"Product metadata: {stac_metadata.get("properties", {})}")
+    logger.info(f'Product metadata: {stac_metadata.get("properties", {})}')
     stac_props = normalize_stac_properties_datetimes(stac_metadata.get("properties", {}))
     logger.info(f"Extracted STAC properties from product metadata: {stac_props}")
 
