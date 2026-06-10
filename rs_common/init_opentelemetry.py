@@ -150,7 +150,6 @@ def init_traces(service_name: str, logger=None):
     """
     # No concurrent threads
     with lock:
-
         global initialized
         if initialized:
             return
@@ -184,15 +183,24 @@ def init_traces(service_name: str, logger=None):
     # Specific opentelemetry instrumentation with custom hooks
     #
 
+    instrumented = []
+
     if trace_requests_headers() or trace_requests_body():
+        instrumented.append("requests")
         RequestsInstrumentor().instrument(
             tracer_provider=otel_tracer,
             request_hook=requests_hook,
             response_hook=requests_hook,
         )
 
-    BotocoreInstrumentor().instrument(tracer_provider=otel_tracer, request_hook=botocore_request_hook)
+    instrumented.extend(["aiobotocore", "botocore"])
     AiobotocoreInstrumentor().instrument(tracer_provider=otel_tracer, request_hook=botocore_request_hook)
+    BotocoreInstrumentor().instrument(tracer_provider=otel_tracer, request_hook=botocore_request_hook)
+
+    # Don't instrument these packages again (separated by ,)
+    disable = os.getenv("OTEL_PYTHON_DISABLED_INSTRUMENTATIONS", "").split(",")
+    disable.extend(instrumented)
+    os.environ["OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"] = ",".join(disable)
 
     # Instrument all other dependencies under opentelemetry.instrumentation.*
     # NOTE 1: we need 'poetry run opentelemetry-bootstrap -a install' to install these.
