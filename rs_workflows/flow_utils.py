@@ -397,6 +397,12 @@ class DprProcessIn(BaseModel):
         description="Instrument mode used in certain queries. Can be a string or InstrumentMode enum.",
     )
 
+    edh_api_key: str | None = Field(
+        default=None,
+        title="EarthDataHub Standard API key",
+        description="Destination Earth / EarthDataHub standard API key used to access Copernicus DEM",
+    )
+
     # -----------------------
     # Validators
     # -----------------------

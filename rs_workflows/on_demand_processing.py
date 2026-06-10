@@ -34,7 +34,7 @@ from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_client.rs_client import RsClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
-from rs_workflows import auxip_flow, catalog_flow
+from rs_workflows import auxip_flow, catalog_flow, earthdatahub_flow
 from rs_workflows.dpr_flow import run_processor
 from rs_workflows.flow_utils import (
     AuxiliarySource,
@@ -225,18 +225,26 @@ async def _stage_input_adfs_alternative(
         task_table,
         specific_input_product,
     )
-    logger.info(f"Selected ADFS collection {collection}")
+    logger.info(f"Selected ADFS collection {collection} for ADFS {input_adfs["name"]}")
 
     aux_status: bool
     aux_items: ItemCollection | None
-    aux_status, aux_items = (
-        auxip_flow.aux_staging_task.with_options(
-            retries=staging_retries,
-            retry_delay_seconds=staging_retry_delay,
+    # Special case for Copernicus DEM available at Earthdatahub
+    if input_adfs["name"] == "DEM":
+        aux_items = earthdatahub_flow.earthdatahub_search_task.submit(
+            dpr_input.env,
+            aux_cql2,
+        ).result()
+        aux_status = True
+    else:
+        aux_status, aux_items = (
+            auxip_flow.aux_staging_task.with_options(
+                retries=staging_retries,
+                retry_delay_seconds=staging_retry_delay,
+            )
+            .submit(dpr_input.env, aux_cql2, collection, timeout, source)
+            .result()  # type: ignore
         )
-        .submit(dpr_input.env, aux_cql2, collection, timeout, source)
-        .result()  # type: ignore
-    )
 
     if not aux_items:
         return None
@@ -457,7 +465,7 @@ async def dpr_processing(
             auxip_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [t.result() for t in tasks]
         except (RuntimeError, KeyError) as err:
             raise err
-        # Set of ADFS. Each tuple includes the adfs name, type and the s3 storage path
+        # Set of ADFS. Each tuple includes the adfs name, type and the s3/https storage path
         source_items: list[Item] = []
         adfs: set[tuple[str, str, str]] = set()
         for name, adf_type, (status, item_collection) in auxip_items:
@@ -467,6 +475,7 @@ async def dpr_processing(
 
                 if status:
                     asset = next(iter(item.assets.values()))
+                    logger.info(f"ADFS '{name}' of type '{adf_type}': {asset.href}")
                     adfs.add((name, adf_type, asset.href))
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
