@@ -121,6 +121,7 @@ class AuxiliarySource(str, Enum):
     PRIP = "prip"
     CADIP = "cadip"
     AUXIP = "auxip"
+    CDSE = "cdse"
     CATALOG = "catalog"
 
 
