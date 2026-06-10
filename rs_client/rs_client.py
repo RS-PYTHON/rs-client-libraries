@@ -261,6 +261,16 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         return CadipClient(self.rs_server_href, self.rs_server_api_key, self.logger, **kwargs)
 
+    def get_cdse_client(self, **kwargs) -> "CdseClient":  # type: ignore # noqa: F821
+        """
+        Return an instance of the child class CdseClient.
+        """
+        from rs_client.stac.cdse_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            CdseClient,
+        )
+
+        return CdseClient(self.logger, **kwargs)
+
     def get_catalog_client(self, **kwargs) -> "CatalogClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class CatalogClient, with the same attributes as this "self" instance.
