@@ -547,7 +547,7 @@ async def run_processor(
                 except FileNotFoundError:
                     logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
             # After processing, clean up autoclean paths. IMPORTANT : the shared disk has to be mounted
-            # in the current flow environment (prefect workker) for this to work ! So, the shared_disk has to be
+            # in the current flow environment (prefect worker) for this to work ! So, the shared_disk has to be
             # mounted in both dask worker environment (where the processor runs) and in the prefect worker
             # environment (where this flow runs)
             clean_paths(paths_to_delete, logger)
