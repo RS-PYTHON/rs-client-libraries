@@ -187,6 +187,7 @@ async def init_prefect_blocks():
         global_env_vars = {}
         for key in [
             "RSPY_LOCAL_MODE",
+            "RSPY_PREFECT_URL",
             "PREFECT_BUCKET_NAME",
             "PREFECT_BUCKET_FOLDER",
             "POSTGRES_USER",

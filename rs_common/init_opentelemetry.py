@@ -148,7 +148,6 @@ def init_traces(service_name: str, logger=None):
         service_name (str): service name
         logger: non-default logger to user
     """
-    # No concurrent threads
     with lock:
         global initialized
         if initialized:
