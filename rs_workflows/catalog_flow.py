@@ -18,7 +18,8 @@ import json
 import os
 from datetime import datetime
 
-from prefect import flow, get_run_context, get_run_logger, runtime, task
+from prefect import flow, get_run_logger, runtime, task
+from prefect.runtime import get_run_context
 from pystac import (
     Collection,
     Extent,
