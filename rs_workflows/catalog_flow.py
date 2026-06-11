@@ -16,9 +16,17 @@
 
 import json
 import os
+from datetime import datetime
 
-from prefect import flow, get_run_logger, runtime, task
-from pystac import ItemCollection, Link
+from prefect import flow, get_run_context, get_run_logger, runtime, task
+from pystac import (
+    Collection,
+    Extent,
+    ItemCollection,
+    Link,
+    SpatialExtent,
+    TemporalExtent,
+)
 
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import (
@@ -141,6 +149,12 @@ async def publish(
 
                 # Add processing url link for each STAC item
                 platform = os.environ.get("RSPY_PREFECT_URL", "https://processing.ops.rs-python.eu")
+
+                ## TEST
+                ctx = get_run_context()
+                # Récupère l'URL complète de la tâche ou du flow
+                logger.info(f"full_url = '{ctx.task_run.url}'")
+
                 item.add_link(
                     Link(
                         rel="processing-execution",
@@ -154,6 +168,10 @@ async def publish(
                     item.id,
                     target_collection,
                 )
+
+                # Check that the collection exists. Otherwise create it.
+                await check_and_create_collection(flow_env, target_collection)
+
                 # Publish item to catalog
                 # TODO: adjust timeout as needed. Current value is 6 hours.
                 logger.info(
@@ -255,3 +273,29 @@ def resolve_collection(
         )
 
     return target_collection
+
+
+@task(name="Check and create the collection if needed")
+async def check_and_create_collection(flow_env: FlowEnv, collection_name: str):
+    # Check that the collection "collection_name" exists. Otherwise create it.
+    logger = get_run_logger()
+
+    catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+    try:
+        catalog_client.search(collections=[collection_name])
+    except RuntimeError:
+        # The collection is missing, we will create it
+        logger.info(f"The collection {collection_name} is missing; it will be created.")
+        spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
+        date_strings = ["2000-02-01T00:00:00Z", "2100-02-12T00:00:00Z"]
+        date_objects: list[datetime | None] = [
+            datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ") for date_str in date_strings
+        ]
+        temporal = TemporalExtent(intervals=date_objects)
+        extent = Extent(spatial=spatial, temporal=temporal)
+        new_collection = Collection(
+            id=collection_name,
+            description=f"{collection_name} collection",
+            extent=extent,
+        )
+        catalog_client.add_collection(new_collection)
