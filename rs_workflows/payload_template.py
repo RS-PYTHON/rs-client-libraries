@@ -184,6 +184,7 @@ class GeneralConfiguration(BasePayloadModel):
     triggering__use_basic_logging: bool | None = True
     triggering__wait_before_exit: int | None = 10
     dask__export_graphs: str | None = None
+    dask_utils__timeout: int | None = None
     breakpoints__folder: str | None = None
     triggering__create_temporary: bool | None = None
     triggering__temporary_shared: bool | None = None
@@ -319,6 +320,7 @@ class PayloadSchema(BasePayloadModel):
     dask_context: DaskContext | None = None
     logging: str | None = None
     config: list[str] | None = None
+    secret: list[str] | None = None
     eoqc: EOQCConfig | None = None
 
 
