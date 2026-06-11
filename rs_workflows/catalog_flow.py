@@ -19,7 +19,8 @@ import os
 from datetime import datetime
 
 from prefect import flow, get_run_logger, runtime, task
-from prefect.runtime import get_run_context
+from prefect.context import get_run_context
+from prefect.utilities.urls import url_for
 from pystac import (
     Collection,
     Extent,
@@ -153,8 +154,8 @@ async def publish(
 
                 ## TEST
                 ctx = get_run_context()
-                # Récupère l'URL complète de la tâche ou du flow
-                logger.info(f"full_url = '{ctx.task_run.url}'")
+                task_run_url = url_for(ctx.task_run)
+                logger.info(f"full_url = '{task_run_url}'")
 
                 item.add_link(
                     Link(
