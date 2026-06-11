@@ -54,6 +54,7 @@ async def test_search_returns_found_items(monkeypatch, mocker, mock_auxip_logger
         method="POST",
         stac_filter={"foo": "bar"},
         max_items=3,
+        collections=None,
         sortby=[],
         timestamp=None,
     )

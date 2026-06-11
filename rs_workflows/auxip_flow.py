@@ -83,6 +83,7 @@ async def search(
             method="POST",
             stac_filter=aux_cql2.get("filter"),
             max_items=aux_cql2.get("limit"),
+            collections=aux_cql2.get("collections"),
             sortby=aux_cql2.get("sortby"),
             timestamp=aux_cql2.get("timestamp"),
             **source_search_kwargs,
