@@ -20,7 +20,7 @@
 
 # Generic metadata about this project
 name: rs-client-libraries
-prefect-version: 3.6.20
+prefect-version: 3.6.29
 
 # build section allows you to manage and build docker images
 build: null
@@ -45,7 +45,7 @@ deployments:
     Generic processing flow. Not meant to be called directly.
   entrypoint: rs_workflows/on_demand_processing.py:dpr_processing
   work_pool:
-    name: eopf-prefect-pool
+    name: processing-sandbox-k8s-pool
     work_queue_name: null
     job_variables: {}
   schedules: []
@@ -59,7 +59,7 @@ deployments:
   entrypoint: rs_workflows/on_demand/sentinel1/s1_ard.py:process_s1ard
   parameters: {}
   work_pool:
-    name: eopf-prefect-pool
+    name: processing-sandbox-k8s-pool
     work_queue_name: null
     job_variables: {}
   schedules: []
@@ -73,7 +73,7 @@ deployments:
   entrypoint: rs_workflows/on_demand/sentinel1/s1_ard.py:process_s1ard_reference
   parameters: {}
   work_pool:
-    name: eopf-prefect-pool
+    name: processing-sandbox-k8s-pool
     work_queue_name: null
     job_variables: {}
   schedules: []
