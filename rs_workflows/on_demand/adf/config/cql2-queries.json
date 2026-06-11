@@ -1,6 +1,6 @@
 [
     {
-        "name": "ValCover",
+        "name": "ValIntersect",
         "parameters": [
             "product_type",
             "start_datetime",
@@ -62,7 +62,7 @@
                     "direction": "desc"
                 }
             ],
-            "limit": 200
+            "limit": 50
         }
     },
     {
@@ -108,51 +108,6 @@
                 }
             ],
             "limit": 100
-        }
-    },
-    {
-        "name": "Published",
-        "parameters": [
-            "product_type",
-            "start_datetime",
-            "end_datetime"
-        ],
-        "stac": {
-            "filter": {
-                "op": "and",
-                "args": [
-                    {
-                        "op": "=",
-                        "args": [
-                            {
-                                "property": "product:type"
-                            },
-                            "{product_type}"
-                        ]
-                    },
-                    {
-                        "op": "t_contains",
-                        "args": [
-                            {
-                                "interval": [
-                                    "{start_datetime}",
-                                    "{end_datetime}"
-                                ]
-                            },
-                            {
-                                "property": "published"
-                            }
-                        ]
-                    }
-                ]
-            },
-            "sortby": [
-                {
-                    "field": "created",
-                    "direction": "desc"
-                }
-            ],
-            "limit": 10
         }
     },
     {
@@ -295,6 +250,72 @@
                 }
             ],
             "limit": 1
+        }
+    },
+    {
+        "name": "ValCover",
+        "parameters": [
+            "product_type",
+            "start_datetime",
+            "end_datetime",
+            "dTa",
+            "dTb"
+        ],
+        "stac": {
+            "filter": {
+                "op": "and",
+                "args": [
+                    {
+                        "op": "=",
+                        "args": [
+                            {
+                                "property": "product:type"
+                            },
+                            "{product_type}"
+                        ]
+                    },
+                    {
+                        "op": "t_intersects",
+                        "args": [
+                            {
+                                "interval": [
+                                    {
+                                        "property": "start_datetime"
+                                    },
+                                    {
+                                        "property": "end_datetime"
+                                    }
+                                ]
+                            },
+                            {
+                                "interval": [
+                                    {
+                                        "op": "-",
+                                        "args": [
+                                            "{start_datetime}",
+                                            "{dTa}"
+                                        ]
+                                    },
+                                    {
+                                        "op": "+",
+                                        "args": [
+                                            "{end_datetime}",
+                                            "{dTb}"
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "sortby": [
+                {
+                    "field": "created",
+                    "direction": "desc"
+                }
+            ],
+            "limit": 200
         }
     }
 ]
