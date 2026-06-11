@@ -103,6 +103,7 @@ async def aux_staging(
     catalog_collection_identifier: str,
     timeout_seconds: int = -1,
     source: AuxiliarySource = AuxiliarySource.AUXIP,
+    selected_assets: list[str] | None = None,
 ) -> tuple[bool, ItemCollection | None]:
     """
     Generic flow to retrieve a list of items matching the STAC CQL2 filter given, and to stage the ones
@@ -115,6 +116,7 @@ async def aux_staging(
         timeout_seconds (int): Timeout value for the Auxip search task.
             Optional, if no value is given the process will run until it is completed
         source (str): STAC source where auxiliary products are searched.
+        selected_assets: Optional asset keys to stage.
 
     Returns:
         bool: Return status: False if staging failed, True otherwise
@@ -148,11 +150,13 @@ async def aux_staging(
             logger.info("AUX items found in catalog; skipping staging.")
             return True, aux_items
 
-        # Stage Auxip items
+        # Stage AUX items
+        asset_names = selected_assets or ({"product"} if source == AuxiliarySource.CDSE else None)
         staged = staging_task.submit(
             flow_env.serialize(),
             aux_items,
             catalog_collection_identifier,
+            asset_names=asset_names,
         )
 
         # Wait for last task to end.

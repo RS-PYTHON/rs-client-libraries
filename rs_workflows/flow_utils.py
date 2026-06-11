@@ -259,6 +259,10 @@ class AuxiliaryProductMapping(BaseModel):
         default=AuxiliarySource.AUXIP,
         description="STAC source where auxiliary products are searched.",
     )
+    selected_assets: list[str] | None = Field(
+        default=None,
+        description="Optional asset keys to stage.",
+    )
 
     def items(self):
         """Helper method to return the model fields as items, useful for logging."""

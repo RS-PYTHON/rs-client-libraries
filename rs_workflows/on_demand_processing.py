@@ -61,7 +61,10 @@ def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
     return f"Dask cluster dashboard URL: {dashboard_url}"
 
 
-def _select_aux_collection_and_source(dpr_input: DprProcessIn, product_type: str) -> tuple[str, AuxiliarySource]:
+def _select_aux_collection_and_source(
+    dpr_input: DprProcessIn,
+    product_type: str,
+) -> tuple[str, AuxiliarySource, list[str] | None]:
     """
     Resolve the catalog collection identifier and STAC source for a requested AUX product type.
 
@@ -78,19 +81,20 @@ def _select_aux_collection_and_source(dpr_input: DprProcessIn, product_type: str
     default_aux_collection = f"{dpr_input.satellite}-aux-{product_type}"
     return next(
         (
-            (p.collection_name, p.source)
+            (p.collection_name, p.source, p.selected_assets)
             for p in dpr_input.auxiliary_product_to_collection_identifier
             if p.product_type == product_type
         ),
         next(
             (
-                (p.collection_name, p.source)
+                (p.collection_name, p.source, p.selected_assets)
                 for p in dpr_input.auxiliary_product_to_collection_identifier
                 if p.product_type == "*"
             ),
             (
                 default_aux_collection,
                 AuxiliarySource.AUXIP,
+                None,
             ),
         ),
     )
@@ -102,7 +106,7 @@ async def _build_aux_request(
     dpr_input: DprProcessIn,
     task_table: dict[str, Any],
     specific_input_product: tuple[str | None, Item | None] = (None, None),
-) -> tuple[dict, str, int, AuxiliarySource]:
+) -> tuple[dict, str, int, AuxiliarySource, list[str] | None]:
     """
     Build the AUX request data for a single ADFS alternative.
 
@@ -113,7 +117,7 @@ async def _build_aux_request(
     - resolves the target AUX catalog collection for the requested product type
 
     The returned tuple contains everything needed by the staging call:
-    ``(aux_cql2, collection, timeout, source)``.
+    ``(aux_cql2, collection, timeout, source, selected_assets)``.
     """
     logger = get_run_logger()
     timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
@@ -139,12 +143,12 @@ async def _build_aux_request(
     logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
     product_type = parameters.get("product_type", "*")
-    collection, source = _select_aux_collection_and_source(dpr_input, product_type)
+    collection, source, selected_assets = _select_aux_collection_and_source(dpr_input, product_type)
     get_run_logger().info(
         f"🚧 Prepared AUX request for input {input_adfs['name']} "
         f"using source {source} and collection {collection}:🧹 {aux_cql2}",
     )
-    return aux_cql2, collection, timeout if timeout else -1, source
+    return aux_cql2, collection, timeout if timeout else -1, source, selected_assets
 
 
 async def _normalize_archived_aux_items(item_collection: ItemCollection, dpr_input: DprProcessIn) -> ItemCollection:
@@ -218,7 +222,7 @@ async def _stage_input_adfs_alternative(
     the next alternative in order.
     """
     logger = get_run_logger()
-    aux_cql2, collection, timeout, source = await _build_aux_request(
+    aux_cql2, collection, timeout, source, selected_assets = await _build_aux_request(
         alternative,
         input_adfs,
         dpr_input,
@@ -242,7 +246,7 @@ async def _stage_input_adfs_alternative(
                 retries=staging_retries,
                 retry_delay_seconds=staging_retry_delay,
             )
-            .submit(dpr_input.env, aux_cql2, collection, timeout, source)
+            .submit(dpr_input.env, aux_cql2, collection, timeout, source, selected_assets)
             .result()  # type: ignore
         )
 
