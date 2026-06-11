@@ -19,8 +19,6 @@ import os
 from datetime import datetime
 
 from prefect import flow, get_run_logger, runtime, task
-from prefect.context import get_run_context
-from prefect.utilities.urls import url_for
 from pystac import (
     Collection,
     Extent,
@@ -151,11 +149,6 @@ async def publish(
 
                 # Add processing url link for each STAC item
                 platform = os.environ.get("RSPY_PREFECT_URL", "https://processing.ops.rs-python.eu")
-
-                ## TEST
-                ctx = get_run_context()
-                task_run_url = url_for(ctx.task_run)
-                logger.info(f"full_url = '{task_run_url}'")
 
                 item.add_link(
                     Link(
