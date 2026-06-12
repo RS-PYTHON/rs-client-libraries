@@ -21,29 +21,19 @@ from threading import Lock
 
 import requests
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation import auto_instrumentation
 from opentelemetry.instrumentation.botocore import (
     AiobotocoreInstrumentor,
     BotocoreInstrumentor,
 )
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace.span import NonRecordingSpan, Span, SpanContext, TraceFlags
 from opentelemetry.util._decorator import _agnosticcontextmanager
 
-from rs_common import utils
-from rs_common.logging import Logging
 from rs_common.utils import env_bool
 
 lock = Lock()
 initialized = False
-
-default_logger = Logging.default(__name__)
-
-FROM_PYTEST = False
 
 
 # Show details of http headers and body/content in tempo/grafana ?
@@ -133,20 +123,19 @@ def requests_hook(span: Span, request: requests.PreparedRequest, response: reque
             span.set_attribute("http.response.content", parse_data(response.content))
 
 
-def botocore_request_hook(span, _service_name, _operation_name, api_params: dict):
+def botocore_hook(span, _service_name, _operation_name, api_params: dict):
     """Callback function invoked by BotocoreInstrumentor and AiobotocoreInstrumentor"""
     bucket = api_params.get("Bucket", "")
     key = api_params.get("Key", "")
     span.set_attribute("_path", f"s3://{bucket}/{key}")
 
 
-def init_traces(service_name: str, logger=None):
+def init_traces(service_name: str):
     """
     Init instrumentation of OpenTelemetry traces.
 
     Args:
         service_name (str): service name
-        logger: non-default logger to user
     """
     with lock:
         global initialized
@@ -154,59 +143,32 @@ def init_traces(service_name: str, logger=None):
             return
         initialized = True
 
-    logger = logger or default_logger
+    # Set the opentelemetry service name
+    os.environ["OTEL_SERVICE_NAME"] = service_name
 
-    # Don't call this line from pytest because it causes errors:
-    # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to localhost:4317, retrying in ..s.
-    if not FROM_PYTEST:
-        tempo_endpoint = os.getenv("TEMPO_ENDPOINT")
-        if not tempo_endpoint:
-            if utils.CLUSTER_MODE:
-                logger.warning("'TEMPO_ENDPOINT' variable is missing, cannot initialize OpenTelemetry")
-            return
+    # Send openelemetry signals to tempo
+    os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = os.getenv("TEMPO_ENDPOINT")
 
-        # Set the tempo endpoint for all opentelemetry instrumentors.
-        # NOTE: in local mode we have this error that we can ignore:
-        # Failed to export metrics to tempo:4317, error code: StatusCode.UNIMPLEMENTED
-        os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = tempo_endpoint
+    # We'll use custom instrumentation for these packages (separated by ,)
+    custom = "aiobotocore,botocore,requests"
+    os.environ["OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"] = (
+        f"{os.getenv('OTEL_PYTHON_DISABLED_INSTRUMENTATIONS', '')},{custom}"
+    )
 
-    otel_resource = Resource(attributes={"service.name": service_name})
-    otel_tracer = TracerProvider(resource=otel_resource)
-    if not FROM_PYTEST:
-        otel_tracer.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=tempo_endpoint)))
-
-    # Use this tracer everywhere in opentelemetry
-    trace.set_tracer_provider(otel_tracer)
+    # Run the opentelemetry auto instrumentation on all packages under opentelemetry.instrumentation.*
+    # This is what the command line "opentelemetry-instrumentation" would do.
+    # NOTE 1: we need 'poetry run opentelemetry-bootstrap -a install' to install these packages.
+    # NOTE 2: in local mode we have this error that we can ignore:
+    # Failed to export metrics to tempo:4317, error code: StatusCode.UNIMPLEMENTED
+    auto_instrumentation.initialize()
 
     #
     # Specific opentelemetry instrumentation with custom hooks
     #
 
-    instrumented = []
-
-    if trace_requests_headers() or trace_requests_body():
-        instrumented.append("requests")
-        RequestsInstrumentor().instrument(
-            tracer_provider=otel_tracer,
-            request_hook=requests_hook,
-            response_hook=requests_hook,
-        )
-
-    instrumented.extend(["aiobotocore", "botocore"])
-    AiobotocoreInstrumentor().instrument(tracer_provider=otel_tracer, request_hook=botocore_request_hook)
-    BotocoreInstrumentor().instrument(tracer_provider=otel_tracer, request_hook=botocore_request_hook)
-
-    # Don't instrument these packages again (separated by ,)
-    disable = os.getenv("OTEL_PYTHON_DISABLED_INSTRUMENTATIONS", "").split(",")
-    disable.extend(instrumented)
-    os.environ["OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"] = ",".join(disable)
-
-    # Instrument all other dependencies under opentelemetry.instrumentation.*
-    # NOTE 1: we need 'poetry run opentelemetry-bootstrap -a install' to install these.
-    # NOTE 2: we have warnings 'Overriding of current TracerProvider is not allowed' and
-    # 'Attempting to instrument while already instrumented' because we already did some specific
-    # instrumentations above, but we can ignore these warnings.
-    auto_instrumentation.initialize()
+    AiobotocoreInstrumentor().instrument(request_hook=botocore_hook)
+    BotocoreInstrumentor().instrument(request_hook=botocore_hook)
+    RequestsInstrumentor().instrument(request_hook=requests_hook, response_hook=requests_hook)
 
 
 @_agnosticcontextmanager
