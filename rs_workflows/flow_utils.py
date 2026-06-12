@@ -118,6 +118,7 @@ class LoggingLevel(str, Enum):
 class AuxiliarySource(str, Enum):
     """STAC source for auxiliary product search."""
 
+    LTA = "lta"
     PRIP = "prip"
     CADIP = "cadip"
     AUXIP = "auxip"

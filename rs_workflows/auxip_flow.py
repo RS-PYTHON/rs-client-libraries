@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Auxip flow implementation."""
+"""Auxiliary product search and staging flows."""
 
 import datetime
 import json
@@ -29,9 +29,9 @@ from rs_workflows.flow_utils import AuxiliarySource, FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task
 from rs_workflows.utils.utils import asset_unzip_decompress
 
-###############
-# Auxip flows #
-###############
+###################
+# Auxiliary flows #
+###################
 
 
 def select_search_client_and_kwargs(
@@ -49,6 +49,11 @@ def select_search_client_and_kwargs(
         return flow_env.rs_client.get_cadip_client(), {}
     if source == AuxiliarySource.CDSE:
         return flow_env.rs_client.get_cdse_client(), {}
+    if source == AuxiliarySource.LTA:
+        raise ValueError(
+            "LTA auxiliary product search is not supported yet: rs-server does not expose an LTA STAC service "
+            "endpoint and rs-client-libraries does not provide an LtaClient.",
+        )
     raise ValueError(f"Unsupported auxiliary product source: {source.value!r}")
 
 
@@ -60,11 +65,11 @@ async def search(
     source: AuxiliarySource = AuxiliarySource.AUXIP,
 ) -> ItemCollection | None:
     """
-    Search Auxip products.
+    Search AUX products.
 
     Args:
         env: Prefect flow environment (at least the owner_id is required)
-        auxip_cql2: Auxip CQL2 filter read from the processor tasktable.
+        aux_cql2: AUX CQL2 filter read from the processor tasktable.
         error_if_empty: Raise a ValueError if the results are empty.
         source: STAC source where auxiliary products are searched.
     """
@@ -113,14 +118,14 @@ async def aux_staging(
         env (FlowEnvArgs): Prefect flow environment
         stac_query (dict): CQL2 filter to select which files to stage
         catalog_collection_identifier (str): Catalog collection identifier where CADIP sessions and AUX data are staged
-        timeout_seconds (int): Timeout value for the Auxip search task.
+        timeout_seconds (int): Timeout value for the AUX search task.
             Optional, if no value is given the process will run until it is completed
         source (str): STAC source where auxiliary products are searched.
         selected_assets: Optional asset keys to stage.
 
     Returns:
         bool: Return status: False if staging failed, True otherwise
-        ItemCollection: List of catalog Items staged from Auxip station
+        ItemCollection: List of catalog Items staged from AUX station
     """
     logger = get_run_logger()
 
@@ -128,7 +133,7 @@ async def aux_staging(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "aux-staging"):
 
-        # Search Auxip products
+        # Search AUX products
         aux_items: ItemCollection | None = (
             search_task.with_options(timeout_seconds=timeout_seconds if timeout_seconds >= 0 else None)
             .submit(
@@ -208,7 +213,7 @@ async def on_demand_aux_staging(
     catalog_collection_identifier: str,
 ) -> tuple[bool, ItemCollection | None]:
     """
-    Flow to retrieve Auxip files using a ValCover filter with the given time interval defined by
+    Flow to retrieve AUX files using a ValCover filter with the given time interval defined by
     start_datetime and end_datetime, select only the type of files wanted if eopf_type is given, stage
     the files and add STAC items into the catalog.
     Informations on ValCover filter:
@@ -225,7 +230,7 @@ async def on_demand_aux_staging(
 
     Returns:
         bool: Return status: False if staging failed, True otherwise
-        ItemCollection: List of Items retrieved from the Auxip search and staged to the catalog
+        ItemCollection: List of Items retrieved from the AUX search and staged to the catalog
     """
 
     # CQL2 filter: we use a filter combining a ValCover filter and a product type filter

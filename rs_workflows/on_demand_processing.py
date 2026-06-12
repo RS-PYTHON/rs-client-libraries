@@ -139,7 +139,7 @@ async def _build_aux_request(
 
     md = "# AUX CQL2 filter \n\n```json\n" + json.dumps(aux_cql2, indent=2) + "\n```"
     artifact_key_name: str = "aux-cql2-filter"
-    await acreate_markdown_artifact(key=artifact_key_name, markdown=md, description="Auxip CQL2 filter")
+    await acreate_markdown_artifact(key=artifact_key_name, markdown=md, description="AUX CQL2 filter")
     logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
     product_type = parameters.get("product_type", "*")
@@ -153,9 +153,9 @@ async def _build_aux_request(
 
 async def _normalize_archived_aux_items(item_collection: ItemCollection, dpr_input: DprProcessIn) -> ItemCollection:
     """
-    Normalize archived AUXIP items and persist the updated metadata to the catalog.
+    Normalize archived AUX items and persist the updated metadata to the catalog.
 
-    When staged AUXIP items still point to archived content, this helper:
+    When staged AUX items still point to archived content, this helper:
     - finds the affected items in the collection
     - submits one normalization task per archived item
     - waits for all normalization results
@@ -173,12 +173,12 @@ async def _normalize_archived_aux_items(item_collection: ItemCollection, dpr_inp
 
     tasks = []
     for idx in archived_indexes:
-        auxip_item = item_collection.items[idx]
+        aux_item = item_collection.items[idx]
         logger.info(
             "The following staged ADFS asset is archived/compressed "
-            f"{auxip_item.to_dict()}. Starting normalization task",
+            f"{aux_item.to_dict()}. Starting normalization task",
         )
-        tasks.append(auxip_flow.aux_unzip_decompress_task.submit(auxip_item))
+        tasks.append(auxip_flow.aux_unzip_decompress_task.submit(aux_item))
 
     results = [task.result() for task in tasks]
 
@@ -212,8 +212,8 @@ async def _stage_input_adfs_alternative(
     Stage one ADFS alternative and normalize archived outputs when needed.
 
     This helper encapsulates the "happy path" for a single alternative:
-    1. build the final AUXIP request and resolve the target collection
-    2. stage matching AUXIP items with the configured retry policy
+    1. build the final AUX request and resolve the target collection
+    2. stage matching AUX items with the configured retry policy
     3. if the staged assets are still archived, normalize them and update the catalog
     4. return the same tuple shape expected by the caller
 
@@ -280,9 +280,9 @@ async def process_input_adfs(
     input and stops at the first alternative that produces staged items.
 
     For each alternative, the task:
-    - builds the final AUXIP CQL2 request from the task table definition
+    - builds the final AUX CQL2 request from the task table definition
     - resolves the target AUX collection identifier
-    - runs AUXIP staging with retries
+    - runs AUX staging with retries
     - normalizes archived outputs when the staged assets still point to
       compressed archives
     - updates the catalog entries after normalization so downstream payload
@@ -466,13 +466,13 @@ async def dpr_processing(
                     )
 
         try:
-            auxip_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [t.result() for t in tasks]
+            aux_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [t.result() for t in tasks]
         except (RuntimeError, KeyError) as err:
             raise err
         # Set of ADFS. Each tuple includes the adfs name, type and the s3/https storage path
         source_items: list[Item] = []
         adfs: set[tuple[str, str, str]] = set()
-        for name, adf_type, (status, item_collection) in auxip_items:
+        for name, adf_type, (status, item_collection) in aux_items:
             for item in item_collection.items:
                 # list with links to be added in derived_from
                 source_items.append(item)

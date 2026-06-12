@@ -24,7 +24,7 @@ import pytest
 from pystac import Item, ItemCollection
 
 from rs_workflows import auxip_flow
-from rs_workflows.flow_utils import FlowEnvArgs
+from rs_workflows.flow_utils import AuxiliarySource, FlowEnvArgs
 
 
 @pytest.fixture
@@ -33,6 +33,38 @@ def mock_auxip_logger(monkeypatch, mocker):
     logger = mocker.Mock()
     monkeypatch.setattr(auxip_flow, "get_run_logger", lambda: logger)
     return logger
+
+
+@pytest.mark.parametrize(
+    ("source", "getter_name", "expected_kwargs"),
+    [
+        (AuxiliarySource.AUXIP, "get_auxip_client", {}),
+        (AuxiliarySource.CATALOG, "get_catalog_client", {"owner_id": "me"}),
+        (AuxiliarySource.PRIP, "get_prip_client", {}),
+        (AuxiliarySource.CADIP, "get_cadip_client", {}),
+        (AuxiliarySource.CDSE, "get_cdse_client", {}),
+    ],
+)
+def test_select_search_client_and_kwargs_selects_expected_client(mocker, source, getter_name, expected_kwargs):
+    """Test AUX source selection returns the expected STAC client and source-specific search kwargs."""
+    expected_client = mocker.Mock()
+    flow_env = mocker.Mock()
+    flow_env.owner_id = "me"
+    getattr(flow_env.rs_client, getter_name).return_value = expected_client
+
+    selected_client, search_kwargs = auxip_flow.select_search_client_and_kwargs(flow_env, source)
+
+    assert selected_client is expected_client
+    assert search_kwargs == expected_kwargs
+    getattr(flow_env.rs_client, getter_name).assert_called_once_with()
+
+
+def test_select_search_client_and_kwargs_lta_raises_not_supported(mocker):
+    """Test LTA source selection fails clearly until rs-server exposes an LTA STAC service and client."""
+    flow_env = mocker.Mock()
+
+    with pytest.raises(ValueError, match="LTA auxiliary product search is not supported yet"):
+        auxip_flow.select_search_client_and_kwargs(flow_env, AuxiliarySource.LTA)
 
 
 @pytest.mark.asyncio
