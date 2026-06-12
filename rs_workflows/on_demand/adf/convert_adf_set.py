@@ -27,7 +27,7 @@ from prefect.runner.storage import GitRepository
 from prefect.runtime import flow_run
 from prefect.variables import Variable
 
-from rs_workflows.adf_flow import SafeDict, adf_conversion_task, substitute_values
+from rs_workflows.adf_flow import adf_conversion_task, substitute_values
 from rs_workflows.flow_utils import AdfProcessIn, AuxiliaryProductMapping, FlowEnvArgs
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -71,7 +71,8 @@ async def convert_adf_group(
     # Check input chronology
     if period_start_datetime >= period_end_datetime:
         raise ValueError(
-            f"❌ period_start_datetime should be before period_end_datetime ( here {period_start_datetime} >= {period_end_datetime})",
+            "❌ period_start_datetime should be before period_end_datetime",
+            f" ( here {period_start_datetime} >= {period_end_datetime})",
         )
 
     # Read the Prefect Variable and extract list of aux to manage
@@ -81,7 +82,7 @@ async def convert_adf_group(
     if not isinstance(raw_data, dict):
         raise ValueError(f"❌ Prefect variable '{adf_group_name}' has got an invalid format.")
     settings: dict[str, Any] = raw_data
-    satellite = settings.get("satellite", "")
+    # satellite = settings.get("satellite", "")
     aux_to_be_generated: list = settings.get("aux-to-be-generated", [])
     logger.debug(f"aux_to_be_generated = {aux_to_be_generated}")
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] = settings.get(
@@ -109,8 +110,8 @@ async def convert_adf_group(
                 period_end_datetime,
                 auxiliary_product_to_collection_identifier,
             )
-        else:
-            logger.info("No future period to schedule. All AUX data retrieval is for past dates.")
+    else:
+        logger.info("No future period to schedule. All AUX data retrieval is for past dates.")
 
     # 2) Continue with transformation on the past
     if period_start_datetime < now_utc:
@@ -138,8 +139,8 @@ async def convert_adf_group(
         logger.info("No AUX data to retrieve in the past. Flows have been scheduled to retrieved them later on.")
 
 
-def compute_cql2(cql2_query_name: str, dTa: int, dTb: int) -> dict:
-
+def compute_cql2(cql2_query_name: str, dta: int, dtb: int) -> dict:
+    """Compute the CQL2 filter content by reading the configuration file and substituting the values."""
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
@@ -167,7 +168,7 @@ def compute_cql2(cql2_query_name: str, dTa: int, dTb: int) -> dict:
         "limit": cql2_temp["stac"]["limit"],
     }
 
-    return substitute_values(cql2_json, {"dTa": dTa, "dTb": dTb})
+    return substitute_values(cql2_json, {"dTa": dta, "dTb": dtb})
 
 
 @task(name="conversion from the past")
@@ -175,19 +176,23 @@ async def past_adf_conversion(
     owner_identifier: str,
     product_type: str,
     cql2_query_name: str,
-    dTa: int,
-    dTb: int,
+    dta: int,
+    dtb: int,
     period_in_hours: int,
     period_start: datetime,
     period_end: datetime,
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
 ) -> None:
-    """ """
+    """
+    Convert ADF data for a period in the past by splitting it into
+    sub-periods of length `period_in_hours` and running the conversion flow on each of them.
+    If `period_in_hours` is equal to 0, then the conversion is run on the whole period at once.
+    """
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
     logger.info("Computing cql2_filter without start_datetime and end_datetime...")
-    cql2_filter_without_date = compute_cql2(cql2_query_name, dTa, dTb)
+    cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb)
 
     # Scheduling according to the period_in_hours
     flow_parameters: AdfProcessIn
@@ -242,21 +247,13 @@ async def past_adf_conversion(
             start += duration
 
 
-@task(name="fake conversion in the past")
-async def fake_adf_conversion_no_more_used():
-    logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
-    logger.info(" single conversion task ...")
-    await asyncio.sleep(5)
-
-
 @task(name="schedule conversion")
 async def schedule_adf_conversion(
     owner_identifier: str,
     product_type: str,
     cql2_query_name: str,
-    dTa: int,
-    dTb: int,
+    dta: int,
+    dtb: int,
     period_in_hours: int,
     period_start: datetime,
     period_end: datetime,
@@ -273,7 +270,7 @@ async def schedule_adf_conversion(
     logger.setLevel(logging.DEBUG)
 
     logger.info("Computing cql2_filter without start_datetime and end_datetime...")
-    cql2_filter_without_date = compute_cql2(cql2_query_name, dTa, dTb)
+    cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb)
 
     # Scheduling according to the period_in_hours
     rule: str
@@ -283,7 +280,10 @@ async def schedule_adf_conversion(
             f"Schedule the flow conversion to start at {period_start} for a time range [{period_start}-{period_end}].",
         )
         logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
-        rule = f"DTSTART:{period_start.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=HOURLY;UNTIL={period_start.strftime("%Y%m%dT%H%M%SZ")}"
+        rule = (
+            f"DTSTART:{period_start.strftime("%Y%m%dT%H%M%SZ")}\n",
+            f"FREQ=HOURLY;UNTIL={period_start.strftime("%Y%m%dT%H%M%SZ")}",
+        )
 
         await schedule_conversion_flow(
             owner_identifier,
@@ -299,7 +299,10 @@ async def schedule_adf_conversion(
         logger.debug(f"period_corrected = {period_corrected}")
         start_rule: datetime = period_start + period_corrected
         stop_rule: datetime = period_end
-        rule = f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=MINUTELY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}"
+        rule = (
+            f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\n",
+            f"FREQ=MINUTELY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}",
+        )
         logger.debug(f"rule = {rule}")
 
         logger.info(

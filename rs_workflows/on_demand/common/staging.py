@@ -30,7 +30,6 @@ from prefect.artifacts import (
 )
 from pydantic import BaseModel, Field
 
-from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.catalog_flow import check_and_create_collection
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.utils.artifact_verbose import ReportManager
