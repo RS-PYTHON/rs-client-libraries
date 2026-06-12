@@ -272,6 +272,9 @@ def resolve_collection(
 
 @task(name="Check and create the collection if needed")
 async def check_and_create_collection(flow_env: FlowEnv, collection_name: str):
+    """
+    Check if a collection exists, and create it if it doesn't.
+    """
     # Check that the collection "collection_name" exists. Otherwise create it.
     logger = get_run_logger()
 

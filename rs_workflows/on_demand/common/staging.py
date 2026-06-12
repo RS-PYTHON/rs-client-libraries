@@ -29,12 +29,6 @@ from prefect.artifacts import (
     acreate_markdown_artifact,
 )
 from pydantic import BaseModel, Field
-from pystac import (
-    Collection,
-    Extent,
-    SpatialExtent,
-    TemporalExtent,
-)
 
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.catalog_flow import check_and_create_collection

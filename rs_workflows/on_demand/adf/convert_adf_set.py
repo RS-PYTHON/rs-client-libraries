@@ -27,7 +27,7 @@ from prefect.runner.storage import GitRepository
 from prefect.runtime import flow_run
 from prefect.variables import Variable
 
-from rs_workflows.adf_flow import adf_conversion_task
+from rs_workflows.adf_flow import SafeDict, adf_conversion_task, substitute_values
 from rs_workflows.flow_utils import AdfProcessIn, AuxiliaryProductMapping, FlowEnvArgs
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -58,7 +58,8 @@ async def convert_adf_group(
         - The part of the period in the future is scheduled for later execution.
 
     Raises:
-        ValueError: If `period_start_datetime` is not before `period_end_datetime` or if the Prefect Variable format is invalid.
+        ValueError: If `period_start_datetime` is not before `period_end_datetime`
+        or if the Prefect Variable format is invalid.
         FileNotFoundError: If the Prefect Variable does not exist.
     """
 
@@ -135,21 +136,6 @@ async def convert_adf_group(
         await asyncio.gather(*tasks)
     else:
         logger.info("No AUX data to retrieve in the past. Flows have been scheduled to retrieved them later on.")
-
-
-class SafeDict(dict):
-    def __missing__(self, key):
-        return "{" + key + "}"
-
-
-def substitute_values(obj, values):
-    if isinstance(obj, dict):
-        return {k: substitute_values(v, values) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [substitute_values(v, values) for v in obj]
-    if isinstance(obj, str):
-        return obj.format_map(SafeDict(values))
-    return obj
 
 
 def compute_cql2(cql2_query_name: str, dTa: int, dTb: int) -> dict:

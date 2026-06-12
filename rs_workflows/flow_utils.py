@@ -459,7 +459,8 @@ class AdfProcessIn(BaseModel):
     cql2_filter: dict | None = Field(
         default=None,
         title="CQL2 Filter",
-        description="CQL2 filter for retrieving auxiliary data. If provided, start_datetime, end_datetime, and satellite will be ignored for auxiliary data retrieval.",
+        description="CQL2 filter for retrieving auxiliary data."
+        "If provided, start_datetime, end_datetime, and satellite will be ignored for auxiliary data retrieval.",
     )
 
     @field_validator("adf_type", mode="before")

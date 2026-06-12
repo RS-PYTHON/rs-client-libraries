@@ -328,11 +328,14 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
 
 
 class SafeDict(dict):
+    """Dict subclass that returns {key} for missing keys instead of raising KeyError."""
+
     def __missing__(self, key):
         return "{" + key + "}"
 
 
 def substitute_values(obj, values):
+    """Recursively substitute values in a nested structure of dicts/lists/strings."""
     if isinstance(obj, dict):
         return {k: substitute_values(v, values) for k, v in obj.items()}
     if isinstance(obj, list):
