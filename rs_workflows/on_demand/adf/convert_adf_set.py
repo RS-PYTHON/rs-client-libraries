@@ -23,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 from prefect import flow, get_run_logger, task
+from prefect.client.orchestration import get_client
 from prefect.runner.storage import GitRepository
 from prefect.runtime import flow_run
 from prefect.variables import Variable
@@ -33,7 +34,7 @@ from rs_workflows.flow_utils import AdfProcessIn, AuxiliaryProductMapping, FlowE
 script_dir = os.path.dirname(os.path.abspath(__file__))
 CQL2_FILTERS_PATH = os.path.join(script_dir, "config", "cql2-queries.json")
 
-PREFECT_WORKPOOL: str = "eopf-prefect-pool"
+# PREFECT_WORKPOOL: str = "eopf-prefect-pool"
 GITHUB_URL: str = "https://github.com/RS-PYTHON/rs-client-libraries.git"
 GITHUB_BRANCH: str = "develop"
 
@@ -340,10 +341,16 @@ async def schedule_conversion_flow(
         ),
     )
 
+    # Retrieve the name of the workpool
+    work_pool_name: str | None = None
+    async with get_client() as client:
+        deployment = await client.read_deployment(flow_run.deployment_id)
+        work_pool_name = deployment.work_pool_name
+
     encoded_period: str = str(int(period.total_seconds()))
     await flow_obj.deploy(
         name=f"Convert ADF {product_type}",
-        work_pool_name=PREFECT_WORKPOOL,
+        work_pool_name=work_pool_name,
         rrule=rule,
         tags=["auxip", "conversion"],
         parameters={
