@@ -35,7 +35,7 @@ CQL2_FILTERS_PATH = os.path.join(script_dir, "config", "cql2-queries.json")
 
 PREFECT_WORKPOOL: str = "eopf-prefect-pool"
 GITHUB_URL: str = "https://github.com/RS-PYTHON/rs-client-libraries.git"
-GITHUB_BRANCH: str = "rspy-1074/create-flow-convert-adf-group"
+GITHUB_BRANCH: str = "develop"
 
 
 @flow(name="convert-adf-group")
@@ -281,7 +281,7 @@ async def schedule_adf_conversion(
         )
         logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
         rule = (
-            f"DTSTART:{period_start.strftime("%Y%m%dT%H%M%SZ")}\n",
+            f"DTSTART:{period_start.strftime("%Y%m%dT%H%M%SZ")}\n"
             f"FREQ=HOURLY;UNTIL={period_start.strftime("%Y%m%dT%H%M%SZ")}",
         )
 
@@ -300,8 +300,8 @@ async def schedule_adf_conversion(
         start_rule: datetime = period_start + period_corrected
         stop_rule: datetime = period_end
         rule = (
-            f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\n",
-            f"FREQ=MINUTELY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}",
+            f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\n"
+            f"FREQ=MINUTELY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}"
         )
         logger.debug(f"rule = {rule}")
 
