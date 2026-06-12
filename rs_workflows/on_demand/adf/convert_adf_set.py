@@ -204,6 +204,7 @@ async def past_adf_conversion(
     cql2_filter_without_date = compute_cql2(cql2_query_name, dTa, dTb)
 
     # Scheduling according to the period_in_hours
+    flow_parameters: AdfProcessIn
     if period_in_hours == 0:
         # special case where a single run is requested
         logger.info(
@@ -217,7 +218,7 @@ async def past_adf_conversion(
             },
         )
         logger.debug(f"Associated cql2 filter is: {cql2_filter}")
-        flow_parameters: AdfProcessIn = AdfProcessIn(
+        flow_parameters = AdfProcessIn(
             env=FlowEnvArgs(owner_id=owner_identifier),
             adf_type=product_type,
             auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
@@ -243,7 +244,7 @@ async def past_adf_conversion(
                 },
             )
             logger.debug(f"( past ) Associated cql2 filter is: {cql2_filter}")
-            flow_parameters: AdfProcessIn = AdfProcessIn(
+            flow_parameters = AdfProcessIn(
                 env=FlowEnvArgs(owner_id=owner_identifier),
                 adf_type=product_type,
                 auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
@@ -289,15 +290,14 @@ async def schedule_adf_conversion(
     cql2_filter_without_date = compute_cql2(cql2_query_name, dTa, dTb)
 
     # Scheduling according to the period_in_hours
+    rule: str
     if period_in_hours == 0:
         # special case where a single run is requested
         logger.info(
             f"Schedule the flow conversion to start at {period_start} for a time range [{period_start}-{period_end}].",
         )
         logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
-        rule: str = (
-            f"DTSTART:{period_start.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=HOURLY;UNTIL={period_start.strftime("%Y%m%dT%H%M%SZ")}"
-        )
+        rule = f"DTSTART:{period_start.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=HOURLY;UNTIL={period_start.strftime("%Y%m%dT%H%M%SZ")}"
 
         await schedule_conversion_flow(
             owner_identifier,
@@ -313,9 +313,7 @@ async def schedule_adf_conversion(
         logger.debug(f"period_corrected = {period_corrected}")
         start_rule: datetime = period_start + period_corrected
         stop_rule: datetime = period_end
-        rule: str = (
-            f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=MINUTELY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}"
-        )
+        rule = f"DTSTART:{start_rule.strftime("%Y%m%dT%H%M%SZ")}\nFREQ=MINUTELY;INTERVAL={period_in_hours};UNTIL={stop_rule.strftime("%Y%m%dT%H%M%SZ")}"
         logger.debug(f"rule = {rule}")
 
         logger.info(
