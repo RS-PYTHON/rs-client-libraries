@@ -153,8 +153,8 @@ def compute_cql2(cql2_query_name: str, dta: int, dtb: int) -> dict:
         logger.error(f"❌ Error: The file '{CQL2_FILTERS_PATH}' does not exist.")
     except json.JSONDecodeError as e:
         logger.error(f"❌ Error: The file '{CQL2_FILTERS_PATH}' is not valid JSON. Details: {e}")
-    except Exception as e:
-        logger.error(f"❌ Unexpected error while reading file '{CQL2_FILTERS_PATH}' : {e}")
+    except OSError as e:
+        logger.error(f"❌ OS error while reading file '{CQL2_FILTERS_PATH}': {e}")
 
     logger.debug(f"Read CQL2 filter content from file '{CQL2_FILTERS_PATH}' : {cql2_json}")
 
@@ -327,6 +327,7 @@ async def schedule_conversion_flow(
     period: timedelta,
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
 ) -> None:
+    """Schedule the conversion flow with the given parameters and scheduling rule."""
 
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
@@ -360,6 +361,10 @@ async def adf_conversion_scheduled(
     period: str,
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
 ) -> None:
+    """
+    Flow to convert ADF data for a scheduled period. The period is defined by the scheduling rule of the flow and
+    the `period` parameter, which defines the length of the period to convert starting from the flow run start time.
+    """
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
