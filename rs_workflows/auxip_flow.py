@@ -71,7 +71,7 @@ async def search(
         env: Prefect flow environment (at least the owner_id is required)
         aux_cql2: AUX CQL2 filter read from the processor tasktable.
         error_if_empty: Raise a ValueError if the results are empty.
-        source: STAC source where auxiliary products are searched.
+        source: STAC source where auxiliary products are searched. Default: auxip.
     """
     logger = get_run_logger()
 
@@ -117,10 +117,10 @@ async def aux_staging(
     Args:
         env (FlowEnvArgs): Prefect flow environment
         stac_query (dict): CQL2 filter to select which files to stage
-        catalog_collection_identifier (str): Catalog collection identifier where CADIP sessions and AUX data are staged
+        catalog_collection_identifier (str): Catalog collection identifier where auxiliary data are staged
         timeout_seconds (int): Timeout value for the AUX search task.
             Optional, if no value is given the process will run until it is completed
-        source (str): STAC source where auxiliary products are searched.
+        source (str): STAC source where auxiliary products are searched. Default: auxip.
         selected_assets: Optional asset keys to stage.
 
     Returns:
@@ -226,7 +226,7 @@ async def on_demand_aux_staging(
         end_datetime: End datetime for the time interval used to filter the files
             (select a date or directly enter a timestamp, e.g. "2025-08-10T14:00:00.509000Z")
         product_type: Auxiliary file type wanted
-        catalog_collection_identifier: Catalog collection identifier where CADIP sessions and AUX data are staged
+        catalog_collection_identifier: Catalog collection identifier where auxiliary data are staged
 
     Returns:
         bool: Return status: False if staging failed, True otherwise
