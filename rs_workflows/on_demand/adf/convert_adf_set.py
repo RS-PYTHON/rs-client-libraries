@@ -282,7 +282,7 @@ async def schedule_adf_conversion(
         logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
         rule = (
             f"DTSTART:{period_start.strftime("%Y%m%dT%H%M%SZ")}\n"
-            f"FREQ=HOURLY;UNTIL={period_start.strftime("%Y%m%dT%H%M%SZ")}",
+            f"FREQ=HOURLY;UNTIL={period_start.strftime("%Y%m%dT%H%M%SZ")}"
         )
 
         await schedule_conversion_flow(
@@ -332,9 +332,12 @@ async def schedule_conversion_flow(
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
-    flow_obj = await flow.from_source(
-        source=GitRepository(url=GITHUB_URL, branch=GITHUB_BRANCH),
-        entrypoint="rs_workflows/on_demand/adf/convert_adf_set.py:adf_conversion_scheduled",
+    flow_obj = await cast(
+        Awaitable[Any],
+        flow.from_source(
+            source=GitRepository(url=GITHUB_URL, branch=GITHUB_BRANCH),
+            entrypoint="rs_workflows/on_demand/adf/convert_adf_set.py:adf_conversion_scheduled",
+        ),
     )
 
     encoded_period: str = str(int(period.total_seconds()))
