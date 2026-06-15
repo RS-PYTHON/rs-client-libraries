@@ -62,8 +62,6 @@ async def convert_adf_group(
     """
 
     logger = get_run_logger()
-    # logger.level = logging.DEBUG
-    # logger.propagate = True
     logger.setLevel(logging.DEBUG)
 
     # Check input chronology
@@ -80,7 +78,6 @@ async def convert_adf_group(
     if not isinstance(raw_data, dict):
         raise ValueError(f"❌ Prefect variable '{adf_group_name}' has got an invalid format.")
     settings: dict[str, Any] = raw_data
-    # satellite = settings.get("satellite", "")
     aux_to_be_generated: list = settings.get("aux-to-be-generated", [])
     logger.debug(f"aux_to_be_generated = {aux_to_be_generated}")
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] = settings.get(

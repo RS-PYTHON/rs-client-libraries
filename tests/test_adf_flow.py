@@ -982,3 +982,52 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
     assert published_metadata[0].product_type == expected_generated_type
     assert published_metadata[0].stac_item.properties["product:type"] == expected_generated_type
     assert publish_mapping_arg[0].collection_name == "ADF_OL_PUBLISH"
+
+
+@pytest.mark.asyncio
+async def test_adf_conversion_uses_custom_cql2_filter(
+    monkeypatch,
+    mocker,
+    sample_adf_process_in,
+    tmp_path,
+    _mock_os_env,
+):
+    """Test that the flow uses the provided cql2_filter and substitutes product_type."""
+    sample_adf_process_in.cql2_filter = {
+        "filter": {
+            "op": "and",
+            "args": [
+                {"op": "=", "args": [{"property": "product:type"}, "{product_type}"]},
+                {
+                    "op": "t_intersects",
+                    "args": [
+                        {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                        {"interval": ["{start_datetime}", "{end_datetime}"]},
+                    ],
+                },
+            ],
+        },
+    }
+
+    # Mock logger & auxip_staging_task
+    mock_logger = MagicMock()
+    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+
+    source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
+    staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
+    monkeypatch.setattr(adf_flow, "auxip_staging_task", staging_mock)
+
+    # Run the flow
+    await adf_flow.adf_conversion.fn(sample_adf_process_in)
+
+    # Check that cql2_filter was used and product_type was substituted correctly
+    assert staging_mock.call_count == 1
+    cql2_filter_used = staging_mock.call_args.kwargs["cql2_filter"]
+    assert cql2_filter_used["filter"]["args"][0]["args"][1] == "AX___MA1_AX"  # product_type substitué
+    assert (
+        cql2_filter_used["filter"]["args"][1]["args"][1]["interval"][0] == "2021-03-21T03:00:00+00:00"
+    )  # start_datetime substitué
+    assert (
+        cql2_filter_used["filter"]["args"][1]["args"][1]["interval"][1] == "2021-03-21T15:00:00+00:00"
+    )  # end_datetime substitué
