@@ -34,7 +34,7 @@ from rs_client.ogcapi.dpr_client import ClusterInfo
 from rs_client.rs_client import RsClient
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common import prefect_utils
-from rs_workflows import auxip_flow, catalog_flow, earthdatahub_flow
+from rs_workflows import aux_flow, catalog_flow, earthdatahub_flow
 from rs_workflows.dpr_flow import run_processor
 from rs_workflows.flow_utils import (
     AuxiliarySource,
@@ -178,7 +178,7 @@ async def _normalize_archived_aux_items(item_collection: ItemCollection, dpr_inp
             "The following staged ADFS asset is archived/compressed "
             f"{aux_item.to_dict()}. Starting normalization task",
         )
-        tasks.append(auxip_flow.aux_unzip_decompress_task.submit(aux_item))
+        tasks.append(aux_flow.aux_unzip_decompress_task.submit(aux_item))
 
     results = [task.result() for task in tasks]
 
@@ -242,7 +242,7 @@ async def _stage_input_adfs_alternative(
         aux_status = True
     else:
         aux_status, aux_items = (
-            auxip_flow.aux_staging_task.with_options(
+            aux_flow.aux_staging_task.with_options(
                 retries=staging_retries,
                 retry_delay_seconds=staging_retry_delay,
             )

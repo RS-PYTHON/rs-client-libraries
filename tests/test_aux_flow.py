@@ -23,7 +23,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pystac import Item, ItemCollection
 
-from rs_workflows import auxip_flow
+from rs_workflows import aux_flow
 from rs_workflows.flow_utils import AuxiliarySource, FlowEnvArgs
 
 
@@ -31,7 +31,7 @@ from rs_workflows.flow_utils import AuxiliarySource, FlowEnvArgs
 def mock_auxip_logger(monkeypatch, mocker):
     """Replace Prefect run logger with a plain mock."""
     logger = mocker.Mock()
-    monkeypatch.setattr(auxip_flow, "get_run_logger", lambda: logger)
+    monkeypatch.setattr(aux_flow, "get_run_logger", lambda: logger)
     return logger
 
 
@@ -53,7 +53,7 @@ def test_select_search_client_and_kwargs_selects_expected_client(mocker, source,
     flow_env.owner_id = "me"
     getattr(flow_env.rs_client, getter_name).return_value = expected_client
 
-    selected_client, search_kwargs = auxip_flow.select_search_client_and_kwargs(flow_env, source)
+    selected_client, search_kwargs = aux_flow.select_search_client_and_kwargs(flow_env, source)
 
     assert selected_client is expected_client
     assert search_kwargs == expected_kwargs
@@ -65,7 +65,7 @@ def test_select_search_client_and_kwargs_lta_raises_not_supported(mocker):
     flow_env = mocker.Mock()
 
     with pytest.raises(ValueError, match="LTA auxiliary product search is not supported yet"):
-        auxip_flow.select_search_client_and_kwargs(flow_env, AuxiliarySource.LTA)
+        aux_flow.select_search_client_and_kwargs(flow_env, AuxiliarySource.LTA)
 
 
 @pytest.mark.asyncio
@@ -78,9 +78,9 @@ async def test_search_returns_found_items(monkeypatch, mocker, mock_auxip_logger
     flow_env = mocker.Mock()
     flow_env.start_span.return_value = nullcontext()
     flow_env.rs_client.get_auxip_client.return_value = auxip_client
-    monkeypatch.setattr(auxip_flow, "FlowEnv", lambda env: flow_env)
+    monkeypatch.setattr(aux_flow, "FlowEnv", lambda env: flow_env)
 
-    result = await auxip_flow.search.fn(env, {"filter": {"foo": "bar"}, "limit": 3, "sortby": []})
+    result = await aux_flow.search.fn(env, {"filter": {"foo": "bar"}, "limit": 3, "sortby": []})
 
     assert result is found
     auxip_client.search.assert_called_once_with(
@@ -102,10 +102,10 @@ async def test_search_raises_when_empty_and_error_if_empty(monkeypatch, mocker, 
     flow_env = mocker.Mock()
     flow_env.start_span.return_value = nullcontext()
     flow_env.rs_client.get_auxip_client.return_value = auxip_client
-    monkeypatch.setattr(auxip_flow, "FlowEnv", lambda env: flow_env)
+    monkeypatch.setattr(aux_flow, "FlowEnv", lambda env: flow_env)
 
     with pytest.raises(ValueError, match="No AUX product found"):
-        await auxip_flow.search.fn(env, {"filter": {"foo": "bar"}}, error_if_empty=True)
+        await aux_flow.search.fn(env, {"filter": {"foo": "bar"}}, error_if_empty=True)
 
 
 class _SubmitResult:  # pylint: disable=too-few-public-methods
@@ -145,11 +145,11 @@ async def test_auxip_staging_returns_early_when_search_is_empty(monkeypatch, moc
     flow_env = mocker.Mock()
     flow_env.start_span.return_value = nullcontext()
     flow_env.serialize.return_value = {"owner_id": "me"}
-    monkeypatch.setattr(auxip_flow, "FlowEnv", lambda env: flow_env)
+    monkeypatch.setattr(aux_flow, "FlowEnv", lambda env: flow_env)
     search_stub = _TaskStub(ItemCollection([]))
-    monkeypatch.setattr(auxip_flow, "search_task", search_stub)
+    monkeypatch.setattr(aux_flow, "search_task", search_stub)
 
-    result = await auxip_flow.aux_staging.fn(env, {"filter": {}}, "collection")
+    result = await aux_flow.aux_staging.fn(env, {"filter": {}}, "collection")
 
     assert result == (True, None)
 
@@ -167,17 +167,17 @@ async def test_auxip_staging_success(monkeypatch, mocker, mock_auxip_logger):
     catalog_client = mocker.Mock()
     catalog_client.get_items.return_value = [catalog_item]
     flow_env.rs_client.get_catalog_client.return_value = catalog_client
-    monkeypatch.setattr(auxip_flow, "FlowEnv", lambda env: flow_env)
-    monkeypatch.setattr(auxip_flow, "search_task", _TaskStub(ItemCollection([source_item])))
+    monkeypatch.setattr(aux_flow, "FlowEnv", lambda env: flow_env)
+    monkeypatch.setattr(aux_flow, "search_task", _TaskStub(ItemCollection([source_item])))
     monkeypatch.setattr(
-        auxip_flow,
+        aux_flow,
         "staging_task",
         _TaskStub({"job-1": {"status": "successful", "jobID": "1", "message": "ok"}}),
     )
     artifact_mock = AsyncMock()
-    monkeypatch.setattr(auxip_flow, "acreate_markdown_artifact", artifact_mock)
+    monkeypatch.setattr(aux_flow, "acreate_markdown_artifact", artifact_mock)
 
-    status_ok, items = await auxip_flow.aux_staging.fn(env, {"filter": {}}, "collection")
+    status_ok, items = await aux_flow.aux_staging.fn(env, {"filter": {}}, "collection")
 
     assert status_ok is True
     assert items is not None
@@ -198,17 +198,17 @@ async def test_auxip_staging_failure_skips_artifact(monkeypatch, mocker, mock_au
     catalog_client = mocker.Mock()
     catalog_client.get_items.return_value = [catalog_item]
     flow_env.rs_client.get_catalog_client.return_value = catalog_client
-    monkeypatch.setattr(auxip_flow, "FlowEnv", lambda env: flow_env)
-    monkeypatch.setattr(auxip_flow, "search_task", _TaskStub(ItemCollection([source_item])))
+    monkeypatch.setattr(aux_flow, "FlowEnv", lambda env: flow_env)
+    monkeypatch.setattr(aux_flow, "search_task", _TaskStub(ItemCollection([source_item])))
     monkeypatch.setattr(
-        auxip_flow,
+        aux_flow,
         "staging_task",
         _TaskStub({"job-1": {"status": "failed", "jobID": "1", "message": "boom"}}),
     )
     artifact_mock = AsyncMock()
-    monkeypatch.setattr(auxip_flow, "acreate_markdown_artifact", artifact_mock)
+    monkeypatch.setattr(aux_flow, "acreate_markdown_artifact", artifact_mock)
 
-    status_ok, items = await auxip_flow.aux_staging.fn(env, {"filter": {}}, "collection")
+    status_ok, items = await aux_flow.aux_staging.fn(env, {"filter": {}}, "collection")
 
     assert status_ok is False
     assert items is not None
@@ -224,10 +224,10 @@ async def test_on_demand_auxip_staging_builds_valcover_filter(monkeypatch):
     staging_mock = AsyncMock(return_value=(True, staged_items))
     aux_staging_task = MagicMock()
     aux_staging_task.fn = staging_mock
-    monkeypatch.setattr(auxip_flow, "create_valcover_filter", create_filter_mock)
-    monkeypatch.setattr(auxip_flow, "aux_staging", aux_staging_task)
+    monkeypatch.setattr(aux_flow, "create_valcover_filter", create_filter_mock)
+    monkeypatch.setattr(aux_flow, "aux_staging", aux_staging_task)
 
-    result = await auxip_flow.on_demand_aux_staging.fn(
+    result = await aux_flow.on_demand_aux_staging.fn(
         env,
         "2024-01-01T00:00:00Z",
         "2024-01-02T00:00:00Z",
@@ -250,10 +250,10 @@ async def test_task_wrappers_delegate_to_underlying_flows(monkeypatch):
     search_mock = AsyncMock(return_value="search-result")
     staging_mock = AsyncMock(return_value=("ok", None))
     unzip_mock = AsyncMock(return_value="item")
-    monkeypatch.setattr(auxip_flow.search, "fn", search_mock)
-    monkeypatch.setattr(auxip_flow.aux_staging, "fn", staging_mock)
-    monkeypatch.setattr(auxip_flow.asset_unzip_decompress, "fn", unzip_mock)
+    monkeypatch.setattr(aux_flow.search, "fn", search_mock)
+    monkeypatch.setattr(aux_flow.aux_staging, "fn", staging_mock)
+    monkeypatch.setattr(aux_flow.asset_unzip_decompress, "fn", unzip_mock)
 
-    assert await auxip_flow.search_task.fn(1, a=2) == "search-result"
-    assert await auxip_flow.aux_staging_task.fn(3, b=4) == ("ok", None)
-    assert await auxip_flow.aux_unzip_decompress_task.fn(5, c=6) == "item"
+    assert await aux_flow.search_task.fn(1, a=2) == "search-result"
+    assert await aux_flow.aux_staging_task.fn(3, b=4) == ("ok", None)
+    assert await aux_flow.aux_unzip_decompress_task.fn(5, c=6) == "item"
