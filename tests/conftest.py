@@ -44,6 +44,7 @@ from pystac import Asset, Item
 from starlette import status
 
 from rs_client.rs_client import RsClient
+from rs_client.stac.cdse_client import CDSE_STAC_HREF
 from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from rs_common.utils import env_bool
@@ -658,6 +659,15 @@ def mocked_rspy_landing_pages_():
             service=service,
         )
         responses.get(url=f"{MOCKED_RSPY_WEBSITE}/{service}/", json=json_landing_page, status=status.HTTP_200_OK)
+    responses.get(
+        url=CDSE_STAC_HREF,
+        json=common.json_landing_page(
+            "https://stac.dataspace.copernicus.eu",
+            f"{OWNER_ID}:{COLLECTION_ID}",
+            service="v1",
+        ),
+        status=status.HTTP_200_OK,
+    )
 
 
 @pytest.fixture(name="set_db_env_var")
@@ -704,6 +714,12 @@ def cadip_client_(generic_rs_client):
 def prip_client_(generic_rs_client):
     """Return a generic PripClient instance for testing."""
     yield generic_rs_client.get_prip_client()
+
+
+@pytest.fixture(name="cdse_client")
+def cdse_client_(generic_rs_client):
+    """Return a generic CdseClient instance for testing."""
+    yield generic_rs_client.get_cdse_client()
 
 
 @pytest.fixture(name="stac_client")
