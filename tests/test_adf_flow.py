@@ -138,6 +138,8 @@ def test_create_stac_item_from_json_uses_stac_discovery(mocker, tmp_path):
                     "properties": {
                         "product:type": "ADF_WATER",
                         "created": "2026-04-27T13:30:05",
+                        "start_datetime": "2021-08-01T00:00:00Z",
+                        "end_datetime": "2021-08-01T12:00:00Z",
                     },
                 },
             },
@@ -305,13 +307,32 @@ def test_create_stac_item_falls_back_to_metadata_when_item_id_has_no_dates(mocke
     assert item.common_metadata.end_datetime.hour == 15
 
 
-def test_extract_datetimes_from_item_id_logs_warning_on_no_match():
+def test_extract_datetimes_from_item_id_no_match():
     """Test that a warning is logged when the item_id pattern doesn't match (make sonarqube happy)"""
-    mock_logger = MagicMock()
-    result = adf_flow.extract_datetimes_from_item_id("no-dates-here", logger=mock_logger)
+    result = adf_flow.extract_datetimes_from_item_id("no-dates-here")
     assert result is None
-    mock_logger.warning.assert_called_once()
-    assert "no-dates-here" in mock_logger.warning.call_args[0][0]
+
+
+def test_create_stac_item_raises_error_when_datetimes_missing(mocker, tmp_path):
+    """Test that a RuntimeError is raised if neither stac_props nor item_id have datetimes."""
+    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
+    zarr_dir = tmp_path / "test.zarr"
+    zarr_dir.mkdir()
+    zattrs_content = {
+        "id": "simple-id-no-dates",
+        "properties": {
+            "product:type": "ADF_ECMWA",
+            "created": "2026-04-27T13:30:05",
+            # missing start_datetime and end_datetime
+        },
+    }
+    (zarr_dir / ".zattrs").write_text(json.dumps(zattrs_content))
+
+    with pytest.raises(
+        RuntimeError,
+        match="Could not extract datetimes from metadata properties or from item_id 'simple-id-no-dates'",
+    ):
+        adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_ECMWA")
 
 
 def test_run_adf_script_returns_generated_zarr(monkeypatch, mocker, tmp_path):

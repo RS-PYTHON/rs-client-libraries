@@ -137,19 +137,17 @@ STAC_DATETIME_PROPERTY_NAMES = {
 _ITEM_ID_DT_RE = re.compile(r"_(\d{8}T\d{6})_(\d{8}T\d{6})_\d{8}T\d{6}$")
 
 
-def extract_datetimes_from_item_id(item_id: str, logger=None) -> tuple[str, str] | None:
+def extract_datetimes_from_item_id(item_id: str) -> tuple[str, str] | None:
     """Extract start and end datetime ISO strings from an item_id.
 
     The expected item_id format is:
         <prefix>_<start_YYYYMMDDTHHMMSS>_<end_YYYYMMDDTHHMMSS>_<creation_YYYYMMDDTHHMMSS>
 
-    Returns a (start_iso, end_iso) tuple on success, or None when the
+    Returns a (start_datetime, end_datetime) tuple on success, or None when the
     pattern does not match.
     """
     match = _ITEM_ID_DT_RE.search(item_id)
     if not match:
-        if logger:
-            logger.warning(f"Could not extract datetimes from item_id: {item_id!r}")
         return None
     start_raw, end_raw = match.group(1), match.group(2)
     start_iso = (
@@ -308,24 +306,20 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
 
     # extract start/end datetime for pystac.Item validation.
     # try to find them in the metadata, but if they are not present, try to take them from the
-    # item_id string pattern. If still not found, fallback to 'created' or current time
-    # to avoid validation issues. The S00__ADF_GETAS.py script doesn't set but 'created' field
-    # in the metadata, but pystac requires at least one of them to be set, so we need a
-    # fallback mechanism in this case.
-    # This was discussed and agreed with the user:
-    # priority: metadata properties > datetimes embedded in item_id > 'created' > current time.
-    fallback_dt_str = stac_props.get("created") or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    # item_id string pattern. If still not found, raise an error.
+    # priority: metadata properties > datetimes embedded in item_id
     start_dt_str = stac_props.get("start_datetime")
     end_dt_str = stac_props.get("end_datetime")
     if not start_dt_str or not end_dt_str:
-        id_datetimes = extract_datetimes_from_item_id(item_id, logger=logger)
+        id_datetimes = extract_datetimes_from_item_id(item_id)
         if id_datetimes:
             start_dt_str = start_dt_str or id_datetimes[0]
             end_dt_str = end_dt_str or id_datetimes[1]
             logger.info(f"Extracted start/end datetimes from item_id: {id_datetimes[0]} / {id_datetimes[1]}")
         else:
-            start_dt_str = start_dt_str or fallback_dt_str
-            end_dt_str = end_dt_str or fallback_dt_str
+            msg = f"Could not extract datetimes from metadata properties or from item_id {item_id!r}"
+            logger.error(msg)
+            raise RuntimeError(msg)
 
     start_dt = parse_date(start_dt_str) if start_dt_str else None
     end_dt = parse_date(end_dt_str) if end_dt_str else None
