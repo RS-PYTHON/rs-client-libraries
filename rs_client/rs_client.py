@@ -271,6 +271,16 @@ class RsClient:  # pylint: disable=too-many-instance-attributes
 
         return CdseClient(self.logger, **kwargs)
 
+    def get_earthdatahub_client(self, **kwargs) -> "EarthDataHubClient":  # type: ignore # noqa: F821
+        """
+        Return an instance of the child class EarthDataHubClient.
+        """
+        from rs_client.stac.earthdatahub_client import (  # pylint: disable=import-outside-toplevel,cyclic-import
+            EarthDataHubClient,
+        )
+
+        return EarthDataHubClient(logger=self.logger, **kwargs)
+
     def get_catalog_client(self, **kwargs) -> "CatalogClient":  # type: ignore # noqa: F821
         """
         Return an instance of the child class CatalogClient, with the same attributes as this "self" instance.

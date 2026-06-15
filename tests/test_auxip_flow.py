@@ -43,6 +43,7 @@ def mock_auxip_logger(monkeypatch, mocker):
         (AuxiliarySource.PRIP, "get_prip_client", {}),
         (AuxiliarySource.CADIP, "get_cadip_client", {}),
         (AuxiliarySource.CDSE, "get_cdse_client", {}),
+        (AuxiliarySource.EARTHDATAHUB, "get_earthdatahub_client", {}),
     ],
 )
 def test_select_search_client_and_kwargs_selects_expected_client(mocker, source, getter_name, expected_kwargs):

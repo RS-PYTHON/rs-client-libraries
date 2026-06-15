@@ -124,6 +124,7 @@ class AuxiliarySource(str, Enum):
     AUXIP = "auxip"
     CDSE = "cdse"
     CATALOG = "catalog"
+    EARTHDATAHUB = "earthdatahub"
 
 
 class FlowEnvArgs(BaseModel):

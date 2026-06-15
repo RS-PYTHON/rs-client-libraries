@@ -19,7 +19,7 @@ from typing import Any
 
 from rs_client.stac.stac_base import StacBase
 
-EDH_STAC_HREF = "https://earthdatahub.destine.eu/api/stac/v1"
+EDH_STAC_HREF = "https://earthdatahub.destine.eu/api/stac/v1/"
 
 
 class EarthDataHubClient(StacBase):

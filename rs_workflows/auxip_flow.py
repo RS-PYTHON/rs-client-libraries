@@ -49,6 +49,8 @@ def select_search_client_and_kwargs(
         return flow_env.rs_client.get_cadip_client(), {}
     if source == AuxiliarySource.CDSE:
         return flow_env.rs_client.get_cdse_client(), {}
+    if source == AuxiliarySource.EARTHDATAHUB:
+        return flow_env.rs_client.get_earthdatahub_client(), {}
     if source == AuxiliarySource.LTA:
         raise ValueError(
             "LTA auxiliary product search is not supported yet: rs-server does not expose an LTA STAC service "
