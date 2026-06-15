@@ -14,49 +14,49 @@
 
 """OpenTelemetry utility"""
 
-import inspect
 import json
 import os
-import pkgutil
-import sys
 from collections.abc import Iterator
 from threading import Lock
 
-import opentelemetry.instrumentation
 import requests
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.asyncio import AsyncioInstrumentor
-from opentelemetry.instrumentation.instrumentor import BaseInstrumentor  # type: ignore
+from opentelemetry.instrumentation import auto_instrumentation
+from opentelemetry.instrumentation.botocore import (
+    AiobotocoreInstrumentor,
+    BotocoreInstrumentor,
+)
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace.span import NonRecordingSpan, Span, SpanContext, TraceFlags
 from opentelemetry.util._decorator import _agnosticcontextmanager
 
-from rs_common import utils
-from rs_common.logging import Logging
 from rs_common.utils import env_bool
 
 lock = Lock()
-
-default_logger = Logging.default(__name__)
-
-FROM_PYTEST = False
+INITIALIZED = False
 
 
 # Show details of http headers and body/content in tempo/grafana ?
 # Don't store results in global variables because the env var values can change
 # after this module was loaded.
-def trace_headers():
+def trace_requests_headers():
     """Trace request headers ?"""
     return env_bool("OTEL_PYTHON_REQUESTS_TRACE_HEADERS", default=False)
 
 
-def trace_body():
+def trace_requests_body():
     """Trace request bodies and response contents ?"""
     return env_bool("OTEL_PYTHON_REQUESTS_TRACE_BODY", default=False)
+
+
+def decode(binary_value):
+    """Try to decode binary value"""
+    try:
+        if isinstance(binary_value, bytes):
+            return binary_value.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    return binary_value
 
 
 def parse_data(data) -> str:
@@ -85,12 +85,7 @@ def parse_data(data) -> str:
     if isinstance(data, dict):
 
         # Decode bytes
-        data = {
-            key.decode("utf-8") if isinstance(key, bytes) else key: (
-                value.decode("utf-8") if isinstance(value, bytes) else value
-            )
-            for key, value in data.items()
-        }
+        data = {decode(key): decode(value) for key, value in data.items()}
 
         # Convert to strings
         data = {str(key): str(value) for key, value in data.items()}
@@ -117,112 +112,66 @@ def requests_hook(span: Span, request: requests.PreparedRequest, response: reque
     # so it appears at the top in the grafana UI, it's more readable
     span.set_attribute("_url", span.attributes.get("http.url"))  # type: ignore
 
-    if trace_headers():
+    if trace_requests_headers():
         span.set_attribute("http.request.headers", parse_data(request.headers))
         if response:
             span.set_attribute("http.response.headers", parse_data(response.headers))
 
-    if trace_body():
+    if trace_requests_body():
         span.set_attribute("http.request.body", parse_data(request.body))
         if response:
             span.set_attribute("http.response.content", parse_data(response.content))
 
 
-def init_traces(service_name: str, logger=None):
+def botocore_hook(span, _service_name, _operation_name, api_params: dict):
+    """Callback function invoked by BotocoreInstrumentor and AiobotocoreInstrumentor"""
+    if not (span and span.is_recording()):
+        return
+    bucket = api_params.get("Bucket", "")
+    key = api_params.get("Key", "")
+    span.set_attribute("_path", f"s3://{bucket}/{key}")
+
+
+def init_traces(service_name: str):
     """
     Init instrumentation of OpenTelemetry traces.
 
     Args:
         service_name (str): service name
-        logger: non-default logger to user
     """
-
-    # See: https://github.com/softwarebloat/python-tracing-demo/tree/main
-
-    # No concurrent threads
     with lock:
-        logger = logger or default_logger
+        global INITIALIZED  # pylint: disable=global-statement
+        if INITIALIZED:
+            return
+        INITIALIZED = True
 
-        # Don't call this line from pytest because it causes errors:
-        # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to ...
-        if not FROM_PYTEST:
-            tempo_endpoint = os.getenv("TEMPO_ENDPOINT")
-            if not tempo_endpoint:
-                if utils.CLUSTER_MODE:
-                    logger.warning("'TEMPO_ENDPOINT' variable is missing, cannot initialize OpenTelemetry")
-                return
+    # Set the opentelemetry service name
+    os.environ["OTEL_SERVICE_NAME"] = service_name
 
-            # TODO: to avoid errors in local mode:
-            # Transient error StatusCode.UNAVAILABLE encountered while exporting metrics to ...
-            #
-            # The below line does not work either but at least we have less error messages.
-            # See: https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-221?focusedId=162092&
-            # page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-162092
-            #
-            # Now we have a single line error, which is less worst:
-            # Failed to export metrics to tempo:4317, error code: StatusCode.UNIMPLEMENTED
-            os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = tempo_endpoint
+    # Send openelemetry signals to tempo
+    if not (tempo_endpoint := os.getenv("TEMPO_ENDPOINT")):
+        return
+    os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = tempo_endpoint
 
-        otel_resource = Resource(attributes={"service.name": service_name})
-        otel_tracer = TracerProvider(resource=otel_resource)
-        trace.set_tracer_provider(otel_tracer)
+    # We'll use custom instrumentation for these packages (separated by ,)
+    org_disabled = os.getenv("OTEL_PYTHON_DISABLED_INSTRUMENTATIONS", "")
+    os.environ["OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"] = f"{org_disabled},aiobotocore,botocore,requests"
 
-        if not FROM_PYTEST:
-            otel_tracer.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=tempo_endpoint)))
+    # Run the opentelemetry auto instrumentation on all packages under opentelemetry.instrumentation.*
+    # This is what the command line "opentelemetry-instrumentation" would do.
+    # NOTE: we need 'poetry run opentelemetry-bootstrap -a install' to install these packages.
+    try:
+        auto_instrumentation.initialize()
+    finally:
+        os.environ["OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"] = org_disabled
 
-        # Instrument all the dependencies under opentelemetry.instrumentation.*
-        # NOTE: we need 'poetry run opentelemetry-bootstrap -a install' to install these.
+    #
+    # Specific opentelemetry instrumentation with custom hooks
+    #
 
-        package = opentelemetry.instrumentation
-        prefix = package.__name__ + "."
-        classes = set()
-
-        # We need an empty PYTHONPATH if the env var is missing
-        os.environ["PYTHONPATH"] = os.getenv("PYTHONPATH", "")
-
-        # Recursively find all package modules
-        for _, module_str, _ in pkgutil.walk_packages(path=package.__path__, prefix=prefix, onerror=None):
-
-            # Don't instrument these modules, they have errors, maybe we should see why
-            if module_str in [
-                "opentelemetry.instrumentation.tortoiseorm",
-                "opentelemetry.instrumentation.auto_instrumentation.sitecustomize",
-            ]:
-                continue
-
-            # Import and find all module classes
-            __import__(module_str)
-            for _, _class in inspect.getmembers(sys.modules[module_str]):
-                if (not inspect.isclass(_class)) or (_class in classes):
-                    continue
-
-                # Save the class (classes are found several times when imported by other modules)
-                classes.add(_class)
-
-                # Don't instrument these classes, they have errors, maybe we should see why
-                if _class in [AsyncioInstrumentor, BaseInstrumentor]:
-                    continue
-
-                # If the "instrument" method exists, call it
-                _instrument = getattr(_class, "instrument", None)
-                if callable(_instrument):
-                    _class_instance = _class()
-                    if _class_instance.is_instrumented_by_opentelemetry:
-                        continue
-                    # name = f"{module_str}.{_class.__name__}".removeprefix(prefix)
-                    # logger.debug(f"OpenTelemetry instrumentation of {name!r}")
-
-                    # Handle specific hooks
-                    if _class == RequestsInstrumentor and (trace_headers() or trace_body()):
-                        _class_instance.instrument(
-                            tracer_provider=otel_tracer,
-                            request_hook=requests_hook,
-                            response_hook=requests_hook,
-                        )
-
-                    # General case (no hooks)
-                    else:
-                        _class_instance.instrument(tracer_provider=otel_tracer)
+    AiobotocoreInstrumentor().instrument(request_hook=botocore_hook)
+    BotocoreInstrumentor().instrument(request_hook=botocore_hook)
+    RequestsInstrumentor().instrument(request_hook=requests_hook, response_hook=requests_hook)
 
 
 @_agnosticcontextmanager

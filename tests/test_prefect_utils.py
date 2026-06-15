@@ -87,6 +87,7 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
     # Environment variables for all users
     env_global = {
         "RSPY_LOCAL_MODE": "1" if local_mode else "0",
+        "RSPY_PREFECT_URL": "http://localhost:4200",
         "PREFECT_BUCKET_NAME": "PREFECT_BUCKET_NAME",
         "PREFECT_BUCKET_FOLDER": "PREFECT_BUCKET_FOLDER",
         "POSTGRES_USER": "test_user",
