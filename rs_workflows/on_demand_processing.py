@@ -439,7 +439,7 @@ async def dpr_processing(
                 for specific_input_product_stac_item in product_stac_items:
                     if specific_input_product_stac_item:
                         logger.info(
-                            f"Submitting '{input_adfs["name"]}' ADFS task for input {specific_input_product_stac_item}",
+                            f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product_stac_item}",
                         )
                     tasks.append(
                         process_input_adfs.submit(
