@@ -25,6 +25,7 @@ from starlette import status
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_client.rs_client import RsClient
+from rs_workflows.dpr_flow import run_processor
 from tests.conftest import MOCKED_RSPY_WEBSITE
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
@@ -185,3 +186,190 @@ I/O:
 
     mock_s3_upload_empty.assert_awaited_with("s3://bucket/output/.empty")
     assert uploaded_contents.strip() == (expected_results_local if local_mode else expected_results_cluster).strip()
+
+
+# ---------------------------------------------------------------------------
+
+# paths_to_delete logic tests (run_processor autoclean collection)
+
+
+def _make_mock_product(mocker, *, prod_id, path, final_product, autoclean):
+    """Create a mock output product with the given attributes."""
+    prod = mocker.Mock()
+    prod.id = prod_id
+    prod.path = path
+    prod.final_product = final_product
+    prod.autoclean = autoclean
+    return prod
+
+
+def _setup_run_processor_mocks(mocker):
+    """
+    Patch all run_processor dependencies unrelated to paths_to_delete so that
+    the function can complete without real S3/DPR infrastructure.
+    """
+    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.record_performance_indicators")
+    mocker.patch("rs_workflows.dpr_flow.update_eopf_assets", return_value=[])
+
+    mock_dpr_client = mocker.Mock()
+    mock_dpr_client.run_process.return_value = mocker.Mock()
+    mock_dpr_client.wait_for_job.return_value = None
+
+    mock_flow_env = mocker.MagicMock()
+    mock_flow_env.rs_client.get_dpr_client.return_value = mock_dpr_client
+    mocker.patch("rs_workflows.dpr_flow.FlowEnv", return_value=mock_flow_env)
+
+    mocker.patch(
+        "rs_workflows.dpr_flow.prefect_utils.s3_download_dir",
+        new_callable=AsyncMock,
+    )
+
+
+@pytest.mark.asyncio
+async def test_paths_to_delete_contains_autoclean_paths(mocker):
+    """
+    Verify that run_processor collects the paths of output products whose
+    autoclean flag is True, and passes them to clean_paths.
+    Products with autoclean=False must not appear in the list.
+    """
+    _setup_run_processor_mocks(mocker)
+    mock_clean = mocker.patch("rs_workflows.dpr_flow.clean_paths")
+
+    prod_autoclean = _make_mock_product(
+        mocker,
+        prod_id="p1",
+        path="/shared/output/p1",
+        final_product=True,
+        autoclean=True,
+    )
+    prod_no_autoclean = _make_mock_product(
+        mocker,
+        prod_id="p2",
+        path="/shared/output/p2",
+        final_product=True,
+        autoclean=False,
+    )
+
+    payload = mocker.Mock()
+    payload.io = mocker.Mock()
+    payload.io.output_products = [prod_autoclean, prod_no_autoclean]
+
+    await run_processor.fn(
+        env=mocker.Mock(),
+        processor="mockup",
+        payload=payload,
+        cluster_info=CLUSTER_INFO,
+        s3_payload_run="s3://bucket/payload.yaml",
+        input_products=[],
+    )
+
+    mock_clean.assert_called_once()
+    paths_called = mock_clean.call_args[0][0]
+    assert "/shared/output/p1" in paths_called
+    assert "/shared/output/p2" not in paths_called
+
+
+@pytest.mark.asyncio
+async def test_paths_to_delete_deduplicates_same_path(mocker):
+    """
+    Verify that run_processor does not add the same filesystem path twice to
+    paths_to_delete even when multiple output products share the same path
+    and all have autoclean=True.
+    """
+    _setup_run_processor_mocks(mocker)
+    mock_clean = mocker.patch("rs_workflows.dpr_flow.clean_paths")
+
+    shared_path = "/shared/output/common"
+    prod_1 = _make_mock_product(mocker, prod_id="p1", path=shared_path, final_product=True, autoclean=True)
+    prod_2 = _make_mock_product(mocker, prod_id="p2", path=shared_path, final_product=False, autoclean=True)
+
+    payload = mocker.Mock()
+    payload.io = mocker.Mock()
+    payload.io.output_products = [prod_1, prod_2]
+
+    await run_processor.fn(
+        env=mocker.Mock(),
+        processor="mockup",
+        payload=payload,
+        cluster_info=CLUSTER_INFO,
+        s3_payload_run="s3://bucket/payload.yaml",
+        input_products=[],
+    )
+
+    mock_clean.assert_called_once()
+    paths_called = mock_clean.call_args[0][0]
+    assert paths_called.count(shared_path) == 1
+
+
+@pytest.mark.asyncio
+async def test_paths_to_delete_empty_when_no_autoclean(mocker):
+    """
+    Verify that clean_paths is called with an empty list when no output product
+    has autoclean=True, i.e. no cleanup is scheduled.
+    """
+    _setup_run_processor_mocks(mocker)
+    mock_clean = mocker.patch("rs_workflows.dpr_flow.clean_paths")
+
+    prod = _make_mock_product(mocker, prod_id="p1", path="/shared/output/p1", final_product=True, autoclean=False)
+
+    payload = mocker.Mock()
+    payload.io = mocker.Mock()
+    payload.io.output_products = [prod]
+
+    await run_processor.fn(
+        env=mocker.Mock(),
+        processor="mockup",
+        payload=payload,
+        cluster_info=CLUSTER_INFO,
+        s3_payload_run="s3://bucket/payload.yaml",
+        input_products=[],
+    )
+
+    mock_clean.assert_called_once()
+    paths_called = mock_clean.call_args[0][0]
+    assert paths_called == []
+
+
+@pytest.mark.asyncio
+async def test_paths_to_delete_independent_of_final_product_flag(mocker):
+    """
+    Verify that autoclean path collection is orthogonal to final_product:
+    both final and non-final output products with autoclean=True must have
+    their paths included in paths_to_delete.
+    """
+    _setup_run_processor_mocks(mocker)
+    mock_clean = mocker.patch("rs_workflows.dpr_flow.clean_paths")
+
+    prod_final_autoclean = _make_mock_product(
+        mocker,
+        prod_id="final",
+        path="/shared/final",
+        final_product=True,
+        autoclean=True,
+    )
+    prod_intermediate_autoclean = _make_mock_product(
+        mocker,
+        prod_id="intermediate",
+        path="/shared/intermediate",
+        final_product=False,
+        autoclean=True,
+    )
+
+    payload = mocker.Mock()
+    payload.io = mocker.Mock()
+    payload.io.output_products = [prod_final_autoclean, prod_intermediate_autoclean]
+
+    await run_processor.fn(
+        env=mocker.Mock(),
+        processor="mockup",
+        payload=payload,
+        cluster_info=CLUSTER_INFO,
+        s3_payload_run="s3://bucket/payload.yaml",
+        input_products=[],
+    )
+
+    mock_clean.assert_called_once()
+    paths_called = mock_clean.call_args[0][0]
+    assert "/shared/final" in paths_called
+    assert "/shared/intermediate" in paths_called
