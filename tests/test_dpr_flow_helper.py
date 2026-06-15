@@ -23,6 +23,7 @@ import pytest
 from rs_client.ogcapi import dpr_client
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprProcessor
 from rs_workflows.dpr_flow import (
+    clean_paths,
     compute_eopf_origin_datetime,
     create_stac_item,
     extract_products_and_zattrs,
@@ -724,3 +725,92 @@ def test_no_eopf_origin_datetime(mocker):
         match="Maximum eopf datetime could not be computed",
     ):
         compute_eopf_origin_datetime(env, input_products)
+
+
+def test_clean_paths_removes_existing_directories(mocker, tmp_path):
+    """
+    Verify that clean_paths calls shutil.rmtree for each path that exists
+    and is a directory, and logs an info message for each removal.
+    """
+
+    dir_a = tmp_path / "dir_a"
+    dir_b = tmp_path / "dir_b"
+    dir_a.mkdir()
+    dir_b.mkdir()
+
+    mock_logger = mocker.Mock()
+    mock_rmtree = mocker.patch("rs_workflows.dpr_flow.shutil.rmtree")
+
+    clean_paths([str(dir_a), str(dir_b)], mock_logger)
+
+    assert mock_rmtree.call_count == 2
+    mock_rmtree.assert_any_call(str(dir_a))
+    mock_rmtree.assert_any_call(str(dir_b))
+    # One info call per directory removed
+    assert mock_logger.info.call_count >= 2
+
+
+def test_clean_paths_warns_and_skips_nonexistent_path(mocker, tmp_path):
+    """
+    Verify that clean_paths emits a warning and skips paths that do not exist,
+    without raising an exception.
+    """
+
+    nonexistent = str(tmp_path / "does_not_exist")
+    mock_logger = mocker.Mock()
+    mock_rmtree = mocker.patch("rs_workflows.dpr_flow.shutil.rmtree")
+
+    clean_paths([nonexistent], mock_logger)
+
+    mock_rmtree.assert_not_called()
+    mock_logger.warning.assert_called_once()
+    warning_msg = mock_logger.warning.call_args[0][0]
+    assert "does not exist" in warning_msg
+    assert nonexistent in warning_msg
+
+
+def test_clean_paths_warns_and_skips_file_path(mocker, tmp_path):
+    """
+    Verify that clean_paths emits a warning and skips paths that point to a
+    file rather than a directory (only directories are valid autoclean targets).
+    """
+
+    file_path = tmp_path / "not_a_dir.txt"
+    file_path.write_text("content")
+
+    mock_logger = mocker.Mock()
+    mock_rmtree = mocker.patch("rs_workflows.dpr_flow.shutil.rmtree")
+
+    clean_paths([str(file_path)], mock_logger)
+
+    mock_rmtree.assert_not_called()
+    mock_logger.warning.assert_called_once()
+    warning_msg = mock_logger.warning.call_args[0][0]
+    assert "expected directory but found file" in warning_msg
+
+
+def test_clean_paths_warns_on_rmtree_exception(mocker, tmp_path):
+    """
+    Verify that clean_paths catches exceptions raised by shutil.rmtree,
+    logs a warning instead of propagating the error, and continues processing
+    subsequent paths.
+    """
+
+    dir_a = tmp_path / "dir_a"
+    dir_b = tmp_path / "dir_b"
+    dir_a.mkdir()
+    dir_b.mkdir()
+
+    mock_logger = mocker.Mock()
+    mocker.patch(
+        "rs_workflows.dpr_flow.shutil.rmtree",
+        side_effect=[OSError("Permission denied"), None],
+    )
+
+    # Should not raise; exception is caught and warned
+    clean_paths([str(dir_a), str(dir_b)], mock_logger)
+
+    mock_logger.warning.assert_called_once()
+    warning_msg = mock_logger.warning.call_args[0][0]
+    assert "Autoclean failed" in warning_msg
+    assert str(dir_a) in warning_msg
