@@ -55,7 +55,7 @@ async def call_dpr_flow(
     dask_cluster_label: str,
     processor_name: str,
     processor_version: str,
-    pipeline: DprPipeline | None,
+    pipeline: DprPipeline | str | None,
     unit: str | None,
     priority: Priority | None,
     processing_mode: list[ProcessingMode],
@@ -77,7 +77,9 @@ async def call_dpr_flow(
         processor_version=processor_version,
         dask_cluster_label=dask_cluster_label,
         s3_payload_file=f"{s3_payload}/payload_{processor_name}.yaml",
-        pipeline=DprPipeline(pipeline) if pipeline else None,
+        pipeline=(
+            DprPipeline(pipeline) if pipeline in DprPipeline._value2member_map_ else pipeline  # pylint: disable=W0212
+        ),
         unit=unit,
         priority=Priority(priority),
         workflow_type=WorkflowType(workflow),

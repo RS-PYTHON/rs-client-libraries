@@ -56,7 +56,7 @@ class ProcessingFlowParams(BaseModel):
         json_schema_extra={"order": 2},
     )
 
-    pipeline: DprPipeline | None = Field(
+    pipeline: DprPipeline | str | None = Field(
         default=None,
         title="Pipeline",
         description="DPR pipeline to use for processing.",
