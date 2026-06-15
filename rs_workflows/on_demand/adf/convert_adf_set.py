@@ -293,11 +293,11 @@ async def schedule_adf_conversion(
         )
 
     else:
-        period_corrected: timedelta = min(period_end - period_start, timedelta(minutes=period_in_hours))
+        period_corrected: timedelta = min(period_end - period_start, timedelta(hours=period_in_hours))
         logger.debug(f"period_corrected = {period_corrected}")
         rule = (
             f"DTSTART:{period_start.strftime("%Y%m%dT%H%M%SZ")}\n"
-            f"FREQ=MINUTELY;INTERVAL={period_in_hours};UNTIL={period_end.strftime("%Y%m%dT%H%M%SZ")}"
+            f"FREQ=HOURLY;INTERVAL={period_in_hours};UNTIL={period_end.strftime("%Y%m%dT%H%M%SZ")}"
         )
         logger.debug(f"rule = {rule}")
 
