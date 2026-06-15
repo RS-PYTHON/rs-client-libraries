@@ -33,10 +33,7 @@ from rs_workflows.flow_utils import AdfProcessIn, AuxiliaryProductMapping, FlowE
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 CQL2_FILTERS_PATH = os.path.join(script_dir, "config", "cql2-queries.json")
-
-# PREFECT_WORKPOOL: str = "eopf-prefect-pool"
-GITHUB_URL: str = "https://github.com/RS-PYTHON/rs-client-libraries.git"
-GITHUB_BRANCH: str = "develop"
+FLOW_TO_BE_SCHEDULED: str = "rs_workflows/on_demand/adf/convert_adf_set.py:adf_conversion_scheduled"
 
 
 @flow(name="convert-adf-group")
@@ -333,19 +330,31 @@ async def schedule_conversion_flow(
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
-    flow_obj = await cast(
-        Awaitable[Any],
-        flow.from_source(
-            source=GitRepository(url=GITHUB_URL, branch=GITHUB_BRANCH),
-            entrypoint="rs_workflows/on_demand/adf/convert_adf_set.py:adf_conversion_scheduled",
-        ),
-    )
-
-    # Retrieve the name of the workpool
+    # Retrieve the name of the workpool, GitHub URL and Branch
     work_pool_name: str | None = None
+    github_repository: str | None = None
+    github_branch: str | None = None
     async with get_client() as client:
         deployment = await client.read_deployment(flow_run.deployment_id)
         work_pool_name = deployment.work_pool_name
+        pull_steps = deployment.pull_steps or []
+
+        for step in pull_steps:
+            for step_name, step_config in step.items():
+                if "git_clone" in step_name:
+                    github_repository = step_config.get("repository")
+                    github_branch = step_config.get("branch", "develop")  # "develop" by default
+        logger.info(
+            f"Work pool name: {work_pool_name}, GitHub repository: {github_repository}, GitHub branch: {github_branch}",
+        )
+
+    flow_obj = await cast(
+        Awaitable[Any],
+        flow.from_source(
+            source=GitRepository(url=github_repository, branch=github_branch),
+            entrypoint=FLOW_TO_BE_SCHEDULED,
+        ),
+    )
 
     encoded_period: str = str(int(period.total_seconds()))
     await flow_obj.deploy(
