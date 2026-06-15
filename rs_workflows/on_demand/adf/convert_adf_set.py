@@ -22,7 +22,7 @@ from collections.abc import Awaitable
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
-from prefect import flow, get_run_logger, task
+from prefect import flow, get_run_logger, runtime, task
 from prefect.client.orchestration import get_client
 from prefect.runner.storage import GitRepository
 from prefect.runtime import flow_run
@@ -335,7 +335,7 @@ async def schedule_conversion_flow(
     github_repository: str | None = None
     github_branch: str | None = None
     async with get_client() as client:
-        deployment = await client.read_deployment(flow_run.deployment_id)
+        deployment = await client.read_deployment(runtime.deployment.id)
         work_pool_name = deployment.work_pool_name
         pull_steps = deployment.pull_steps or []
 
