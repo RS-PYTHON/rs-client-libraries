@@ -889,13 +889,24 @@ def generate_payload(  # pylint: disable=unused-argument
     logger.info("Building the payload")
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (stories 800/1050)
-        general_configuration=GeneralConfiguration(logging=LoggingConfig(level=dpr_process_in.logging_level.name)),
+        general_configuration=GeneralConfiguration(
+            logging=LoggingConfig(level=dpr_process_in.logging_level.name),
+            triggering__temporary_shared=dpr_process_in.temporary_shared,
+            dask_utils__timeout=dpr_process_in.dask_task_timeout,
+            temporary__folder=dpr_process_in.temporary_folder,
+            temporary__folder_s3_secret=(
+                "s3"
+                if dpr_process_in.temporary_folder and dpr_process_in.temporary_folder.startswith("s3://")
+                else None
+            ),
+        ),
         workflow=workflow_steps,
         io=io_config,  # type: ignore
         # The dask_context section is built in the dpr_service
         # dask_context=dask_context,
         logging=logging,
         config=config,
+        secret=["secrets.json"],
     )
     logger.debug(f"Generated payload: \n {payload}")
     return payload

@@ -63,6 +63,9 @@ async def call_dpr_flow(
     generated_product_to_collection_identifier: list[FlowGeneratedProduct],
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
     logging_level: LoggingLevel = LoggingLevel.INFO,
+    dask_task_timeout: int | None = None,
+    temporary_folder: str | None = None,
+    temporary_shared: bool = False,
 ) -> None:
     """
     Call any DPR processing flow with a set of default parameters.
@@ -87,6 +90,9 @@ async def call_dpr_flow(
         generated_product_to_collection_identifier=generated_product_to_collection_identifier,
         auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
         logging_level=logging_level,
+        dask_task_timeout=dask_task_timeout,
+        temporary_folder=temporary_folder,
+        temporary_shared=temporary_shared,
         processing_mode=processing_mode,
         **external_variables,
     )
