@@ -55,7 +55,7 @@ async def call_dpr_flow(
     dask_cluster_label: str,
     processor_name: str,
     processor_version: str,
-    pipeline: DprPipeline | None,
+    pipeline: DprPipeline | str | None,
     unit: str | None,
     priority: Priority | None,
     processing_mode: list[ProcessingMode],
@@ -63,6 +63,9 @@ async def call_dpr_flow(
     generated_product_to_collection_identifier: list[FlowGeneratedProduct],
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
     logging_level: LoggingLevel = LoggingLevel.INFO,
+    dask_task_timeout: int | None = None,
+    temporary_folder: str | None = None,
+    temporary_shared: bool = False,
 ) -> None:
     """
     Call any DPR processing flow with a set of default parameters.
@@ -77,7 +80,9 @@ async def call_dpr_flow(
         processor_version=processor_version,
         dask_cluster_label=dask_cluster_label,
         s3_payload_file=f"{s3_payload}/payload_{processor_name}.yaml",
-        pipeline=DprPipeline(pipeline) if pipeline else None,
+        pipeline=(
+            DprPipeline(pipeline) if pipeline in DprPipeline._value2member_map_ else pipeline  # pylint: disable=W0212
+        ),
         unit=unit,
         priority=Priority(priority),
         workflow_type=WorkflowType(workflow),
@@ -85,6 +90,9 @@ async def call_dpr_flow(
         generated_product_to_collection_identifier=generated_product_to_collection_identifier,
         auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
         logging_level=logging_level,
+        dask_task_timeout=dask_task_timeout,
+        temporary_folder=temporary_folder,
+        temporary_shared=temporary_shared,
         processing_mode=processing_mode,
         **external_variables,
     )

@@ -923,6 +923,7 @@ def _mock_dpr_process_in():
     mock.processor_name = msg
 
     mock.logging_level = LoggingLevel.DEBUG
+    mock.temporary_folder = None
 
     return mock
 
