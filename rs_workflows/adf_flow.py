@@ -141,9 +141,9 @@ def extract_datetimes_from_item_id(item_id: str, logger=None) -> tuple[str, str]
     """Extract start and end datetime ISO strings from an item_id.
 
     The expected item_id format is:
-        ``<prefix>_<start_YYYYMMDDTHHMMSS>_<end_YYYYMMDDTHHMMSS>_<creation_YYYYMMDDTHHMMSS>``
+        <prefix>_<start_YYYYMMDDTHHMMSS>_<end_YYYYMMDDTHHMMSS>_<creation_YYYYMMDDTHHMMSS>
 
-    Returns a ``(start_iso, end_iso)`` tuple on success, or ``None`` when the
+    Returns a (start_iso, end_iso) tuple on success, or None when the
     pattern does not match.
     """
     match = _ITEM_ID_DT_RE.search(item_id)
