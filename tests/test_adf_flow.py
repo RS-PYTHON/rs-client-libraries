@@ -178,6 +178,142 @@ def test_create_stac_item_from_json_falls_back_to_filename(mocker, tmp_path):
     assert item.properties["product:type"] == "ADF_WATER"
 
 
+@pytest.mark.parametrize(
+    "item_id, expected_start, expected_end",
+    [
+        (
+            "S03A_ADF_OLCAL_20211027T000000_20991231T235959_20260612T114433",
+            "2021-10-27T00:00:00Z",
+            "2099-12-31T23:59:59Z",
+        ),
+        (
+            "S00__ADF_ECMWA_20210321T030000_20210321T150000_20260101T000000",
+            "2021-03-21T03:00:00Z",
+            "2021-03-21T15:00:00Z",
+        ),
+    ],
+)
+def test_extract_datetimes_from_item_id_valid(item_id, expected_start, expected_end):
+    """Test extraction of start/end datetimes from a well-formed item_id."""
+    result = adf_flow.extract_datetimes_from_item_id(item_id)
+    assert result is not None
+    start_iso, end_iso = result
+    assert start_iso == expected_start
+    assert end_iso == expected_end
+
+
+@pytest.mark.parametrize(
+    "item_id",
+    [
+        "no-dates-here",
+        # only two timestamps, missing creation
+        "S00__ADF_ECMWA_20210321T030000_20210321T150000",
+        "S00__ADF_ECMWA",
+        "",
+    ],
+)
+def test_extract_datetimes_from_item_id_no_match(item_id):
+    """Test that non-matching item_ids return None."""
+    assert adf_flow.extract_datetimes_from_item_id(item_id) is None
+
+
+def test_create_stac_item_uses_stac_props_over_item_id(mocker, tmp_path):
+    """Test that create_stac_item_from_zarr prefers stac_props datetimes over item_id ones."""
+    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
+    zarr_dir = tmp_path / "test.zarr"
+    zarr_dir.mkdir()
+    zattrs_content = {
+        "id": "S03A_ADF_OLCAL_20211027T000000_20991231T235959_20260612T114433",
+        "properties": {
+            "product:type": "ADF_OLCAL",
+            "created": "2026-06-12T11:44:33Z",
+            # These stac_props should take priority over the item_id datetimes
+            "start_datetime": "2000-01-01T00:00:00Z",
+            "end_datetime": "2000-12-31T23:59:59Z",
+        },
+    }
+    (zarr_dir / ".zattrs").write_text(json.dumps(zattrs_content))
+
+    item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_OLCAL")
+
+    assert item.id == "S03A_ADF_OLCAL_20211027T000000_20991231T235959_20260612T114433"
+    # Datetimes should come from stac_props, not from item_id
+    assert item.common_metadata.start_datetime is not None
+    assert item.common_metadata.end_datetime is not None
+    assert item.common_metadata.start_datetime.year == 2000
+    assert item.common_metadata.start_datetime.month == 1
+    assert item.common_metadata.start_datetime.day == 1
+    assert item.common_metadata.end_datetime.year == 2000
+    assert item.common_metadata.end_datetime.month == 12
+    assert item.common_metadata.end_datetime.day == 31
+
+
+def test_create_stac_item_uses_item_id_when_stac_props_missing(mocker, tmp_path):
+    """Test that item_id datetimes are used when stac_props don't have start/end datetime."""
+    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
+    zarr_dir = tmp_path / "test.zarr"
+    zarr_dir.mkdir()
+    zattrs_content = {
+        "id": "S03A_ADF_OLCAL_20211027T000000_20991231T235959_20260612T114433",
+        "properties": {
+            "product:type": "ADF_OLCAL",
+            "created": "2026-06-12T11:44:33Z",
+            # No start_datetime/end_datetime => should fall back to item_id
+        },
+    }
+    (zarr_dir / ".zattrs").write_text(json.dumps(zattrs_content))
+
+    item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_OLCAL")
+
+    assert item.id == "S03A_ADF_OLCAL_20211027T000000_20991231T235959_20260612T114433"
+    # Datetimes should come from item_id since stac_props don't have them
+    assert item.common_metadata.start_datetime is not None
+    assert item.common_metadata.end_datetime is not None
+    assert item.common_metadata.start_datetime.year == 2021
+    assert item.common_metadata.start_datetime.month == 10
+    assert item.common_metadata.start_datetime.day == 27
+    assert item.common_metadata.end_datetime.year == 2099
+    assert item.common_metadata.end_datetime.month == 12
+    assert item.common_metadata.end_datetime.day == 31
+
+
+def test_create_stac_item_falls_back_to_metadata_when_item_id_has_no_dates(mocker, tmp_path):
+    """Test that metadata properties are used when item_id doesn't match the datetime pattern."""
+    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
+    zarr_dir = tmp_path / "test.zarr"
+    zarr_dir.mkdir()
+    zattrs_content = {
+        "id": "simple-id-no-dates",
+        "properties": {
+            "product:type": "ADF_ECMWA",
+            "start_datetime": "2021-03-21T03:00:00Z",
+            "end_datetime": "2021-03-21T15:00:00Z",
+        },
+    }
+    (zarr_dir / ".zattrs").write_text(json.dumps(zattrs_content))
+
+    item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_ECMWA")
+
+    assert item.id == "simple-id-no-dates"
+    # Datetimes should come from metadata properties since item_id doesn't match
+    assert item.common_metadata.start_datetime is not None
+    assert item.common_metadata.end_datetime is not None
+    assert item.common_metadata.start_datetime.year == 2021
+    assert item.common_metadata.start_datetime.month == 3
+    assert item.common_metadata.start_datetime.day == 21
+    assert item.common_metadata.start_datetime.hour == 3
+    assert item.common_metadata.end_datetime.hour == 15
+
+
+def test_extract_datetimes_from_item_id_logs_warning_on_no_match():
+    """Test that a warning is logged when the item_id pattern doesn't match (make sonarqube happy)"""
+    mock_logger = MagicMock()
+    result = adf_flow.extract_datetimes_from_item_id("no-dates-here", logger=mock_logger)
+    assert result is None
+    mock_logger.warning.assert_called_once()
+    assert "no-dates-here" in mock_logger.warning.call_args[0][0]
+
+
 def test_run_adf_script_returns_generated_zarr(monkeypatch, mocker, tmp_path):
     """Test the conversion script wrapper returns the generated ZARR path."""
     mock_logger = MagicMock()
