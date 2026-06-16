@@ -30,7 +30,7 @@ from requests import Response
 from requests.models import PreparedRequest
 
 from rs_client.rs_client import TIMEOUT, RsClient
-from rs_common.utils import get_href_service
+from rs_common.utils import get_href_service, read_response_error
 
 MAX_RETRIES_NUMBER_FOR_GETTING_JOB_STATUS = 20
 
@@ -110,7 +110,7 @@ class OgcApiClient(RsClient):
         if result.errors:
             raise OgcValidationException(  # type: ignore
                 f"Error validating the response of the endpoint {openapi_request.path} - "
-                f"Server response content: {response.json()} - "
+                f"Server response content: {read_response_error(response)} - "
                 f"Validation error of the server response: {', '.join(str(x) for x in result.errors)}",
             )
         if not result.data:

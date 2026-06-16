@@ -14,11 +14,30 @@
 
 """Test the storage_configuration module"""
 
+import copy
 import json
 from unittest.mock import Mock
 
+import pytest
+
 from rs_workflows.payload_template import StoreParams
 from rs_workflows.storage_configuration import StorageConfig
+
+
+@pytest.fixture(name="sample_config_data")
+def _sample_config_data_local(sample_config_data):
+    """Override sample_config_data to add required 'kind' and 'absolute_path' fields."""
+    data = copy.deepcopy(sample_config_data)
+    for entry in data["storage_configuration"]:
+        if entry["name"] == "s3":
+            entry["kind"] = "obs"
+        elif entry["name"] == "local_disk":
+            entry["kind"] = "local_disk"
+            entry["absolute_path"] = entry.pop("relative_path", "/data")
+        elif entry["name"] == "shared_disk":
+            entry["kind"] = "shared_disk"
+            entry["absolute_path"] = entry.pop("relative_path", "/mnt/shared")
+    return data
 
 
 def test_init_and_load(secrets, config_file):
@@ -67,25 +86,28 @@ def test_get_store_params_s3(secrets, config_file):
     assert params.storage_options.client_kwargs["endpoint_url"].get_secret_value() == "http://minio"
 
 
-def test_get_store_params_local_disk(secrets, config_file):
-    """Test retrieval of StoreParams for a local disk storage configuration."""
+def test_get_disk_storage_local_disk(secrets, config_file):
+    """Test retrieval of disk storage configuration for local disk."""
     sc = StorageConfig(secrets, config_file)
     params = sc.get_store_params("local_disk")
-    assert params is not None
-    assert params.storage_path is not None
-    assert params.storage_path.name == "local_disk"
-    assert params.storage_path.opening_mode == "rw"
-    assert params.storage_path.relative_path == "/data"
+    assert params is None
+    disk_storage = sc.get_disk_storage("local_disk")
+    assert disk_storage is not None
+    assert disk_storage["opening_mode"] == "rw"
+    assert disk_storage["path"] == f"/data/{sc.job_identifier}"
+    assert disk_storage["autoclean"] is True
 
 
-def test_get_store_params_shared_disk(secrets, config_file):
-    """Test retrieval of StoreParams for a shared disk storage configuration."""
+def test_get_disk_storage_shared_disk(secrets, config_file):
+    """Test retrieval of disk storage configuration for shared disk."""
     sc = StorageConfig(secrets, config_file)
     params = sc.get_store_params("shared_disk")
-    assert params is not None
-    assert params.storage_path is not None
-    assert params.storage_path.name == "shared_disk"
-    assert params.storage_path.opening_mode == "r"
+    assert params is None
+    disk_storage = sc.get_disk_storage("shared_disk")
+    assert disk_storage is not None
+    assert disk_storage["opening_mode"] == "r"
+    assert disk_storage["path"] == f"/mnt/shared/{sc.job_identifier}"
+    assert disk_storage["autoclean"] is False
 
 
 def test_get_store_params_missing(secrets, config_file):
@@ -117,14 +139,7 @@ def test_missing_secret_warning(tmp_path, sample_config_data, secrets):
 def test_get_all_storage_names(secrets, config_file):
     """Test retrieval of all storage configurations."""
     sc = StorageConfig(secrets, config_file)
-    all_params = sc.get_all_storage_names()
-    names = []
-    for p in all_params:
-        if p.storage_options:
-            names.append(p.storage_options.name)
-        elif p.storage_path:
-            names.append(p.storage_path.name)
-
+    names = sc.get_all_storage_names()
     assert "s3" in names
     assert "local_disk" in names
     assert "shared_disk" in names

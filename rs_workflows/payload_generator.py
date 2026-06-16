@@ -25,6 +25,7 @@ from uuid import uuid4
 import requests
 from prefect import get_run_logger, task
 from prefect.blocks.system import Secret
+from pydantic import SecretStr
 from pystac import Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
@@ -51,6 +52,7 @@ from rs_workflows.utils.utils import get_common_and_relative_paths, search_by_na
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
 DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
 RSPY_CATALOG_BUCKET = "rs-dev-cluster-catalog"
+DATA_EDH_DOMAIN = "data.earthdatahub.destine.eu"
 
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
@@ -367,8 +369,14 @@ def build_input_products(
                 store_name = storage_configuration.get_storage_for_pipeline_section(
                     mapping.get("origin", ""),
                 ) or storage_configuration.get_storage_for_pipeline_section("other")
+                # TODO: the following line is temporary and for tests only ! Force eveything to s3 !
+                # Delete the following line once the things will be clarified with other store_names
+                # This is due to the internal discussions, disregard any other store_name but s3
+                store_name = "s3"
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for input product '{product_name}'")
+
+        kind = storage_configuration.get_storage_kind(store_name)
         store_params = deepcopy(storage_configuration.get_store_params(store_name))
 
         if len(products) == 1:
@@ -380,18 +388,26 @@ def build_input_products(
                 input_product.item_id,
             )
 
+            opening_mode = None
+            if kind in ("shared_disk", "local_disk"):
+                disk_config = storage_configuration.get_disk_storage(store_name)
+                if disk_config:
+                    opening_mode = disk_config.get("opening_mode")
+                store_params = None
+
             inputs.append(
                 InputProduct(
                     id=mapping["name"],
                     path=stac_item_path,
                     # TODO: The value for this field in the tasktable (from where the unit is built) should be
-                    # 'filename' in case of s1 l0 processor, otherwise the s1 l0 processor is failing in starting.
-                    # check in the tasktable from rs-dpr-service (config/TaskTable_S1_L0_generated_by_rs_python_v1.json)
-                    # that in section io, the type field is set to 'filename' for input_products (S1ACADUS).
+                    # set to 'filename' for the s1 l0 processor, otherwise the processor fails to start.
+                    # Verify in the rs-dpr-service tasktable (config/TaskTable_S1_L0_generated_by_rs_python_v1.json)
+                    # that in the io section, the type field for input_products (S1ACADUS) is set to 'filename'.
                     # To be fixed in future iterations !
                     type=mapping.get("type", "filename"),
                     store_type=mapping["store_type"],
                     store_params=store_params,
+                    opening_mode=opening_mode,
                 ),
             )
         elif isinstance(store_params, StoreParams):
@@ -464,7 +480,7 @@ def build_output_products(
     for mapping in unit.get("output_products", []):
         product_name = mapping["name"]
 
-        logger.info(f"Configuration bucket: Building output section for name: {product_name}")
+        logger.info(f"Building output section for name: {product_name}")
         output_product = mapping_lookup.get(product_name)
 
         # Fails ONLY if required mapping is missing
@@ -485,8 +501,6 @@ def build_output_products(
                 f"cannot be '*' if the collection name is not specified for product '{product_name}'",
             )
 
-        bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
-        output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
         if not store_name:
@@ -496,21 +510,43 @@ def build_output_products(
                 store_name = storage_configuration.get_storage_for_pipeline_section(
                     mapping.get("origin", ""),
                 ) or storage_configuration.get_storage_for_pipeline_section("other")
-                # TODO: the following line is temporary and for tests only ! Force eveything to s3 !
-                # Delete the following line once the things will be clarified with other store_names
-                # This is due to the internal discussions, disregard any other store_name but s3
-                store_name = "s3"
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
+
+        # Determine the output path based on the storage kind
+        kind = storage_configuration.get_storage_kind(store_name)
+        store_params = deepcopy(storage_configuration.get_store_params(store_name))
+        opening_mode = mapping.get("opening_mode", "CREATE")
+        autoclean = None
+
+        if kind == "obs":
+            bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
+            output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
+        elif kind in ("shared_disk", "local_disk"):
+            disk_config = storage_configuration.get_disk_storage(store_name)
+            if disk_config and disk_config.get("path"):
+                output_path = disk_config["path"]
+                opening_mode = disk_config.get("opening_mode", opening_mode)
+                autoclean = disk_config.get("autoclean", False)
+            else:
+                raise RuntimeError(
+                    f"Storage '{store_name}' of kind '{kind}' has no storage path configured "
+                    f"for output product '{product_name}'",
+                )
+            store_params = None
+        else:
+            raise RuntimeError(f"Unknown storage kind '{kind}' for output product '{product_name}'")
+
         outputs.append(
             OutputProduct(
                 id=mapping["name"],
                 path=output_path,
                 store_type=mapping["store_type"],
-                store_params=storage_configuration.get_store_params(store_name),
+                store_params=store_params,
                 type=mapping.get("type", "filename"),
-                opening_mode=mapping.get("opening_mode", "CREATE"),
+                opening_mode=opening_mode,
                 final_product=mapping.get("final_product", True),
+                autoclean=autoclean,
             ),
         )
 
@@ -564,6 +600,7 @@ def get_io(
 def build_adfs(
     storage_configuration: StorageConfig,
     adfs: list[tuple[str, str, str]],
+    dpr_process_in: DprProcessIn,
 ) -> list[AdfConfig]:
     """
     Build a list of AdfConfig objects from input ADF definitions.
@@ -577,6 +614,7 @@ def build_adfs(
         storage_configuration (StorageConfig): Configuration object used to
             retrieve default storage parameters.
         adfs (list[tuple[str, str, str]]): List of (adf_id, adfs_type, path) tuples.
+        dpr_process_in (DprProcessIn): DPR input process definition
 
     Returns:
         list[AdfConfig]: List of constructed AdfConfig objects, one per group
@@ -598,6 +636,12 @@ def build_adfs(
             path, adfs_type = adfs_entries[0]
             if adfs_type == "folder":
                 path = os.path.dirname(path)
+            # Inject EarthDataHub API Key in path, as per documentation at
+            # https://earthdatahub.destine.eu/collections/copernicus-dem/datasets/GLO-30
+            if dpr_process_in.edh_api_key and path.startswith(f"https://{DATA_EDH_DOMAIN}/"):
+                path = SecretStr(
+                    path.replace(DATA_EDH_DOMAIN, f"edh:{dpr_process_in.edh_api_key}@api.earthdatahub.destine.eu"),
+                )
             result.append(AdfConfig(id=adfs_id, path=path, store_params=store_params))
         elif isinstance(store_params, StoreParams):
             # Advanced case where several adfs share the same id (i.e. several files)
@@ -793,13 +837,15 @@ def generate_payload(  # pylint: disable=unused-argument
                 storage_configuration,
                 bucket_configuration,
             )
-            io_config.input_products += input_products
-            io_config.output_products += output_products
+            seen_inputs = {p.id for p in io_config.input_products}
+            io_config.input_products += [p for p in input_products if p.id not in seen_inputs]
+            seen_outputs = {p.id for p in io_config.output_products}
+            io_config.output_products += [p for p in output_products if p.id not in seen_outputs]
         except KeyError as ke:
             raise ValueError(f"Key {ke} not found in unit list") from ke
 
     logger.info("Building ADFs section")
-    io_config.adfs = build_adfs(storage_configuration, adfs)
+    io_config.adfs = build_adfs(storage_configuration, adfs, dpr_process_in)
 
     # Add the logging config for l0 and s1 / s3 configurations. These configurations
     # are hardcoded in the l0 eopf dask worker image. The path where these files are stored is given
@@ -841,15 +887,25 @@ def generate_payload(  # pylint: disable=unused-argument
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
     logger.info("Building the payload")
+    temp_folder_s3_secret = (
+        "s3" if dpr_process_in.temporary_folder and dpr_process_in.temporary_folder.startswith("s3://") else None
+    )
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (stories 800/1050)
-        general_configuration=GeneralConfiguration(logging=LoggingConfig(level=dpr_process_in.logging_level.name)),
+        general_configuration=GeneralConfiguration(
+            logging=LoggingConfig(level=dpr_process_in.logging_level.name),
+            triggering__temporary_shared=dpr_process_in.temporary_shared,
+            dask_utils__timeout=dpr_process_in.dask_task_timeout,
+            temporary__folder=dpr_process_in.temporary_folder,
+            temporary__folder_s3_secret=temp_folder_s3_secret,
+        ),
         workflow=workflow_steps,
         io=io_config,  # type: ignore
         # The dask_context section is built in the dpr_service
         # dask_context=dask_context,
         logging=logging,
         config=config,
+        secret=["secrets.json"] if temp_folder_s3_secret else None,
     )
     logger.debug(f"Generated payload: \n {payload}")
     return payload

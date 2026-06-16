@@ -16,6 +16,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess  # nosec B404
 import sys
@@ -29,7 +30,7 @@ from prefect import flow, get_run_logger, task
 from pystac import Asset, Item
 
 from rs_common.prefect_utils import s3_upload_dir, s3_upload_file
-from rs_workflows.auxip_flow import auxip_staging_task
+from rs_workflows.aux_flow import aux_staging_task
 from rs_workflows.catalog_flow import publish
 from rs_workflows.flow_utils import (
     AdfProcessIn,
@@ -130,6 +131,32 @@ STAC_DATETIME_PROPERTY_NAMES = {
     "start_datetime",
     "end_datetime",
 }
+
+# Regex to capture start and end datetime tokens from an item_id.
+# Expected pattern: <prefix>_<YYYYMMDDTHHMMSS>_<YYYYMMDDTHHMMSS>_<creation_timestamp>
+_ITEM_ID_DT_RE = re.compile(r"_(\d{8}T\d{6})_(\d{8}T\d{6})_\d{8}T\d{6}$")
+
+
+def extract_datetimes_from_item_id(item_id: str) -> tuple[str, str] | None:
+    """Extract start and end datetime ISO strings from an item_id.
+
+    The expected item_id format is:
+        <prefix>_<start_YYYYMMDDTHHMMSS>_<end_YYYYMMDDTHHMMSS>_<creation_YYYYMMDDTHHMMSS>
+
+    Returns a (start_datetime, end_datetime) tuple on success, or None when the
+    pattern does not match.
+    """
+    match = _ITEM_ID_DT_RE.search(item_id)
+    if not match:
+        return None
+    start_raw, end_raw = match.group(1), match.group(2)
+    start_iso = (
+        datetime.strptime(start_raw, "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    )
+    end_iso = (
+        datetime.strptime(end_raw, "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    )
+    return start_iso, end_iso
 
 
 def resolve_collection_name(mappings, product_type: str) -> str | None:
@@ -278,13 +305,21 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     logger.info(f"Setting item_id to {item_id}")
 
     # extract start/end datetime for pystac.Item validation.
-    # try to find them in the metadata, but if they are not present, fallback to 'created'
-    # or current time to avoid validation issues. The S00__ADF_GETAS.py script doesn't set but
-    # 'created' field in the metadata, but pystac requires at least one of them to be set, so we need
-    # a fallback mechanism in this case.
-    fallback_dt_str = stac_props.get("created") or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    start_dt_str = stac_props.get("start_datetime") or fallback_dt_str
-    end_dt_str = stac_props.get("end_datetime") or fallback_dt_str
+    # try to find them in the metadata, but if they are not present, try to take them from the
+    # item_id string pattern. If still not found, raise an error.
+    # priority: metadata properties > datetimes embedded in item_id
+    start_dt_str = stac_props.get("start_datetime")
+    end_dt_str = stac_props.get("end_datetime")
+    if not start_dt_str or not end_dt_str:
+        id_datetimes = extract_datetimes_from_item_id(item_id)
+        if id_datetimes:
+            start_dt_str = start_dt_str or id_datetimes[0]
+            end_dt_str = end_dt_str or id_datetimes[1]
+            logger.info(f"Extracted start/end datetimes from item_id: {id_datetimes[0]} / {id_datetimes[1]}")
+        else:
+            msg = f"Could not extract datetimes from metadata properties or from item_id {item_id!r}"
+            logger.error(msg)
+            raise RuntimeError(msg)
 
     start_dt = parse_date(start_dt_str) if start_dt_str else None
     end_dt = parse_date(end_dt_str) if end_dt_str else None
@@ -382,7 +417,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 )
 
             logger.info(f"Staging {prod_type} to collection {target_collection}")
-            success, items = await auxip_staging_task(
+            success, items = await aux_staging_task(
                 env=adf_input.env,
                 cql2_filter=cql2_filter,
                 catalog_collection_identifier=target_collection,

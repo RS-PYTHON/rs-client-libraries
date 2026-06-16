@@ -18,6 +18,7 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import SecretStr
 from pystac import Asset, Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
@@ -26,6 +27,7 @@ from rs_workflows.flow_utils import (
     FlowInputProduct,
 )
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
+    DATA_EDH_DOMAIN,
     build_adfs,
     build_input_products,
     build_output_products,
@@ -115,6 +117,7 @@ def test_get_io_builds_input_and_output(
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
     mock_storage_config.get_storage_for_specific_product.return_value = "s3"
+    mock_storage_config.get_storage_kind.return_value = "obs"
 
     inputs, outputs = get_io(
         sample_unit,
@@ -282,6 +285,43 @@ def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_e
             adfs=[],
             dpr_process_in=mock_dpr_process_in,
         )
+
+
+def test_generate_payload_deduplicates_io(mocker, sample_unit, mock_dpr_process_in, flow_env, _mock_os_env):
+    """
+    When two units share the same input/output product id, generate_payload must
+    include each id only once in the payload (regression test for the duplicate
+    input_products bug).
+    """
+    shared_input = InputProduct(id="slcs", path="s3://bucket/slcs", store_type="s3")
+    shared_output = OutputProduct(id="out1", path="s3://bucket/out1", store_type="s3")
+
+    mocker.patch(
+        "rs_workflows.payload_generator.load_storage_configuration",
+        return_value=MagicMock(default_adfs_storage="s3"),
+    )
+    mocker.patch(
+        "rs_workflows.payload_generator.get_io",
+        return_value=([shared_input], [shared_output]),
+    )
+    mocker.patch("rs_workflows.payload_generator.fetch_csv_from_endpoint", return_value=[])
+    mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=MagicMock())
+    mock_secret = MagicMock()
+    mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
+    mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
+
+    payload = generate_payload.fn(
+        flow_env=flow_env,
+        unit_list=[sample_unit, sample_unit],
+        adfs=[],
+        dpr_process_in=mock_dpr_process_in,
+    )
+
+    assert payload.io is not None
+    assert len(payload.io.input_products) == 1
+    assert payload.io.input_products[0].id == "slcs"
+    assert len(payload.io.output_products) == 1
+    assert payload.io.output_products[0].id == "out1"
 
 
 # ----------------------------------------------------------------------
@@ -687,12 +727,20 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
     assert len(inputs) == 1
     mock_storage.get_storage_for_pipeline_section.assert_any_call("pipeline_input_1")
     mock_storage.get_storage_for_pipeline_section.assert_any_call("other")
-    mock_storage.get_store_params.assert_called_with("pipeline_s3")
+    # store_name is forced to "s3" regardless of the pipeline resolution (temporary workaround)
+    mock_storage.get_store_params.assert_called_with("s3")
 
 
 # ----------------------------------------------------------------------
 
 # build_adfs
+
+
+def _make_dpr_process_in(edh_api_key=None):
+    """Helper to create a minimal DprProcessIn mock for build_adfs tests."""
+    mock = MagicMock()
+    mock.edh_api_key = edh_api_key
+    return mock
 
 
 def test_build_adfs_single_folder(mock_store_params):
@@ -705,7 +753,7 @@ def test_build_adfs_single_folder(mock_store_params):
         ("adf1", "folder", "/data/myfolder/file1.txt"),
     ]
 
-    result = build_adfs(mock_storage_config, adfs)
+    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in())
 
     assert len(result) == 1
     assert result[0].id == "adf1"
@@ -722,7 +770,7 @@ def test_build_adfs_single_filename(mock_store_params):
         ("adf1", "filename", "/data/file1.txt"),
     ]
 
-    result = build_adfs(mock_storage_config, adfs)
+    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in())
 
     assert len(result) == 1
     assert result[0].id == "adf1"
@@ -740,7 +788,7 @@ def test_build_adfs_multiple_entries(mock_store_params):
         ("adf1", "filename", "/data/folder/file2.txt"),
     ]
 
-    result = build_adfs(mock_storage_config, adfs)
+    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in())
 
     assert len(result) == 1
     adf = result[0]
@@ -750,6 +798,75 @@ def test_build_adfs_multiple_entries(mock_store_params):
     assert isinstance(adf.store_params, StoreParams)
     assert adf.store_params.multiplicity == "2"
     assert adf.store_params.regex == r"(file1\.txt|file2\.txt)"
+
+
+def test_build_adfs_edh_url_replaced_with_api_key(mock_store_params):
+    """EDH URL is rewritten to inject the API key and becomes a SecretStr."""
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
+    edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
+    adfs = [("DEM", "filename", edh_url)]
+
+    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
+
+    assert len(result) == 1
+    path = result[0].path
+    assert isinstance(path, SecretStr), "EDH path with injected API key must be a SecretStr"
+    full_url = path.get_secret_value()
+    assert "my-secret-token" in full_url
+    assert DATA_EDH_DOMAIN not in full_url
+    assert full_url == "https://edh:my-secret-token@api.earthdatahub.destine.eu/copernicus-dem-30m/tile.tif"
+
+
+def test_build_adfs_edh_url_secret_hides_token(mock_store_params):
+    """The SecretStr representation must not expose the API key in plain text."""
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
+    edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
+    adfs = [("DEM", "filename", edh_url)]
+
+    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
+
+    path = result[0].path
+    assert isinstance(path, SecretStr)
+    assert "my-secret-token" not in str(path)
+    assert "my-secret-token" not in repr(path)
+
+
+def test_build_adfs_no_edh_key_url_unchanged(mock_store_params):
+    """EDH URL is left unchanged when no API key is provided."""
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
+    edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
+    adfs = [("DEM", "filename", edh_url)]
+
+    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key=None))
+
+    path = result[0].path
+    assert not isinstance(path, SecretStr)
+    assert path == edh_url
+
+
+def test_build_adfs_non_edh_url_not_replaced(mock_store_params):
+    """A non-EDH https URL is not replaced even when an API key is provided."""
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+
+    other_url = "https://some-other-service.example.com/data/file.tif"
+    adfs = [("ADF1", "filename", other_url)]
+
+    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
+
+    path = result[0].path
+    assert not isinstance(path, SecretStr)
+    assert path == other_url
 
 
 # ----------------------------------------------------------------------
@@ -769,6 +886,7 @@ def test_build_output_products_specific_storage(
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     # Provide mappings for BOTH output1 and output2
     mock_dpr_process_in.generated_product_to_collection_identifier = [
@@ -809,6 +927,7 @@ def test_build_output_products_fallback_unit(
     mock_storage.get_storage_for_specific_product.return_value = None
     mock_storage.get_storage_for_unit_section.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     mock_dpr_process_in.generated_product_to_collection_identifier = [
         FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
@@ -839,6 +958,7 @@ def test_build_output_products_fallback_pipeline(
     mock_storage.get_storage_for_specific_product.return_value = None
     mock_storage.get_storage_for_pipeline_section.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     mock_dpr_process_in.generated_product_to_collection_identifier = [
         FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
@@ -876,7 +996,7 @@ def test_build_output_products_error_no_storage(
     mock_dpr_process_in.unit = False
     mock_dpr_process_in.pipeline = False
 
-    with pytest.raises(RuntimeError, match="Unable to determine the output bucket"):
+    with pytest.raises(RuntimeError, match="Couldn't find any storage configuration for output product"):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
 
@@ -888,6 +1008,7 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     # sample_unit has "output1" and "output2"
     # We provide only "output1" in generated_product_to_collection_identifier, so "output2" should trigger the error
@@ -917,6 +1038,7 @@ def test_build_output_products_extra_mapping_is_ignored(sample_unit, mock_dpr_pr
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     mock_dpr_process_in.generated_product_to_collection_identifier = [
         FlowGeneratedProduct(name="output1", product_type="type1", collection_name="COLL"),
@@ -991,6 +1113,7 @@ def test_build_output_products_ignores_extra_generated_products(mock_dpr_process
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
 
     mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
     mocker.patch(
@@ -1003,3 +1126,201 @@ def test_build_output_products_ignores_extra_generated_products(mock_dpr_process
     assert len(result) == 1
     assert result[0].id == "S01SARRAW"
     assert "s01sarraw" in result[0].path  # ensures correct collection used
+
+
+# ----------------------------------------------------------------------
+
+# shared_disk / local_disk paths
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_input_products_disk_store_params_cleared(sample_unit, kind, mocker):
+    """
+    For shared_disk and local_disk input products the store_params must be None (disk
+    storages don't use S3 credentials)
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value=(None, "/mnt/shared/path/to/item"),
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", item_id="item_id", collection_name="coll_id")]
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None  # disk storages have no StoreParams
+    mock_storage.get_disk_storage.return_value = {
+        "path": "/mnt/shared/job-uuid",
+        "opening_mode": "READ_ONLY",
+        "autoclean": False,
+    }
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    assert len(inputs) == 1
+    inp = inputs[0]
+    assert inp.id == "S1CADUS"
+    assert inp.path == "/mnt/shared/path/to/item"  # path comes from STAC, not from disk_config
+    assert inp.store_params is None  # cleared for disk storages
+    assert inp.opening_mode == "READ_ONLY"
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_input_products_disk_no_disk_config(sample_unit, kind, mocker):
+    """
+    When get_disk_storage returns None for a disk kind storage, the opening_mode
+    should remain None and store_params should still be None.
+    """
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value=(None, "/mnt/shared/path/to/item"),
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", item_id="item_id", collection_name="coll_id")]
+
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None
+    mock_storage.get_disk_storage.return_value = None  # no disk config entry
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+    assert len(inputs) == 1
+    inp = inputs[0]
+    assert inp.store_params is None
+    assert inp.opening_mode is None  # no disk_config → opening_mode stays None
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_output_products_disk_uses_disk_path(
+    sample_unit,
+    mock_dpr_process_in,
+    kind,
+    mocker,
+):
+    """
+    For shared_disk and local_disk output products path must come from disk_config["path"],
+    not from a bucket lookup and store_params must be None
+    """
+    disk_path = "/mnt/shared/job-uuid"
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None
+    mock_storage.get_disk_storage.return_value = {
+        "path": disk_path,
+        "opening_mode": "CREATE_OVERWRITE",
+        "autoclean": True,
+    }
+
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="out_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="out_type2", collection_name="OUT_COLL2"),
+    ]
+
+    mock_find_bucket = mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket")
+
+    outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    mock_find_bucket.assert_not_called()  # disk path → no S3 bucket resolution
+
+    assert len(outputs) == 2
+    for out in outputs:
+        assert out.path == disk_path
+        assert out.store_params is None
+        assert out.opening_mode == "CREATE_OVERWRITE"
+        assert out.autoclean is True
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_output_products_disk_autoclean_false(
+    sample_unit,
+    mock_dpr_process_in,
+    kind,
+    mocker,
+):
+    """
+    When autoclean is False in disk_config the OutputProduct must reflect that.
+    This is in case for shared_disk (it seems that the local_disk may be discarded in future,
+    according to our internal discussions)
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None
+    mock_storage.get_disk_storage.return_value = {
+        "path": "/mnt/shared/job-uuid",
+        "opening_mode": "CREATE",
+        "autoclean": False,
+    }
+
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="out_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="out_type2", collection_name="OUT_COLL2"),
+    ]
+
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket")
+
+    outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert len(outputs) == 2
+    for out in outputs:
+        assert out.autoclean is False
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_output_products_disk_missing_path_raises(
+    sample_unit,
+    mock_dpr_process_in,
+    kind,
+):
+    """
+    When the disk_config entry exists but contains no 'path' key,
+    a RuntimeError must be raised explaining which storage and product are affected.
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None
+    mock_storage.get_disk_storage.return_value = {
+        # 'path' key is intentionally absent
+        "opening_mode": "CREATE_OVERWRITE",
+        "autoclean": False,
+    }
+
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="out_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="out_type2", collection_name="OUT_COLL2"),
+    ]
+
+    with pytest.raises(RuntimeError, match="has no storage path configured"):
+        build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+@pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
+def test_build_output_products_disk_no_disk_config_raises(
+    sample_unit,
+    mock_dpr_process_in,
+    kind,
+):
+    """
+    When get_disk_storage returns None for a disk kind storage,
+    a RuntimeError must be raised (the processor has nowhere to write).
+    """
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "my_disk"
+    mock_storage.get_storage_kind.return_value = kind
+    mock_storage.get_store_params.return_value = None
+    mock_storage.get_disk_storage.return_value = None  # no disk config at all
+
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="out_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="out_type2", collection_name="OUT_COLL2"),
+    ]
+
+    with pytest.raises(RuntimeError, match="has no storage path configured"):
+        build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])

@@ -16,6 +16,7 @@
 
 import datetime
 import json
+import shutil
 import tempfile
 import time
 from datetime import timedelta
@@ -235,6 +236,28 @@ def create_stac_item(
     return item
 
 
+def clean_paths(paths: list[str], logger) -> None:
+    """Delete directories or files listed in paths, logging outcomes.
+
+    Args:
+        paths: List of filesystem paths to remove.
+        logger: Prefect logger for informational messages.
+    """
+    logger.info(f"Cleaning up temporary paths: {paths}")
+    for path in paths:
+        try:
+            if not osp.exists(path):
+                logger.warning(f"Autoclean: path does not exist {path}, skipping.")
+                continue
+            if osp.isdir(path):
+                shutil.rmtree(path)
+                logger.info(f"Autoclean: removed directory {path}")
+            else:
+                logger.warning(f"Autoclean: expected directory but found file {path}, skipping.")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning(f"Autoclean failed for the shared path {path}: {e}")
+
+
 @task(name="Update eopf assets")
 def update_eopf_assets(
     env,
@@ -310,7 +333,7 @@ def update_eopf_assets(
     # Note: input_products != input_adfs
     if dpr_processor.lower() == "mockup":
         eopf_origin_datetime = "2026-01-01T00:00:00Z"
-    elif input_products:
+    elif input_products and zattrs_list:
         eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
     else:
         eopf_origin_datetime = None
@@ -454,6 +477,8 @@ async def run_processor(
         # the payload to avoid triggering the catalog registration for them
         # Create a temporary list for keeping track of products to keep
         kept_products = []
+        # List of paths to delete if autoclean is enabled
+        paths_to_delete: list[str] = []
 
         # Iterate over the original products
         for prod in payload.io.output_products:
@@ -461,6 +486,9 @@ async def run_processor(
                 kept_products.append(prod)
             else:
                 logger.info(f"Output product {prod.id} is not marked as final_product, skipping catalog registration.")
+            # Record autoclean path for any product with autoclean=True
+            if prod.autoclean and prod.path not in paths_to_delete:
+                paths_to_delete.append(prod.path)
 
         # Update the original output_products list with the kept products
         payload.io.output_products[:] = kept_products
@@ -489,7 +517,6 @@ async def run_processor(
             dpr_client.wait_for_job(job_status, logger, f"{processor!r} processor")
         finally:
             logger.info(f"Processor execution time: {str(timedelta(seconds=time.time() - start_time))}")
-
             # Download reports folder from the s3 bucket
             with tempfile.TemporaryDirectory() as tmpdir:
                 await prefect_utils.s3_download_dir(s3_payload_dir, tmpdir)
@@ -519,6 +546,11 @@ async def run_processor(
 
                 except FileNotFoundError:
                     logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
+            # After processing, clean up autoclean paths. IMPORTANT : the shared disk has to be mounted
+            # in the current flow environment (prefect worker) for this to work ! So, the shared_disk has to be
+            # mounted in both dask worker environment (where the processor runs) and in the prefect worker
+            # environment (where this flow runs)
+            clean_paths(paths_to_delete, logger)
 
         items_metadata = update_eopf_assets(flow_env, input_products, payload, processor)
         eopf_stac_items = [asset.stac_item for asset in items_metadata]
