@@ -12,34 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""EarthDataHubClient class implementation."""
+"""CdseClient class implementation."""
 
 import logging
 from typing import Any
 
 from rs_client.stac.stac_base import StacBase
 
-EDH_STAC_HREF = "https://earthdatahub.destine.eu/api/stac/v1/"
+CDSE_STAC_HREF = "https://stac.dataspace.copernicus.eu/v1/"
 
 
-class EarthDataHubClient(StacBase):
+class CdseClient(StacBase):
     """
-    EarthDataHubClient class implementation.
+    CdseClient class implementation.
 
     Attributes: see :py:class:`RsClient`
     """
 
     def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
-        edh_api_key: str | None = None,  # pylint: disable=unused-argument
         logger: logging.Logger | None = None,
         **kwargs: dict[str, Any],
     ):
         """
-        Initializes an EarthDataHubClient instance.
+        Initializes a CdseClient instance.
 
         Args:
-            edh_api_key (str | None): API key for authentication (default: None).
             logger (logging.Logger | None, optional): Logger instance (default: None).
             **kwargs: Arbitrary keyword arguments that may include:
                 - `headers` (Optional[Dict[str, str]])
@@ -50,11 +48,11 @@ class EarthDataHubClient(StacBase):
                 - `stac_io` (Optional[StacApiIO])
                 - `timeout` (Optional[Timeout])
         """
-        super().__init__(None, None, None, logger, EDH_STAC_HREF, **kwargs)
+        super().__init__(None, None, None, logger, CDSE_STAC_HREF, **kwargs)
 
     @property
     def href_service(self) -> str:
         """
-        Return the EarthDataHub STAC URL.
+        Return the CDSE STAC URL.
         """
-        return EDH_STAC_HREF
+        return CDSE_STAC_HREF

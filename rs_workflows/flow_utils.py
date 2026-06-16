@@ -115,6 +115,18 @@ class LoggingLevel(str, Enum):
     CRITICAL = "CRITICAL"
 
 
+class AuxiliarySource(str, Enum):
+    """STAC source for auxiliary product search."""
+
+    LTA = "lta"
+    PRIP = "prip"
+    CADIP = "cadip"
+    AUXIP = "auxip"
+    CDSE = "cdse"
+    CATALOG = "catalog"
+    EARTHDATAHUB = "earthdatahub"
+
+
 class FlowEnvArgs(BaseModel):
     """
     Prefect flow environment arguments.
@@ -245,6 +257,14 @@ class AuxiliaryProductMapping(BaseModel):
 
     product_type: str = Field(description="Product type or '*' wildcard.")
     collection_name: str = Field(description="Collection name.")
+    source: AuxiliarySource = Field(
+        default=AuxiliarySource.AUXIP,
+        description="STAC source where auxiliary products are searched.",
+    )
+    selected_assets: list[str] | None = Field(
+        default=None,
+        description="Optional asset keys to stage.",
+    )
 
     def items(self):
         """Helper method to return the model fields as items, useful for logging."""
