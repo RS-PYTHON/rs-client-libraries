@@ -16,20 +16,23 @@
 
 import json
 from collections.abc import Callable
+from typing import Any
 
 from prefect import get_run_logger
 from pystac import ItemCollection
 
-from rs_client.rs_client import RsClient
 from rs_client.stac.stac_base import StacBase
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+
+# Selects the STAC client to use and any source-specific search arguments.
+StacClientSelector = Callable[[FlowEnv], tuple[StacBase, dict[str, Any]]]
 
 
 async def search(
     env: FlowEnvArgs,
     cql2: dict,
     span_name: str,
-    stac_client_getter: Callable[[RsClient], StacBase],
+    stac_client_selector: StacClientSelector,
     error_if_empty: bool = False,
 ) -> ItemCollection | None:
     """
@@ -38,7 +41,9 @@ async def search(
     Args:
         env: Prefect flow environment (at least the owner_id is required)
         cql2: CQL2 filter read from the processor tasktable.
-        stac_client_getter: Function receiving rs_client and returning a StacBase.
+        span_name: Name of the OpenTelemetry span.
+        stac_client_selector: Function receiving the flow environment and returning the STAC client
+            plus source-specific search keyword arguments.
         error_if_empty: Raise a ValueError if the results are empty.
     """
     logger = get_run_logger()
@@ -48,12 +53,15 @@ async def search(
     with flow_env.start_span(__name__, span_name):
 
         logger.info(f"Start STAC search using CQL2: {cql2}")
-        stac_client: StacBase = stac_client_getter(flow_env.rs_client)
+        stac_client, search_kwargs = stac_client_selector(flow_env)
         found = stac_client.search(
             method="POST",
             stac_filter=cql2.get("filter"),
             max_items=cql2.get("limit"),
+            collections=cql2.get("collections"),
             sortby=cql2.get("sortby"),
+            timestamp=cql2.get("timestamp"),
+            **search_kwargs,
         )
         if (not found) and error_if_empty:
             raise ValueError(
