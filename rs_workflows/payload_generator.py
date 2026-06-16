@@ -887,6 +887,9 @@ def generate_payload(  # pylint: disable=unused-argument
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
     logger.info("Building the payload")
+    temp_folder_s3_secret = (
+        "s3" if dpr_process_in.temporary_folder and dpr_process_in.temporary_folder.startswith("s3://") else None
+    )
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (stories 800/1050)
         general_configuration=GeneralConfiguration(
@@ -894,11 +897,7 @@ def generate_payload(  # pylint: disable=unused-argument
             triggering__temporary_shared=dpr_process_in.temporary_shared,
             dask_utils__timeout=dpr_process_in.dask_task_timeout,
             temporary__folder=dpr_process_in.temporary_folder,
-            temporary__folder_s3_secret=(
-                "s3"
-                if dpr_process_in.temporary_folder and dpr_process_in.temporary_folder.startswith("s3://")
-                else None
-            ),
+            temporary__folder_s3_secret=temp_folder_s3_secret,
         ),
         workflow=workflow_steps,
         io=io_config,  # type: ignore
@@ -906,7 +905,7 @@ def generate_payload(  # pylint: disable=unused-argument
         # dask_context=dask_context,
         logging=logging,
         config=config,
-        secret=["secrets.json"],
+        secret=["secrets.json"] if temp_folder_s3_secret else None,
     )
     logger.debug(f"Generated payload: \n {payload}")
     return payload
