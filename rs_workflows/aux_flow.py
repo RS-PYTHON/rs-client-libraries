@@ -26,6 +26,7 @@ from rs_client.stac.stac_base import StacBase
 from rs_common.utils import create_valcover_filter
 from rs_workflows.flow_utils import AuxiliarySource, FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task
+from rs_workflows.utils import stac
 from rs_workflows.utils.utils import asset_unzip_decompress
 
 ###################
@@ -74,32 +75,13 @@ async def search(
         error_if_empty: Raise a ValueError if the results are empty.
         source: STAC source where auxiliary products are searched. Default: auxip.
     """
-    logger = get_run_logger()
-
-    # Init flow environment and opentelemetry span
-    flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "aux-search"):
-
-        logger.info(f"Start AUX search from {source.value}: {aux_cql2}")
-        search_client, source_search_kwargs = select_search_client_and_kwargs(
-            flow_env,
-            source,
-        )
-        found = search_client.search(
-            method="POST",
-            stac_filter=aux_cql2.get("filter"),
-            max_items=aux_cql2.get("limit"),
-            collections=aux_cql2.get("collections"),
-            sortby=aux_cql2.get("sortby"),
-            timestamp=aux_cql2.get("timestamp"),
-            **source_search_kwargs,
-        )
-        if (not found) and error_if_empty:
-            raise ValueError(
-                f"❌ No AUX product found for CQL2 filter: {json.dumps(aux_cql2, indent=2)}",
-            )
-        logger.info(f"🔍 AUX search found {len(found)} result(s): {found.to_dict()}")
-        return found
+    return await stac.search(
+        env=env,
+        cql2=aux_cql2,
+        span_name="aux-search",
+        stac_client_selector=lambda flow_env: select_search_client_and_kwargs(flow_env, source),
+        error_if_empty=error_if_empty,
+    )
 
 
 @flow(name="stage-aux")

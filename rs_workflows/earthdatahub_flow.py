@@ -17,7 +17,6 @@
 from prefect import flow, task
 from pystac import ItemCollection
 
-from rs_client.stac.earthdatahub_client import EarthDataHubClient
 from rs_workflows.flow_utils import FlowEnvArgs
 from rs_workflows.utils import stac
 
@@ -40,7 +39,13 @@ async def search(
         edh_cql2: CQL2 filter read from the processor tasktable.
         error_if_empty: Raise a ValueError if the results are empty.
     """
-    return await stac.search(env, edh_cql2, "earthdatahub-search", lambda _: EarthDataHubClient(), error_if_empty)
+    return await stac.search(
+        env=env,
+        cql2=edh_cql2,
+        span_name="earthdatahub-search",
+        stac_client_selector=lambda flow_env: (flow_env.rs_client.get_earthdatahub_client(), {}),
+        error_if_empty=error_if_empty,
+    )
 
 
 ###########################
