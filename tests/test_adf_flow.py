@@ -1125,7 +1125,6 @@ async def test_adf_conversion_uses_custom_cql2_filter(
     monkeypatch,
     mocker,
     sample_adf_process_in,
-    tmp_path,
     _mock_os_env,
 ):
     """Test that the flow uses the provided cql2_filter and substitutes product_type."""
