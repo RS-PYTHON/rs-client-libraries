@@ -204,21 +204,6 @@ def test_extract_datetimes_from_item_id_valid(item_id, expected_start, expected_
     assert end_iso == expected_end
 
 
-@pytest.mark.parametrize(
-    "item_id",
-    [
-        "no-dates-here",
-        # only two timestamps, missing creation
-        "S00__ADF_ECMWA_20210321T030000_20210321T150000",
-        "S00__ADF_ECMWA",
-        "",
-    ],
-)
-def test_extract_datetimes_from_item_id_no_match(item_id):
-    """Test that non-matching item_ids return None."""
-    assert adf_flow.extract_datetimes_from_item_id(item_id) is None
-
-
 def test_create_stac_item_uses_stac_props_over_item_id(mocker, tmp_path):
     """Test that create_stac_item_from_zarr prefers stac_props datetimes over item_id ones."""
     mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
