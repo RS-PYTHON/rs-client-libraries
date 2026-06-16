@@ -25,6 +25,7 @@ from pystac import Item, ItemCollection
 
 from rs_workflows import aux_flow
 from rs_workflows.flow_utils import AuxiliarySource, FlowEnvArgs
+from rs_workflows.utils import stac as stac_utils
 
 
 @pytest.fixture
@@ -32,6 +33,7 @@ def mock_auxip_logger(monkeypatch, mocker):
     """Replace Prefect run logger with a plain mock."""
     logger = mocker.Mock()
     monkeypatch.setattr(aux_flow, "get_run_logger", lambda: logger)
+    monkeypatch.setattr(stac_utils, "get_run_logger", lambda: logger)
     return logger
 
 
@@ -78,7 +80,7 @@ async def test_search_returns_found_items(monkeypatch, mocker, mock_auxip_logger
     flow_env = mocker.Mock()
     flow_env.start_span.return_value = nullcontext()
     flow_env.rs_client.get_auxip_client.return_value = auxip_client
-    monkeypatch.setattr(aux_flow, "FlowEnv", lambda env: flow_env)
+    monkeypatch.setattr(stac_utils, "FlowEnv", lambda env: flow_env)
 
     result = await aux_flow.search.fn(env, {"filter": {"foo": "bar"}, "limit": 3, "sortby": []})
 
@@ -102,9 +104,9 @@ async def test_search_raises_when_empty_and_error_if_empty(monkeypatch, mocker, 
     flow_env = mocker.Mock()
     flow_env.start_span.return_value = nullcontext()
     flow_env.rs_client.get_auxip_client.return_value = auxip_client
-    monkeypatch.setattr(aux_flow, "FlowEnv", lambda env: flow_env)
+    monkeypatch.setattr(stac_utils, "FlowEnv", lambda env: flow_env)
 
-    with pytest.raises(ValueError, match="No AUX product found"):
+    with pytest.raises(ValueError, match="No item found for CQL2"):
         await aux_flow.search.fn(env, {"filter": {"foo": "bar"}}, error_if_empty=True)
 
 
