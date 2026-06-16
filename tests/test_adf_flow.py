@@ -1132,7 +1132,7 @@ async def test_adf_conversion_uses_custom_cql2_filter(
     mocker,
     sample_adf_process_in,
     _mock_os_env,
-):
+):  # pylint: disable=redefined-outer-name,unused-argument
     """Test that the flow uses the provided cql2_filter and substitutes product_type."""
     sample_adf_process_in.cql2_filter = {
         "filter": {
