@@ -30,7 +30,7 @@ from prefect import flow, get_run_logger, task
 from pystac import Asset, Item
 
 from rs_common.prefect_utils import s3_upload_dir, s3_upload_file
-from rs_workflows.auxip_flow import auxip_staging_task
+from rs_workflows.aux_flow import aux_staging_task
 from rs_workflows.catalog_flow import publish
 from rs_workflows.flow_utils import (
     AdfProcessIn,
@@ -417,7 +417,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 )
 
             logger.info(f"Staging {prod_type} to collection {target_collection}")
-            success, items = await auxip_staging_task(
+            success, items = await aux_staging_task(
                 env=adf_input.env,
                 cql2_filter=cql2_filter,
                 catalog_collection_identifier=target_collection,

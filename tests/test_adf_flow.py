@@ -555,7 +555,7 @@ async def test_adf_conversion_flow_logic(
     source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
     staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
-    monkeypatch.setattr(adf_flow, "auxip_staging_task", staging_mock)
+    monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
 
     # 2. Mock download_and_extract_assets_task
     extract_mock = AsyncMock()
@@ -658,7 +658,7 @@ async def test_adf_conversion_flow_logic_for_ecmwf(
     source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
     staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
-    monkeypatch.setattr(adf_flow, "auxip_staging_task", staging_mock)
+    monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
 
     extract_mock = AsyncMock()
     monkeypatch.setattr(adf_flow, "download_and_extract_assets_task", extract_mock)
@@ -748,7 +748,7 @@ async def test_adf_conversion_flow_logic_for_water(
     source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
     staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
-    monkeypatch.setattr(adf_flow, "auxip_staging_task", staging_mock)
+    monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
 
     extract_mock = AsyncMock()
     monkeypatch.setattr(adf_flow, "download_and_extract_assets_task", extract_mock)
@@ -846,7 +846,7 @@ async def test_adf_conversion_raises_when_publish_collection_not_found(
     source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
     staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
-    monkeypatch.setattr(adf_flow, "auxip_staging_task", staging_mock)
+    monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
 
     extract_mock = AsyncMock()
     monkeypatch.setattr(adf_flow, "download_and_extract_assets_task", extract_mock)
@@ -928,7 +928,7 @@ async def test_adf_conversion_flow_logic_for_getas(
     source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
     staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
-    monkeypatch.setattr(adf_flow, "auxip_staging_task", staging_mock)
+    monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
 
     extract_mock = AsyncMock()
     monkeypatch.setattr(adf_flow, "download_and_extract_assets_task", extract_mock)
@@ -1072,7 +1072,7 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
     source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
     staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
-    monkeypatch.setattr(adf_flow, "auxip_staging_task", staging_mock)
+    monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
 
     extract_mock = AsyncMock()
     monkeypatch.setattr(adf_flow, "download_and_extract_assets_task", extract_mock)

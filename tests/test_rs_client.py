@@ -21,6 +21,7 @@ from rs_client.rs_client import RsClient
 from rs_client.stac.auxip_client import AuxipClient
 from rs_client.stac.cadip_client import CadipClient
 from rs_client.stac.catalog_client import CatalogClient
+from rs_client.stac.cdse_client import CdseClient
 from rs_client.stac.prip_client import PripClient
 from tests.common import json_landing_page
 
@@ -31,12 +32,14 @@ from .conftest import RS_SERVER_API_KEY, RSPY_UAC_CHECK_URL
 def test_get_child_client(  # pylint: disable=redefined-outer-name
     auxip_client,
     cadip_client,
+    cdse_client,
     prip_client,
     stac_client,
 ):
     """Test get_*_client child factories."""
     assert isinstance(auxip_client, AuxipClient)
     assert isinstance(cadip_client, CadipClient)
+    assert isinstance(cdse_client, CdseClient)
     assert isinstance(prip_client, PripClient)
     assert isinstance(stac_client, CatalogClient)
 

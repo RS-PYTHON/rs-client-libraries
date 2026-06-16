@@ -115,6 +115,18 @@ class LoggingLevel(str, Enum):
     CRITICAL = "CRITICAL"
 
 
+class AuxiliarySource(str, Enum):
+    """STAC source for auxiliary product search."""
+
+    LTA = "lta"
+    PRIP = "prip"
+    CADIP = "cadip"
+    AUXIP = "auxip"
+    CDSE = "cdse"
+    CATALOG = "catalog"
+    EARTHDATAHUB = "earthdatahub"
+
+
 class FlowEnvArgs(BaseModel):
     """
     Prefect flow environment arguments.
@@ -245,6 +257,14 @@ class AuxiliaryProductMapping(BaseModel):
 
     product_type: str = Field(description="Product type or '*' wildcard.")
     collection_name: str = Field(description="Collection name.")
+    source: AuxiliarySource = Field(
+        default=AuxiliarySource.AUXIP,
+        description="STAC source where auxiliary products are searched.",
+    )
+    selected_assets: list[str] | None = Field(
+        default=None,
+        description="Optional asset keys to stage.",
+    )
 
     def items(self):
         """Helper method to return the model fields as items, useful for logging."""
@@ -286,10 +306,28 @@ class DprProcessIn(BaseModel):
         description="Optional Dask cluster instance ID used to build a direct dashboard URL.",
     )
 
+    dask_task_timeout: int | None = Field(
+        default=None,
+        title="Dask task timeout",
+        description="Default timeout on a submitted task",
+    )
+
     logging_level: LoggingLevel = Field(
         default=LoggingLevel.INFO,
         title="Overall EOPF logging level",
         description="Overall EOPF logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+
+    temporary_shared: bool = Field(
+        default=False,
+        title="Temporary folder shared",
+        description="Whether the temporary folder is reachable from the workers",
+    )
+
+    temporary_folder: str | None = Field(
+        default=None,
+        title="Temporary folder",
+        description="Temporary folder path",
     )
 
     s3_payload_file: str = Field(

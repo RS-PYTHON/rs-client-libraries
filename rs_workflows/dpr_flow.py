@@ -333,7 +333,7 @@ def update_eopf_assets(
     # Note: input_products != input_adfs
     if dpr_processor.lower() == "mockup":
         eopf_origin_datetime = "2026-01-01T00:00:00Z"
-    elif input_products:
+    elif input_products and zattrs_list:
         eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
     else:
         eopf_origin_datetime = None
