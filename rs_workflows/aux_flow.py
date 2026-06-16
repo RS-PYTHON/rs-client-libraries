@@ -82,6 +82,7 @@ async def search(
         span_name="aux-search",
         stac_client_selector=lambda flow_env: select_search_client_and_kwargs(flow_env, source),
         error_if_empty=error_if_empty,
+        start_log_message=f"Start AUX search from {source.value}: {aux_cql2}",
     )
 
 
