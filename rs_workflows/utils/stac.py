@@ -34,6 +34,7 @@ async def search(
     span_name: str,
     stac_client_selector: StacClientSelector,
     error_if_empty: bool = False,
+    start_log_message: str | None = None,
 ) -> ItemCollection | None:
     """
     Search items in a STAC catalogue.
@@ -45,6 +46,7 @@ async def search(
         stac_client_selector: Function receiving the flow environment and returning the STAC client
             plus source-specific search keyword arguments.
         error_if_empty: Raise a ValueError if the results are empty.
+        start_log_message: Optional search start log message.
     """
     logger = get_run_logger()
 
@@ -52,7 +54,7 @@ async def search(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, span_name):
 
-        logger.info(f"Start STAC search using CQL2: {cql2}")
+        logger.info(start_log_message or f"Start STAC search using CQL2: {cql2}")
         stac_client, search_kwargs = stac_client_selector(flow_env)
         found = stac_client.search(
             method="POST",
