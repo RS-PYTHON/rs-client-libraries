@@ -199,8 +199,8 @@ async def past_adf_conversion(
         cql2_filter = substitute_values(
             cql2_filter_without_date,
             {
-                "start_datetime": period_start.isoformat().replace("+00:00", ".000Z"),
-                "end_datetime": period_end.isoformat().replace("+00:00", ".000Z"),
+                "start_datetime": period_start.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+                "end_datetime": period_end.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
             },
         )
         logger.debug(f"Associated cql2 filter is: {cql2_filter}")
@@ -225,8 +225,8 @@ async def past_adf_conversion(
             cql2_filter = substitute_values(
                 cql2_filter_without_date,
                 {
-                    "start_datetime": start.isoformat().replace("+00:00", ".000Z"),
-                    "end_datetime": stop.isoformat().replace("+00:00", ".000Z"),
+                    "start_datetime": start.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+                    "end_datetime": stop.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
                 },
             )
             logger.debug(f"( past ) Associated cql2 filter is: {cql2_filter}")
@@ -390,8 +390,8 @@ async def adf_conversion_scheduled(
     cql2_filter = substitute_values(
         cql2_filter_without_date,
         {
-            "start_datetime": start.isoformat().replace("+00:00", ".000Z"),
-            "end_datetime": stop.isoformat().replace("+00:00", ".000Z"),
+            "start_datetime": start.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+            "end_datetime": stop.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
         },
     )
     logger.debug(f"The CQL2 used for the conversion is {cql2_filter}")
