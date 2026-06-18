@@ -164,10 +164,12 @@ async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages)
 
 
 @pytest.mark.asyncio
-async def test_check_and_create_collection(mocker, monkeypatch, mocked_rspy_landing_pages):
+async def test_check_and_create_collection(
+    mocker,
+    monkeypatch,
+    mocked_rspy_landing_pages,
+):  # pylint: disable=unused-argument
     """Test the check_and_create_collection function."""
-    env = FlowEnvArgs(owner_id=OWNER_ID)
-
     # Mock FlowEnv et CatalogClient
     mock_logger = MagicMock()
     mocker.patch(
