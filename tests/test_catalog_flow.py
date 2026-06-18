@@ -170,7 +170,7 @@ async def test_check_and_create_collection(
     mocked_rspy_landing_pages,
 ):  # pylint: disable=unused-argument
     """Test the check_and_create_collection function."""
-    # Mock FlowEnv et CatalogClient
+    # Mock FlowEnv and CatalogClient
     mock_logger = MagicMock()
     mocker.patch(
         "rs_workflows.catalog_flow.get_run_logger",
@@ -192,7 +192,7 @@ async def test_check_and_create_collection(
         lambda env: flow_env_mock,
     )
 
-    # --- Cas 1 : La collection existe déjà ---
+    # --- Case 1 : the collection exists.
     collection_name = "existing_collection"
     responses.add(
         responses.POST,
@@ -205,19 +205,16 @@ async def test_check_and_create_collection(
     await catalog_flow.check_and_create_collection.fn(flow_env_mock, collection_name)
     spy_add_collection.assert_not_called()
 
-    # --- Cas 2 : La collection n'existe pas ---
-    # Réinitialiser le spy pour le Cas 2
+    # --- Case 2 : The collection does not exist
     spy_add_collection.reset_mock()
-
-    collection_name = "new_collection_3"
-    # Simuler une erreur 404 pour catalog_client.search
+    collection_name = "harry_potter"
     responses.add(
         responses.POST,
         f"{MOCKED_RSPY_WEBSITE}/catalog/search",
         json={"error": "Collection not found"},
         status=status.HTTP_404_NOT_FOUND,
     )
-    # Simuler la création de la collection
+    # Simulate the creation of the collection
     responses.add(
         responses.POST,
         f"{MOCKED_RSPY_WEBSITE}/catalog/collections",
@@ -228,10 +225,10 @@ async def test_check_and_create_collection(
     await catalog_flow.check_and_create_collection.fn(flow_env_mock, collection_name)
     spy_add_collection.assert_called_once()
 
-    # Récupérer l'objet Collection (2ème élément du tuple)
+    # Get collection object
     collection_arg = spy_add_collection.call_args[0][1]
 
-    # Vérifier les attributs de la Collection
+    # Check content
     assert collection_arg.id == collection_name
     assert collection_arg.description == f"{collection_name} collection"
     assert collection_arg.extent is not None
