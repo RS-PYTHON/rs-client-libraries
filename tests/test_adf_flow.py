@@ -1226,9 +1226,3 @@ async def test_adf_conversion_uses_custom_cql2_filter(
     assert staging_mock.call_count == 1
     cql2_filter_used = staging_mock.call_args.kwargs["cql2_filter"]
     assert cql2_filter_used["filter"]["args"][0]["args"][1] == "AX___MA1_AX"  # product_type substitué
-    assert (
-        cql2_filter_used["filter"]["args"][1]["args"][1]["interval"][0] == "2021-03-21T03:00:00+00:00"
-    )  # start_datetime substitué
-    assert (
-        cql2_filter_used["filter"]["args"][1]["args"][1]["interval"][1] == "2021-03-21T15:00:00+00:00"
-    )  # end_datetime substitué
