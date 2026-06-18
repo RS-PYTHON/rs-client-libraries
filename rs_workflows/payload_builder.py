@@ -191,7 +191,6 @@ def _build_entry(
 
     # Retrieve product details from "io" section
     io_details = io_index.get(io_product["name"], {})
-
     if not io_details:
         raise TaskTableError(
             f'Could not find details for product "{io_product["name"]}" in "io" section, " \
