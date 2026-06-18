@@ -15,6 +15,7 @@
 """Unit tests for catalog_flow.py"""
 
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import responses
@@ -29,14 +30,40 @@ from rs_workflows.flow_utils import (
     FlowGeneratedProduct,
 )
 from tests.conftest import MOCKED_RSPY_WEBSITE, OWNER_ID
-from tests.test_utils import setup_worklow_test_env
 
 
 @pytest.mark.asyncio
-async def test_publish_tempfixes(mocker, mocked_rspy_landing_pages):  # pylint: disable=unused-argument
+async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages):  # pylint: disable=unused-argument
     """Test the temporary fixes in the publish function."""
-    await setup_worklow_test_env()
     env = FlowEnvArgs(owner_id=OWNER_ID)
+
+    # Mock FlowEnv to avoid Prefect block loading
+    mock_logger = MagicMock()
+    mocker.patch(
+        "rs_workflows.catalog_flow.get_run_logger",
+        return_value=mock_logger,
+    )
+    real_catalog_client = catalog_client.CatalogClient(
+        MOCKED_RSPY_WEBSITE,
+        "test-api-key",
+        OWNER_ID,
+    )
+    flow_env_mock = MagicMock()
+    flow_env_mock.rs_client.get_catalog_client.return_value = real_catalog_client
+    flow_env_mock.start_span.return_value.__enter__ = lambda self: MagicMock()
+    flow_env_mock.start_span.return_value.__exit__ = lambda self, *args: None
+    monkeypatch.setattr(
+        catalog_flow,
+        "FlowEnv",
+        lambda env: flow_env_mock,
+    )
+
+    # Mock check_and_create_collection to avoid unmocked HTTP calls
+    monkeypatch.setattr(
+        catalog_flow,
+        "check_and_create_collection",
+        AsyncMock(),
+    )
 
     # Mock add_item
     spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
@@ -46,12 +73,6 @@ async def test_publish_tempfixes(mocker, mocked_rspy_landing_pages):  # pylint: 
     responses.post(
         f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}/items",
         json={"status": status.HTTP_200_OK},
-        status=status.HTTP_200_OK,
-    )
-    # Mock get_collections
-    responses.get(
-        f"{MOCKED_RSPY_WEBSITE}/catalog/collections",
-        json={"collections": [], "links": []},
         status=status.HTTP_200_OK,
     )
 
