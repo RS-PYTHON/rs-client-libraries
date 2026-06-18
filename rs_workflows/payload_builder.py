@@ -23,8 +23,6 @@ from rs_common.utils import strftime_millis
 
 EXTERNAL_VAR_PATTERN = re.compile(r"\{external_variable\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
 VARIABLE_PATTERN = re.compile(r"^{(.*)}$")  # matches exactly "{var}" (whole string)
-# Pattern for input/output origins chaining units inside a pipeline: unit.step_id.output_product_name or unit.output_product_name
-UNIT_ORIGIN_PATTERN = r"^[^.]+\.[^.]+(\.[^.]+)?$"
 
 
 class TaskTableError(ValueError):
@@ -76,6 +74,8 @@ def _extract_io_origin_from_pipeline(
         "pipeline.output": "pipeline_output",
         "pipeline.internal": "pipeline_internal",
     }
+    # Pattern for origins chaining units inside a pipeline: unit.step_id.output_product_name or unit.output_product_name
+    unit_origin_pattern = r"^[^.]+\.[^.]+(\.[^.]+)?$"
 
     # Retrieve the details of the step defining the unit and the step_id given (if any) from the pipeline definition
     pipeline_unit: dict[str, Any] = {}
@@ -106,7 +106,7 @@ def _extract_io_origin_from_pipeline(
         product_origin = origin_mapping[product_origin]
 
     # Case 2: origin is a product from another unit
-    elif re.fullmatch(UNIT_ORIGIN_PATTERN, product_origin):
+    elif re.fullmatch(unit_origin_pattern, product_origin):
         all_fields = product_origin.split(".")
 
         # Origin unit is always the first field.
@@ -189,20 +189,12 @@ def _build_entry(
     if mode != "always" and mode not in processing_modes:
         return None
 
-    # List possible names referencing the I/O:
-    # can be from the io_product name or the key used for the previous unit's output
-    io_name_list = [io_product["name"]]
-    if origin and re.fullmatch(UNIT_ORIGIN_PATTERN, origin):
-        io_name_list.append(origin.split(".")[-1])
-
-    # Retrieve product details from "io" section: try names until details are found
-    io_details: dict[str, Any] = {}
-    while io_name_list and not io_details:
-        io_details = io_index.get(io_name_list.pop(0), {})
+    # Retrieve product details from "io" section
+    io_details = io_index.get(io_product["name"], {})
 
     if not io_details:
         raise TaskTableError(
-            f'Could not find details for any product "{io_name_list}" in "io" section, " \
+            f'Could not find details for product "{io_product["name"]}" in "io" section, " \
                 "available products are: {io_index.keys()}.',
         )
 
