@@ -1156,7 +1156,7 @@ async def test_adf_conversion_uses_custom_cql2_filter(
     source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
     staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
-    monkeypatch.setattr(adf_flow, "auxip_staging_task", staging_mock)
+    monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
 
     # Run the flow
     await adf_flow.adf_conversion.fn(sample_adf_process_in)
