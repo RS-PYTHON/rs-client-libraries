@@ -1162,7 +1162,7 @@ async def test_adf_conversion_uses_custom_cql2_filter(
     # Run the flow
     await adf_flow.adf_conversion.fn(sample_adf_process_in)
 
-    # Check that cql2_filter was used and product_type was substituted correctly
+    # Check that cql2_filter was used and product_type was substituted
     assert staging_mock.call_count == 1
     cql2_filter_used = staging_mock.call_args.kwargs["cql2_filter"]
     assert cql2_filter_used["filter"]["args"][0]["args"][1] == "AX___MA1_AX"  # product_type substitué
