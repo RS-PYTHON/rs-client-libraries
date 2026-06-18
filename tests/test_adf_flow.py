@@ -1149,13 +1149,19 @@ async def test_adf_conversion_uses_custom_cql2_filter(
         },
     }
 
-    # Mock logger & auxip_staging_task
+    # Mock logger & FlowEnv
     mock_logger = MagicMock()
     mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
 
-    source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
-    source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
-    staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
+    flow_env_mock = MagicMock()
+    flow_env_mock.start_span.return_value = MagicMock()
+    flow_env_mock.start_span.return_value.__enter__.return_value = MagicMock()
+    flow_env_mock.owner_id = "test-user"
+    monkeypatch.setattr(adf_flow, "FlowEnv", lambda env: flow_env_mock)
+
+    # Mock aux_staging_task — return failure so the flow exits early after staging.
+    # The test only cares about the cql2_filter argument passed to the staging call.
+    staging_mock = AsyncMock(return_value=(False, None))
     monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
 
     # Run the flow
