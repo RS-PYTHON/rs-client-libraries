@@ -1130,6 +1130,9 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
 async def test_adf_conversion_uses_custom_cql2_filter(
     monkeypatch,
     mocker,
+    tmp_path,
+    _mock_os_env,
+    create_stac_item_mock,
     sample_adf_process_in,
 ):  # pylint: disable=redefined-outer-name,unused-argument
     """Test that the flow uses the provided cql2_filter and substitutes product_type."""
@@ -1157,6 +1160,58 @@ async def test_adf_conversion_uses_custom_cql2_filter(
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
     staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
     monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
+
+    # 2. Mock download_and_extract_assets_task
+    extract_mock = AsyncMock()
+    monkeypatch.setattr(adf_flow, "download_and_extract_assets_task", extract_mock)
+
+    # 3. Mock S3 operations
+    upload_mock = AsyncMock()
+    monkeypatch.setattr(adf_flow, "s3_upload_dir", upload_mock)
+    rmtree_mock = MagicMock()
+    monkeypatch.setattr(adf_flow.shutil, "rmtree", rmtree_mock)
+
+    # 4. Mock run_adf_script
+    zarr_path = tmp_path / "mock.zarr"
+    zarr_path.mkdir()
+    zattrs_content = {
+        "id": "mock-adf",
+        "properties": {
+            "product:type": "ADF_ECMWA",
+            "start_datetime": "2021-03-21T03:00:00Z",
+            "end_datetime": "2021-03-21T15:00:00Z",
+        },
+    }
+    (zarr_path / ".zattrs").write_text(json.dumps(zattrs_content))
+    run_script_mock = MagicMock(return_value=[zarr_path])
+    monkeypatch.setattr(adf_flow, "run_adf_script", run_script_mock)
+    generated_item = Item(
+        id="mock-adf",
+        geometry=None,
+        bbox=None,
+        datetime=datetime.now(timezone.utc),
+        properties={"product:type": "S00__ADF_ECMWA"},
+    )
+    generated_item.add_asset("data", Asset(href=str(zarr_path)))
+    create_item_mock = MagicMock(return_value=generated_item)
+    monkeypatch.setattr(adf_flow, "create_stac_item_from_zarr", create_item_mock)
+
+    # 5. Mock external configurations
+    config_mock = MagicMock(return_value=[["*", "*", "*", "*", "test-bucket"]])
+    monkeypatch.setattr(adf_flow, "fetch_csv_from_endpoint", config_mock)
+    monkeypatch.setattr(adf_flow, "find_s3_output_bucket", MagicMock(return_value="test-bucket"))
+
+    # 6. Mock publish
+    publish_mock = AsyncMock()
+    monkeypatch.setattr(adf_flow, "publish", publish_mock)
+
+    # 7. Mock FlowEnv
+    flow_env_mock = mocker.MagicMock()
+    flow_env_mock.start_span.return_value = MagicMock()
+    flow_env_mock.start_span.return_value.__enter__.return_value = MagicMock()
+    flow_env_mock.owner_id = "test-user"
+    flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id="test-user")
+    monkeypatch.setattr(adf_flow, "FlowEnv", lambda env: flow_env_mock)
 
     # Run the flow
     await adf_flow.adf_conversion.fn(sample_adf_process_in)
