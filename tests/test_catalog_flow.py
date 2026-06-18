@@ -161,3 +161,77 @@ async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages)
     assert len(providers) == 2
     assert providers[0]["name"] == "valid"
     assert providers[1]["name"] == "no_roles"  # No 'roles' key so it's kept
+
+
+@pytest.mark.asyncio
+async def test_check_and_create_collection(mocker, monkeypatch, mocked_rspy_landing_pages):
+    """Test the check_and_create_collection function."""
+    env = FlowEnvArgs(owner_id=OWNER_ID)
+
+    # Mock FlowEnv et CatalogClient
+    mock_logger = MagicMock()
+    mocker.patch(
+        "rs_workflows.catalog_flow.get_run_logger",
+        return_value=mock_logger,
+    )
+
+    real_catalog_client = catalog_client.CatalogClient(
+        MOCKED_RSPY_WEBSITE,
+        "test-api-key",
+        OWNER_ID,
+    )
+    flow_env_mock = MagicMock()
+    flow_env_mock.rs_client.get_catalog_client.return_value = real_catalog_client
+    flow_env_mock.start_span.return_value.__enter__ = lambda self: MagicMock()
+    flow_env_mock.start_span.return_value.__exit__ = lambda self, *args: None
+    monkeypatch.setattr(
+        catalog_flow,
+        "FlowEnv",
+        lambda env: flow_env_mock,
+    )
+
+    # --- Cas 1 : La collection existe déjà ---
+    collection_name = "existing_collection"
+    responses.add(
+        responses.POST,
+        f"{MOCKED_RSPY_WEBSITE}/catalog/search",
+        json={"type": "FeatureCollection", "features": []},
+        status=status.HTTP_200_OK,
+    )
+    spy_add_collection = mocker.spy(catalog_client.CatalogClient, "add_collection")
+
+    await catalog_flow.check_and_create_collection.fn(flow_env_mock, collection_name)
+    spy_add_collection.assert_not_called()
+
+    # --- Cas 2 : La collection n'existe pas ---
+    # Réinitialiser le spy pour le Cas 2
+    spy_add_collection.reset_mock()
+
+    collection_name = "new_collection_3"
+    # Simuler une erreur 404 pour catalog_client.search
+    responses.add(
+        responses.POST,
+        f"{MOCKED_RSPY_WEBSITE}/catalog/search",
+        json={"error": "Collection not found"},
+        status=status.HTTP_404_NOT_FOUND,
+    )
+    # Simuler la création de la collection
+    responses.add(
+        responses.POST,
+        f"{MOCKED_RSPY_WEBSITE}/catalog/collections",
+        json={"id": collection_name, "description": f"{collection_name} collection"},
+        status=status.HTTP_201_CREATED,
+    )
+
+    await catalog_flow.check_and_create_collection.fn(flow_env_mock, collection_name)
+    spy_add_collection.assert_called_once()
+
+    # Récupérer l'objet Collection (2ème élément du tuple)
+    collection_arg = spy_add_collection.call_args[0][1]
+
+    # Vérifier les attributs de la Collection
+    assert collection_arg.id == collection_name
+    assert collection_arg.description == f"{collection_name} collection"
+    assert collection_arg.extent is not None
+    assert len(collection_arg.extent.spatial.bboxes) == 1
+    assert len(collection_arg.extent.temporal.intervals) == 1
