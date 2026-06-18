@@ -148,7 +148,7 @@ async def publish(
                 # TEMPFIX END
 
                 # Add processing url link for each STAC item
-                platform = os.environ.get("RSPY_PREFECT_URL", "https://processing.ops.rs-python.eu")
+                platform = os.environ.get("RSPY_PREFECT_URL")
 
                 item.add_link(
                     Link(
