@@ -59,7 +59,7 @@ jobs:
     steps:
       - id: set-binary-env
         name: Call action 'set-binary-env'
-        uses: RS-PYTHON/actions/.github/actions/set-binary-env@develop
+        uses: RS-PYTHON/actions/.github/actions/set-binary-env@change-docker-tags
         with:
           wheel_version_name: ${{ needs.build-wheel.outputs.version_name }}
           manual_tag: ${{ github.event.inputs.docker_tag }}
