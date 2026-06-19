@@ -139,9 +139,9 @@ def _extract_io_origin_from_pipeline(
             )
 
         # Check that the referenced product exists in the outputs of the unit we found
-        if product_name not in origin_unit.get("output_products", {}):
+        if origin_product_name not in origin_unit.get("output_products", {}):
             raise TaskTableError(
-                f"Unit '{unit_name}' needs product '{product_name}' from unit '{origin_unit_name}' "
+                f"Unit '{unit_name}' needs product '{origin_product_name}' from unit '{origin_unit_name}' "
                 f"but available outputs are: {origin_unit.get("output_products", {})}.",
             )
 
