@@ -211,11 +211,16 @@ def main(data_directory, tmp_dir=None, keep_tmp_dir=False):
     # https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file/-/merge_requests/30#note_67577
     # files = get_all_grib_files(data_directory, file_type=["MF1", "MF2"])
     files = get_all_grib_files(data_directory, file_type=["MF1"])
+    print(f"files='{files}'")
+
     files_by_ref_date = get_all_mf_ref_times(files)
+    print(f"files_by_ref_date='{files_by_ref_date}'")
+    
     # Filter only "full" products: 4 MF1 files
     full_products = {
         ref_date: products_paths for ref_date, products_paths in files_by_ref_date.items() if len(products_paths) == 4
     }
+    print(f"full_products='{full_products}'")
     print(f"Found {len(full_products)} full products with the following reference times: {list(full_products.keys())}")
 
     if not tmp_dir:

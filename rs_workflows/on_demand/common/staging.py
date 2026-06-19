@@ -29,14 +29,8 @@ from prefect.artifacts import (
     acreate_markdown_artifact,
 )
 from pydantic import BaseModel, Field
-from pystac import (
-    Collection,
-    Extent,
-    SpatialExtent,
-    TemporalExtent,
-)
 
-from rs_client.stac.catalog_client import CatalogClient
+from rs_workflows.catalog_flow import check_and_create_collection
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.utils.artifact_verbose import ReportManager
 from rs_workflows.utils.cadip import cadip_session_search
@@ -318,25 +312,7 @@ async def stage_session_common(
     catalog_cadip_collection = f"s0{sat}-cadip-session"
 
     # Check that the collection exists. Otherwise create it.
-    catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-    try:
-        catalog_client.search(collections=[catalog_cadip_collection])
-    except RuntimeError:
-        # The collection is missing, we will create it
-        logger.info(f"The collection {catalog_cadip_collection} is missing; it will be created.")
-        spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
-        date_strings = ["2000-02-01T00:00:00Z", "2100-02-12T00:00:00Z"]
-        date_objects: list[datetime | None] = [
-            datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ") for date_str in date_strings
-        ]
-        temporal = TemporalExtent(intervals=date_objects)
-        extent = Extent(spatial=spatial, temporal=temporal)
-        new_collection = Collection(
-            id=catalog_cadip_collection,
-            description=f"{catalog_cadip_collection} collection",
-            extent=extent,
-        )
-        catalog_client.add_collection(new_collection)
+    await check_and_create_collection(flow_env, catalog_cadip_collection)
 
     # URL to search the STAC ItemCollection
     cadip_client = flow_env.rs_client.get_cadip_client()

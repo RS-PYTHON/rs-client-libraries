@@ -494,6 +494,12 @@ class AdfProcessIn(BaseModel):
         title="Satellite",
         description="Satellite identifier used in certain queries. Can be a string or SentinelSatellite enum.",
     )
+    cql2_filter: dict | None = Field(
+        default=None,
+        title="CQL2 Filter",
+        description="CQL2 filter for retrieving auxiliary data."
+        "If provided, start_datetime, end_datetime, and satellite will be ignored for auxiliary data retrieval.",
+    )
 
     @field_validator("adf_type", mode="before")
     @classmethod

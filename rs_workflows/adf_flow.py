@@ -15,6 +15,7 @@
 """Adf conversion flow implementation."""
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -361,12 +362,31 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     return item
 
 
+class SafeDict(dict):
+    """Dict subclass that returns {key} for missing keys instead of raising KeyError."""
+
+    def __missing__(self, key):
+        return "{" + key + "}"
+
+
+def substitute_values(obj, values):
+    """Recursively substitute values in a nested structure of dicts/lists/strings."""
+    if isinstance(obj, dict):
+        return {k: substitute_values(v, values) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [substitute_values(v, values) for v in obj]
+    if isinstance(obj, str):
+        return obj.format_map(SafeDict(values))
+    return obj
+
+
 @flow(name="convert-adf")
 async def adf_conversion(adf_input: AdfProcessIn):
     """
     Prefect flow for ADF conversion.
     """
     logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
     logger.info(f"Starting adf_conversion flow for adf_type: {adf_input.adf_type}")
 
     flow_env = FlowEnv(adf_input.env)
@@ -383,26 +403,33 @@ async def adf_conversion(adf_input: AdfProcessIn):
 
         staged_items: list[Item] = []
         for prod_type in required_types:
-            cql2_filter = {
-                "filter": {
-                    "op": "and",
-                    "args": [
-                        {
-                            "op": "t_intersects",
-                            "args": [
-                                {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
-                                {
-                                    "interval": [
-                                        adf_input.start_datetime.isoformat() if adf_input.start_datetime else None,
-                                        adf_input.end_datetime.isoformat() if adf_input.end_datetime else None,
-                                    ],
-                                },
-                            ],
-                        },
-                        {"op": "=", "args": [{"property": "product:type"}, prod_type]},
-                    ],
-                },
-            }
+            cql2_filter: dict = {}
+            if adf_input.cql2_filter is not None:
+                logger.info("Use the provided CQL2 filter for auxiliary data retrieval")
+                cql2_filter = substitute_values(adf_input.cql2_filter, {"product_type": prod_type})
+                logger.debug(f"Substituted CQL2 filter for product type {prod_type}: {cql2_filter}")
+            else:
+                logger.info("Build a default CQL2 filter for auxiliary data retrieval with operator t_intersects")
+                cql2_filter = {
+                    "filter": {
+                        "op": "and",
+                        "args": [
+                            {
+                                "op": "t_intersects",
+                                "args": [
+                                    {"interval": [{"property": "start_datetime"}, {"property": "end_datetime"}]},
+                                    {
+                                        "interval": [
+                                            adf_input.start_datetime.isoformat() if adf_input.start_datetime else None,
+                                            adf_input.end_datetime.isoformat() if adf_input.end_datetime else None,
+                                        ],
+                                    },
+                                ],
+                            },
+                            {"op": "=", "args": [{"property": "product:type"}, prod_type]},
+                        ],
+                    },
+                }
             logger.info(f"Built CQL2 filter for product type {prod_type}: {cql2_filter}")
 
             # find target collection from mapping, preferring an exact product type match
@@ -412,7 +439,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
             )
             if target_collection is None:
                 raise RuntimeError(
-                    "No target collection found for input product type "
+                    "❌ No target collection found for input product type "
                     f"{prod_type!r} in auxiliary_product_to_collection_identifier.",
                 )
 
@@ -422,11 +449,12 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 cql2_filter=cql2_filter,
                 catalog_collection_identifier=target_collection,
             )
+            logger.debug(f"Staging result for product type {prod_type}: success={success}, items={items}")
             if success and items:
                 staged_items.extend(items)
 
         if not staged_items:
-            logger.error("No staged items found to process.")
+            logger.warning("⚠️ No staged items found to process.")
             return
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -469,7 +497,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 )
                 if target_collection is None:
                     raise RuntimeError(
-                        "No target collection found for generated product type "
+                        "❌ No target collection found for generated product type "
                         f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
                     )
 
@@ -518,6 +546,15 @@ async def adf_conversion(adf_input: AdfProcessIn):
             finally:
                 logger.info(f"Cleaning up output directory {output_dir}")
                 shutil.rmtree(output_dir, ignore_errors=True)
+
+
+###########################
+# Call the flows as tasks #
+###########################
+@task(name="convert-adf-task")
+async def adf_conversion_task(*args, **kwargs) -> None:
+    """See: adf_conversion"""
+    return await adf_conversion.fn(*args, **kwargs)
 
 
 if __name__ == "__main__":
