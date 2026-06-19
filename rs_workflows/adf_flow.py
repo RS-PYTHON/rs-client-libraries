@@ -325,7 +325,14 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     # We check if platform is part of the STAC properties.
     # If not, we will get it from the name of the generated item
     if not stac_props.get("platform"):
-        stac_props["platform"] = f"sentinel-{item_id[2:4].lower()}"
+        value_platform: str = item_id[2:4].lower()
+        if value_platform not in ("0_", "__", "00"):
+            stac_props["platform"] = f"sentinel-{value_platform}"
+            logger.info(
+                f"'platfrom' property has been computed from the item name. Value is '{stac_props["platform"]}'",
+            )
+        else:
+            logger.info(f"'platfrom' is not added to properties because the ADF is not linked to a specififc platform.")
 
     start_dt = parse_date(start_dt_str) if start_dt_str else None
     end_dt = parse_date(end_dt_str) if end_dt_str else None
