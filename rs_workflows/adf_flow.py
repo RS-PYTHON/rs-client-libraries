@@ -324,9 +324,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
 
     # We check if platform is part of the STAC properties.
     # If not, we will get it from the name of the generated item
-    platform: str = stac_props.get("platform")
-    if not platform:
-        platform = f"sentinel-{item_id[2:4].lower()}"
+    platform: str = stac_props.get("platform", f"sentinel-{item_id[2:4].lower()}")
 
     start_dt = parse_date(start_dt_str) if start_dt_str else None
     end_dt = parse_date(end_dt_str) if end_dt_str else None
