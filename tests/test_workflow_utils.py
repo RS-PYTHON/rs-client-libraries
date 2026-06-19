@@ -36,20 +36,19 @@ def mock_workflow_utils_logger(monkeypatch, mocker):
 
 @pytest.mark.asyncio
 async def test_upload_folder_flat(tmp_path, monkeypatch, mock_workflow_utils_logger):
-    """Test upload keeps relative paths in destination keys."""
+    """Test upload delegates folder content upload to the shared S3 helper."""
     folder = tmp_path / "payload"
     nested = folder / "nested"
     nested.mkdir(parents=True)
     (folder / "a.txt").write_text("a")
     (nested / "b.txt").write_text("b")
 
-    upload_mock = AsyncMock()
-    monkeypatch.setattr(workflow_utils, "s3_upload_file", upload_mock)
+    upload_dir_mock = AsyncMock()
+    monkeypatch.setattr(workflow_utils, "s3_upload_dir", upload_dir_mock)
 
     await workflow_utils.upload_folder_flat(folder, "s3://bucket/prefix/")
 
-    uploaded_targets = [call.args[1] for call in upload_mock.await_args_list]
-    assert uploaded_targets == ["s3://bucket/prefix/a.txt", "s3://bucket/prefix/nested/b.txt"]
+    upload_dir_mock.assert_awaited_once_with(folder, "s3://bucket/prefix/")
 
 
 @pytest.mark.asyncio
@@ -246,6 +245,56 @@ async def test_process_asset_returns_nested_extracted_file_href(
     assert result == "s3://bucket/path/nested/payload.bin"
     delete_mock.assert_called_once()
     upload_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_asset_returns_zarr_store_href(
+    monkeypatch,
+    mock_workflow_utils_logger,
+):
+    """Test normalized Zarr assets return the store root, not an internal chunk file."""
+    download_mock = AsyncMock()
+    upload_mock = AsyncMock()
+    delete_mock = MagicMock()
+
+    def fake_extract_zip(_zip_path, extract_to):
+        zarr_array = Path(extract_to) / "getasse_height"
+        zarr_array.mkdir(parents=True, exist_ok=True)
+        (zarr_array / "3.17").write_text("chunk")
+
+    extract_zip_mock = MagicMock(side_effect=fake_extract_zip)
+
+    monkeypatch.setattr(workflow_utils, "s3_download_file", download_mock)
+    monkeypatch.setattr(workflow_utils, "s3_delete", delete_mock)
+    monkeypatch.setattr(workflow_utils, "extract_zip", extract_zip_mock)
+    monkeypatch.setattr(workflow_utils, "recursive_extract", MagicMock(return_value=0))
+    monkeypatch.setattr(workflow_utils, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
+    monkeypatch.setattr(workflow_utils, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(
+        workflow_utils,
+        "get_upload_prefix",
+        MagicMock(
+            return_value=(
+                "s3://rs-dev-cluster-temp/opadeanu/TEST_FLOW_AUXIP/"
+                "S00__ADF_GETAS_20000101T000000_21000101T000000_20260612T074319.zarr/"
+            ),
+        ),
+    )
+
+    result = await workflow_utils.process_asset(
+        (
+            "s3://rs-dev-cluster-temp/opadeanu/TEST_FLOW_AUXIP/"
+            "S00__ADF_GETAS_20000101T000000_21000101T000000_20260612T074319.zarr.zip"
+        ),
+        "S00__ADF_GETAS_20000101T000000_21000101T000000_20260612T074319.zarr.zip",
+    )
+
+    assert result == (
+        "s3://rs-dev-cluster-temp/opadeanu/TEST_FLOW_AUXIP/"
+        "S00__ADF_GETAS_20000101T000000_21000101T000000_20260612T074319.zarr"
+    )
+    upload_mock.assert_awaited_once()
+    delete_mock.assert_called_once()
 
 
 @pytest.mark.asyncio

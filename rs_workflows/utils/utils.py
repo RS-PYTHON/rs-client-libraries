@@ -26,7 +26,7 @@ from typing import Any
 from prefect import flow, get_run_logger, task
 from pystac import Item, ItemCollection
 
-from rs_common.prefect_utils import s3_delete, s3_download_file, s3_upload_file
+from rs_common.prefect_utils import s3_delete, s3_download_file, s3_upload_dir
 from rs_common.utils import (
     extract_tar,
     extract_zip,
@@ -272,7 +272,10 @@ async def download_and_extract_assets_task(
                     tmp_path.unlink()
 
 
-async def upload_folder_flat(local_folder: Path, prefix: str):
+async def upload_folder_flat(
+    local_folder: Path,
+    prefix: str,
+):
     """
     Upload all files under ``local_folder`` to the S3 prefix.
 
@@ -286,11 +289,7 @@ async def upload_folder_flat(local_folder: Path, prefix: str):
         f"Preparing upload of {len(files_to_upload)} file(s) from {local_folder} to {prefix}",
     )
 
-    for file_path in files_to_upload:
-        relative_path = file_path.relative_to(local_folder).as_posix()
-        s3_path = prefix + relative_path
-        logger.info(f"Uploading {file_path} -> {s3_path}")
-        await s3_upload_file(file_path, s3_path)
+    await s3_upload_dir(local_folder, prefix)
 
     logger.info(f"Finished uploading {len(files_to_upload)} file(s) to {prefix}")
 
@@ -361,6 +360,11 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
         logger.info(f"Uploading to prefix: {prefix}")
 
         await upload_folder_flat(upload_dir, prefix)
+
+        if prefix.rstrip("/").lower().endswith(".zarr"):
+            zarr_href = prefix.rstrip("/")
+            logger.info(f"Returning normalized Zarr store href: {zarr_href}")
+            return zarr_href
 
         extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
         if not extracted_files:
