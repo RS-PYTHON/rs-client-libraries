@@ -363,10 +363,16 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
 
 
 class SafeDict(dict):
-    """Dict subclass that returns {key} for missing keys instead of raising KeyError."""
+    """Dict subclass that returns {key} if key is missing or its value is None."""
 
     def __missing__(self, key):
         return "{" + key + "}"
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        if value is None:
+            return "{" + key + "}"
+        return value
 
 
 def substitute_values(obj, values):

@@ -1,19 +1,72 @@
 {
-    "satellite": "all",
-    "aux-to-be-generated": [
-        {
-            "product_type": "S00__ADF_WATER",
-            "cql2_query_name": "LatestValCover",
-            "dtA": 0,
-            "dtB": 0,
-            "period_in_hours": 0
-        },
-        {
-            "product_type": "S00__ADF_ECMWF",
-            "cql2_query_name": "Published",
-            "dtA": 0,
-            "dtB": 0,
-            "period_in_hours": 4
-        }
-    ]
+  "satellite": "sentinel-3a",
+  "aux-to-be-generated": [
+    {
+      "product_type": "S03_ADF_OLINS",
+      "cql2_query_name": "LatestValIntersect",
+      "period_in_hours": 2
+    },
+    {
+      "product_type": "S03_ADF_OLCAL",
+      "cql2_query_name": "LatestValIntersect",
+      "period_in_hours": 2
+    },
+    {
+      "product_type": "S03_ADF_OLPRG",
+      "cql2_query_name": "LatestValIntersect",
+      "period_in_hours": 2
+    },
+    {
+      "product_type": "S03_ADF_OLLUT",
+      "cql2_query_name": "LatestValIntersect",
+      "period_in_hours": 2
+    },
+    {
+      "product_type": "S03_ADF_OLEOP",
+      "cql2_query_name": "LatestValIntersect",
+      "period_in_hours": 2
+    }
+  ],
+  "auxiliary-product-to-collection-identifier": [
+    {
+      "product_type": "OL_1_INS_AX",
+      "collection_name": "adfs_old_format"
+    },
+    {
+      "product_type": "OL_1_CAL_AX",
+      "collection_name": "adfs_old_format"
+    },
+    {
+      "product_type": "OL_1_PRG_AX",
+      "collection_name": "adfs_old_format"
+    },
+    {
+      "product_type": "ADF_OLINS",
+      "collection_name": "adfs_new_format"
+    },
+    {
+      "product_type": "ADF_OLCAL",
+      "collection_name": "adfs_new_format"
+    },
+    {
+      "product_type": "ADF_OLPRG",
+      "collection_name": "adfs_new_format"
+    },
+    {
+      "product_type": "ADF_OLEOP",
+      "collection_name": "adfs_new_format"
+    },
+    {
+      "product_type": "ADF_OLLUT",
+      "collection_name": "adfs_new_format"
+    },
+    {
+      "product_type": "OL_1_EO__AX",
+      "collection_name": "adfs_old_format"
+    },
+    {
+      "product_type": "OL_1_CLUTAX",
+      "collection_name": "adfs_old_format"
+    }
+  ]
 }
