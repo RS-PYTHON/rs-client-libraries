@@ -29,6 +29,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+import requests
 from fastapi.concurrency import run_in_threadpool
 from prefect.blocks.system import Secret
 from prefect.client.orchestration import get_client
@@ -328,6 +329,23 @@ async def read_prefect_blocks(any_owner_id: str | None = None):
 
     # Init the env of the current module from the env vars we have just read
     init_global_env(any_owner_id)
+
+
+def read_latest_artifact(http_session: requests.Session, key: str) -> Any:
+    """
+    Read latest value of an uploaded artifact.
+
+    Args:
+        http_session: HTTP request session
+        key: Artifact key (=name)
+
+    Returns:
+        Artifact value
+    """
+    # See: https://docs-3.prefect.io/v3/api-ref/rest-api/server/artifacts/read-latest-artifact
+    response = http_session.get(f"{os.environ['PREFECT_API_URL']}/artifacts/{key}/latest")
+    response.raise_for_status()
+    return response.json()["data"]
 
 
 def hack_for_jupyter(func: Callable, *args, **kwargs) -> asyncio.Task:

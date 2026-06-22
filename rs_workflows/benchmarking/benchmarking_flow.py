@@ -14,9 +14,12 @@
 
 """Benchmarking flows."""
 
+import json
 import logging
 
 from prefect import flow, get_run_logger, task
+from prefect.artifacts import acreate_markdown_artifact
+from prefect.variables import Variable
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
@@ -27,15 +30,22 @@ async def benchmark_processor(
     processor_name: str,
     processor_version: str,
     scenario_name: str,
-) -> dict:
+):
     """
     https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-1099
+    This flow reads one Prefect variable named "benchmarking-<processor_name>-settings" associated to the input
+    parameter "processor name".
+    This variable provides a mocked structured information to define the benchmarking context.
 
-    Args:
-        env (FlowEnvArgs): Prefect flow environment
+    This flow will:
+      - Execute a mock task using the provided input parameters: processor name, version, and scenario.
+      - Generate a fake Markdown artifact named "benchmarking-result".
 
-    Returns:
+    This artifact contains:
+      - The input parameters passed to the benchmark-processor flow.
+      - The settings fetched from the Prefect variable.
     """
+    # Call the task of the same name
     return benchmark_processor_task.submit(env, processor_name, processor_version, scenario_name).result()
 
 
@@ -45,7 +55,7 @@ async def benchmark_processor_task(
     processor_name: str,
     processor_version: str,
     scenario_name: str,
-) -> dict:
+):
     """Task called by the flow of the same name."""
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
@@ -54,5 +64,24 @@ async def benchmark_processor_task(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "benchmark-processor"):
 
-        logger.info("Hello")
-        return {"message": "hello"}
+        # Read the prefect variable value
+        all_value = await Variable.get(f"benchmarking-{processor_name}-settings")
+
+        # Read contents for the given scenario and processor version
+        this_value = all_value["scenarios"][scenario_name]["processor_versions"][processor_version]
+
+        # Add info
+        report = {
+            "parameters": {
+                "processor_name": processor_name,
+                "processor_version": processor_version,
+                "scenario_name": scenario_name,
+            },
+            "settings": this_value,
+        }
+
+        # Save as a markdown artifact
+        md = "# Benchmarking processor report \n\n```json\n" + json.dumps(report, indent=2) + "\n```"
+        artifact_key_name: str = "benchmarking-result"
+        await acreate_markdown_artifact(key=artifact_key_name, markdown=md, description="Benchmarking processor report")
+        logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
