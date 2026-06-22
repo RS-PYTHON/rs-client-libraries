@@ -62,6 +62,9 @@ class Level1ArdFlowParams(ProcessingFlowParams):
 # Example to retrieve April 2026 S1 SLC (IW) products from CDSE in Toulouse area:
 # https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items?datetime=2026-04-01T00%3A00%3A00.000Z%2F2026-04-30T00%3A00%3A00.000Z&bbox=1.49319102647564%2C43.55965105873602%2C1.5043201542126%2C43.5629914174788&limit=6&sortby=-properties.created
 
+# To retrieve burts:
+# https://catalogue.dataspace.copernicus.eu/odata/v1/Bursts?$top=50&$filter=ParentProductName%20eq%20%27S1C_IW_SLC__1SDV_20260408T174632_20260408T174659_007128_00E6F6_E998.SAFE%27
+
 
 async def _do_process_s1ard(
     slcs: list[str],
