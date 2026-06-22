@@ -204,7 +204,8 @@ def _build_entry(
 
     # Retrieve product details from "io" section
     # Ugly workaround to https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-1090
-    io_details = io_index.get("DEM" if io_product["name"] == "dem" else io_product["name"], {})
+    # io_details = io_index.get("DEM" if io_product["name"] == "dem" else io_product["name"], {})
+    io_details = io_index.get(io_product["name"], {})
     if not io_details:
         raise TaskTableError(
             f'Could not find details for product "{io_product["name"]}" in "io" section, " \
