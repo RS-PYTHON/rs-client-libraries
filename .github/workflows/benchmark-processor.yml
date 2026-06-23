@@ -25,7 +25,7 @@ on:
         options:
           - ops
           - dev
-      processor:
+      processor_name:
         description: Processor
         required: true
         type: choice
@@ -34,28 +34,79 @@ on:
           - s3_l0
           - s1_ard
           - s3_l1olci
+      processor_version:
+        description: Processor version
+        required: true
+        type: choice
+        options: # mocked values from rs-demo/notebooks/sprints/sprint38/1099_first_benchmarking_flow/1099_first_benchmarking_flow.json
+          - "1.4.0"
+          - "1.5.0"
+      scenario:
+        description: Processor version
+        required: true
+        type: choice
+        options: # mocked values from rs-demo/notebooks/sprints/sprint38/1099_first_benchmarking_flow/1099_first_benchmarking_flow.json
+          - A
+          - B
+          - C
+      keycloak_user:
+        description: Keycloak username (to get API Key ...)
+        required: true
+        type: string
 
 jobs:
   main:
     name: Benchmark processor
     runs-on: ubuntu-latest
+    env:
+      # Deployment name in Prefect
+      DEPLOYMENT_NAME: "Benchmark Processor"
+      # Artifact key (=name) in Prefect
+      ARTIFACT_KEY: "benchmarking-result"
+      # To use python scripts under this directory
+      PYTHONPATH: ${{ '.github/scripts:env.PYTHONPATH' }}
+      # Name of the github variable and secret to use
+      CONFIG: ${{ case(github.event.inputs.cluster == 'dev', 'PREFECT_CONFIG_DEV', 'PREFECT_CONFIG_OPS') }}
+      CREDENTIALS: ${{ case(github.event.inputs.cluster == 'dev', 'PREFECT_CREDENTIALS_DEV', 'PREFECT_CREDENTIALS_OPS') }}
+
     steps:
       - uses: actions/checkout@v6
       - name: run
-        env:
-          PYTHONPATH: ${{ '.github/scripts:env.PYTHONPATH' }}
-          CONFIG: ${{ case(github.event.inputs.cluster == 'dev', 'PREFECT_CONFIG_DEV', 'PREFECT_CONFIG_OPS') }}
-          CREDENTIALS: ${{ case(github.event.inputs.cluster == 'dev', 'PREFECT_CREDENTIALS_DEV', 'PREFECT_CREDENTIALS_OPS') }}
         run: |
           import os
+          from call_prefect import *
 
           print("Read configuration from github variable: '${{env.CONFIG}}'")
-          config = """${{ vars[env.CONFIG] }}"""
+          config_yaml = """${{ vars[env.CONFIG] }}"""
 
           print("Read credentials from github secret: '${{env.CREDENTIALS}}'")
-          credentials = """${{ secrets[env.CREDENTIALS] }}"""
+          credentials_yaml = """${{ secrets[env.CREDENTIALS] }}"""
 
-          from call_prefect import *
-          read_access_token(config, credentials)
+          # Read config and credentials
+          init(config_yaml, credentials_yaml)
+
+          # Trigger a Prefect deployment flow run
+          body = {
+              "parameters": {
+                  "env": {"owner_id": "${{ github.event.inputs.keycloak_user }}"},
+                  "processor_name": "${{ github.event.inputs.processor_name }}",
+                  "processor_version": "${{ github.event.inputs.processor_version }}",
+                  "scenario_name": "${{ github.event.inputs.scenario }}",
+              },
+          }
+          flow_run_id = trigger_flow_run("${{ env.DEPLOYMENT_NAME }}", body)
+
+          # Display URL of the page of the Prefect flow run in the github page
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as opened:
+            opened.write(f"Prefect flow run: {get_flow_run_url(flow_run_id)}")
+
+          # Wait for a Prefect flow run to finish, with a timeout in seconds.
+          wait_flow_finish(flow_run_id, delay=5)
+
+          # Read artifact value
+          artifact_value = read_artifact(flow_run_id, "${{ env.ARTIFACT_KEY }}")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as opened:
+            opened.write(f"# Artifact ${{ env.ARTIFACT_KEY }}:")
+            opened.write(artifact_value)
 
         shell: python

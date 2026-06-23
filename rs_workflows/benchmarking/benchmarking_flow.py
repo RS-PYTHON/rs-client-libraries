@@ -14,6 +14,7 @@
 
 """Benchmarking flows."""
 
+import asyncio
 import json
 import logging
 
@@ -85,3 +86,6 @@ async def benchmark_processor_task(
         artifact_key_name: str = "benchmarking-result"
         await acreate_markdown_artifact(key=artifact_key_name, markdown=md, description="Benchmarking processor report")
         logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
+
+        # Sleep a few seconds to simulate a processor runtime
+        await asyncio.sleep(10)
