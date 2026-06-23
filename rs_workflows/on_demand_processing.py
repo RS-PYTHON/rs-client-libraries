@@ -496,7 +496,11 @@ async def dpr_processing(
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
         # HACK for S1-ARD
-        if dpr_input.pipeline in ["ARD_REFERENCE_PIPELINE", "ARD_DEM_ONLY_PIPELINE"]:
+        if dpr_input.pipeline in [
+            "ARD_REFERENCE_PIPELINE",
+            "ARD_DEM_ONLY_PIPELINE",
+            "ARD_REFERENCE_SINGLE_BURST_PIPELINE",
+        ]:
             logger.warning(f"ARD HACK FOR PIPELINE {dpr_input.pipeline}")
             owner_id: str = dpr_input.env.owner_id
             output_collection = "s1-ard-reference-db"
