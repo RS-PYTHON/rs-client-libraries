@@ -147,6 +147,11 @@ class FlowEnvArgs(BaseModel):
         description="Serialized OpenTelemetry span of the calling flow, if any",
     )
     service_name: str = Field(default="rs.workflows", description="OpenTelemetry service name")
+    called_by: str = Field(
+        default="",
+        title="Called by",
+        description="Any additional information on who or what called the flow",
+    )
 
 
 class FlowEnv:

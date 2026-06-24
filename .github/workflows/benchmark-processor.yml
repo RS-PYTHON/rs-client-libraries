@@ -59,8 +59,10 @@ jobs:
     name: Benchmark processor
     runs-on: ubuntu-latest
     env:
-      # Deployment name in Prefect
-      DEPLOYMENT_NAME: "Benchmark Processor"
+      # Link to the URL of this current github actions run
+      THIS_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      # Deploy name in Prefect as {flow_name}/{deployment_name}
+      DEPLOY_NAME: "benchmark-processor/Benchmark Processor"
       # Artifact key (=name) in Prefect
       ARTIFACT_KEY: "benchmarking-result"
       # To use python scripts under this directory
@@ -88,13 +90,16 @@ jobs:
           # Trigger a Prefect deployment flow run
           body = {
               "parameters": {
-                  "env": {"owner_id": "${{ github.event.inputs.keycloak_user }}"},
+                  "env": {
+                    "owner_id": "${{ github.event.inputs.keycloak_user }}",
+                    "called_by": "${{ env.THIS_URL }}",
+                  },
                   "processor_name": "${{ github.event.inputs.processor_name }}",
                   "processor_version": "${{ github.event.inputs.processor_version }}",
                   "scenario_name": "${{ github.event.inputs.scenario }}",
               },
           }
-          flow_run_id = trigger_flow_run("${{ env.DEPLOYMENT_NAME }}", body)
+          flow_run_id = trigger_flow_run("${{ env.DEPLOY_NAME }}", body)
 
           # Display URL of the page of the Prefect flow run in the github page
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as opened:

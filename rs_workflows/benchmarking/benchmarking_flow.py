@@ -71,20 +71,37 @@ async def benchmark_processor_task(
         # Read contents for the given scenario and processor version
         this_value = all_value["scenarios"][scenario_name]["processor_versions"][processor_version]
 
-        # Add info
-        report = {
-            "parameters": {
-                "processor_name": processor_name,
-                "processor_version": processor_version,
-                "scenario_name": scenario_name,
-            },
-            "settings": this_value,
+        # Markdown report
+        parameters = {
+            "owner_id": env.owner_id,
+            "processor_name": processor_name,
+            "processor_version": processor_version,
+            "scenario_name": scenario_name,
         }
+        report = f"""
+# Benchmarking processor report
 
+**Called by**: {env.called_by}
+
+## Parameters
+
+```json
+{json.dumps(parameters, indent=2)}
+```
+
+## Settings
+
+```json
+{json.dumps(this_value, indent=2)}
+```
+"""
         # Save as a markdown artifact
-        md = "# Benchmarking processor report \n\n```json\n" + json.dumps(report, indent=2) + "\n```"
         artifact_key_name: str = "benchmarking-result"
-        await acreate_markdown_artifact(key=artifact_key_name, markdown=md, description="Benchmarking processor report")
+        await acreate_markdown_artifact(
+            key=artifact_key_name,
+            markdown=report,
+            description="Benchmarking processor report",
+        )
         logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
         # Sleep a few seconds to simulate a processor runtime

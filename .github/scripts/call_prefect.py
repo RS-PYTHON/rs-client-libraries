@@ -26,7 +26,8 @@ prefect_public_url: https://<prefect-public-domain>
 
 The PREFECT_CREDENTIALS_DEV and PREFECT_CREDENTIALS_OPS secrets are defined in
 https://github.com/RS-PYTHON/rs-client-libraries/settings/secrets/actions
-These values are set with the admin-dev account on https://admin.iam.example.com/admin/master/console
+These values are set with the admin-dev account on https://admin.iam.example.com/admin/master/console for
+the Prefect service.
 It should have yaml content as:
 keycloak_token_url: ***
 client_id: ***
@@ -80,36 +81,22 @@ def prefect_url(suffix: str):
     return config["prefect_public_url"].strip("/") + "/" + suffix.strip("/")
 
 
-def __get_deployment_id(deployment_name: str) -> str:
+def __get_deployment_id(deploy_name: str) -> str:
     """
-    Return a Prefect deployment ID from its name.
+    Return a Prefect deployment ID from its name as {flow_name}/{deployment_name}
 
-    See: https://docs.prefect.io/v3/api-ref/rest-api/server/deployments/read-deployments
+    See: https://docs.prefect.io/v3/api-ref/rest-api/server/deployments/read-deployment-by-name
     """
-    response = requests.post(
-        prefect_url(f"api/deployments/filter"),
+    response = requests.get(
+        prefect_url(f"api/deployments/name/{deploy_name}"),
         headers=__read_access_token(),
-        json={"deployments": {"name": {"any_": [deployment_name]}}},
     )
+    # NOTE: if this fails, check all available names from a Jupyter terminal by running: 'prefect deployment ls'
     response.raise_for_status()
-    deps = response.json()
-
-    # If the deployement was not found: print the list of all deployments
-    if not deps:
-        response = requests.post(
-            prefect_url(f"api/deployments/filter"),
-            headers=__read_access_token(),
-        )
-        response.raise_for_status()
-        dep_names = "\n  - ".join([""] + sorted([dep["name"] for dep in response.json()]))
-        raise RuntimeError(f"Deployment {deployment_name!r} not found! Existing deployments: {dep_names}")
-
-    if len(deps) > 1:
-        raise RuntimeError(f"{len(deps)} deployments with name {deployment_name!r} exist!")
-    return deps[0]["id"]
+    return response.json()["id"]
 
 
-def trigger_flow_run(deployment_name: str, body: Any | None = None) -> str:
+def trigger_flow_run(deploy_name: str, body: Any | None = None) -> str:
     """
     Trigger a Prefect deployment flow run, from the deployment name and any other parameters.
 
@@ -117,7 +104,7 @@ def trigger_flow_run(deployment_name: str, body: Any | None = None) -> str:
 
     See: https://docs.prefect.io/v3/api-ref/rest-api/server/deployments/create-flow-run-from-deployment
     """
-    deployment_id = __get_deployment_id(deployment_name)
+    deployment_id = __get_deployment_id(deploy_name)
 
     response = requests.post(
         prefect_url(f"api/deployments/{deployment_id}/create_flow_run"),
@@ -130,7 +117,7 @@ def trigger_flow_run(deployment_name: str, body: Any | None = None) -> str:
 
 def get_flow_run_url(flow_run_id: str) -> str:
     """Return the URL of the page of a Prefect flow run"""
-    return f"{prefect_url('runs/flow-run')}/{flow_run_id}"
+    return f"{prefect_url('v2/runs/flow-run')}/{flow_run_id}"
 
 
 def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
@@ -142,6 +129,7 @@ def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
     # URL of the page of the Prefect flow run
     flow_run_url = get_flow_run_url(flow_run_id)
 
+    last_status = "(NOT FOUND)"
     while True:
 
         # Get all states of the flow run
@@ -157,9 +145,11 @@ def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
         # Else check the last state status.
         if states:
             last_status = states[-1]["type"]
-            if last_status in ["COMPLETED", "FAILED", "CANCELLED", "CRASHED"]:
+            if last_status == "COMPLETED":
                 print(f"Flow run {last_status}: {flow_run_url}")
                 return
+            if last_status in ["FAILED", "CANCELLED", "CRASHED", "CANCELLING"]:
+                raise RuntimeError(f"Flow run {last_status}: {flow_run_url}")
 
         if timeout <= 0:
             raise RuntimeError(f"Reached timeout for flow run {last_status}: {flow_run_url}")
