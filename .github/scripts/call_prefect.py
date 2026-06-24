@@ -143,6 +143,7 @@ def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
         try:
             states = response.json()
         except JSONDecodeError:
+            print(response.text, flush=True)
             states = []
 
         # The states are sorted from oldest to latest. If we still don't have any states, wait a little bit.

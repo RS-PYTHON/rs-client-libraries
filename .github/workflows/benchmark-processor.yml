@@ -78,10 +78,10 @@ jobs:
           import os
           from call_prefect import *
 
-          print("Read configuration from github variable: '${{env.CONFIG}}'")
+          print("Read configuration from github variable: '${{env.CONFIG}}'", flush=True)
           config_yaml = """${{ vars[env.CONFIG] }}"""
 
-          print("Read credentials from github secret: '${{env.CREDENTIALS}}'")
+          print("Read credentials from github secret: '${{env.CREDENTIALS}}'", flush=True)
           credentials_yaml = """${{ secrets[env.CREDENTIALS] }}"""
 
           # Read config and credentials
