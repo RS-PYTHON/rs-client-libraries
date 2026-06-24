@@ -50,7 +50,7 @@ on:
           - B
           - C
       keycloak_user:
-        description: Keycloak username (to get API Key ...)
+        description: Keycloak username (owner_id)
         required: true
         type: string
 
@@ -73,7 +73,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - name: run
+      - name: Benchmark processor
         run: |
           import os
           from call_prefect import *

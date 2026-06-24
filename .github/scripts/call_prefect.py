@@ -36,6 +36,7 @@ client_secret: ***
 
 import math
 import time
+from json import JSONDecodeError
 from typing import Any
 
 import requests
@@ -139,7 +140,10 @@ def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
             params={"flow_run_id": flow_run_id},
         )
         response.raise_for_status()
-        states = response.json()
+        try:
+            states = response.json()
+        except JSONDecodeError:
+            states = []
 
         # The states are sorted from oldest to latest. If we still don't have any states, wait a little bit.
         # Else check the last state status.
