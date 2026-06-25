@@ -355,6 +355,7 @@ def read_artifact(http_session: requests.Session, flow_run_id: str | UUID, artif
                 "flow_run_id": {"any_": [flow_run_id]},
             },
         },
+        timeout=30,
     )
     response.raise_for_status()
     artifacts = response.json()
