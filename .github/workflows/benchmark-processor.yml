@@ -103,7 +103,7 @@ jobs:
 
           # Display URL of the page of the Prefect flow run in the github page
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as opened:
-            opened.write(f"Prefect flow run: {get_flow_run_url(flow_run_id)}")
+            opened.write(f":information_source: Prefect flow run: {get_flow_run_url(flow_run_id)}\n\n")
 
           # Wait for a Prefect flow run to finish, with a timeout in seconds.
           wait_flow_finish(flow_run_id, delay=5)
@@ -111,7 +111,7 @@ jobs:
           # Read artifact value
           artifact_value = read_artifact(flow_run_id, "${{ env.ARTIFACT_KEY }}")
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as opened:
-            opened.write(f"# Artifact ${{ env.ARTIFACT_KEY }}:")
+            opened.write(f"# Artifact ${{ env.ARTIFACT_KEY }}:\n\n")
             opened.write(artifact_value)
 
         shell: python

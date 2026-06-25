@@ -118,7 +118,7 @@ def trigger_flow_run(deploy_name: str, body: Any | None = None) -> str:
 
 def get_flow_run_url(flow_run_id: str) -> str:
     """Return the URL of the page of a Prefect flow run"""
-    return f"{prefect_url('v2/runs/flow-run')}/{flow_run_id}"
+    return f"{prefect_url('runs/flow-run')}/{flow_run_id}"
 
 
 def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
@@ -129,29 +129,29 @@ def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
     """
     # URL of the page of the Prefect flow run
     flow_run_url = get_flow_run_url(flow_run_id)
+    print(f"Wait for flow run: {flow_run_url} ...", flush=True)
 
-    last_status = "(NOT FOUND)"
+    last_status = "(NOT FOUND)"  # Flow runs have several status. We keep the last one.
+    old_status = ""  # 'last_status' from previous 'while' iteration.
     while True:
 
         # Get all states of the flow run
         response = requests.get(
-            prefect_url(f"api/flow_run_states"),
+            # NOTE: we need a trailing / on this url or it redirects from https to http on the dev
+            # cluster, I don't know why
+            prefect_url(f"api/flow_run_states") + "/",
             headers=__read_access_token(),
             params={"flow_run_id": flow_run_id},
         )
         response.raise_for_status()
-        try:
-            states = response.json()
-        except JSONDecodeError:
-            print(response.text, flush=True)
-            states = []
+        states = response.json()
 
         # The states are sorted from oldest to latest. If we still don't have any states, wait a little bit.
         # Else check the last state status.
         if states:
             last_status = states[-1]["type"]
             if last_status == "COMPLETED":
-                print(f"Flow run {last_status}: {flow_run_url}")
+                print(f"Flow run {last_status}", flush=True)
                 return
             if last_status in ["FAILED", "CANCELLED", "CRASHED", "CANCELLING"]:
                 raise RuntimeError(f"Flow run {last_status}: {flow_run_url}")
@@ -159,7 +159,10 @@ def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
         if timeout <= 0:
             raise RuntimeError(f"Reached timeout for flow run {last_status}: {flow_run_url}")
 
-        print(f"Wait for flow run {last_status}: {flow_run_url} ...")
+        if last_status != old_status:
+            print(f"Flow run {last_status} ...", flush=True)
+            old_status = last_status
+
         timeout -= delay
         time.sleep(delay)
 
@@ -172,6 +175,7 @@ def read_artifact(flow_run_id: str, artifact_key: str) -> Any:
     """
     response = requests.post(
         prefect_url(f"api/artifacts/filter"),
+        headers=__read_access_token(),
         json={
             "artifacts": {
                 "operator": "and_",

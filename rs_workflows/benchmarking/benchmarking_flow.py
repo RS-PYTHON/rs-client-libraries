@@ -17,9 +17,11 @@
 import asyncio
 import json
 import logging
+import os
 
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
+from prefect.runtime import flow_run
 from prefect.variables import Variable
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
@@ -81,16 +83,18 @@ async def benchmark_processor_task(
         report = f"""
 # Benchmarking processor report
 
-**Called by**: {env.called_by}
+### Prefect flow run
+{f"{os.environ['RSPY_PREFECT_URL']}/runs/flow-run/{flow_run.id}"}
 
-## Parameters
+### Called by
+{env.called_by}
 
+### Parameters
 ```json
 {json.dumps(parameters, indent=2)}
 ```
 
-## Settings
-
+### Settings
 ```json
 {json.dumps(this_value, indent=2)}
 ```
