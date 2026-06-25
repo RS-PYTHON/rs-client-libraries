@@ -137,9 +137,7 @@ def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
 
         # Get all states of the flow run
         response = requests.get(
-            # NOTE: we need a trailing / on this url or it redirects from https to http on the dev
-            # cluster, I don't know why
-            prefect_url(f"api/flow_run_states") + "/",
+            prefect_url(f"api/flow_run_states"),
             headers=__read_access_token(),
             params={"flow_run_id": flow_run_id},
         )

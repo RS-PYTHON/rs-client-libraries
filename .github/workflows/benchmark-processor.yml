@@ -21,7 +21,7 @@ on:
         description: Cluster
         required: true
         type: choice
-        default: dev # CHANGE TO OPS
+        default: ops
         options:
           - ops
           - dev
@@ -48,7 +48,6 @@ on:
         options: # mocked values from rs-demo/notebooks/sprints/sprint38/1099_first_benchmarking_flow/1099_first_benchmarking_flow.json
           - A
           - B
-          - C
       keycloak_user:
         description: Keycloak username (owner_id)
         required: true

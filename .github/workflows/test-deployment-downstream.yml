@@ -16,14 +16,14 @@ name: Test downstream deployments
 
 # Run workflow only for ...
 on:
-  # pull_request: # pull requests
-  #   types: [opened, synchronize, reopened]
-  #   branches:
-  #     - '!feat/prepare-new-release'
-  # push:
-  #   branches: [develop, main] # pushes on the 'develop' or 'main' branches
-  #   # run this worflow only for rs_workflows code related changes
-  #   paths: ['rs_workflows/**.py', '**.toml', 'install.sh']
+  pull_request: # pull requests
+    types: [opened, synchronize, reopened]
+    branches:
+      - '!feat/prepare-new-release'
+  push:
+    branches: [develop, main] # pushes on the 'develop' or 'main' branches
+    # run this worflow only for rs_workflows code related changes
+    paths: ['rs_workflows/**.py', '**.toml', 'install.sh']
   workflow_dispatch: # manual trigger
 
 jobs:
