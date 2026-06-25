@@ -47,7 +47,7 @@
       ],
       "output_products": [
         {
-          "name": "cal_slcs",
+          "name": "CAL_SLCS",
           "mode": "always",
           "mandatory": true
         }
@@ -284,6 +284,12 @@
       "opening_mode": "CREATE_OVERWRITE"
     },
     {
+      "name": "CAL_SLCS",
+      "type": "folder",
+      "store_type": "safe",
+      "opening_mode": "CREATE_OVERWRITE"
+    },
+    {
       "name": "reference_dem",
       "type": "folder"
     },
@@ -400,7 +406,7 @@
             "cal_input": "pipeline_input"
           },
           "output_products": {
-            "cal_slcs": "pipeline_internal"
+            "CAL_SLCS": "pipeline_internal"
           },
           "parameters": {
             "reference_date": "somevalue"
@@ -410,7 +416,7 @@
           "unit_name": "reference_dem",
           "step_id": 2,
           "input_products": {
-            "cal_slcs": "calibration.cal_slcs"
+            "cal_slcs": "calibration.CAL_SLCS"
           },
           "output_products": {
             "reference_dem": "pipeline_internal"
@@ -420,7 +426,7 @@
           "unit_name": "reference_geometry",
           "step_id": 3,
           "input_products": {
-            "cal_slcs": "calibration.cal_slcs",
+            "cal_slcs": "calibration.CAL_SLCS",
             "reference_dem": "reference_dem.reference_dem"
           },
           "output_products": {
@@ -431,7 +437,7 @@
           "unit_name": "coregistration",
           "step_id": 4,
           "input_products": {
-            "cal_slcs": "calibration.cal_slcs",
+            "cal_slcs": "calibration.CAL_SLCS",
             "reference_dem": "reference_dem.reference_dem",
             "simulation_ref": "reference_geometry.simulation_ref"
           },

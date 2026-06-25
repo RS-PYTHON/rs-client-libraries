@@ -19,6 +19,8 @@
 Util functions for ADF scripts
 """
 
+import logging
+
 import os.path as osp
 import shutil
 from datetime import datetime
@@ -163,7 +165,6 @@ def reshape_dataset(ds):
     ds["longitude"] = ds["longitude"].astype(np.float32)
     return ds
 
-
 def get_all_grib_files(
     products_dir: Path,
     file_type: list[str] | str | None = None,
@@ -196,6 +197,9 @@ def get_all_grib_files(
     :param date: Date to search for in the products names
     :return: A list with all grib files corresponding to the set filters (file type and date)
     """
+    print(f"Call get_all_grib_files with products_dir='{products_dir}', file_type='{file_type}' and date='{date}'")
+
+
     if file_type is None:
         file_type = [""]
     elif isinstance(file_type, str):
@@ -209,6 +213,7 @@ def get_all_grib_files(
                 if product_item.suffix == "":
                     all_files.append(product_item)
 
+    print(f"return '{all_files}'")
     return all_files
 
 

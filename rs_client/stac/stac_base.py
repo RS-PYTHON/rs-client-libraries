@@ -376,7 +376,7 @@ class StacBase(RsClient):
 
         try:
             items_search = self.ps_client.search(**kwargs)
-
+            self.logger.info(f"STAC search raw response: {items_search.item_collection()}")
             return items_search.item_collection()
         except NotImplementedError:
             self.logger.exception(

@@ -324,7 +324,7 @@ def test_case_8_exact_output():
             ],
             "output_products": [
                 {
-                    "name": "cal_slcs",
+                    "name": "CAL_SLCS",
                     "origin": "pipeline_internal",
                     "mandatory": True,
                     "type": "folder",
@@ -340,7 +340,7 @@ def test_case_8_exact_output():
             "input_products": [
                 {
                     "name": "cal_slcs",
-                    "origin": "calibration.1.cal_slcs",
+                    "origin": "calibration.1.CAL_SLCS",
                     "mandatory": False,
                     "type": "folder",
                     "store_type": "safe",
@@ -361,7 +361,7 @@ def test_case_8_exact_output():
             "input_products": [
                 {
                     "name": "cal_slcs",
-                    "origin": "calibration.1.cal_slcs",
+                    "origin": "calibration.1.CAL_SLCS",
                     "mandatory": False,
                     "type": "folder",
                     "store_type": "safe",
@@ -385,7 +385,7 @@ def test_case_8_exact_output():
             "input_products": [
                 {
                     "name": "cal_slcs",
-                    "origin": "calibration.1.cal_slcs",
+                    "origin": "calibration.1.CAL_SLCS",
                     "mandatory": False,
                     "type": "folder",
                     "store_type": "safe",

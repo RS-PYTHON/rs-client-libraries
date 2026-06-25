@@ -479,7 +479,7 @@ class TestOgcApi:
         Test to check the behaviour of the method to validate endpoints responses
         """
         process_id = "process_id"
-        request_body = {
+        request_body: dict = {
             "inputs": {"property1": "string", "property2": "string"},
             "outputs": {
                 "property1": {
