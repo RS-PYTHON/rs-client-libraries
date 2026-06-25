@@ -129,7 +129,7 @@ def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
     """
     # URL of the page of the Prefect flow run
     flow_run_url = get_flow_run_url(flow_run_id)
-    print(f"Wait for flow run: {flow_run_url} ...", flush=True)
+    print(f"Wait for flow run: {flow_run_url} ...")
 
     last_status = "(NOT FOUND)"  # Flow runs have several status. We keep the last one.
     old_status = ""  # 'last_status' from previous 'while' iteration.
@@ -151,7 +151,7 @@ def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
         if states:
             last_status = states[-1]["type"]
             if last_status == "COMPLETED":
-                print(f"Flow run {last_status}", flush=True)
+                print(f"Flow run {last_status}")
                 return
             if last_status in ["FAILED", "CANCELLED", "CRASHED", "CANCELLING"]:
                 raise RuntimeError(f"Flow run {last_status}: {flow_run_url}")
@@ -160,7 +160,7 @@ def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
             raise RuntimeError(f"Reached timeout for flow run {last_status}: {flow_run_url}")
 
         if last_status != old_status:
-            print(f"Flow run {last_status} ...", flush=True)
+            print(f"Flow run {last_status} ...")
             old_status = last_status
 
         timeout -= delay

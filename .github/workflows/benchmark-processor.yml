@@ -59,6 +59,8 @@ jobs:
     name: Benchmark processor
     runs-on: ubuntu-latest
     env:
+      # Print python logs in real time
+      PYTHONUNBUFFERED: "1"
       # Link to the URL of this current github actions run
       THIS_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
       # Deploy name in Prefect as {flow_name}/{deployment_name}
@@ -78,10 +80,10 @@ jobs:
           import os
           from call_prefect import *
 
-          print("Read configuration from github variable: '${{env.CONFIG}}'", flush=True)
+          print("Read configuration from github variable: '${{env.CONFIG}}'")
           config_yaml = """${{ vars[env.CONFIG] }}"""
 
-          print("Read credentials from github secret: '${{env.CREDENTIALS}}'", flush=True)
+          print("Read credentials from github secret: '${{env.CREDENTIALS}}'")
           credentials_yaml = """${{ secrets[env.CREDENTIALS] }}"""
 
           # Read config and credentials
@@ -101,11 +103,7 @@ jobs:
           }
           flow_run_id = trigger_flow_run("${{ env.DEPLOY_NAME }}", body)
 
-          # Display URL of the page of the Prefect flow run in the github page
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as opened:
-            opened.write(f":information_source: Prefect flow run: {get_flow_run_url(flow_run_id)}\n\n")
-
-          # Wait for a Prefect flow run to finish, with a timeout in seconds.
+          # Wait for the Prefect flow run to finish, with a timeout in seconds.
           wait_flow_finish(flow_run_id, delay=5)
 
           # Read artifact value
