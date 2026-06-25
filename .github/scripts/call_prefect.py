@@ -36,11 +36,12 @@ client_secret: ***
 
 import math
 import time
-from json import JSONDecodeError
 from typing import Any
 
 import requests
 import yaml
+
+TIMEOUT = 60
 
 config = dict()
 credentials = dict()
@@ -72,6 +73,7 @@ def __read_access_token() -> str:
             "client_id": credentials["client_id"],
             "client_secret": credentials["client_secret"],
         },
+        timeout=TIMEOUT,
     )
     response.raise_for_status()
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
@@ -91,6 +93,7 @@ def __get_deployment_id(deploy_name: str) -> str:
     response = requests.get(
         prefect_url(f"api/deployments/name/{deploy_name}"),
         headers=__read_access_token(),
+        timeout=TIMEOUT,
     )
     # NOTE: if this fails, check all available names from a Jupyter terminal by running: 'prefect deployment ls'
     response.raise_for_status()
@@ -111,6 +114,7 @@ def trigger_flow_run(deploy_name: str, body: Any | None = None) -> str:
         prefect_url(f"api/deployments/{deployment_id}/create_flow_run"),
         headers=__read_access_token(),
         json=body,
+        timeout=TIMEOUT,
     )
     response.raise_for_status()
     return response.json()["state"]["state_details"]["flow_run_id"]
@@ -137,9 +141,10 @@ def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
 
         # Get all states of the flow run
         response = requests.get(
-            prefect_url(f"api/flow_run_states"),
+            prefect_url("api/flow_run_states"),
             headers=__read_access_token(),
             params={"flow_run_id": flow_run_id},
+            timeout=timeout,
         )
         response.raise_for_status()
         states = response.json()
@@ -172,7 +177,7 @@ def read_artifact(flow_run_id: str, artifact_key: str) -> Any:
     See: https://docs.prefect.io/v3/api-ref/rest-api/server/artifacts/read-artifacts
     """
     response = requests.post(
-        prefect_url(f"api/artifacts/filter"),
+        prefect_url("api/artifacts/filter"),
         headers=__read_access_token(),
         json={
             "artifacts": {
@@ -181,6 +186,7 @@ def read_artifact(flow_run_id: str, artifact_key: str) -> Any:
                 "flow_run_id": {"any_": [flow_run_id]},
             },
         },
+        timeout=TIMEOUT,
     )
     response.raise_for_status()
     artifacts = response.json()
