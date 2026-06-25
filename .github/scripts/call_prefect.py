@@ -177,7 +177,7 @@ def read_artifact(flow_run_id: str, artifact_key: str) -> Any:
     See: https://docs.prefect.io/v3/api-ref/rest-api/server/artifacts/read-artifacts
     """
     response = requests.post(
-        prefect_url("api/artifacts/filter"),
+        prefect_url("api/artifacts/latest/filter"),
         headers=__read_access_token(),
         json={
             "artifacts": {
