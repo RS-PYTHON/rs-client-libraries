@@ -957,7 +957,6 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
     mocker.patch("rs_workflows.dpr_flow.catalog_flow.get_item.submit", return_value=mock_future)
 
     # use fixed UUIDs for testing mockup results, to match the ones generated in payload_generator.py
-    # we need at least 2 since build_mockup_payload generates 2 output products.
     fixed_uuids = [
         "00000000-0000-0000-0000-000000000001",
         "00000000-0000-0000-0000-000000000002",
@@ -990,11 +989,11 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
 
     mocked_s3.create_bucket(Bucket=RSPY_CATALOG_BUCKET)
     expected_items = {}
-    base_s3_path = f"dpr_mockup_results/{OWNER_ID}/TEST_FLOW_OUTPUT"
+    base_s3_path = f"{OWNER_ID}/OUTPUT_NTC_COLLECTION"
 
     # for each product
-    for i, (product_name, zattrs_data) in enumerate(zattrs_products.items()):
-        product_uuid = fixed_uuids[i]
+    for product_name, zattrs_data in zattrs_products.items():
+        product_uuid = fixed_uuids[0]
         product_s3_path = f"{base_s3_path}/{product_uuid}"
 
         # upload .zattrs file to both locations to support both old and new tests
