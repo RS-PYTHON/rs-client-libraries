@@ -125,7 +125,7 @@ def get_flow_run_url(flow_run_id: str) -> str:
     return f"{prefect_url('runs/flow-run')}/{flow_run_id}"
 
 
-def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = math.inf):
+def wait_flow_finish(flow_run_id: str, delay: float, timeout: float = 3600):
     """
     Wait for a Prefect flow run to finish, with a timeout in seconds.
 
