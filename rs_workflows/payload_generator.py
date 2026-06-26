@@ -770,6 +770,7 @@ def generate_payload(  # pylint: disable=unused-argument
     unit_list: list[dict],
     adfs: list[tuple[str, str, str]],
     dpr_process_in: DprProcessIn,
+    external_modules: list[dict[str, str]] | None = None,
 ) -> PayloadSchema:
     """
     Assembles and generates a payload schema for a DPR (Data Processing Request) job.
@@ -899,6 +900,7 @@ def generate_payload(  # pylint: disable=unused-argument
             temporary__folder=dpr_process_in.temporary_folder,
             temporary__folder_s3_secret=temp_folder_s3_secret,
         ),
+        external_modules=external_modules,
         workflow=workflow_steps,
         io=io_config,  # type: ignore
         # The dask_context section is built in the dpr_service
