@@ -1,0 +1,7 @@
+************* Module rs_common.init_opentelemetry
+rs_common/init_opentelemetry.py:24: [E0611(no-name-in-module), ] No name 'instrumentation' in module 'opentelemetry'
+rs_common/init_opentelemetry.py:25: [E0611(no-name-in-module), ] No name 'instrumentation' in module 'opentelemetry'
+rs_common/init_opentelemetry.py:29: [E0611(no-name-in-module), ] No name 'instrumentation' in module 'opentelemetry'
+
+------------------------------------------------------------------
+Your code has been rated at 9.98/10 (previous run: 9.98/10, +0.01)

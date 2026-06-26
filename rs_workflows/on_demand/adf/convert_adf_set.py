@@ -340,7 +340,7 @@ async def schedule_conversion_flow(
 
     # Retrieve the name of the workpool, GitHub URL and Branch
     work_pool_name: str | None = None
-    github_repository: str | None = None
+    github_repository: str
     github_branch: str | None = None
     async with get_client() as client:
         deployment = await client.read_deployment(runtime.deployment.id)

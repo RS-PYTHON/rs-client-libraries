@@ -175,3 +175,5 @@ cython_debug/
 
 # SonarQube reports
 /.reports
+pylint-report.txt
+pylint-report.txt
