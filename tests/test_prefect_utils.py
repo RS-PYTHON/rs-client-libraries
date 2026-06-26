@@ -22,6 +22,8 @@ from importlib import reload
 from unittest.mock import AsyncMock, Mock, mock_open, patch
 
 import pytest
+import requests
+import responses
 from prefect.blocks.system import Secret
 from prefect.exceptions import ObjectNotFound
 from prefect_aws import S3Bucket
@@ -178,6 +180,15 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
         if "OBS2" in key:
             env_user.pop(key)
     assert env_user == (await Secret.load(user_block_name)).get()
+
+
+@responses.activate
+def test_read_artifact(monkeypatch):
+    """Test the read_artifact function"""
+    monkeypatch.setenv("PREFECT_API_URL", "https://prefect")
+    my_data = {"my": "data"}
+    responses.post(url=f"{os.environ['PREFECT_API_URL']}/artifacts/filter", json=[{"data": my_data}])
+    assert prefect_utils.read_artifact(requests.Session(), "flow_run_id", "artifact_key") == my_data
 
 
 @pytest.mark.asyncio
