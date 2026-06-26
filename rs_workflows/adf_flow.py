@@ -332,9 +332,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
                 "'platform' property has been computed from the item name." f"Value is '{stac_props["platform"]}'",
             )
         else:
-            logger.info(
-                "'platform' is not added to properties because" "the ADF is not linked to a specififc platform.",
-            )
+            logger.info("'platform' is not added to properties because ADF is not specific to a platform.")
 
     start_dt = parse_date(start_dt_str) if start_dt_str else None
     end_dt = parse_date(end_dt_str) if end_dt_str else None
