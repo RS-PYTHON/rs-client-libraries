@@ -26,15 +26,14 @@ prefect_public_url: https://<prefect-public-domain>
 
 The PREFECT_CREDENTIALS_DEV and PREFECT_CREDENTIALS_OPS secrets are defined in
 https://github.com/RS-PYTHON/rs-client-libraries/settings/secrets/actions
-These values are set with the admin-dev account on https://admin.iam.example.com/admin/master/console for
-the Prefect service.
+These values are set with the admin-dev account on
+https://admin.iam.example.com/admin/master/console for the Prefect service.
 It should have yaml content as:
 keycloak_token_url: ***
 client_id: ***
 client_secret: ***
 """
 
-import math
 import time
 from typing import Any
 
