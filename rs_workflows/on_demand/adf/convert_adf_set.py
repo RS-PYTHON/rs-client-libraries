@@ -91,7 +91,8 @@ async def convert_adf_group(
         [],
     )
     logger.debug(
-        f"read from {adf_group_name} : auxiliary_product_to_collection_identifier = {auxiliary_product_to_collection_identifier}",
+        f"read from {adf_group_name} : auxiliary_product_to_collection_identifier = "
+        f"{auxiliary_product_to_collection_identifier}",
     )
 
     # Split the problem in two : past and future period.
