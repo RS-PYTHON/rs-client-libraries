@@ -41,7 +41,7 @@ FLOW_TO_BE_SCHEDULED: str = "rs_workflows/on_demand/adf/convert_adf_set.py:adf_c
 async def convert_adf_group(
     period_start_datetime: datetime,
     period_end_datetime: datetime,
-    adf_group_name: str = "convert-aux-s3-olci-l1",
+    adf_group_name: str,
     owner_identifier: str = "copernicus",
 ) -> None:
     """
@@ -79,13 +79,21 @@ async def convert_adf_group(
     if not isinstance(raw_data, dict):
         raise ValueError(f"❌ Prefect variable '{adf_group_name}' has got an invalid format.")
     settings: dict[str, Any] = raw_data
+
+    satellite: str | None = settings.get("satellite", None)
+    logger.debug(f"read from {adf_group_name} : satellite = {satellite}")
+
     aux_to_be_generated: list = settings.get("aux-to-be-generated", [])
-    logger.debug(f"aux_to_be_generated = {aux_to_be_generated}")
+    logger.debug(f"read from {adf_group_name} : aux_to_be_generated = {aux_to_be_generated}")
+
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] = settings.get(
         "auxiliary-product-to-collection-identifier",
         [],
     )
-    logger.debug(f"auxiliary_product_to_collection_identifier = {auxiliary_product_to_collection_identifier}")
+    logger.debug(
+        f"read from {adf_group_name} : auxiliary_product_to_collection_identifier = "
+        f"{auxiliary_product_to_collection_identifier}",
+    )
 
     # Split the problem in two : past and future period.
     now_utc = datetime.now(timezone.utc)
@@ -105,6 +113,7 @@ async def convert_adf_group(
                 schedule_start,
                 period_end_datetime,
                 auxiliary_product_to_collection_identifier,
+                satellite,
             )
     else:
         logger.info("No AUX data to be retrieved for the future period. No flow will be scheduled.")
@@ -127,6 +136,7 @@ async def convert_adf_group(
                 retrieve_past_start,
                 retrieve_past_end,
                 auxiliary_product_to_collection_identifier,
+                satellite,
             )
             for item in aux_to_be_generated
         ]
@@ -135,7 +145,7 @@ async def convert_adf_group(
         logger.info("No AUX data to retrieve in the past.")
 
 
-def compute_cql2(cql2_query_name: str, dta: int, dtb: int) -> dict:
+def compute_cql2(cql2_query_name: str, dta: int, dtb: int, satellite: str | None) -> dict:
     """Compute the CQL2 filter content by reading the configuration file and substituting the values."""
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
@@ -164,7 +174,7 @@ def compute_cql2(cql2_query_name: str, dta: int, dtb: int) -> dict:
         "limit": cql2_temp["stac"]["limit"],
     }
 
-    return substitute_values(cql2_json, {"dTa": dta, "dTb": dtb})
+    return substitute_values(cql2_json, {"dTa": dta, "dTb": dtb, "satellite": satellite})
 
 
 @task(name="conversion from the past")
@@ -178,6 +188,7 @@ async def past_adf_conversion(
     period_start: datetime,
     period_end: datetime,
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
+    satellite: str | None,
 ) -> None:
     """
     Convert ADF data for a period in the past by splitting it into
@@ -188,7 +199,7 @@ async def past_adf_conversion(
     logger.setLevel(logging.DEBUG)
 
     logger.info("Computing cql2_filter without start_datetime and end_datetime...")
-    cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb)
+    cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb, satellite)
 
     # Scheduling according to the period_in_hours
     flow_parameters: AdfProcessIn
@@ -254,6 +265,7 @@ async def schedule_adf_conversion(
     period_start: datetime,
     period_end: datetime,
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
+    satellite: str | None,
 ) -> None:
     """
     Convert a single ADF data.
@@ -266,7 +278,7 @@ async def schedule_adf_conversion(
     logger.setLevel(logging.DEBUG)
 
     logger.info("Computing cql2_filter without start_datetime and end_datetime...")
-    cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb)
+    cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb, satellite)
 
     # Scheduling according to the period_in_hours
     rule: str
@@ -328,7 +340,7 @@ async def schedule_conversion_flow(
 
     # Retrieve the name of the workpool, GitHub URL and Branch
     work_pool_name: str | None = None
-    github_repository: str | None = None
+    github_repository: str
     github_branch: str | None = None
     async with get_client() as client:
         deployment = await client.read_deployment(runtime.deployment.id)
