@@ -156,33 +156,11 @@ class DprClient(OgcApiClient):
             (or None if endpoint fails) of the running job
         """
 
-        use_mockup = process.lower() == "mockup"
-
-        # Data to pass to the real processor
-        data = {}
-        if not use_mockup:
-            data = {
-                "s3_config_dir": s3_config_dir,
-                "payload_subpath": payload_subpath,
-                "s3_report_dir": s3_report_dir,
-            } | (extra_data or {})
-
-        # For the mockup processor, pass the payload contents.
-        # Download the payload file into a temp file.
-        else:
-            with tempfile.NamedTemporaryFile() as temp:
-                prefect_utils.s3_download_file(  # type: ignore
-                    osp.join(s3_config_dir, payload_subpath),
-                    temp.name,
-                    _sync=True,  # type: ignore
-                )
-
-                # Read it as a yaml file
-                with open(temp.name, encoding="utf-8") as opened:
-                    data = yaml.safe_load(opened)
-
-            # Add extra info
-            data.update({"use_mockup": use_mockup})
+        data = {
+            "s3_config_dir": s3_config_dir,
+            "payload_subpath": payload_subpath,
+            "s3_report_dir": s3_report_dir,
+        } | (extra_data or {})
 
         # Add the cluster info
         data.update(asdict(cluster_info))
