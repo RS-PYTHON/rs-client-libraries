@@ -41,7 +41,7 @@ FLOW_TO_BE_SCHEDULED: str = "rs_workflows/on_demand/adf/convert_adf_set.py:adf_c
 async def convert_adf_group(
     period_start_datetime: datetime,
     period_end_datetime: datetime,
-    adf_group_name: str = "convert-aux-s3a-olci-l1",
+    adf_group_name: str,
     owner_identifier: str = "copernicus",
 ) -> None:
     """
