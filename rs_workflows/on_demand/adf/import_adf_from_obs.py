@@ -17,7 +17,6 @@
 import fnmatch
 import logging
 import os
-import sys
 import tarfile
 import tempfile
 from pathlib import Path
@@ -26,14 +25,10 @@ import boto3
 from botocore.client import Config
 from prefect import flow, get_run_logger, task
 from prefect.cache_policies import NO_CACHE
+from pystac import Item
 
+from rs_workflows.dpr_flow import create_stac_item
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-
-
-def custom_cache_key_fn(*args, **kwargs):
-    # Exclure s3_client de la clé de cache
-    kwargs.pop("s3_client", None)
-    return args, kwargs
 
 
 @task(cache_policy=NO_CACHE)
@@ -127,11 +122,11 @@ async def import_items(
             path = Path(filename)
             while path.suffix:
                 path = path.with_suffix("")
-            await create_stac_item(str(path), "collection", f"s3://{output_bucket}/{target_s3_key}", rehearsal_mode)
+            await create_new_stac_item(str(path), "collection", f"s3://{output_bucket}/{target_s3_key}", rehearsal_mode)
 
 
 @task
-async def create_stac_item(item_name: str, item_collection: str, asset: str, rehearsal_mode: bool = True) -> None:
+async def create_new_stac_item(item_name: str, item_collection: str, asset: str, rehearsal_mode: bool = True) -> None:
     """
     For each output, create a STAC item with a single asset referencing the output location.
     If rehearsal_mode is True, only describe the action.
@@ -140,7 +135,22 @@ async def create_stac_item(item_name: str, item_collection: str, asset: str, reh
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
-    item = {"id": item_name, "collection": item_collection, "assets": {"data": {"href": asset}}}
+    eopf_feature = {
+        "geometry": {"type": "Point", "coordinates": [0, 0]},
+        "bbox": [0, 0, 0, 0],
+        "properties": {
+            "datetime": "2024-01-01T00:00:00",
+        },
+    }
+
+    item: Item = create_stac_item(
+        eopf_origin_datetime=None,
+        eopf_feature=None,
+        s3_data_location=asset,
+        product_name=item_name,
+        dpr_processor="obs_import",
+    )
+
     if rehearsal_mode:
         logger.info(f"[REHEARSAL] Would create STAC item for {item}")
     else:
