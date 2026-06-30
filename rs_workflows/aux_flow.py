@@ -16,6 +16,7 @@
 
 import datetime
 import json
+import logging
 from typing import Any
 
 from prefect import flow, get_run_logger, task
@@ -113,6 +114,7 @@ async def aux_staging(
         ItemCollection: List of catalog Items staged from AUX station
     """
     logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)

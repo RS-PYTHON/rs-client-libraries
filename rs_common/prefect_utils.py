@@ -28,7 +28,9 @@ from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
 from typing import Any
+from uuid import UUID
 
+import requests
 from fastapi.concurrency import run_in_threadpool
 from prefect.blocks.system import Secret
 from prefect.client.orchestration import get_client
@@ -328,6 +330,38 @@ async def read_prefect_blocks(any_owner_id: str | None = None):
 
     # Init the env of the current module from the env vars we have just read
     init_global_env(any_owner_id)
+
+
+def read_artifact(http_session: requests.Session, flow_run_id: str | UUID, artifact_key: str) -> Any:
+    """
+    Read artifact value.
+
+    Args:
+        http_session: HTTP request session
+        flow_run_id: Prefect flow run ID
+        artifact_key: Artifact key (=name)
+
+    Returns:
+        Artifact value
+    """
+    # See: https://docs.prefect.io/v3/api-ref/rest-api/server/artifacts/read-artifacts
+    flow_run_id = str(flow_run_id)
+    response = http_session.post(
+        f"{os.environ['PREFECT_API_URL']}/artifacts/filter",
+        json={
+            "artifacts": {
+                "operator": "and_",
+                "key": {"any_": [artifact_key]},
+                "flow_run_id": {"any_": [flow_run_id]},
+            },
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    artifacts = response.json()
+    if not artifacts:
+        raise RuntimeError(f"No artifact found for flow run ID: {flow_run_id!r} and artifact key: {artifact_key!r}")
+    return artifacts[0]["data"]
 
 
 def hack_for_jupyter(func: Callable, *args, **kwargs) -> asyncio.Task:

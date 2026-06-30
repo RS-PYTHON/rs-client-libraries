@@ -18,7 +18,7 @@ import json
 import os
 
 import requests
-from prefect import flow, task
+from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
 from prefect.context import TaskRunContext
 
@@ -81,7 +81,14 @@ async def create_rights_artifact(rights: dict, username: str) -> None:
 ```json
 {pretty_json}
 """
-    await acreate_markdown_artifact(key="rights", markdown=markdown_report, description="session staging output")
+    logger = get_run_logger()
+    artifact_key_name: str = "obs-rights"
+    await acreate_markdown_artifact(
+        key=artifact_key_name,
+        markdown=markdown_report,
+        description="session staging output",
+    )
+    logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
 
 @flow(name="update-osam-account", log_prints=True, validate_parameters=True)
