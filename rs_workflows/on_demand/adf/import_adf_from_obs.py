@@ -12,51 +12,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Convert a set of ADF data."""
+"""Import ADF from an S3 bucket and create a STAC item stored on the rs-catalog"""
 
 import fnmatch
-import glob
-import json
+import logging
 import os
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Dict, List
 
 import boto3
 from botocore.client import Config
 from prefect import flow, get_run_logger, task
+from prefect.cache_policies import NO_CACHE
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 
-@task
-async def connect_to_s3(env: FlowEnvArgs) -> boto3.client:
-    """
-    Connect to S3 (OBS) using the environment's credentials.
-    Returns a boto3 S3 client.
-    """
-    logger = get_run_logger()
-    logger.info(f"Connecting to S3 as {env.owner_id}")
-
-    flow_env = FlowEnv(env)
-    with flow_env:
-        logger.info("Retrieve credentials to access Postgres quota database")
-
-        logger.info(f"Retrieve credentials to access input bucket.")
-        s3_client = boto3.client(
-            "s3",
-            endpoint_url=os.environ["S3_ADF_INPUT_ENDPOINT"],
-            aws_access_key_id=os.environ["S3_ADF_INPUT_ACCESSKEY"],
-            aws_secret_access_key=os.environ["S3_ADF_INPUT_SECRETKEY"],
-            config=Config(signature_version="s3v4"),
-            region_name=os.environ["S3_ADF_INPUT_REGION"],
-        )
-
-        return s3_client
+def custom_cache_key_fn(*args, **kwargs):
+    # Exclure s3_client de la clé de cache
+    kwargs.pop("s3_client", None)
+    return args, kwargs
 
 
-@task
+@task(cache_policy=NO_CACHE)
 async def download_adf_files(
     s3_client: boto3.client,
     bucket: str,
@@ -69,12 +49,13 @@ async def download_adf_files(
     Returns the list of local paths to the downloaded files.
     """
     logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
     local_paths = []
 
     for file in files:
         s3_key = f"{path}/{file}"
         local_path = os.path.join(input_dir, file)
-        logger.info(f"Downloading {s3_key} from {bucket} to {local_path}")
+        logger.info(f"📥 Downloading '{file}' from '{bucket}' with path '{path}' to '{input_dir}'")
         s3_client.download_file(bucket, s3_key, local_path)
         local_paths.append(local_path)
 
@@ -88,123 +69,149 @@ async def extract_files(local_paths: list[str], extract_dir: str) -> list[str]:
     Returns the list of extracted file paths.
     """
     logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
     extracted_files = []
 
     for local_path in local_paths:
-        logger.info(f"Extracting {local_path} to {extract_dir}")
+        logger.info(f"🧵 Extracting {local_path} to {extract_dir}")
         with tarfile.open(local_path, "r:gz") as tar:
-            tar.extractall(path=extract_dir)
+            logger.debug(f"The file {local_path} will be uncompressed to the directory '{extract_dir}'.")
+            tar.extractall(path=extract_dir, filter="tar")
             extracted_files.extend(tar.getnames())
+            logger.debug(f"Following files have been extracted: '{tar.getnames()}'.")
 
     return [os.path.join(extract_dir, f) for f in extracted_files]
 
 
-@task
-async def copy_to_target_obs(
-    env: FlowEnvArgs,
+@task(cache_policy=NO_CACHE)
+async def import_items(
+    owner: str,
     s3_client: boto3.client,
     extracted_files: list[str],
     output_bucket: str,
     output_path: str,
     extract_pattern: str,
     rehearsal_mode: bool,
-) -> list[str]:
+) -> None:
     """
     Copy files matching the extract_pattern to the target OBS bucket.
     If rehearsal_mode is True, only describe the action.
     Returns the list of target S3 keys.
     """
     logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
     target_keys = []
 
-    for file in extracted_files:
-        if fnmatch.fnmatch(file, extract_pattern):
-            relative_path = os.path.relpath(file, extracted_files)
-            target_key = f"{output_path}/{env.owner_id}/{relative_path}"
-            target_s3_key = f"{env.environment}/{target_key}"  # Adjust as needed for your OBS structure
+    logger.debug(f"Files will be filtered with pattern '{extract_pattern}'.")
+    patterns = extract_pattern.split("|")
 
-            if rehearsal_mode:
-                logger.info(f"[REHEARSAL] Would copy {file} to s3://{output_bucket}/{target_s3_key}")
-            else:
-                logger.info(f"Copying {file} to s3://{output_bucket}/{target_s3_key}")
+    for file in extracted_files:
+        filename = Path(file).name
+        logger.debug(f"Check for filename '{filename}'.")
+
+        additional_path = output_path.strip("/")
+        if additional_path != "":
+            additional_path += "/"
+
+        if any(fnmatch.fnmatch(filename, p) for p in patterns):
+            logger.debug(f"✅ Check is OK. This file will be imported on the bucket '{output_bucket}'.")
+            parent_dir = os.path.dirname(file)
+            relative_path = os.path.relpath(file, parent_dir)
+            logger.debug(f"parent directory='{parent_dir}', relative path='{relative_path}'.")
+            target_s3_key = f"{owner}/COLLECTION/{additional_path}{relative_path}"
+
+            if not rehearsal_mode:
                 s3_client.upload_file(file, output_bucket, target_s3_key)
 
-        target_keys.append(f"s3://{output_bucket}/{target_s3_key}")
-
-    return target_keys
+            # remove filename suffix
+            path = Path(filename)
+            while path.suffix:
+                path = path.with_suffix("")
+            await create_stac_item(str(path), "collection", f"s3://{output_bucket}/{target_s3_key}", rehearsal_mode)
 
 
 @task
-async def create_stac_item(target_keys: list[str], rehearsal_mode: bool) -> list[dict]:
+async def create_stac_item(item_name: str, item_collection: str, asset: str, rehearsal_mode: bool = True) -> None:
     """
     For each output, create a STAC item with a single asset referencing the output location.
     If rehearsal_mode is True, only describe the action.
     Returns the list of STAC items.
     """
     logger = get_run_logger()
-    stac_items = []
+    logger.setLevel(logging.DEBUG)
 
-    for key in target_keys:
-        item = {"type": "Feature", "properties": {}, "assets": {"data": {"href": key}}}
-        if rehearsal_mode:
-            logger.info(f"[REHEARSAL] Would create STAC item for {key}")
-        else:
-            logger.info(f"Created STAC item for {key}")
-        stac_items.append(item)
-
-    return stac_items
+    item = {"id": item_name, "collection": item_collection, "assets": {"data": {"href": asset}}}
+    if rehearsal_mode:
+        logger.info(f"[REHEARSAL] Would create STAC item for {item}")
+    else:
+        logger.info(f"Created STAC item for {item}")
 
 
 @flow(name="import-adf-from-obs")
-async def import_adf_from_obs(env: FlowEnvArgs, configuration: dict, rehearsal_mode: bool = True):
+async def import_adf_from_obs(
+    owner: str,
+    configuration: dict,
+    obs_id: str = "PUBLICATION",
+    rehearsal_mode: bool = True,
+):
     """
     Main flow: import ADF files from OBS, extract, copy to target, and create STAC items.
     """
     logger = get_run_logger()
-    logger.info(f"Starting import-adf-from-obs flow for {env.owner_id}")
+    logger.setLevel(logging.DEBUG)
+
+    logger.info(f"Starting import-adf-from-obs flow for {owner}")
+    env: FlowEnvArgs = FlowEnvArgs(owner_id=owner)
 
     # Load configuration from Prefect variable
-    config = json.loads(configuration)
-    input_config = config["input"]
-    output_config = config["output"]
+    input_config = configuration["input"]
+    output_config = configuration["output"]
 
     input_dir: str
     output_dir: str
-    with tempfile.TemporaryDirectory() as temp_dir:
+    with tempfile.TemporaryDirectory(dir=".", prefix="tmp", delete=False) as temp_dir:
         temp_path = Path(temp_dir)
         input_dir = temp_path / "input"
         output_dir = temp_path / "output"
+        logger.info(f"Create input directory '{input_dir}' and output directory '{output_dir}'")
         input_dir.mkdir()
         output_dir.mkdir()
 
-    # Step 1: Connect to S3
-    s3_client = await connect_to_s3(env)
+    # Init flow environment and opentelemetry span
+    flow_env = FlowEnv(env)
+    with flow_env.start_span(__name__, "import-adfs-obs"):
+        logger.info(f"🪣 Retrieve credentials to access bucket linked to '{obs_id}'.")
 
-    # Step 2: Download ADF files
-    downloaded_files = await download_adf_files(
-        s3_client,
-        input_config["bucket"],
-        input_config["path"],
-        input_config["files"],
-        input_dir,
-    )
+        # Step 1: Connect to S3
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=os.environ[f"S3_{obs_id}_ENDPOINT"],
+            aws_access_key_id=os.environ[f"S3_{obs_id}_ACCESSKEY"],
+            aws_secret_access_key=os.environ[f"S3_{obs_id}_SECRETKEY"],
+            config=Config(signature_version="s3v4"),
+            region_name=os.environ[f"S3_{obs_id}_REGION"],
+        )
+        logger.debug(f"s3 client created.")
 
-    # Step 3: Extract files
-    extracted_files = await extract_files(downloaded_files, output_dir)
+        # Step 2: Download ADF files
+        downloaded_files = await download_adf_files(
+            s3_client,
+            input_config["bucket"],
+            input_config["path"],
+            input_config["files"],
+            input_dir,
+        )
 
-    # Step 4: Copy to target OBS
-    target_keys = await copy_to_target_obs(
-        env,
-        s3_client,
-        extracted_files,
-        output_config["bucket"],
-        output_config["path"],
-        input_config["extract_pattern"],
-        rehearsal_mode,
-    )
+        # Step 3: Extract files
+        extracted_files = await extract_files(downloaded_files, output_dir)
 
-    # Step 5: Create STAC Item
-    stac_items = await create_stac_item(target_keys, rehearsal_mode)
-
-    logger.info(f"Flow completed. Target keys: {target_keys}")
-    return {"target_keys": target_keys, "stac_items": stac_items}
+        # Step 4: Copy to target OBS
+        target_keys = await import_items(
+            owner,
+            s3_client,
+            extracted_files,
+            output_config["bucket"],
+            output_config["path"],
+            input_config["extract_pattern"],
+            rehearsal_mode,
+        )
