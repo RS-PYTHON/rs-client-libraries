@@ -18,7 +18,6 @@ import getpass
 import tempfile
 from unittest.mock import AsyncMock
 
-import anyio
 import pytest
 import responses
 from starlette import status
@@ -65,15 +64,11 @@ def test_dpr_client(mocker, dpr_client: DprClient, process: str, ogcapi_response
         status=status.HTTP_200_OK,
     )
 
-    def mock_download(_, to_path, **__):
-        """
-        Mock downloading of the payload file (for the mockup process).
-        Create an empty yaml file in the target path..
-        """
-        with open(to_path, "w", encoding="utf-8") as opened:
-            opened.write("empty:")
-
-    mocker.patch("rs_client.ogcapi.dpr_client.prefect_utils.s3_download_file", new=mock_download)
+    # Mock reading of the payload file (for the mockup process): return empty yaml bytes
+    mocker.patch(
+        "rs_client.ogcapi.dpr_client.prefect_utils.s3_read_bytes",
+        return_value=b"empty:",
+    )
 
     # Run the DPR processing
     assert dpr_client.run_process(process, CLUSTER_INFO, "", "", "", {}) == ogcapi_response_sample
@@ -161,15 +156,14 @@ I/O:
         new_callable=AsyncMock,
     )
 
-    async def mock_upload(from_path, _, **__):
+    async def mock_upload(data, _s3_path, **__):
         """
-        Mock uploading of the payload file.
-        Return the uploaded file contents.
+        Mock uploading of the payload contents.
+        Return the uploaded contents as text.
         """
-        async with await anyio.open_file(from_path, encoding="utf-8") as opened:
-            return await opened.read()
+        return data.decode("utf-8")
 
-    mocker.patch("rs_client.ogcapi.dpr_client.prefect_utils.s3_upload_file", new=mock_upload)
+    mocker.patch("rs_client.ogcapi.dpr_client.prefect_utils.s3_upload_bytes", new=mock_upload)
 
     # Write dummy payload file
     with tempfile.NamedTemporaryFile() as tmp:
