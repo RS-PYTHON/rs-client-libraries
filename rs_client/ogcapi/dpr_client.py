@@ -16,7 +16,6 @@
 
 import ast
 import os.path as osp
-import tempfile
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
@@ -167,19 +166,11 @@ class DprClient(OgcApiClient):
                 "s3_report_dir": s3_report_dir,
             } | (extra_data or {})
 
-        # For the mockup processor, pass the payload contents.
-        # Download the payload file into a temp file.
+        # For the mockup processor, read the payload yaml straight from S3.
         else:
-            with tempfile.NamedTemporaryFile() as temp:
-                prefect_utils.s3_download_file(  # type: ignore
-                    osp.join(s3_config_dir, payload_subpath),
-                    temp.name,
-                    _sync=True,  # type: ignore
-                )
-
-                # Read it as a yaml file
-                with open(temp.name, encoding="utf-8") as opened:
-                    data = yaml.safe_load(opened)
+            data = yaml.safe_load(
+                prefect_utils.s3_read_bytes(osp.join(s3_config_dir, payload_subpath), _sync=True),  # type: ignore
+            )
 
             # Add extra info
             data.update({"use_mockup": use_mockup})
@@ -347,10 +338,5 @@ class DprClient(OgcApiClient):
             # yaml to str conversion
             contents = yaml.dump(payload, default_flow_style=False, sort_keys=False)
 
-        # Write the modified contents to a temp file
-        with tempfile.NamedTemporaryFile() as tmp:
-            tmp.write(contents.encode("utf-8"))
-            tmp.flush()
-
-            # Upload the temp file to the s3 bucket
-            return await prefect_utils.s3_upload_file(tmp.name, str(s3_path))
+        # Upload the modified contents to the s3 bucket.
+        return await prefect_utils.s3_upload_bytes(contents.encode("utf-8"), str(s3_path))

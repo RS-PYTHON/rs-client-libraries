@@ -1,3 +1,6 @@
+# Vendored from the ESA EOPF Copernicus project (CPM ADF auxiliary-data-file):
+# https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file/-/tree/main/scripts/cop_dem_utils
+
 class Coordinates:
     def __init__(self, lat=None, lon=None, y=None, x=None):
         if lat is not None and lon is not None:

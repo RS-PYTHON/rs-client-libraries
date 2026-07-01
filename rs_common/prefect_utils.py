@@ -19,11 +19,11 @@ WARNING: AFTER EACH MODIFICATION, RESTART THE JUPYTER NOTEBOOK KERNEL !
 
 import asyncio
 import getpass
+import io
 import json
 import os
 import re
 import socket
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
@@ -102,6 +102,12 @@ def format_env_user(block_name: str, any_owner_id: str):
     return re.sub("[^a-zA-Z0-9]", "-", name)  # replace special characters by dash
 
 
+def _append_apikey_to_env(apikey: str) -> None:
+    """Append the API key to the user's ~/.env file (blocking I/O, run off the event loop)."""
+    with open(os.path.expanduser("~/.env"), "a", encoding="utf-8") as env_file:
+        env_file.write(f"\nRSPY_APIKEY={apikey}\n")
+
+
 @sync_compatible
 async def read_apikey(optional: bool = False, save_to_env: bool = True) -> None:
     """
@@ -132,9 +138,8 @@ async def read_apikey(optional: bool = False, save_to_env: bool = True) -> None:
         # Append it to the ~/.env file, if requested.
         # Don't overwrite the full ~/.env file because it can contain other user info.
         if save_to_env:
-            with open(os.path.expanduser("~/.env"), "a", encoding="utf-8") as env_file:
-                env_file.write(f"\nRSPY_APIKEY={apikey}\n")
-                logger.debug("API key saved to '~/.env'")
+            await asyncio.to_thread(_append_apikey_to_env, apikey)
+            logger.debug("API key saved to '~/.env'")
 
 
 @sync_compatible
@@ -495,22 +500,27 @@ async def s3_upload_file(
     return await s3_bucket.aupload_from_path(from_path, to_path, **upload_kwargs)
 
 
+async def s3_upload_bytes(data: bytes, s3_path: str, **upload_kwargs: dict[str, Any]) -> str:
+    """Upload in-memory bytes straight to the S3 bucket, without writing a temporary file."""
+    s3_bucket, to_path = get_s3_bucket(s3_path)
+    return await s3_bucket.aupload_from_file_object(io.BytesIO(data), to_path, **upload_kwargs)
+
+
+@sync_compatible
+async def s3_read_bytes(s3_path: str) -> bytes:
+    """Read an object's bytes straight from the S3 bucket, without a temporary file."""
+    s3_bucket, from_path = get_s3_bucket(s3_path)
+    return await s3_bucket.aread_path(from_path)
+
+
 @sync_compatible
 async def s3_upload_empty_file(
     s3_path: str,
     **upload_kwargs: dict[str, Any],
 ) -> str:
     """Upload an empty temp file to the S3 bucket."""
-
-    # Create a tmp file
-    with tempfile.NamedTemporaryFile() as tmp:
-
-        # Add contents to the file or boto3 has a strange behavior after uploading an empty file
-        tmp.write(b"empty")
-        tmp.flush()
-
-        # Upload the file
-        return await s3_upload_file(tmp.name, s3_path, **upload_kwargs)
+    # Add contents to the file or boto3 has a strange behavior after uploading an empty file
+    return await s3_upload_bytes(b"empty", s3_path, **upload_kwargs)
 
 
 @sync_compatible

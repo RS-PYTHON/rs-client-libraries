@@ -16,7 +16,6 @@
 import datetime
 import json
 import typing
-from pathlib import Path
 
 import pytest
 
@@ -29,7 +28,6 @@ from rs_workflows.dpr_flow import (
     extract_products_and_zattrs,
     read_zattrs_sync,
     run_processor,
-    s3_download_file_sync,
     s3_list,
     update_eopf_assets,
 )
@@ -85,11 +83,10 @@ def test_s3_list_returns_full_s3_paths(mocker):
     mock_objects.filter.assert_called_once_with(Prefix="some/prefix/")
 
 
-def test_read_zattrs_sync_downloads_and_parses_json(mocker):
+def test_read_zattrs_sync_reads_and_parses_json(mocker):
     """
-    Verify that read_zattrs_sync correctly downloads each .zattrs file from S3,
-    reads its JSON content, and returns a list of dictionaries containing both
-    the original path and the parsed data.
+    Verify that read_zattrs_sync reads the .zattrs bytes straight from S3 (no temp file)
+    and returns the parsed JSON.
     """
     zattrs_path = "s3://my-bucket/product_a/.zattrs"
 
@@ -98,21 +95,15 @@ def test_read_zattrs_sync_downloads_and_parses_json(mocker):
         "answer": 42,
     }
 
-    def fake_s3_download(src, dest, _sync):  # pylint: disable=unused-argument
-        with open(dest, "w", encoding="utf-8") as f:
-            json.dump(fake_json_data, f)
-
-    mock_download = mocker.patch(
-        "rs_workflows.dpr_flow.s3_download_file_sync",
-        side_effect=fake_s3_download,
+    mock_read = mocker.patch(
+        "rs_workflows.dpr_flow.prefect_utils.s3_read_bytes",
+        return_value=json.dumps(fake_json_data).encode("utf-8"),
     )
 
     result = read_zattrs_sync(zattrs_path)
 
     assert result == fake_json_data
-
-    assert mock_download.call_count == 1
-    mock_download.assert_any_call(zattrs_path, mocker.ANY, _sync=True)
+    mock_read.assert_called_once_with(zattrs_path, _sync=True)
 
 
 def test_extract_products_and_zattrs():
@@ -197,40 +188,6 @@ def test_extract_products_and_zattrs_no_matches():
 
     result = extract_products_and_zattrs(files, base_path)
     assert not result
-
-
-def test_s3_download_file_sync_downloads_and_returns_path(mocker):
-    """
-    Verify that s3_download_file_sync calls the underlying S3 bucket's
-    download_object_to_path with the correct arguments and returns the
-    destination path unchanged.
-    """
-    s3_path = "s3://my-bucket/some/file.txt"
-    to_path = Path("/tmp/file.txt")
-
-    mock_s3_bucket = mocker.Mock()
-    mock_from_path = "some/file.txt"
-
-    mocker.patch(
-        "rs_workflows.dpr_flow.prefect_utils.get_s3_bucket",
-        return_value=(mock_s3_bucket, mock_from_path),
-    )
-
-    result = s3_download_file_sync(
-        s3_path,
-        to_path,
-        _sync=True,
-        extra_arg="value",
-    )
-
-    mock_s3_bucket.download_object_to_path.assert_called_once_with(
-        mock_from_path,
-        str(to_path),
-        _sync=True,
-        extra_arg="value",
-    )
-
-    assert result == to_path
 
 
 def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
