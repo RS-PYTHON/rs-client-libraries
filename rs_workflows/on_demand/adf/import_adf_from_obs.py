@@ -31,6 +31,7 @@ from prefect.cache_policies import NO_CACHE
 from pystac import Item
 
 from rs_common.utils import strftime_millis
+from rs_workflows.catalog_flow import check_and_create_collection, publish
 from rs_workflows.dpr_flow import create_stac_item
 from rs_workflows.flow_utils import (
     DprProcessedItemMetadata,
@@ -93,7 +94,8 @@ async def extract_files(local_paths: list[str], extract_dir: str) -> list[str]:
 
 
 # TODO : migrate function to rs_workflows.utils.catalog.py
-def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: str, force_publication: bool):
+@task
+async def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: str, force_publication: bool) -> None:
     """ "
     This method will create the collection in case it does not exists.
     Check if the item is already inside the collection.
@@ -102,7 +104,11 @@ def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: str, for
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
-    result = get_single_catalog_item(flow_env, item.id, collection_name)
+    # Assert that the collection is created, before searching item inside.
+    await check_and_create_collection(flow_env, collection_name)
+
+    logger.debug(f"Check if '{item.id}' is already published on the collection '{collection_name}'.")
+    result = await get_single_catalog_item(flow_env, item.id, [collection_name])
     if not result:
         logger.info(f"The STAC item 🧊 '{item.id}' will be published on the collection '{collection_name}'.")
         items_metadata: list[DprProcessedItemMetadata] = []
@@ -111,7 +117,7 @@ def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: str, for
         items_metadata.append(
             DprProcessedItemMetadata(
                 output_product_id=item.id,
-                product_type=item.properties.get("product_type"),
+                product_type=item.properties.get("product:type"),
                 stac_item=item,
             ),
         )
@@ -119,13 +125,18 @@ def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: str, for
         publish_mapping.append(
             FlowGeneratedProduct(
                 name=item.id,
-                product_type=item.properties.get("product_type"),
+                product_type=item.properties.get("product:type"),
                 collection_name=collection_name,
             ),
         )
 
         logger.debug(f"items_metadata = {items_metadata}")
         logger.debug(f"publish_mapping = {publish_mapping}")
+        await publish(
+            flow_env.serialize(),
+            publish_mapping,
+            items_metadata,
+        )
 
 
 @task(cache_policy=NO_CACHE)
@@ -181,7 +192,7 @@ async def import_items(
             target_s3_key = f"{flow_env.owner_id}/{target_collection}/{additional_path}"
 
             # Item creation
-            item: Item = await create_new_stac_item(filename, f"{output_bucket}/{target_s3_key}")
+            item: Item = await create_new_stac_item(filename, f"s3://{output_bucket}/{target_s3_key}")
 
             if rehearsal_mode:
                 logger.info(
@@ -191,15 +202,15 @@ async def import_items(
             else:
                 # Import the data into the destination bucket
                 logger.info(
-                    f"📥 Copy filename '{filename}' to the bucket '{output_bucket}' on the path '{target_s3_key}'.",
+                    f"📥 Copy filename '{filename}' into the bucket 🪣'{output_bucket}' on the path '{target_s3_key}'.",
                 )
-                s3_client.upload_file(file, output_bucket, target_s3_key)
+                s3_client.upload_file(file, output_bucket, f"{target_s3_key}{filename}")
 
                 # Push the item into the collection
                 logger.debug(
                     f"Push STAC item into rs-catalog collection {target_collection}: {json.dumps(item.to_dict(), indent=2)}",
                 )
-                published_stac_item(flow_env, item, target_collection, False)
+                await published_stac_item(flow_env, item, target_collection, False)
 
 
 def convert_date(input: str) -> str:
@@ -210,7 +221,7 @@ def convert_date(input: str) -> str:
 
 
 @task
-async def create_new_stac_item(item_name: str, target_s3_key: str) -> Item:
+async def create_new_stac_item(item_name: str, href: str) -> Item:
     """
     For each output, create a STAC item with a single asset referencing the output location.
     Returns the STAC item and the asset path.
@@ -255,7 +266,7 @@ async def create_new_stac_item(item_name: str, target_s3_key: str) -> Item:
     item: Item = create_stac_item(
         eopf_origin_datetime=eopf_origin_datetime,
         eopf_feature=eopf_feature,
-        s3_data_location=target_s3_key + item_name,
+        s3_data_location=href + item_name,
         product_name=cleaned_filename,
         dpr_processor="obs_import",
     )
