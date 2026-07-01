@@ -15,6 +15,8 @@
 default_language_version:
     python: python3
 default_stages: [pre-commit]
+# rs_workflows/adf_conversion is vendored third-party code (ESA EOPF project,
+# https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file); keep it as-is.
 exclude: ^rs_workflows/adf_conversion/
 repos:
 

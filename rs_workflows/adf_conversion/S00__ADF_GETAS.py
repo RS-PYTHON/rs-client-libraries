@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # coding: utf8
 #
+# Vendored from the ESA EOPF Copernicus project (CPM ADF auxiliary-data-file):
+# https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file/-/tree/main/scripts/
+#
 # Copyright 2022-2026 ESA
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
