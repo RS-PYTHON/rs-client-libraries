@@ -32,7 +32,17 @@ from pystac import Item
 
 from rs_common.utils import strftime_millis
 from rs_workflows.dpr_flow import create_stac_item
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.flow_utils import (
+    DprProcessedItemMetadata,
+    FlowEnv,
+    FlowEnvArgs,
+    FlowGeneratedProduct,
+)
+from rs_workflows.payload_generator import (
+    fetch_csv_from_endpoint,
+    find_s3_output_bucket,
+)
+from rs_workflows.utils.catalog import get_single_catalog_item
 
 
 @task(cache_policy=NO_CACHE)
@@ -82,12 +92,47 @@ async def extract_files(local_paths: list[str], extract_dir: str) -> list[str]:
     return [os.path.join(extract_dir, f) for f in extracted_files]
 
 
+# TODO : migrate function to rs_workflows.utils.catalog.py
+def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: str, force_publication: bool):
+    """ "
+    This method will create the collection in case it does not exists.
+    Check if the item is already inside the collection.
+    In case the item is already present, the item is pushed to the collection only if force_publication.
+    """
+    logger = get_run_logger()
+    logger.setLevel(logging.DEBUG)
+
+    result = get_single_catalog_item(flow_env, item.id, collection_name)
+    if not result:
+        logger.info(f"The STAC item 🧊 '{item.id}' will be published on the collection '{collection_name}'.")
+        items_metadata: list[DprProcessedItemMetadata] = []
+        publish_mapping: list[FlowGeneratedProduct] = []
+
+        items_metadata.append(
+            DprProcessedItemMetadata(
+                output_product_id=item.id,
+                product_type=item.properties.get("product_type"),
+                stac_item=item,
+            ),
+        )
+
+        publish_mapping.append(
+            FlowGeneratedProduct(
+                name=item.id,
+                product_type=item.properties.get("product_type"),
+                collection_name=collection_name,
+            ),
+        )
+
+        logger.debug(f"items_metadata = {items_metadata}")
+        logger.debug(f"publish_mapping = {publish_mapping}")
+
+
 @task(cache_policy=NO_CACHE)
 async def import_items(
-    owner: str,
+    flow_env: FlowEnv,
     s3_client: boto3.client,
     extracted_files: list[str],
-    output_bucket: str,
     output_path: str,
     extract_pattern: str,
     rehearsal_mode: bool,
@@ -99,7 +144,6 @@ async def import_items(
     """
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
-    target_keys = []
 
     logger.debug(f"Files will be filtered with pattern '{extract_pattern}'.")
     patterns = extract_pattern.split("|")
@@ -113,42 +157,87 @@ async def import_items(
             additional_path += "/"
 
         if any(fnmatch.fnmatch(filename, p) for p in patterns):
-            logger.debug(f"✅ Check is OK. This file will be imported on the bucket '{output_bucket}'.")
-            parent_dir = os.path.dirname(file)
-            relative_path = os.path.relpath(file, parent_dir)
-            logger.debug(f"parent directory='{parent_dir}', relative path='{relative_path}'.")
-            target_s3_key = f"{owner}/COLLECTION/{additional_path}{relative_path}"
+            # The file should be treated.
+            logger.info(f"✅ This file match the pattern. It will be treated.")
 
-            if not rehearsal_mode:
+            # we define the collection
+            item_product_type: str = filename[4:15].lower()
+            # TODO préciser la collection en cas de surcharge
+            target_collection: str = item_product_type
+
+            # Target bucket name computation
+            bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
+            output_bucket: str = find_s3_output_bucket(
+                bucket_configuration,
+                flow_env.owner_id,
+                target_collection,
+                item_product_type,
+            )
+            logger.info(f"🪣 The target bucket will be {output_bucket}.")
+
+            # compute the path on the bucket
+            # parent_dir = os.path.dirname(file)
+            # relative_path = os.path.relpath(file, parent_dir)
+            target_s3_key = f"{flow_env.owner_id}/{target_collection}/{additional_path}"
+
+            # Item creation
+            item: Item = await create_new_stac_item(filename, f"{output_bucket}/{target_s3_key}")
+
+            if rehearsal_mode:
+                logger.info(
+                    f"[REHEARSAL] Would create STAC item into collection {target_collection}: {json.dumps(item.to_dict(), indent=2)}",
+                )
+
+            else:
+                # Import the data into the destination bucket
+                logger.info(
+                    f"📥 Copy filename '{filename}' to the bucket '{output_bucket}' on the path '{target_s3_key}'.",
+                )
                 s3_client.upload_file(file, output_bucket, target_s3_key)
 
-            await create_new_stac_item(filename, "collection", f"s3://{output_bucket}/{target_s3_key}", rehearsal_mode)
+                # Push the item into the collection
+                logger.debug(
+                    f"Push STAC item into rs-catalog collection {target_collection}: {json.dumps(item.to_dict(), indent=2)}",
+                )
+                published_stac_item(flow_env, item, target_collection, False)
+
+
+def convert_date(input: str) -> str:
+    """
+    Convert input format YYYYmmddTHHMMSS to ("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    """
+    return strftime_millis(datetime.strptime(input, "%Y%m%dT%H%M%S"))
 
 
 @task
-async def create_new_stac_item(item_name: str, item_collection: str, asset: str, rehearsal_mode: bool = True) -> None:
+async def create_new_stac_item(item_name: str, target_s3_key: str) -> Item:
     """
     For each output, create a STAC item with a single asset referencing the output location.
-    If rehearsal_mode is True, only describe the action.
-    Returns the list of STAC items.
+    Returns the STAC item and the asset path.
     """
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
     # This work for ADF provided by the MPC
-    # todo: Adapt the code for ADF coming for other source ( if needed )
-    # Extrace all the dates, product_type, platform
+    # TODO: Adapt the code for ADF coming from other source ( if needed )
+    # Extract the dates, product_type, platform
+    cleaned_filename = re.sub(r"\.(zarr|ZARR|tgz|zip|ZIP|TGZ)$", "", item_name)
     dates = re.findall(r"\d{8}T\d{6}", item_name)
-    start_datetime = strftime_millis(dates[0])
-    end_datetime = strftime_millis(dates[1])
-    eopf_origin_datetime = strftime_millis(dates[2])
-    product_type: str = item_name[4:14].lower
-    platform: str = item_name[3:3].lower
-    if platform == "_":
-        platform = ""
-    constellation: str = item_name[2:2].lower
+    start_datetime = convert_date(dates[0])
+    end_datetime = convert_date(dates[1])
+    eopf_origin_datetime = convert_date(dates[2])
+    product_type: str = item_name[4:15].upper()
+    platform: str = item_name[2:3].lower()
+    constellation: str = item_name[1:2].lower()
     if constellation == "_":
         constellation = ""
+        platform = ""
+    else:
+        if platform == "_":
+            platform = ""
+        else:
+            platform = f"sentinel-{constellation}{platform}"
+        constellation = f"sentinel-{constellation}"
 
     eopf_feature = {
         "geometry": {"type": "Point", "coordinates": [0, 0]},
@@ -166,17 +255,12 @@ async def create_new_stac_item(item_name: str, item_collection: str, asset: str,
     item: Item = create_stac_item(
         eopf_origin_datetime=eopf_origin_datetime,
         eopf_feature=eopf_feature,
-        s3_data_location=asset,
-        product_name=item_name,
+        s3_data_location=target_s3_key + item_name,
+        product_name=cleaned_filename,
         dpr_processor="obs_import",
     )
 
-    logger.debug(f"item: {json.dumps(item.to_dict(), indent=2)}")
-
-    if rehearsal_mode:
-        logger.info(f"[REHEARSAL] Would create STAC item for {item}")
-    else:
-        logger.info(f"Created STAC item for {item}")
+    return item
 
 
 @flow(name="import-adf-from-obs")
@@ -214,8 +298,8 @@ async def import_adf_from_obs(
     with flow_env.start_span(__name__, "import-adfs-obs"):
         logger.info(f"🪣 Retrieve credentials to access bucket linked to '{obs_id}'.")
 
-        # Step 1: Connect to S3
-        s3_client = boto3.client(
+        # Step 1: Connect to S3 with 2 differents settings
+        s3_client_input = boto3.client(
             "s3",
             endpoint_url=os.environ[f"S3_{obs_id}_ENDPOINT"],
             aws_access_key_id=os.environ[f"S3_{obs_id}_ACCESSKEY"],
@@ -223,11 +307,21 @@ async def import_adf_from_obs(
             config=Config(signature_version="s3v4"),
             region_name=os.environ[f"S3_{obs_id}_REGION"],
         )
-        logger.debug(f"s3 client created.")
+        logger.debug(f"s3 client to retrieve input has been created.")
+
+        s3_client_output = boto3.client(
+            "s3",
+            endpoint_url=os.environ["S3_ENDPOINT"],
+            aws_access_key_id=os.environ["S3_ACCESSKEY"],
+            aws_secret_access_key=os.environ["S3_SECRETKEY"],
+            config=Config(signature_version="s3v4"),
+            region_name=os.environ["S3_REGION"],
+        )
+        logger.debug(f"s3 client to copy output has been created.")
 
         # Step 2: Download ADF files
         downloaded_files = await download_adf_files(
-            s3_client,
+            s3_client_input,
             input_config["bucket"],
             input_config["path"],
             input_config["files"],
@@ -237,12 +331,11 @@ async def import_adf_from_obs(
         # Step 3: Extract files
         extracted_files = await extract_files(downloaded_files, output_dir)
 
-        # Step 4: Copy to target OBS
+        # Step 4: Import data and create STAC item
         target_keys = await import_items(
-            owner,
-            s3_client,
+            flow_env,
+            s3_client_output,
             extracted_files,
-            output_config["bucket"],
             output_config["path"],
             input_config["extract_pattern"],
             rehearsal_mode,
