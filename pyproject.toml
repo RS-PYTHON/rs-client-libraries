@@ -99,6 +99,12 @@ responses = "^0.26.0"
 starlette = "^1.3.1"
 pytest-responses = "^0.5.1"
 moto = "^5.1.22"
+# Dependencies of the standalone rs_workflows/adf_conversion scripts, required to
+# unit-test them (tests/test_adf_util.py, tests/test_adf_cop_dem_utils.py).
+numpy = ">=1.26"
+pandas = ">=2.2"
+xarray = ">=2024.9.0"
+matplotlib = ">=3.9.0"
 
 [tool.poetry.group.demo.dependencies] # for hybrid mode
 jupyterlab = "^4.5.0"
@@ -119,6 +125,9 @@ build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.black]
 line-length = 120
+# rs_workflows/adf_conversion is third-party code vendored from the ESA EOPF
+# project (https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file); it is
+# kept as-is and excluded from our QA tooling.
 extend-exclude = 'rs_workflows/adf_conversion/'
 
 [tool.pytest.ini_options]
@@ -135,10 +144,12 @@ warn_redundant_casts = true
 check_untyped_defs = true
 ignore_missing_imports = true
 disable_error_code = ["call-overload"]
+# vendored third-party code, see [tool.black] above
 exclude = ["rs_workflows/adf_conversion/"]
 
 [tool.flake8]
 max-line-length = 120
+# vendored third-party code, see [tool.black] above
 exclude = ["rs_workflows/adf_conversion/"]
 # per-file-ignores = [
 #     '__init__.py:F401',

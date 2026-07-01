@@ -16,7 +16,6 @@
 
 import ast
 import os.path as osp
-import tempfile
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
@@ -295,10 +294,5 @@ class DprClient(OgcApiClient):
             # yaml to str conversion
             contents = yaml.dump(payload, default_flow_style=False, sort_keys=False)
 
-        # Write the modified contents to a temp file
-        with tempfile.NamedTemporaryFile() as tmp:
-            tmp.write(contents.encode("utf-8"))
-            tmp.flush()
-
-            # Upload the temp file to the s3 bucket
-            return await prefect_utils.s3_upload_file(tmp.name, str(s3_path))
+        # Upload the modified contents to the s3 bucket.
+        return await prefect_utils.s3_upload_bytes(contents.encode("utf-8"), str(s3_path))

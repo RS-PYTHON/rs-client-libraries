@@ -1,3 +1,6 @@
+# Vendored from the ESA EOPF Copernicus project (CPM ADF auxiliary-data-file):
+# https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file/-/tree/main/scripts/cop_dem_utils
+
 class Progression:
     """Class to track the progression"""
 

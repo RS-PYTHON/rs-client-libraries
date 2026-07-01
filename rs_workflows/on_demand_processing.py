@@ -16,15 +16,12 @@
 
 # pylint: disable=W0101  # ignore 'unreachable code' (temporar)
 
-import datetime
 import json
 import os
 import re
-import tempfile as std_tempfile
 from copy import deepcopy
 from typing import Any
 
-import anyio
 import yaml
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
@@ -508,18 +505,9 @@ async def dpr_processing(
         # the payload file to upload to S3. here, the secrets are revealed
         generated_payload_res_with_secrets = generated_payload_res.dump(reveal_secrets=True)
         yaml_str = yaml.dump(generated_payload_res_with_secrets, default_flow_style=False, sort_keys=False)
-        # upload the config payload file to S3
-        tmp_dir = std_tempfile.gettempdir()
-        tmp_file_path = os.path.join(tmp_dir, f"dpr_payload_{datetime.datetime.now().timestamp()}.yaml")
-        async with await anyio.open_file(tmp_file_path, "w", encoding="utf-8") as tmp_file:
-            await tmp_file.write(yaml_str)
-            # flush to be extra-safe
-            await tmp_file.flush()
+        # upload the config payload contents straight to S3, without a temporary file
         logger.debug(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
-        await prefect_utils.s3_upload_file(tmp_file_path, dpr_input.s3_payload_file)
-
-        # clean up the temp payload file
-        await anyio.Path(tmp_file_path).unlink()
+        await prefect_utils.s3_upload_bytes(yaml_str.encode("utf-8"), dpr_input.s3_payload_file)
 
         # Run the DPR processor
         processed_items = run_processor.submit(
