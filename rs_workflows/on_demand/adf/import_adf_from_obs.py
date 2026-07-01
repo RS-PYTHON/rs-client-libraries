@@ -15,10 +15,13 @@
 """Import ADF from an S3 bucket and create a STAC item stored on the rs-catalog"""
 
 import fnmatch
+import json
 import logging
 import os
+import re
 import tarfile
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import boto3
@@ -27,6 +30,7 @@ from prefect import flow, get_run_logger, task
 from prefect.cache_policies import NO_CACHE
 from pystac import Item
 
+from rs_common.utils import strftime_millis
 from rs_workflows.dpr_flow import create_stac_item
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
@@ -118,11 +122,7 @@ async def import_items(
             if not rehearsal_mode:
                 s3_client.upload_file(file, output_bucket, target_s3_key)
 
-            # remove filename suffix
-            path = Path(filename)
-            while path.suffix:
-                path = path.with_suffix("")
-            await create_new_stac_item(str(path), "collection", f"s3://{output_bucket}/{target_s3_key}", rehearsal_mode)
+            await create_new_stac_item(filename, "collection", f"s3://{output_bucket}/{target_s3_key}", rehearsal_mode)
 
 
 @task
@@ -135,21 +135,43 @@ async def create_new_stac_item(item_name: str, item_collection: str, asset: str,
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
+    # This work for ADF provided by the MPC
+    # todo: Adapt the code for ADF coming for other source ( if needed )
+    # Extrace all the dates, product_type, platform
+    dates = re.findall(r"\d{8}T\d{6}", item_name)
+    start_datetime = strftime_millis(dates[0])
+    end_datetime = strftime_millis(dates[1])
+    eopf_origin_datetime = strftime_millis(dates[2])
+    product_type: str = item_name[4:14].lower
+    platform: str = item_name[3:3].lower
+    if platform == "_":
+        platform = ""
+    constellation: str = item_name[2:2].lower
+    if constellation == "_":
+        constellation = ""
+
     eopf_feature = {
         "geometry": {"type": "Point", "coordinates": [0, 0]},
         "bbox": [0, 0, 0, 0],
         "properties": {
-            "datetime": "2024-01-01T00:00:00",
+            "datetime": eopf_origin_datetime,
+            "start_datetime": start_datetime,
+            "end_datetime": end_datetime,
+            "product:type": product_type,
+            "platform": platform,
+            "constellation": constellation,
         },
     }
 
     item: Item = create_stac_item(
-        eopf_origin_datetime=None,
-        eopf_feature=None,
+        eopf_origin_datetime=eopf_origin_datetime,
+        eopf_feature=eopf_feature,
         s3_data_location=asset,
         product_name=item_name,
         dpr_processor="obs_import",
     )
+
+    logger.debug(f"item: {json.dumps(item.to_dict(), indent=2)}")
 
     if rehearsal_mode:
         logger.info(f"[REHEARSAL] Would create STAC item for {item}")
