@@ -206,16 +206,46 @@ class DprClient(OgcApiClient):
         payload.update(asdict(cluster_info))  # Add the cluster info to the payload
         return super()._run_process("conv_safe_zarr", payload)
 
-    def wait_for_job(self, *args, **kwargs) -> list[dict]:  # type: ignore
+    def _stream_logs(self, url: str, logger) -> None:
+        """Stream logs from the SSE endpoint."""
+        try:
+            # 86400 seconds (24h) timeout for the long running stream
+            response = self.http_session.get(url, stream=True, **self.apikey_headers, timeout=86400)
+            if response.status_code == 200:
+                for line in response.iter_lines():
+                    if line:
+                        decoded = line.decode("utf-8")
+                        if decoded.startswith("data: "):
+                            logger.info(decoded[6:])
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            logger.warning(f"Failed to stream logs: {e}")
+
+    def wait_for_job(  # type: ignore
+        self,
+        job_status: dict,
+        logger=None,
+        job_name: str = "",
+        poll_interval: int = 2,
+    ) -> list[dict]:
         """
         Wait for job to finish.
 
         Returns:
             EOPF results
         """
+        job_id = job_status.get("jobID")
+        if job_id and logger:
+            url = f"{self.href_service}/{self.endpoint_prefix}jobs/{job_id}/logs"
+            self._stream_logs(url, logger)
+
         # Call parent method and parse results
-        job_status = super().wait_for_job(*args, **kwargs)
-        return ast.literal_eval(job_status["message"])
+        final_status = super().wait_for_job(
+            job_status=job_status,
+            logger=logger,
+            job_name=job_name,
+            poll_interval=poll_interval,
+        )
+        return ast.literal_eval(final_status["message"])
 
     ######################################################
     # These endpoints are not implemented by the service #
