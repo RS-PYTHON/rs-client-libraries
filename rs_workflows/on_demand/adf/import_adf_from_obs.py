@@ -22,7 +22,6 @@ import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
 
 import boto3
 from botocore.client import Config
@@ -30,7 +29,6 @@ from prefect import flow, get_run_logger, task
 from prefect.cache_policies import NO_CACHE
 from pystac import Item
 
-from rs_client.stac.catalog_client import CatalogClient
 from rs_common.utils import extract_tar, strftime_millis
 from rs_workflows.catalog_flow import check_and_create_collection
 from rs_workflows.dpr_flow import create_stac_item
@@ -84,7 +82,7 @@ async def extract_files(files: list[str], extract_dir: str) -> list[str]:
     for file in files:
         logger.info(f"🧵 Extracting {file} to {extract_dir}")
         count, extracted_files = extract_tar(Path(file), Path(extract_dir))
-        logger.debug(f"{count} files have been extracted:\n" + "\n".join(f"- {f}" for f in extracted_files))
+        logger.debug("%s files have been extracted:\n%s", count, "\n".join(f"- {f}" for f in extracted_files))
 
     return [os.path.join(extract_dir, f) for f in extracted_files]
 
