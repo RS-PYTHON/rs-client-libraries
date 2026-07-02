@@ -32,13 +32,11 @@ from pystac import Item
 
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common.utils import strftime_millis
-from rs_workflows.catalog_flow import check_and_create_collection, publish
+from rs_workflows.catalog_flow import check_and_create_collection
 from rs_workflows.dpr_flow import create_stac_item
 from rs_workflows.flow_utils import (
-    DprProcessedItemMetadata,
     FlowEnv,
     FlowEnvArgs,
-    FlowGeneratedProduct,
 )
 from rs_workflows.payload_generator import (
     fetch_csv_from_endpoint,
@@ -92,46 +90,6 @@ async def extract_files(local_paths: list[str], extract_dir: str) -> list[str]:
             logger.debug(f"Following files have been extracted: '{tar.getnames()}'.")
 
     return [os.path.join(extract_dir, f) for f in extracted_files]
-
-
-# TODO : migrate function to rs_workflows.utils.catalog.py
-@task
-async def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: str) -> None:
-    """ "
-    This method will create the collection in case it does not exists.
-    Check if the item is already inside the collection.
-    In case the item is already present, the item is pushed to the collection only if force_publication.
-    """
-    logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
-
-    logger.info(f"The STAC item 🧊 '{item.id}' will be published on the collection '{collection_name}'.")
-    items_metadata: list[DprProcessedItemMetadata] = []
-    publish_mapping: list[FlowGeneratedProduct] = []
-
-    items_metadata.append(
-        DprProcessedItemMetadata(
-            output_product_id=item.id,
-            product_type=item.properties.get("product:type"),
-            stac_item=item,
-        ),
-    )
-
-    publish_mapping.append(
-        FlowGeneratedProduct(
-            name=item.id,
-            product_type=str(item.properties.get("product:type")),
-            collection_name=collection_name,
-        ),
-    )
-
-    logger.debug(f"items_metadata = {items_metadata}")
-    logger.debug(f"publish_mapping = {publish_mapping}")
-    await publish(
-        flow_env.serialize(),
-        publish_mapping,
-        items_metadata,
-    )
 
 
 @task(cache_policy=NO_CACHE)
