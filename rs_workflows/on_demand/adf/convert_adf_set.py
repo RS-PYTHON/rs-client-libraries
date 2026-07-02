@@ -26,7 +26,6 @@ from prefect import flow, get_run_logger, runtime, task
 from prefect.client.orchestration import get_client
 from prefect.runner.storage import GitRepository
 from prefect.runtime import flow_run
-from prefect.variables import Variable
 
 from rs_common.utils import strftime_millis
 from rs_workflows.adf_flow import adf_conversion_task, substitute_values
