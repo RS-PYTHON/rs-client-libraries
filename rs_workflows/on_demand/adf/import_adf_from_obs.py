@@ -80,10 +80,10 @@ async def extract_files(files: list[str], extract_dir: str) -> list[str]:
     logger.setLevel(logging.DEBUG)
     extracted_files = []
 
-    for path in files:
-        logger.info(f"🧵 Extracting {path} to {extract_dir}")
-        extracted_files = extract_tar(path, extract_dir)
-        logger.debug(f"Following files have been extracted: '{extracted_files}'.")
+    for file in files:
+        logger.info(f"🧵 Extracting {file} to {extract_dir}")
+        extracted_files = extract_tar(Path(file), Path(extract_dir))
+        logger.debug(f"{extracted_files} files have been extracted.")
 
     return [os.path.join(extract_dir, f) for f in extracted_files]
 
