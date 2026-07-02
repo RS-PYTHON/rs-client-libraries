@@ -41,27 +41,65 @@ FLOW_TO_BE_SCHEDULED: str = "rs_workflows/on_demand/adf/convert_adf_set.py:adf_c
 async def convert_adf_group(
     period_start_datetime: datetime,
     period_end_datetime: datetime,
-    adf_group_name: str,
-    owner_identifier: str = "copernicus",
+    configuration: dict,
+    owner: str = "copernicus",
 ) -> None:
     """
-    Convert a set of ADF (Auxiliary Data Files) data for a specified group and time period.
+    # Convert ADF format
 
-    Args:
-        period_start_datetime: Start datetime of the period to convert (UTC).
-        period_end_datetime: End datetime of the period to convert (UTC).
-        adf_group_name: Name of the ADF group (Prefect Variable) containing the configuration.
+    Convert a set of ADF (Auxiliary Data Files) retrieved from ADGS or rs-catalog.
 
-    Behavior:
-        - The part of the period in the past is processed immediately.
-        - The part of the period in the future is scheduled for later execution.
+    ---
 
-    Raises:
-        ValueError: If `period_start_datetime` is not before `period_end_datetime`
-        or if the Prefect Variable format is invalid.
-        FileNotFoundError: If the Prefect Variable does not exist.
+    ## Workflow Steps
+
+    1. *Download* — Retrieves the old format of ADF files from ADGS or rs-catalog.
+    2. *Convert* — Immediately performs the conversion for past periods.
+    3. *Schedule* — Schedules a conversion flow for future periods.
+
+    ---
+
+    ## Parameters
+    Parameter | Type | Default | Description |
+    |---|---|---|---|
+    | `period_start_datetime` | `datetime` | *required* | Period start in UTC |
+    | `period_end_datetime` | `datetime` | *required* | Period end in UTC |
+    | `configuration` | `dict` | *required* | JSON configuration (see format below) |
+    | `owner` | `str` | `copernicus` | Name of the user triggering the flow |
+
+    > *Note:* If a period traverses the current period, the part of the period in
+    > the past is processed immediately, the part of the period in the future is
+    > scheduled for later execution.
+
+    ---
+    ## Configuration Format example
+
+    ```json
+    {
+        "satellite": "all",
+        "aux-to-be-generated": [
+            {
+                "product_type": "S00__ADF_ECMWA",
+                "cql2_query_name": "ValIntersect",
+                "dTa": 43200,
+                "dTb": 43200,
+                "period_in_hours": 24
+            }
+        ],
+        "auxiliary-product-to-collection-identifier": [
+            {
+                "product_type": "AX___MA1_AX",
+                "collection_name": "adfs_old_format"
+            },
+            {
+                "product_type": "ADF_ECMWA",
+                "collection_name": "adfs_new_format"
+            }
+        ]
+    }
+    ```
+    ---
     """
-
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
@@ -72,26 +110,21 @@ async def convert_adf_group(
             f" ( here {period_start_datetime} >= {period_end_datetime})",
         )
 
-    # Read the Prefect Variable and extract list of aux to manage
-    raw_data = await cast(Awaitable[Any], Variable.get(adf_group_name))
-    if raw_data is None:
-        raise FileExistsError(f"❌ Prefect variable '{adf_group_name}' does not exist.")
-    if not isinstance(raw_data, dict):
-        raise ValueError(f"❌ Prefect variable '{adf_group_name}' has got an invalid format.")
-    settings: dict[str, Any] = raw_data
+    # Some checks
+    if configuration is None:
+        raise FileExistsError("❌ Configuration is missing.")
 
-    satellite: str | None = settings.get("satellite", None)
-    logger.debug(f"read from {adf_group_name} : satellite = {satellite}")
+    satellite: str | None = configuration["satellite"]
+    logger.debug(f"read from the 'configuration' : satellite = {satellite}")
 
-    aux_to_be_generated: list = settings.get("aux-to-be-generated", [])
-    logger.debug(f"read from {adf_group_name} : aux_to_be_generated = {aux_to_be_generated}")
+    aux_to_be_generated: list = configuration["aux-to-be-generated"]
+    logger.debug(f"read from 'configuration' : aux_to_be_generated = {aux_to_be_generated}")
 
-    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] = settings.get(
-        "auxiliary-product-to-collection-identifier",
-        [],
-    )
+    auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping] = configuration[
+        "auxiliary-product-to-collection-identifier"
+    ]
     logger.debug(
-        f"read from {adf_group_name} : auxiliary_product_to_collection_identifier = "
+        "read from 'configuration' : auxiliary_product_to_collection_identifier = "
         f"{auxiliary_product_to_collection_identifier}",
     )
 
@@ -104,7 +137,7 @@ async def convert_adf_group(
         logger.info(f"Scheduling ADF conversion for the period [{schedule_start} - {period_end_datetime}]")
         for item in aux_to_be_generated:
             await schedule_adf_conversion.with_options(name=f"schedule {item['product_type']}  ")(
-                owner_identifier,
+                owner,
                 item["product_type"],
                 item["cql2_query_name"],
                 item.get("dTa", 0),
@@ -127,7 +160,7 @@ async def convert_adf_group(
 
         tasks = [
             past_adf_conversion.with_options(name=f"convert {item['product_type']}  ")(
-                owner_identifier,
+                owner,
                 item["product_type"],
                 item["cql2_query_name"],
                 item.get("dTa", 0),
