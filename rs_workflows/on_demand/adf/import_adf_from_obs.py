@@ -82,8 +82,8 @@ async def extract_files(files: list[str], extract_dir: str) -> list[str]:
 
     for file in files:
         logger.info(f"🧵 Extracting {file} to {extract_dir}")
-        extracted_files = extract_tar(Path(file), Path(extract_dir))
-        logger.debug(f"{extracted_files} files have been extracted.")
+        count, extracted_files = extract_tar(Path(file), Path(extract_dir))
+        logger.debug(f"{count} files have been extracted. list : {extract_files}.")
 
     return [os.path.join(extract_dir, f) for f in extracted_files]
 
