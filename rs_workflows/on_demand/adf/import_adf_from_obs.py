@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import re
-import tarfile
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -31,7 +30,7 @@ from prefect.cache_policies import NO_CACHE
 from pystac import Item
 
 from rs_client.stac.catalog_client import CatalogClient
-from rs_common.utils import strftime_millis
+from rs_common.utils import extract_tar, strftime_millis
 from rs_workflows.catalog_flow import check_and_create_collection
 from rs_workflows.dpr_flow import create_stac_item
 from rs_workflows.flow_utils import (
@@ -72,7 +71,7 @@ async def download_adf_files(
 
 
 @task
-async def extract_files(local_paths: list[str], extract_dir: str) -> list[str]:
+async def extract_files(files: list[str], extract_dir: str) -> list[str]:
     """
     Extract all .tar.gz files to the specified directory.
     Returns the list of extracted file paths.
@@ -81,13 +80,10 @@ async def extract_files(local_paths: list[str], extract_dir: str) -> list[str]:
     logger.setLevel(logging.DEBUG)
     extracted_files = []
 
-    for local_path in local_paths:
-        logger.info(f"🧵 Extracting {local_path} to {extract_dir}")
-        with tarfile.open(local_path, "r:gz") as tar:
-            logger.debug(f"The file {local_path} will be uncompressed to the directory '{extract_dir}'.")
-            tar.extractall(path=extract_dir, filter="tar")
-            extracted_files.extend(tar.getnames())
-            logger.debug(f"Following files have been extracted: '{tar.getnames()}'.")
+    for path in files:
+        logger.info(f"🧵 Extracting {path} to {extract_dir}")
+        extracted_files = extract_tar(path, extract_dir)
+        logger.debug(f"Following files have been extracted: '{extracted_files}'.")
 
     return [os.path.join(extract_dir, f) for f in extracted_files]
 
