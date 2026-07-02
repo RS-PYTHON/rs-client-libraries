@@ -299,7 +299,7 @@ async def import_adf_from_obs(
     """
     # Import ADF from Object Storage
 
-    > Imports a set of *ADF files* into the *rs-catalog* from an object storage bucket.
+    Imports a set of *ADF files* into the *rs-catalog* from an object storage bucket.
 
     ---
 
