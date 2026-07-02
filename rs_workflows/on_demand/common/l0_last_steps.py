@@ -58,7 +58,7 @@ async def process_l0_last_steps(
             return
 
         # Satellite identifier
-        satellite_identifier = f"sentinel-{mission}{session[2].lower()}"
+        satellite_value = f"sentinel-{mission}{session[2].lower()}"
 
         # Published date
         published = item_session.properties.get("published")
@@ -75,7 +75,7 @@ async def process_l0_last_steps(
             external_variables={
                 "start_datetime": start_datetime,
                 "end_datetime": end_datetime,
-                "satellite_identifier": satellite_identifier,
+                "satellite": satellite_value,
             },
             dask_cluster_label=p.dask_cluster_label,
             processor_name=p.processor_name,

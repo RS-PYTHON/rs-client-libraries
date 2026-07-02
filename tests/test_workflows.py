@@ -148,7 +148,7 @@ async def test_dpr_processing(
 
     # Spy on function calls
     spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
-    spy_s3_upload_file = mocker.spy(prefect_utils, "s3_upload_file")
+    spy_s3_upload_bytes = mocker.spy(prefect_utils, "s3_upload_bytes")
     spy_s3_delete = mocker.spy(prefect_utils, "s3_delete")
     monkeypatch.setenv("RSPY_HOST_OSAM", "https://dummy-osam")
     mocker.patch(
@@ -241,11 +241,11 @@ async def test_dpr_processing(
 
     assert result_items == expected_items
 
-    # --- verify s3_upload_file was called with the expected destination (second arg) ---
-    upload_calls = spy_s3_upload_file.call_args_list
+    # --- verify the payload was uploaded in memory to the expected destination ---
+    upload_calls = spy_s3_upload_bytes.call_args_list
     assert len(upload_calls) == 1
     args = upload_calls[0].args
-    assert isinstance(args[0], (str, Path))  # temp file path
+    assert isinstance(args[0], bytes)  # in-memory payload contents
     assert args[1] == dpr_input.s3_payload_file  # destination S3 path
 
     # --- verify s3_delete was called with the payload file ---

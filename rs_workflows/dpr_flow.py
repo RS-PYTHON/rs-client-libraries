@@ -24,7 +24,6 @@ from datetime import timedelta
 # import datetime
 from os import path as osp
 from pathlib import Path
-from typing import Any
 
 import anyio
 from prefect import get_run_logger, task
@@ -110,27 +109,8 @@ def extract_products_and_zattrs(files: list[str], base_path: str):
 
 
 def read_zattrs_sync(path: str):
-    """
-    Download `.zattrs` file synchronously using prefect_utils.s3_download_file
-    and return parsed JSON dicts in memory.
-    """
-    with tempfile.NamedTemporaryFile() as temp:
-        s3_download_file_sync(path, str(temp.name), _sync=True)
-        with open(temp.name, encoding="utf-8") as f:
-            return json.load(f)
-
-
-def s3_download_file_sync(
-    s3_path: str,
-    to_path: str | Path,
-    **download_kwargs: Any,
-) -> str | Path:
-    """
-    Download a file from S3 synchronously.
-    """
-    s3_bucket, from_path = prefect_utils.get_s3_bucket(s3_path)
-    s3_bucket.download_object_to_path(from_path, str(to_path), **download_kwargs)
-    return to_path
+    """Read a `.zattrs` file from S3 synchronously and return the parsed JSON, in memory."""
+    return json.loads(prefect_utils.s3_read_bytes(path, _sync=True))  # type: ignore
 
 
 def create_stac_item(
