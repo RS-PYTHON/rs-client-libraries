@@ -116,7 +116,7 @@ def _get_output_bucket(
     if not output_bucket:
         raise ValueError(
             f"❌ No S3 bucket found for owner={owner_id}, "
-            "collection={target_collection}, product:type={product_type}",
+            f"collection={target_collection}, product:type={product_type}",
         )
     return output_bucket
 
@@ -297,7 +297,7 @@ async def create_new_stac_item(item_name: str, href: str) -> Item:
     item: Item = create_stac_item(
         eopf_origin_datetime=eopf_origin_datetime,
         eopf_feature=eopf_feature,
-        s3_data_location=href + item_name,
+        s3_data_location=href,
         product_name=cleaned_filename,
         dpr_processor="obs_import",
     )
