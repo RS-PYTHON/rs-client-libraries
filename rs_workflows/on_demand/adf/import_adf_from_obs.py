@@ -291,10 +291,10 @@ async def create_new_stac_item(item_name: str, href: str) -> Item:
 
 @flow(name="import-adf-from-obs")
 async def import_adf_from_obs(
-    owner: str,
     configuration: dict,
+    owner: str = "copernicus",
     obs_id: str = "PUBLICATION",
-    rehearsal_mode: bool = True,
+    rehearsal_mode: bool = False,
 ):
     """
     # Import ADF from Object Storage
