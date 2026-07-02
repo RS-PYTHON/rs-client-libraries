@@ -274,9 +274,9 @@ async def import_adf_from_obs(
 
     | Parameter | Type | Default | Description |
     |---|---|---|---|
-    | `owner` | `str` | *required* | Name of the user triggering the flow |
     | `configuration` | `dict` | *required* | JSON configuration (see format below) |
-    | `obs_id` | `str` | `"PUBLICATION"` | Object storage identifier for credentials |
+    | `owner` | `str` | `copernicus` | Name of the user triggering the flow |
+    | `obs_id` | `str` | `PUBLICATION` | Object storage identifier for credentials |
     | `rehearsal_mode` | `bool` | `True` | If `True`, STAC items are *not* published |
 
     > *Note:* The collection where ADF files are published is derived from `product:type` by default,
