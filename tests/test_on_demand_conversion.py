@@ -341,3 +341,44 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
 
     cleanup_submit_mock.assert_called_once_with(serialized_env, output_collection, safe_item_id)
     cleanup_future.result.assert_called_once()
+
+
+async def test_on_demand_conversion_raises_when_staging_produces_no_item(monkeypatch, mocker):
+    """A 'successful' staging that stages nothing fails with a clear error, not IndexError."""
+    owner_id = "test-owner"
+    conversion_input = ConversionIn(
+        env=FlowEnvArgs(owner_id=owner_id),
+        stac_input="https://catalog.test/collections/safe/items/S1A_IW_SLC_SAFE",
+        generated_product_to_collection_identifier=FlowGeneratedProduct(
+            name="S01SIWSLC",
+            product_type="S01SIWSLC",
+            collection_name="s01siwslc",
+        ),
+        owner_id=owner_id,
+        dask_cluster_label="dask-safe",
+        dask_cluster_instance="dask-instance-1",
+    )
+
+    mocker.patch.object(on_demand_conversion_flow, "get_run_logger", return_value=MagicMock())
+
+    flow_env_mock = MagicMock()
+    flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id=owner_id)
+    flow_env_mock.start_span.return_value = nullcontext()
+    catalog_client_mock = MagicMock()
+    catalog_client_mock.get_items.return_value = []  # staging staged nothing
+    flow_env_mock.rs_client.get_catalog_client.return_value = catalog_client_mock
+    monkeypatch.setattr(on_demand_conversion_flow, "FlowEnv", lambda env: flow_env_mock)
+
+    # Staging reports success even though no item was staged.
+    staging_future = MagicMock()
+    staging_future.result.return_value = {"stage-safe": {"status": "successful"}}
+    staging_task_mock = MagicMock()
+    staging_task_mock.submit.return_value = staging_future
+    mocker.patch.object(
+        on_demand_conversion_flow.staging_task,
+        "with_options",
+        return_value=staging_task_mock,
+    )
+
+    with pytest.raises(RuntimeError, match="Staging produced no catalog item"):
+        await on_demand_conversion_flow.on_demand_conversion.fn(conversion_input)

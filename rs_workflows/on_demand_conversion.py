@@ -224,6 +224,16 @@ async def on_demand_conversion(
         )
         logger.info(f"Retrieved catalog items after staging: {catalog_items.to_dict()}")
 
+        # Staging can report a "successful" job while staging nothing (e.g. when the
+        # requested assets don't match any asset of the input item), which leaves the
+        # collection empty. Fail explicitly instead of raising an opaque IndexError.
+        if not catalog_items.items:
+            raise RuntimeError(
+                f"Staging produced no catalog item for {stac_item_id!r} in collection "
+                f"{staging_collection!r}. Check that 'selected_assets' matches an asset "
+                f"name of the input item (e.g. 'product').",
+            )
+
         # Start from the staged catalog item; if it contains an archived SAFE asset,
         # step 2 will replace this with the uncompressed item.
         safe_item = catalog_items.items[0]
