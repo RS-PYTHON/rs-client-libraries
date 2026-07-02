@@ -77,7 +77,7 @@ async def extract_files(files: list[str], extract_dir: str) -> list[str]:
     """
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
-    extracted_files = []
+    extracted_files: list[str] = []
 
     for file in files:
         logger.info(f"🧵 Extracting {file} to {extract_dir}")
@@ -102,7 +102,7 @@ def _compute_target_collection(filename: str, override_collection: str | None) -
 
 
 def _get_output_bucket(
-    bucket_configuration: list[dict],
+    bucket_configuration: list[list[str]],
     owner_id: str,
     target_collection: str,
     product_type: str,
@@ -215,7 +215,9 @@ async def import_items(
 
         # Compute target S3 bucket
         product_type = filename[4:15].lower()
-        bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
+        bucket_configuration: list[list[str]] = fetch_csv_from_endpoint(
+            os.environ["RSPY_HOST_OSAM"] + "/internal/configuration",
+        )
         output_bucket = _get_output_bucket(bucket_configuration, flow_env.owner_id, target_collection, product_type)
         logger.info(f"🪣 Target S3 bucket: '{output_bucket}'")
 
