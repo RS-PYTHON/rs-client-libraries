@@ -42,7 +42,7 @@ from rs_workflows.payload_generator import (
     fetch_csv_from_endpoint,
     find_s3_output_bucket,
 )
-from rs_workflows.utils.catalog import get_single_catalog_item
+from rs_workflows.utils.catalog import get_single_catalog_item, published_stac_item
 
 
 @task(cache_policy=NO_CACHE)
