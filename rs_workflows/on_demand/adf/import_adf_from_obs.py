@@ -30,6 +30,7 @@ from prefect import flow, get_run_logger, task
 from prefect.cache_policies import NO_CACHE
 from pystac import Item
 
+from rs_client.stac.catalog_client import CatalogClient
 from rs_common.utils import strftime_millis
 from rs_workflows.catalog_flow import check_and_create_collection, publish
 from rs_workflows.dpr_flow import create_stac_item
@@ -95,7 +96,7 @@ async def extract_files(local_paths: list[str], extract_dir: str) -> list[str]:
 
 # TODO : migrate function to rs_workflows.utils.catalog.py
 @task
-async def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: str, force_publication: bool) -> None:
+async def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: str) -> None:
     """ "
     This method will create the collection in case it does not exists.
     Check if the item is already inside the collection.
@@ -104,39 +105,33 @@ async def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: st
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
-    # Assert that the collection is created, before searching item inside.
-    await check_and_create_collection(flow_env, collection_name)
+    logger.info(f"The STAC item 🧊 '{item.id}' will be published on the collection '{collection_name}'.")
+    items_metadata: list[DprProcessedItemMetadata] = []
+    publish_mapping: list[FlowGeneratedProduct] = []
 
-    logger.debug(f"Check if '{item.id}' is already published on the collection '{collection_name}'.")
-    result = await get_single_catalog_item(flow_env, item.id, [collection_name])
-    if not result:
-        logger.info(f"The STAC item 🧊 '{item.id}' will be published on the collection '{collection_name}'.")
-        items_metadata: list[DprProcessedItemMetadata] = []
-        publish_mapping: list[FlowGeneratedProduct] = []
+    items_metadata.append(
+        DprProcessedItemMetadata(
+            output_product_id=item.id,
+            product_type=item.properties.get("product:type"),
+            stac_item=item,
+        ),
+    )
 
-        items_metadata.append(
-            DprProcessedItemMetadata(
-                output_product_id=item.id,
-                product_type=item.properties.get("product:type"),
-                stac_item=item,
-            ),
-        )
+    publish_mapping.append(
+        FlowGeneratedProduct(
+            name=item.id,
+            product_type=item.properties.get("product:type"),
+            collection_name=collection_name,
+        ),
+    )
 
-        publish_mapping.append(
-            FlowGeneratedProduct(
-                name=item.id,
-                product_type=item.properties.get("product:type"),
-                collection_name=collection_name,
-            ),
-        )
-
-        logger.debug(f"items_metadata = {items_metadata}")
-        logger.debug(f"publish_mapping = {publish_mapping}")
-        await publish(
-            flow_env.serialize(),
-            publish_mapping,
-            items_metadata,
-        )
+    logger.debug(f"items_metadata = {items_metadata}")
+    logger.debug(f"publish_mapping = {publish_mapping}")
+    await publish(
+        flow_env.serialize(),
+        publish_mapping,
+        items_metadata,
+    )
 
 
 @task(cache_policy=NO_CACHE)
@@ -145,6 +140,8 @@ async def import_items(
     s3_client: boto3.client,
     extracted_files: list[str],
     output_path: str,
+    override_collection: str,
+    override: bool,
     extract_pattern: str,
     rehearsal_mode: bool,
 ) -> None:
@@ -171,10 +168,10 @@ async def import_items(
             # The file should be treated.
             logger.info(f"✅ This file match the pattern. It will be treated.")
 
-            # we define the collection
+            # Target collection computation
             item_product_type: str = filename[4:15].lower()
-            # TODO préciser la collection en cas de surcharge
-            target_collection: str = item_product_type
+            target_collection: str = override_collection if override_collection else item_product_type
+            logger.debug(f"The target collection is '{target_collection}'.")
 
             # Target bucket name computation
             bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
@@ -200,17 +197,32 @@ async def import_items(
                 )
 
             else:
-                # Import the data into the destination bucket
-                logger.info(
-                    f"📥 Copy filename '{filename}' into the bucket 🪣'{output_bucket}' on the path '{target_s3_key}'.",
-                )
-                s3_client.upload_file(file, output_bucket, f"{target_s3_key}{filename}")
+                # Assert that the collection is created, before searching item inside.
+                await check_and_create_collection(flow_env, target_collection)
 
-                # Push the item into the collection
-                logger.debug(
-                    f"Push STAC item into rs-catalog collection {target_collection}: {json.dumps(item.to_dict(), indent=2)}",
-                )
-                await published_stac_item(flow_env, item, target_collection, False)
+                # Check if the item is already inserted
+                logger.debug(f"Check if '{item.id}' is already published on the collection '{target_collection}'.")
+                result: Item | None = await get_single_catalog_item(flow_env, item.id, [target_collection])
+
+                if result and override:
+                    # We should delete the item from the catalog
+                    logger.info(f"Remove the STAC item 🧊'{item.id}' from collection '{target_collection}'.")
+                    catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+                    catalog_client.remove_item(target_collection, item.id, raise_for_status=False)
+                    result = None
+
+                if not result:
+                    # Import the data into the destination bucket
+                    logger.info(
+                        f"📥 Copy filename '{filename}' into the bucket 🪣'{output_bucket}' on the path '{target_s3_key}'.",
+                    )
+                    s3_client.upload_file(file, output_bucket, f"{target_s3_key}{filename}")
+
+                    # Push the item into the collection
+                    logger.debug(
+                        f"Push STAC item into rs-catalog collection {target_collection}: {json.dumps(item.to_dict(), indent=2)}",
+                    )
+                    await published_stac_item(flow_env, item, target_collection)
 
 
 def convert_date(input: str) -> str:
@@ -294,60 +306,60 @@ async def import_adf_from_obs(
     input_config = configuration["input"]
     output_config = configuration["output"]
 
-    input_dir: str
-    output_dir: str
-    with tempfile.TemporaryDirectory(dir=".", prefix="tmp", delete=False) as temp_dir:
+    with tempfile.TemporaryDirectory(dir=".", prefix="tmp", delete=True) as temp_dir:
         temp_path = Path(temp_dir)
-        input_dir = temp_path / "input"
-        output_dir = temp_path / "output"
+        input_dir: str = temp_path / "input"
+        output_dir: str = temp_path / "output"
         logger.info(f"Create input directory '{input_dir}' and output directory '{output_dir}'")
         input_dir.mkdir()
         output_dir.mkdir()
 
-    # Init flow environment and opentelemetry span
-    flow_env = FlowEnv(env)
-    with flow_env.start_span(__name__, "import-adfs-obs"):
-        logger.info(f"🪣 Retrieve credentials to access bucket linked to '{obs_id}'.")
+        # Init flow environment and opentelemetry span
+        flow_env = FlowEnv(env)
+        with flow_env.start_span(__name__, "import-adfs-obs"):
+            logger.info(f"🪣 Retrieve credentials to access bucket linked to '{obs_id}'.")
 
-        # Step 1: Connect to S3 with 2 differents settings
-        s3_client_input = boto3.client(
-            "s3",
-            endpoint_url=os.environ[f"S3_{obs_id}_ENDPOINT"],
-            aws_access_key_id=os.environ[f"S3_{obs_id}_ACCESSKEY"],
-            aws_secret_access_key=os.environ[f"S3_{obs_id}_SECRETKEY"],
-            config=Config(signature_version="s3v4"),
-            region_name=os.environ[f"S3_{obs_id}_REGION"],
-        )
-        logger.debug(f"s3 client to retrieve input has been created.")
+            # Step 1: Connect to S3 with 2 differents settings
+            s3_client_input = boto3.client(
+                "s3",
+                endpoint_url=os.environ[f"S3_{obs_id}_ENDPOINT"],
+                aws_access_key_id=os.environ[f"S3_{obs_id}_ACCESSKEY"],
+                aws_secret_access_key=os.environ[f"S3_{obs_id}_SECRETKEY"],
+                config=Config(signature_version="s3v4"),
+                region_name=os.environ[f"S3_{obs_id}_REGION"],
+            )
+            logger.debug(f"s3 client to retrieve input has been created.")
 
-        s3_client_output = boto3.client(
-            "s3",
-            endpoint_url=os.environ["S3_ENDPOINT"],
-            aws_access_key_id=os.environ["S3_ACCESSKEY"],
-            aws_secret_access_key=os.environ["S3_SECRETKEY"],
-            config=Config(signature_version="s3v4"),
-            region_name=os.environ["S3_REGION"],
-        )
-        logger.debug(f"s3 client to copy output has been created.")
+            s3_client_output = boto3.client(
+                "s3",
+                endpoint_url=os.environ["S3_ENDPOINT"],
+                aws_access_key_id=os.environ["S3_ACCESSKEY"],
+                aws_secret_access_key=os.environ["S3_SECRETKEY"],
+                config=Config(signature_version="s3v4"),
+                region_name=os.environ["S3_REGION"],
+            )
+            logger.debug(f"s3 client to copy output has been created.")
 
-        # Step 2: Download ADF files
-        downloaded_files = await download_adf_files(
-            s3_client_input,
-            input_config["bucket"],
-            input_config["path"],
-            input_config["files"],
-            input_dir,
-        )
+            # Step 2: Download ADF files
+            downloaded_files = await download_adf_files(
+                s3_client_input,
+                input_config["bucket"],
+                input_config["path"],
+                input_config["files"],
+                input_dir,
+            )
 
-        # Step 3: Extract files
-        extracted_files = await extract_files(downloaded_files, output_dir)
+            # Step 3: Extract files
+            extracted_files = await extract_files(downloaded_files, output_dir)
 
-        # Step 4: Import data and create STAC item
-        target_keys = await import_items(
-            flow_env,
-            s3_client_output,
-            extracted_files,
-            output_config["path"],
-            input_config["extract_pattern"],
-            rehearsal_mode,
-        )
+            # Step 4: Import data and create STAC item
+            target_keys = await import_items(
+                flow_env,
+                s3_client_output,
+                extracted_files,
+                output_config["additional_path"],
+                output_config["collection"],
+                output_config["override"],
+                input_config["extract_pattern"],
+                rehearsal_mode,
+            )
