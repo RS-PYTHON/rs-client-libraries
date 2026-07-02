@@ -120,7 +120,7 @@ async def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: st
     publish_mapping.append(
         FlowGeneratedProduct(
             name=item.id,
-            product_type=item.properties.get("product:type"),
+            product_type=str(item.properties.get("product:type")),
             collection_name=collection_name,
         ),
     )
@@ -166,7 +166,7 @@ async def import_items(
 
         if any(fnmatch.fnmatch(filename, p) for p in patterns):
             # The file should be treated.
-            logger.info(f"✅ This file match the pattern. It will be treated.")
+            logger.info("✅ This file match the pattern. It will be treated.")
 
             # Target collection computation
             item_product_type: str = filename[4:15].lower()
@@ -193,7 +193,8 @@ async def import_items(
 
             if rehearsal_mode:
                 logger.info(
-                    f"[REHEARSAL] Would create STAC item into collection {target_collection}: {json.dumps(item.to_dict(), indent=2)}",
+                    f"[REHEARSAL] Would create STAC item into collection {target_collection}:",
+                    f" {json.dumps(item.to_dict(), indent=2)}",
                 )
 
             else:
@@ -214,22 +215,24 @@ async def import_items(
                 if not result:
                     # Import the data into the destination bucket
                     logger.info(
-                        f"📥 Copy filename '{filename}' into the bucket 🪣'{output_bucket}' on the path '{target_s3_key}'.",
+                        f"📥 Copy filename '{filename}' into the bucket"
+                        " 🪣'{output_bucket}' on the path '{target_s3_key}'.",
                     )
                     s3_client.upload_file(file, output_bucket, f"{target_s3_key}{filename}")
 
                     # Push the item into the collection
                     logger.debug(
-                        f"Push STAC item into rs-catalog collection {target_collection}: {json.dumps(item.to_dict(), indent=2)}",
+                        f"Push STAC item into rs-catalog collection {target_collection}:"
+                        f" {json.dumps(item.to_dict(), indent=2)}",
                     )
                     await published_stac_item(flow_env, item, target_collection)
 
 
-def convert_date(input: str) -> str:
+def convert_date(input_date: str) -> str:
     """
     Convert input format YYYYmmddTHHMMSS to ("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
     """
-    return strftime_millis(datetime.strptime(input, "%Y%m%dT%H%M%S"))
+    return strftime_millis(datetime.strptime(input_date, "%Y%m%dT%H%M%S"))
 
 
 @task
@@ -294,7 +297,53 @@ async def import_adf_from_obs(
     rehearsal_mode: bool = True,
 ):
     """
-    Main flow: import ADF files from OBS, extract, copy to target, and create STAC items.
+    # Import ADF from Object Storage
+
+    > Imports a set of *ADF files* into the *rs-catalog* from an object storage bucket.
+
+    ---
+
+    ## Workflow Steps
+
+    1. *Download* — Retrieves the compressed ADF files from the object storage
+    2. *Decompress* — Extracts the archive contents
+    3. *Filter* — Selects only the relevant ADF files to import
+    4. *Publish* — Pushes the selected files to the rs-catalog as STAC items
+
+    ---
+
+    ## Parameters
+
+    | Parameter | Type | Default | Description |
+    |---|---|---|---|
+    | `owner` | `str` | *required* | Name of the user triggering the flow |
+    | `configuration` | `dict` | *required* | JSON configuration (see format below) |
+    | `obs_id` | `str` | `"PUBLICATION"` | Object storage identifier for credentials |
+    | `rehearsal_mode` | `bool` | `True` | If `True`, STAC items are *not* published |
+
+    > *Note:* The collection where ADF files are published is derived from `product:type` by default,
+    > but can be *overridden* via the configuration.
+
+    ---
+
+    ## Configuration Format example
+
+    ```json
+    {
+        "input": {
+            "bucket": "rs-f1-archive",
+            "path": "S3_OL1/3.23/S3_OL1_3.23_2023-06-20/Ancillary_Data",
+            "files": ["S3_OL1_3.23_2023-06-20_ADF.tar.gz"],
+            "extract_pattern": "S3__*.tgz|S3A_*.tgz"
+        },
+        "output": {
+            "additional_path": "",
+            "collection": "adf-olci-baseline-3-23",
+            "override": false
+        }
+    }
+    ```
+    ---
     """
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
@@ -307,10 +356,10 @@ async def import_adf_from_obs(
     output_config = configuration["output"]
 
     with tempfile.TemporaryDirectory(dir=".", prefix="tmp", delete=True) as temp_dir:
-        temp_path = Path(temp_dir)
-        input_dir: str = temp_path / "input"
-        output_dir: str = temp_path / "output"
-        logger.info(f"Create input directory '{input_dir}' and output directory '{output_dir}'")
+        temp_path: Path = Path(temp_dir)
+        input_dir: Path = temp_path / "input"
+        output_dir: Path = temp_path / "output"
+        logger.info(f"Create input directory '{str(input_dir)}' and output directory '{str(output_dir)}'")
         input_dir.mkdir()
         output_dir.mkdir()
 
@@ -328,7 +377,7 @@ async def import_adf_from_obs(
                 config=Config(signature_version="s3v4"),
                 region_name=os.environ[f"S3_{obs_id}_REGION"],
             )
-            logger.debug(f"s3 client to retrieve input has been created.")
+            logger.debug("Get s3 client to retrieve input has been created.")
 
             s3_client_output = boto3.client(
                 "s3",
@@ -338,7 +387,7 @@ async def import_adf_from_obs(
                 config=Config(signature_version="s3v4"),
                 region_name=os.environ["S3_REGION"],
             )
-            logger.debug(f"s3 client to copy output has been created.")
+            logger.debug("Get s3 client to copy output has been created.")
 
             # Step 2: Download ADF files
             downloaded_files = await download_adf_files(
@@ -346,14 +395,14 @@ async def import_adf_from_obs(
                 input_config["bucket"],
                 input_config["path"],
                 input_config["files"],
-                input_dir,
+                str(input_dir),
             )
 
             # Step 3: Extract files
-            extracted_files = await extract_files(downloaded_files, output_dir)
+            extracted_files = await extract_files(downloaded_files, str(output_dir))
 
             # Step 4: Import data and create STAC item
-            target_keys = await import_items(
+            await import_items(
                 flow_env,
                 s3_client_output,
                 extracted_files,
