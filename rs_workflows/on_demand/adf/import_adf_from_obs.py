@@ -22,6 +22,7 @@ import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
 
 import boto3
 from botocore.client import Config
@@ -83,9 +84,101 @@ async def extract_files(files: list[str], extract_dir: str) -> list[str]:
     for file in files:
         logger.info(f"🧵 Extracting {file} to {extract_dir}")
         count, extracted_files = extract_tar(Path(file), Path(extract_dir))
-        logger.debug(f"{count} files have been extracted. list : {extract_files}.")
+        logger.debug(f"{count} files have been extracted:\n" + "\n".join(f"- {f}" for f in extract_files))
 
     return [os.path.join(extract_dir, f) for f in extracted_files]
+
+
+def _filter_files_by_pattern(files: list[str], extract_pattern: str) -> list[str]:
+    """Filter files matching at least one pattern in `extract_pattern` (split by '|')."""
+    patterns = extract_pattern.split("|")
+    return [file for file in files if any(fnmatch.fnmatch(Path(file).name, p) for p in patterns)]
+
+
+def _compute_target_collection(filename: str, override_collection: str | None) -> str:
+    """Compute the target collection from the filename or override."""
+    if override_collection:
+        return override_collection
+    # Extract product type
+    return filename[4:15].lower()
+
+
+def _get_output_bucket(
+    bucket_configuration: list[dict],
+    owner_id: str,
+    target_collection: str,
+    product_type: str,
+) -> str:
+    """
+    Find the S3 output bucket from the configuration.
+    """
+    output_bucket = find_s3_output_bucket(bucket_configuration, owner_id, target_collection, product_type)
+    if not output_bucket:
+        raise ValueError(
+            f"❌ No S3 bucket found for owner={owner_id}, "
+            "collection={target_collection}, product:type={product_type}",
+        )
+    return output_bucket
+
+
+def _build_s3_key(owner_id: str, target_collection: str, additional_path: str, filename: str) -> str:
+    """
+    Build the target S3 key path.
+    """
+    additional_path = additional_path.strip("/")
+    if additional_path:
+        additional_path += "/"
+    return f"{owner_id}/{target_collection}/{additional_path}{filename}"
+
+
+async def _handle_rehearsal_mode(item: Item, target_collection: str) -> None:
+    """
+    Log the STAC item that would be created in rehearsal mode.
+    """
+    logger = get_run_logger()
+    logger.info(
+        f"[REHEARSAL] Would create STAC item in collection '{target_collection}':\n"
+        f"{json.dumps(item.to_dict(), indent=2)}",
+    )
+
+
+async def _handle_production_mode(
+    flow_env: FlowEnv,
+    s3_client: boto3.client,
+    file: str,
+    output_bucket: str,
+    target_s3_key: str,
+    item: Item,
+    target_collection: str,
+    override: bool,
+) -> None:
+    """Handle file upload and STAC item publication in production mode."""
+    logger = get_run_logger()
+
+    # Ensure the collection exists
+    await check_and_create_collection(flow_env, target_collection)
+
+    # Check if the item already exists
+    logger.debug(f"Checking if item '{item.id}' already exists in collection '{target_collection}'.")
+    existing_item = await get_single_catalog_item(flow_env, item.id, [target_collection])
+
+    if existing_item and override:
+        logger.info(f"Removing existing STAC item 🧊 '{item.id}' from collection '{target_collection}'.")
+        catalog_client = flow_env.rs_client.get_catalog_client()
+        catalog_client.remove_item(target_collection, item.id, raise_for_status=False)
+        existing_item = None
+
+    if not existing_item:
+        # Upload the file to S3
+        logger.info(f"📥 Uploading file '{file}' to bucket 🪣 '{output_bucket}' at path '{target_s3_key}'.")
+        s3_client.upload_file(file, output_bucket, target_s3_key)
+
+        # Publish the STAC item
+        logger.info(
+            f"Publishing STAC item 🧊 '{item.id}' to collection '{target_collection}':\n"
+            f"{json.dumps(item.to_dict(), indent=2)}",
+        )
+        await published_stac_item(flow_env, item, target_collection)
 
 
 @task(cache_policy=NO_CACHE)
@@ -94,92 +187,61 @@ async def import_items(
     s3_client: boto3.client,
     extracted_files: list[str],
     output_path: str,
-    override_collection: str,
-    override: bool,
-    extract_pattern: str,
-    rehearsal_mode: bool,
+    override_collection: str | None = None,
+    override: bool = False,
+    extract_pattern: str = "*",
+    rehearsal_mode: bool = False,
 ) -> None:
     """
-    Copy files matching the extract_pattern to the target OBS bucket.
-    If rehearsal_mode is True, only describe the action.
-    Returns the list of target S3 keys.
+    Copy files matching `extract_pattern` to the target S3 bucket and STAC catalog.
+    If `rehearsal_mode` is True, only log the actions without executing them.
     """
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
-    logger.debug(f"Files will be filtered with pattern '{extract_pattern}'.")
-    patterns = extract_pattern.split("|")
+    # Step 1: Filter files by pattern
+    logger.debug(f"Filtering files with pattern: '{extract_pattern}'")
+    matching_files = _filter_files_by_pattern(extracted_files, extract_pattern)
+    if not matching_files:
+        logger.warning("⚠️ No files matched the extraction pattern. Exiting.")
+        return
 
-    for file in extracted_files:
+    # Step 2: Process each matching file
+    for file in matching_files:
         filename = Path(file).name
-        logger.debug(f"Check for filename '{filename}'.")
+        logger.debug(f"✅ The file '{filename}' matchs the pattern. Processing...")
 
-        additional_path = output_path.strip("/")
-        if additional_path != "":
-            additional_path += "/"
+        # Compute target collection
+        target_collection = _compute_target_collection(filename, override_collection)
+        logger.info(f"Target collection: '{target_collection}'")
 
-        if any(fnmatch.fnmatch(filename, p) for p in patterns):
-            # The file should be treated.
-            logger.info("✅ This file match the pattern. It will be treated.")
+        # Compute target S3 bucket
+        product_type = filename[4:15].lower()
+        bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
+        output_bucket = _get_output_bucket(bucket_configuration, flow_env.owner_id, target_collection, product_type)
+        logger.info(f"🪣 Target S3 bucket: '{output_bucket}'")
 
-            # Target collection computation
-            item_product_type: str = filename[4:15].lower()
-            target_collection: str = override_collection if override_collection else item_product_type
-            logger.debug(f"The target collection is '{target_collection}'.")
+        # Compute S3 key
+        target_s3_key = _build_s3_key(flow_env.owner_id, target_collection, output_path, filename)
+        logger.debug(f"Target S3 key: '{target_s3_key}'")
 
-            # Target bucket name computation
-            bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
-            output_bucket: str = find_s3_output_bucket(
-                bucket_configuration,
-                flow_env.owner_id,
+        # Create STAC item
+        item = await create_new_stac_item(filename, f"s3://{output_bucket}/{target_s3_key}")
+
+        # Handle rehearsal or production mode
+        if rehearsal_mode:
+            await _handle_rehearsal_mode(item, target_collection)
+        else:
+            await _handle_production_mode(
+                flow_env,
+                s3_client,
+                file,
+                output_bucket,
+                target_s3_key,
+                item,
                 target_collection,
-                item_product_type,
+                override,
             )
-            logger.info(f"🪣 The target bucket will be {output_bucket}.")
-
-            # compute the path on the bucket
-            # parent_dir = os.path.dirname(file)
-            # relative_path = os.path.relpath(file, parent_dir)
-            target_s3_key = f"{flow_env.owner_id}/{target_collection}/{additional_path}"
-
-            # Item creation
-            item: Item = await create_new_stac_item(filename, f"s3://{output_bucket}/{target_s3_key}")
-
-            if rehearsal_mode:
-                logger.info(
-                    f"[REHEARSAL] Would create STAC item into collection {target_collection}:",
-                    f" {json.dumps(item.to_dict(), indent=2)}",
-                )
-
-            else:
-                # Assert that the collection is created, before searching item inside.
-                await check_and_create_collection(flow_env, target_collection)
-
-                # Check if the item is already inserted
-                logger.debug(f"Check if '{item.id}' is already published on the collection '{target_collection}'.")
-                result: Item | None = await get_single_catalog_item(flow_env, item.id, [target_collection])
-
-                if result and override:
-                    # We should delete the item from the catalog
-                    logger.info(f"Remove the STAC item 🧊'{item.id}' from collection '{target_collection}'.")
-                    catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-                    catalog_client.remove_item(target_collection, item.id, raise_for_status=False)
-                    result = None
-
-                if not result:
-                    # Import the data into the destination bucket
-                    logger.info(
-                        f"📥 Copy filename '{filename}' into the bucket"
-                        " 🪣'{output_bucket}' on the path '{target_s3_key}'.",
-                    )
-                    s3_client.upload_file(file, output_bucket, f"{target_s3_key}{filename}")
-
-                    # Push the item into the collection
-                    logger.debug(
-                        f"Push STAC item into rs-catalog collection {target_collection}:"
-                        f" {json.dumps(item.to_dict(), indent=2)}",
-                    )
-                    await published_stac_item(flow_env, item, target_collection)
 
 
 def convert_date(input_date: str) -> str:
@@ -331,7 +393,7 @@ async def import_adf_from_obs(
                 config=Config(signature_version="s3v4"),
                 region_name=os.environ[f"S3_{obs_id}_REGION"],
             )
-            logger.debug("Get s3 client to retrieve input has been created.")
+            logger.debug("Get s3 client to retrieve input.")
 
             s3_client_output = boto3.client(
                 "s3",
@@ -341,7 +403,7 @@ async def import_adf_from_obs(
                 config=Config(signature_version="s3v4"),
                 region_name=os.environ["S3_REGION"],
             )
-            logger.debug("Get s3 client to copy output has been created.")
+            logger.debug("Get s3 client to copy output.")
 
             # Step 2: Download ADF files
             downloaded_files = await download_adf_files(
