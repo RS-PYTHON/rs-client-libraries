@@ -230,7 +230,7 @@ async def import_items(
 
         # Handle rehearsal or production mode
         if rehearsal_mode:
-            await _handle_rehearsal_mode(item, target_collection)
+            _handle_rehearsal_mode(item, target_collection)
         else:
             await _handle_production_mode(
                 flow_env,
