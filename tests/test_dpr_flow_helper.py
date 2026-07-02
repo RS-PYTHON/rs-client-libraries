@@ -139,8 +139,6 @@ def test_extract_products_and_zattrs():
         # Not .zattrs files (should be excluded)
         "s3://my-bucket/output/product_e/data.json",
         "s3://my-bucket/output/product_f/metadata.xml",
-        # Too shallow - directly under base_path (should be excluded)
-        "s3://my-bucket/output/.zattrs",
         # Other files in product directories (should be excluded)
         "s3://my-bucket/output/product_a/data.zarr",
         "s3://my-bucket/output/product_b/config.yaml",
@@ -153,6 +151,25 @@ def test_extract_products_and_zattrs():
     assert ("product_a", "s3://my-bucket/output/product_a/.zattrs") in result
     assert ("product_b", "s3://my-bucket/output/product_b/.zattrs") in result
     assert ("S03OLCL0_", "s3://my-bucket/output/S03OLCL0_/.zattrs") in result
+
+
+def test_extract_products_and_zattrs_prefers_root_zattrs():
+    """
+    Verify that a .zattrs file directly under the output path is treated as
+    the product metadata and nested group metadata is ignored.
+    """
+    base_path = "s3://my-bucket/output/product-root"
+
+    files = [
+        "s3://my-bucket/output/product-root/.zattrs",
+        "s3://my-bucket/output/product-root/conditions/.zattrs",
+        "s3://my-bucket/output/product-root/measurements/.zattrs",
+        "s3://my-bucket/output/product-root/quality/.zattrs",
+    ]
+
+    result = extract_products_and_zattrs(files, base_path)
+
+    assert result == [("product-root", "s3://my-bucket/output/product-root/.zattrs")]
 
 
 def test_extract_products_and_zattrs_with_trailing_slash():
@@ -174,6 +191,45 @@ def test_extract_products_and_zattrs_with_trailing_slash():
     assert ("product_b", "s3://my-bucket/output/product_b/.zattrs") in result
 
 
+def test_extract_products_and_zattrs_with_products_container():
+    """
+    Verify that extract_products_and_zattrs supports outputs grouped under
+    a products container without accepting arbitrary nested .zattrs files.
+    """
+    base_path = "s3://my-bucket/output"
+
+    files = [
+        "s3://my-bucket/output/products/product_a/.zattrs",
+        "s3://my-bucket/output/products/product_b/.zattrs",
+        "s3://my-bucket/output/products/product_c/group/.zattrs",
+        "s3://my-bucket/output/product_d/subdir/.zattrs",
+    ]
+
+    result = extract_products_and_zattrs(files, base_path)
+
+    assert result == [
+        ("product_a", "s3://my-bucket/output/products/product_a/.zattrs"),
+        ("product_b", "s3://my-bucket/output/products/product_b/.zattrs"),
+    ]
+
+
+def test_extract_products_and_zattrs_ignores_similar_prefixes():
+    """
+    Verify that paths outside the base path are ignored even when their
+    string prefix is similar to base_path.
+    """
+    base_path = "s3://my-bucket/output"
+
+    files = [
+        "s3://my-bucket/output-extra/product_a/.zattrs",
+        "s3://my-bucket/output/product_b/.zattrs",
+    ]
+
+    result = extract_products_and_zattrs(files, base_path)
+
+    assert result == [("product_b", "s3://my-bucket/output/product_b/.zattrs")]
+
+
 def test_extract_products_and_zattrs_empty_list():
     """
     Verify that extract_products_and_zattrs returns an empty list when
@@ -192,7 +248,6 @@ def test_extract_products_and_zattrs_no_matches():
     files = [
         "s3://my-bucket/output/product_a/data.json",
         "s3://my-bucket/output/product_b/subdir/.zattrs",
-        "s3://my-bucket/output/.zattrs",
     ]
 
     result = extract_products_and_zattrs(files, base_path)
