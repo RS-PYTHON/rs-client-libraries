@@ -129,7 +129,7 @@ def _build_s3_key(owner_id: str, target_collection: str, additional_path: str, f
     return f"{owner_id}/{target_collection}/{additional_path}{filename}"
 
 
-async def _handle_rehearsal_mode(item: Item, target_collection: str) -> None:
+def _handle_rehearsal_mode(item: Item, target_collection: str) -> None:
     """
     Log the STAC item that would be created in rehearsal mode.
     """
@@ -261,7 +261,6 @@ async def create_new_stac_item(item_name: str, href: str) -> Item:
     logger.setLevel(logging.DEBUG)
 
     # This work for ADF provided by the MPC
-    # TODO: Adapt the code for ADF coming from other source ( if needed )
     # Extract the dates, product_type, platform
     cleaned_filename = re.sub(r"\.(zarr|ZARR|tgz|zip|ZIP|TGZ)$", "", item_name)
     dates = re.findall(r"\d{8}T\d{6}", item_name)
