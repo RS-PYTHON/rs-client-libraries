@@ -109,7 +109,11 @@ def read_zarr_stac_item(zarr_uri: str) -> Item:
 
     # Reuse the existing DPR STAC builder so the SAFE conversion output follows
     # the same catalog item shape as the other DPR products.
-    item_id = os.path.basename(zarr_uri.removesuffix(".zarr"))
+    item_id = os.path.basename(zarr_uri)
+    # Remove .zarr suffix if the id looks like a valid EOPF id, otherwise keep it
+    # to avoid potential conflict with existing legacy product in catalogue
+    if item_id.startswith("S0"):
+        item_id = item_id.removesuffix(".zarr")
     return create_stac_item(
         eopf_origin_datetime=None,
         eopf_feature=stac_discovery,
