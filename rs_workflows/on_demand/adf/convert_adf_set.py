@@ -385,7 +385,8 @@ async def schedule_conversion_flow(
                     github_repository = step_config.get("repository")
                     github_branch = step_config.get("branch", "develop")  # "develop" by default
         logger.info(
-            f"Work pool name: {work_pool_name}, GitHub repository: {github_repository}, GitHub branch: {github_branch}",
+            "Schedule the flow 'adf_conversion_scheduled' on the Work pool ",
+            f"name: {work_pool_name}, GitHub repository: {github_repository}, GitHub branch: {github_branch}",
         )
 
     flow_obj = await cast(
@@ -439,7 +440,7 @@ async def adf_conversion_scheduled(
             "end_datetime": strftime_millis(stop),
         },
     )
-    logger.debug(f"The CQL2 used for the conversion is {cql2_filter}")
+    logger.debug(f"🧹 The CQL2 used for the conversion is {cql2_filter}")
 
     flow_parameters: AdfProcessIn = AdfProcessIn(
         env=env,
