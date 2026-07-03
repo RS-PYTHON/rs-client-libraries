@@ -81,7 +81,7 @@ async def test_on_demand_conversion_helpers_cover_mapping_zarr_and_safe_task(tmp
     # 2. Zarr STAC discovery.
     # read_zarr_stac_item reads the root .zattrs file written by EOPF and builds
     # the STAC item through the same create_stac_item helper used by DPR flows.
-    zarr_dir = tmp_path / "S1A_SAFE_CONVERTED.zarr"
+    zarr_dir = tmp_path / "S01SIWSLC_SAFE_CONVERTED.zarr"
     zarr_dir.mkdir()
     (zarr_dir / ".zattrs").write_text(
         json.dumps(
@@ -101,9 +101,9 @@ async def test_on_demand_conversion_helpers_cover_mapping_zarr_and_safe_task(tmp
 
     stac_item = on_demand_conversion_flow.read_zarr_stac_item(str(zarr_dir))
 
-    assert stac_item.id == "S1A_SAFE_CONVERTED"
+    assert stac_item.id == "S01SIWSLC_SAFE_CONVERTED"
     assert stac_item.properties["product:type"] == output_product_type
-    assert stac_item.assets["S1A_SAFE_CONVERTED"].href == str(zarr_dir)
+    assert stac_item.assets["S01SIWSLC_SAFE_CONVERTED"].href == str(zarr_dir)
 
     # Missing stac_discovery metadata is treated as a conversion output problem
     # and should fail before publication.
