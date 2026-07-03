@@ -83,7 +83,8 @@ async def test_convert_adf_group_invalid_configuration_format(mocker):
     _logger(mocker)
     now = datetime.now(timezone.utc)
     with pytest.raises(ValueError, match="❌ Configuration has got an invalid format."):
-        await cas.convert_adf_group.fn(now - timedelta(days=1), now + timedelta(days=1), "wrong")  # type: ignore[arg-type]
+        await cas.convert_adf_group.fn
+        (now - timedelta(days=1), now + timedelta(days=1), "wrong")  # type: ignore[arg-type]
 
 
 async def test_convert_adf_group_past_only(mocker):
