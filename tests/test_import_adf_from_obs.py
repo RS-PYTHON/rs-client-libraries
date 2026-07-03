@@ -23,7 +23,7 @@ import pytest
 from pystac import Item
 
 from rs_workflows.flow_utils import FlowEnv
-from rs_workflows.on_demand.adf.import_adf_from_obs import (  # _get_output_bucket,; _handle_production_mode,; _handle_rehearsal_mode,
+from rs_workflows.on_demand.adf.import_adf_from_obs import (
     _build_s3_key,
     _compute_target_collection,
     _filter_files_by_pattern,
