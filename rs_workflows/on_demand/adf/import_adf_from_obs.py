@@ -354,7 +354,7 @@ async def import_adf_from_obs(
         "output": {
             "additional_path": "",
             "collection": "adf-olci-baseline-3-23",
-            "override": false
+            "override": False
         }
     }
     ```
