@@ -110,8 +110,8 @@ async def convert_adf_group(
         )
 
     # Some checks
-    if configuration is None:
-        raise FileExistsError("❌ Configuration is missing.")
+    if not isinstance(configuration, dict):
+        raise ValueError("❌ Configuration has got an invalid format.")
 
     satellite: str | None = configuration["satellite"]
     logger.debug(f"read from the 'configuration' : satellite = {satellite}")
