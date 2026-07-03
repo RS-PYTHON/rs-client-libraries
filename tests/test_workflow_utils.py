@@ -253,6 +253,8 @@ async def test_process_asset_returns_zarr_store_href(
     mock_workflow_utils_logger,
 ):
     """Test normalized Zarr assets return the store root, not an internal chunk file."""
+    product_name = "S00__ADF_GETAS_20000101T000000_21000101T000000_20260612T074319.zarr"
+    base_uri = "s3://example-bucket/generic-prefix/TEST_FLOW_AUXIP/"
     download_mock = AsyncMock()
     upload_mock = AsyncMock()
     delete_mock = MagicMock()
@@ -274,25 +276,16 @@ async def test_process_asset_returns_zarr_store_href(
         workflow_utils,
         "get_upload_prefix",
         MagicMock(
-            return_value=(
-                "s3://rs-dev-cluster-temp/opadeanu/TEST_FLOW_AUXIP/"
-                "S00__ADF_GETAS_20000101T000000_21000101T000000_20260612T074319.zarr/"
-            ),
+            return_value=f"{base_uri}{product_name}/",
         ),
     )
 
     result = await workflow_utils.process_asset(
-        (
-            "s3://rs-dev-cluster-temp/opadeanu/TEST_FLOW_AUXIP/"
-            "S00__ADF_GETAS_20000101T000000_21000101T000000_20260612T074319.zarr.zip"
-        ),
-        "S00__ADF_GETAS_20000101T000000_21000101T000000_20260612T074319.zarr.zip",
+        f"{base_uri}{product_name}.zip",
+        f"{product_name}.zip",
     )
 
-    assert result == (
-        "s3://rs-dev-cluster-temp/opadeanu/TEST_FLOW_AUXIP/"
-        "S00__ADF_GETAS_20000101T000000_21000101T000000_20260612T074319.zarr"
-    )
+    assert result == f"{base_uri}{product_name}"
     upload_mock.assert_awaited_once()
     delete_mock.assert_called_once()
 
