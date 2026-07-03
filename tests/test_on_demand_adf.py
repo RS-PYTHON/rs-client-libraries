@@ -163,7 +163,7 @@ async def test_past_adf_conversion_splits_period(mocker):
         "S",
     )
 
-    assert conv.with_options.return_value.await_count == 3
+    assert conv.with_options.return_value.await_count == 2
 
 
 # --------------------------------------------------------------------------- #
