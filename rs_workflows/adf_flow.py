@@ -24,10 +24,11 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 from dateutil.parser import parse as parse_date
 from prefect import flow, get_run_logger, task
+from pydantic.fields import FieldInfo
 from pystac import Asset, Item
 
 from rs_common.prefect_utils import s3_upload_dir, s3_upload_file
@@ -178,7 +179,8 @@ def resolve_source_name(mappings: list[AuxiliaryProductMapping], product_type: s
     for mapping in mappings:
         if mapping.product_type == product_type:
             return mapping.source
-    return AuxiliaryProductMapping.model_fields["source"].default
+    fields = cast(dict[str, FieldInfo], AuxiliaryProductMapping.model_fields)
+    return fields["source"].default
 
 
 def normalize_stac_datetime_value(value: str) -> str:

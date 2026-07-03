@@ -388,7 +388,7 @@ async def schedule_conversion_flow(
                     github_repository = step_config.get("repository")
                     github_branch = step_config.get("branch", "develop")  # "develop" by default
         logger.info(
-            "Schedule the flow 'adf_conversion_scheduled' on the Work pool ",
+            "Schedule the flow 'adf_conversion_scheduled' on the Work pool "
             f"name: {work_pool_name}, GitHub repository: {github_repository}, GitHub branch: {github_branch}",
         )
 
