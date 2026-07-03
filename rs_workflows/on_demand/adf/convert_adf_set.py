@@ -88,7 +88,8 @@ async def convert_adf_group(
         "auxiliary-product-to-collection-identifier": [
             {
                 "product_type": "AX___MA1_AX",
-                "collection_name": "adfs_old_format"
+                "collection_name": "adfs_old_format",
+                "source": "catalog"
             },
             {
                 "product_type": "ADF_ECMWA",
@@ -97,6 +98,8 @@ async def convert_adf_group(
         ]
     }
     ```
+      > By default `source` is set to `AUXIP` and it is only taken into
+      > account for input data.
     ---
     """
     logger = get_run_logger()
