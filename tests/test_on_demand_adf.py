@@ -86,8 +86,8 @@ async def test_convert_adf_group_invalid_configuration_format(mocker):
         await cas.convert_adf_group.fn(
             now - timedelta(days=1),
             now + timedelta(days=1),
-            "wrong",
-        )  # type: ignore[arg-type]
+            "wrong",  # type: ignore[arg-type]
+        )
 
 
 async def test_convert_adf_group_past_only(mocker):
