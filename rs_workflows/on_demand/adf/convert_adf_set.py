@@ -194,7 +194,7 @@ def compute_cql2(cql2_query_name: str, dta: int, dtb: int, satellite: str | None
     except OSError as e:
         logger.error(f"❌ OS error while reading file '{CQL2_FILTERS_PATH}': {e}")
 
-    logger.debug(f"Read CQL2 filter content from file '{CQL2_FILTERS_PATH}' : {cql2_json}")
+    logger.debug(f"🧹 Read CQL2 filter content from file '{CQL2_FILTERS_PATH}' : {cql2_json}")
 
     # Find the filter
     cql2_temp = next(entry for entry in cql2_json if entry["name"] == cql2_query_name)
@@ -230,7 +230,7 @@ async def past_adf_conversion(
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
-    logger.info("Computing cql2_filter without start_datetime and end_datetime...")
+    logger.info("🧹 Computing cql2_filter without start_datetime and end_datetime...")
     cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb, satellite)
 
     # Scheduling according to the period_in_hours
@@ -247,7 +247,7 @@ async def past_adf_conversion(
                 "end_datetime": strftime_millis(period_end),
             },
         )
-        logger.debug(f"Associated cql2 filter is: {cql2_filter}")
+        logger.debug(f"🧹 Associated cql2 filter is: {cql2_filter}")
         flow_parameters = AdfProcessIn(
             env=FlowEnvArgs(owner_id=owner_identifier),
             adf_type=product_type,
@@ -261,7 +261,7 @@ async def past_adf_conversion(
     else:
         start = period_start
         duration: timedelta = timedelta(hours=int(period_in_hours))
-        while start <= period_end:
+        while start < period_end:
             stop = min(start + duration, period_end)
             logger.info(
                 f"Run the conversion task time range [{start}-{stop}].",
@@ -273,7 +273,7 @@ async def past_adf_conversion(
                     "end_datetime": strftime_millis(stop),
                 },
             )
-            logger.debug(f"( past ) Associated cql2 filter is: {cql2_filter}")
+            logger.debug(f"🧹 ( past ) Associated cql2 filter is: {cql2_filter}")
             flow_parameters = AdfProcessIn(
                 env=FlowEnvArgs(owner_id=owner_identifier),
                 adf_type=product_type,
@@ -309,7 +309,7 @@ async def schedule_adf_conversion(
     logger = get_run_logger()
     logger.setLevel(logging.DEBUG)
 
-    logger.info("Computing cql2_filter without start_datetime and end_datetime...")
+    logger.info("🧹 Computing cql2_filter without start_datetime and end_datetime...")
     cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb, satellite)
 
     # Scheduling according to the period_in_hours
@@ -319,7 +319,7 @@ async def schedule_adf_conversion(
         logger.info(
             f"Schedule the flow conversion to start at {period_start} for a time range [{period_start}-{period_end}].",
         )
-        logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
+        logger.debug(f"🧹 Associated cql2 filter is: {cql2_filter_without_date}")
         rule = (
             f"DTSTART:{period_start.strftime("%Y%m%dT%H%M%SZ")}\n"
             f"FREQ=HOURLY;UNTIL={period_start.strftime("%Y%m%dT%H%M%SZ")}"
@@ -346,7 +346,7 @@ async def schedule_adf_conversion(
         logger.info(
             f"Schedule the flow conversion to start at {period_start} for a time range [{period_start}-{period_end}].",
         )
-        logger.debug(f"Associated cql2 filter is: {cql2_filter_without_date}")
+        logger.debug(f"🧹 Associated cql2 filter is: {cql2_filter_without_date}")
         await schedule_conversion_flow(
             owner_identifier,
             rule,
