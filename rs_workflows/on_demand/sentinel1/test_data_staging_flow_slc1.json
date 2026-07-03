@@ -4,7 +4,7 @@
     "calling_span": null,
     "service_name": "rs.workflows"
   },
-  "stac_input": "https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items/S1D_IW_SLC__1SDV_20260420T055953_20260420T060020_002426_003FB6_3AE6",
+  "stac_input": "https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items/S1D_IW_SLC__1SDV_20260420T055950_20260420T060023_002426_003FB6_4AE4",
   "asset_names": [
     "product",
     "thumbnail"
