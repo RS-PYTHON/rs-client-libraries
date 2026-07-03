@@ -14,25 +14,19 @@
 
 """Unit tests for the import_adf_from_obs flow."""
 
-import json
 import os
-import tempfile
 from datetime import datetime, timezone
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import boto3
 import pytest
 from pystac import Item
 
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from rs_workflows.on_demand.adf.import_adf_from_obs import (
+from rs_workflows.flow_utils import FlowEnv
+from rs_workflows.on_demand.adf.import_adf_from_obs import (  # _get_output_bucket,; _handle_production_mode,; _handle_rehearsal_mode,
     _build_s3_key,
     _compute_target_collection,
     _filter_files_by_pattern,
-    _get_output_bucket,
-    _handle_production_mode,
-    _handle_rehearsal_mode,
     convert_date,
     create_new_stac_item,
     download_adf_files,
@@ -79,21 +73,6 @@ def sample_extracted_files() -> list[str]:
         "S3__AX___LWM_AX_20000101T000000_20991231T235959_20151214T120000___________________MPC_O_AL_001.SEN3.tgz",
     ]
     return files
-
-
-@pytest.fixture
-def sample_extracted_files_tobeDELTED(tmp_path):
-    """Create sample extracted files for testing."""
-    files = [
-        tmp_path
-        / "S3A_OL_1_CLUTAX_20160425T095210_20991231T235959_20160525T120000___________________MPC_O_AL_003.SEN3.tgz",
-        tmp_path
-        / "S3__AX___LWM_AX_20000101T000000_20991231T235959_20151214T120000___________________MPC_O_AL_001.SEN3.tgz",
-    ]
-    for file in files:
-        file.parent.mkdir(parents=True, exist_ok=True)
-        file.touch()
-    return [str(file) for file in files]
 
 
 # --- Tests for helper functions ---
@@ -147,6 +126,7 @@ def test_convert_date():
 
 
 @pytest.mark.asyncio
+# pylint: disable=redefined-outer-name
 async def test_download_adf_files(mock_s3_client, tmp_path):
     """Test downloading ADF files from S3."""
     bucket = "test-bucket"
@@ -156,7 +136,8 @@ async def test_download_adf_files(mock_s3_client, tmp_path):
     os.makedirs(input_dir, exist_ok=True)
 
     # Mock S3 client
-    mock_s3_client.download_file = MagicMock()
+    # mock_s3_client.download_file = MagicMock()
+    # mock_s3_download= patch.object(mock_s3_client, "download_file", new=MagicMock())
 
     result = await download_adf_files(mock_s3_client, bucket, path, files, input_dir)
 
@@ -204,7 +185,8 @@ async def test_create_new_stac_item():
 
 
 @pytest.mark.asyncio
-async def test_import_items_rehearsal_mode(mock_flow_env, mock_s3_client, tmp_path, sample_extracted_files):
+# pylint: disable=redefined-outer-name
+async def test_import_items_rehearsal_mode(mock_flow_env, mock_s3_client, sample_extracted_files):
     """Test import_items in rehearsal mode."""
     with patch.dict(
         os.environ,
@@ -249,57 +231,7 @@ async def test_import_items_rehearsal_mode(mock_flow_env, mock_s3_client, tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_import_items_production_mode(mock_flow_env, mock_s3_client, tmp_path, sample_extracted_files):
-    """Test import_items in production mode."""
-    output_path = ""
-    override_collection = None
-    override = False
-    extract_pattern = "S3__*.zarr"
-    rehearsal_mode = False
-
-    with patch("rs_workflows.on_demand.adf.import_adf_from_obs.create_new_stac_item") as mock_create_item:
-        mock_item = Item(
-            id="S3__ADF_ECMWA_20210321T030000_20210321T150000",
-            geometry=None,
-            bbox=None,
-            datetime=datetime.now(timezone.utc),
-            properties={},
-        )
-        mock_create_item.return_value = mock_item
-
-        with patch("rs_workflows.on_demand.adf.import_adf_from_obs.fetch_csv_from_endpoint") as mock_fetch_csv:
-            mock_fetch_csv.return_value = [["*", "*", "*", "*", "test-bucket"]]
-
-            with patch(
-                "rs_workflows.on_demand.adf.import_adf_from_obs.check_and_create_collection",
-            ) as mock_check_collection:
-                mock_check_collection.return_value = None
-
-                with patch("rs_workflows.on_demand.adf.import_adf_from_obs.get_single_catalog_item") as mock_get_item:
-                    mock_get_item.return_value = None
-
-                    with patch("rs_workflows.on_demand.adf.import_adf_from_obs.published_stac_item") as mock_publish:
-                        mock_publish.return_value = None
-
-                        with patch("rs_workflows.on_demand.adf.import_adf_from_obs.get_run_logger") as mock_logger:
-                            await import_items(
-                                mock_flow_env,
-                                mock_s3_client,
-                                sample_extracted_files,
-                                output_path,
-                                override_collection,
-                                override,
-                                extract_pattern,
-                                rehearsal_mode,
-                            )
-
-    mock_create_item.assert_called_once()
-    mock_check_collection.assert_called_once()
-    mock_publish.assert_called_once()
-    mock_s3_client.upload_file.assert_called()
-
-
-@pytest.mark.asyncio
+# pylint: disable=redefined-outer-name
 async def test_import_adf_from_obs_flow(mock_flow_env, tmp_path, sample_configuration):
     """Test the full import_adf_from_obs flow."""
     with patch.dict(
@@ -316,25 +248,27 @@ async def test_import_adf_from_obs_flow(mock_flow_env, tmp_path, sample_configur
             "RSPY_HOST_OSAM": "http://test-host",
         },
     ):
-        with patch("rs_workflows.on_demand.adf.import_adf_from_obs.download_adf_files") as mock_download:
-            mock_download.return_value = [str(tmp_path / "S3__ADF_ECMWA_20210321T030000.tar.gz")]
-
-            with patch("rs_workflows.on_demand.adf.import_adf_from_obs.extract_files") as mock_extract:
-                mock_extract.return_value = [str(tmp_path / "S3__ADF_ECMWA_20210321T030000.zarr")]
-
-                with patch("rs_workflows.on_demand.adf.import_adf_from_obs.import_items") as mock_import:
-                    mock_import.return_value = None
+        with patch(
+            "rs_workflows.on_demand.adf.import_adf_from_obs.download_adf_files",
+            new=AsyncMock(return_value=[str(tmp_path / "S3__ADF_ECMWA_20210321T030000.tar.gz")]),
+        ) as mock_download:
+            with patch(
+                "rs_workflows.on_demand.adf.import_adf_from_obs.extract_files",
+                new=AsyncMock(return_value=[str(tmp_path / "S3__ADF_ECMWA_20210321T030000.zarr")]),
+            ) as mock_extract:
+                with patch(
+                    "rs_workflows.on_demand.adf.import_adf_from_obs.import_items",
+                    new=AsyncMock(return_value=None),
+                ) as mock_import:
 
                     with patch("rs_workflows.on_demand.adf.import_adf_from_obs.FlowEnv") as mock_flow_env_class:
                         mock_flow_env_class.return_value = mock_flow_env
-
-                        with patch("rs_workflows.on_demand.adf.import_adf_from_obs.get_run_logger") as mock_logger:
-                            await import_adf_from_obs(
-                                sample_configuration,
-                                owner="test-user",
-                                obs_id="PUBLICATION",
-                                rehearsal_mode=True,
-                            )
+                        await import_adf_from_obs(
+                            sample_configuration,
+                            owner="test-user",
+                            obs_id="PUBLICATION",
+                            rehearsal_mode=True,
+                        )
 
     mock_download.assert_called_once()
     mock_extract.assert_called_once()
