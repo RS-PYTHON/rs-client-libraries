@@ -477,7 +477,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 prod_type,
             )
 
-            logger.info(f"Staging {prod_type} to collection {target_collection}")
+            logger.info(f"📥 Staging {prod_type} to collection {target_collection} from source {source}")
             success, items = await aux_staging_task(
                 env=adf_input.env,
                 cql2_filter=cql2_filter,
