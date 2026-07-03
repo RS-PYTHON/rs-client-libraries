@@ -36,6 +36,8 @@ from rs_workflows.catalog_flow import publish
 from rs_workflows.flow_utils import (
     AdfProcessIn,
     AdfType,
+    AuxiliaryProductMapping,
+    AuxiliarySource,
     DprProcessedItemMetadata,
     FlowEnv,
     FlowGeneratedProduct,
@@ -169,6 +171,14 @@ def resolve_collection_name(mappings, product_type: str) -> str | None:
         if mapping.product_type == "*" and fallback_collection is None:
             fallback_collection = mapping.collection_name
     return fallback_collection
+
+
+def resolve_source_name(mappings: list[AuxiliaryProductMapping], product_type: str) -> AuxiliarySource:
+    """Resolve the source from mappings."""
+    for mapping in mappings:
+        if mapping.product_type == product_type:
+            return mapping.source
+    return AuxiliaryProductMapping.model_fields["source"].default
 
 
 def normalize_stac_datetime_value(value: str) -> str:
@@ -461,11 +471,18 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     f"{prod_type!r} in auxiliary_product_to_collection_identifier.",
                 )
 
+            # find source from mapping
+            source: AuxiliarySource = resolve_source_name(
+                adf_input.auxiliary_product_to_collection_identifier,
+                prod_type,
+            )
+
             logger.info(f"Staging {prod_type} to collection {target_collection}")
             success, items = await aux_staging_task(
                 env=adf_input.env,
                 cql2_filter=cql2_filter,
                 catalog_collection_identifier=target_collection,
+                source=source,
             )
             logger.debug(f"Staging result for product type {prod_type}: success={success}, items={items}")
             if success and items:
