@@ -173,11 +173,6 @@ def resolve_collection_name(mappings, product_type: str) -> str | None:
     return fallback_collection
 
 
-from typing import cast
-
-from pydantic.fields import FieldInfo
-
-
 def resolve_source_name(mappings: list[AuxiliaryProductMapping], product_type: str) -> AuxiliarySource:
     """Resolve the source from mappings."""
     for mapping in mappings:
