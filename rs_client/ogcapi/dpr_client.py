@@ -201,6 +201,7 @@ class DprClient(OgcApiClient):
         """Stream logs from the SSE endpoint."""
         try:
             # 86400 seconds (24h) timeout for the long running stream
+            logger.info(f"Streaming logs from {url}...")
             response = self.http_session.get(url, stream=True, **self.apikey_headers, timeout=86400)
             if response.status_code == 200:
                 for line in response.iter_lines():
