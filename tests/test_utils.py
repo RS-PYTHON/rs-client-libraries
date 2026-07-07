@@ -372,7 +372,8 @@ def test_extract_tar_skips_unsafe_members(tmp_path, mock_utils_logger):
         archive.add(safe_file, arcname="safe/file.txt")
         archive.add(unsafe_file, arcname="../escape.txt")
 
-    assert extract_tar(tar_path, extract_dir) == 1
+    count, _ = extract_tar(tar_path, extract_dir)
+    assert count == 1
     assert (extract_dir / "safe" / "file.txt").read_text() == "ok"
     assert not (tmp_path / "escape.txt").exists()
     mock_utils_logger.warning.assert_called_with("Skipping unsafe TAR member: ../escape.txt")
