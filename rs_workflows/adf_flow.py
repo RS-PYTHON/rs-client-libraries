@@ -15,7 +15,6 @@
 """Adf conversion flow implementation."""
 
 import json
-import logging
 import os
 import re
 import shutil
@@ -414,7 +413,6 @@ async def adf_conversion(adf_input: AdfProcessIn):
     Prefect flow for ADF conversion.
     """
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
     logger.info(f"Starting adf_conversion flow for adf_type: {adf_input.adf_type}")
 
     flow_env = FlowEnv(adf_input.env)
