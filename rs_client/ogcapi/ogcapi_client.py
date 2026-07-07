@@ -267,14 +267,6 @@ class OgcApiClient(RsClient):
             if not job_identifier:
                 raise RuntimeError("Job identifier is missing.")
 
-            if type(self).__name__ == "DprClient":
-                host_dpr_service = get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE_PUBLIC")
-                if logger:
-                    logger.warning(
-                        "You can cancel this DPR job by calling: "
-                        f"curl -X 'DELETE' '{host_dpr_service}/dpr/jobs/{job_identifier}'",
-                    )
-
             previous_status: dict[str, str] = {}
             # We use previous_status to remove log when the status remains unchanged.
             # This way we reduce the number of useless information
