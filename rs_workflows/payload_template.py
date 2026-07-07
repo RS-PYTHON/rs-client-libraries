@@ -333,7 +333,7 @@ class PayloadSchema(BasePayloadModel):
     external_modules: list[ExternalModule] | None = None
     breakpoints: Breakpoints | None = None
     workflow: list[WorkflowStep] | None = None
-    io: IOConfig | None = Field(None, alias="I/O")
+    io: IOConfig | None = None  # CPM 3.0.0rc4 forces "io" # Field(None, alias="I/O")
     dask_context: DaskContext | None = None
     logging: str | None = None
     config: list[str] | None = None
