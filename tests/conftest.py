@@ -1076,27 +1076,6 @@ def _catalog_client(generic_rs_client):
     return generic_rs_client.get_catalog_client()
 
 
-@pytest.fixture(name="mock_storage_config_json")
-def _mock_storage_config_json(mocker) -> str:
-    """
-    Fully in-memory mock of /etc/storage_configuration.json
-    Uses real json.load() and real open() so we have a realistic parsing
-    """
-    mocker.patch("builtins.open", mock_open(read_data=STORAGE_CONFIG_JSON))
-    mocker.patch("os.path.exists", return_value=True)
-    return "/fake/etc/storage_configuration.json"
-
-
-@pytest.fixture(name="mock_storage_config_invalid_json")
-def _mock_storage_config_invalid_json(mocker) -> str:
-    """
-    Mock a read for an invalid storage_configuration.json file
-    """
-    mocker.patch("builtins.open", mock_open(read_data=INVALID_JSON))
-    mocker.patch("os.path.exists", return_value=True)
-    return "/fake/etc/storage_configuration.json"
-
-
 # Mock Response Class for fetching CSV tests
 class MockResponse:
     """

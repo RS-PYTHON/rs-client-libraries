@@ -718,8 +718,6 @@ def generate_payload(  # pylint: disable=unused-argument
     # with flow_env.start_span(__name__, "generate-payload"):
     # the values should be name of the secrets, and not the values of these secrets.
     # it's up to the processor to retrieve the values at the running time
-    # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
-    # in cluster mode, it should be mounted as volume from a predefined (?) configmap
 
     logger.info(f"🚧 Starting payload generation for DPR processor '{dpr_process_in.processor_name}'")
     logger.info("Loading storage configuration template from file")
