@@ -157,7 +157,8 @@ async def _do_process_s1ard(
             auxiliary_product_to_collection_identifier=p.auxiliary_product_to_collection_identifier or [],
             logging_level=p.logging_level,
             dask_task_timeout=3000,
-            temporary_folder="s3://prip-rs-playground/copernicus/s1ard_temp/",  # FIXME temp
+            # temporary_folder="s3://prip-rs-playground/copernicus/s1ard_temp/",  # FIXME temp
+            temporary_folder="/mnt/share/ads-01",  # FIXME temp
             temporary_shared=True,
         )
 
