@@ -14,7 +14,6 @@
 
 """Helper task to interact with the rs-catalog."""
 
-import logging
 from datetime import datetime, timezone
 
 from prefect import get_run_logger, task
@@ -112,8 +111,6 @@ async def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: st
     Push a STAC item into the rs-catalog.
     """
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
-
     logger.info(f"The STAC item 🧊 '{item.id}' will be published on the collection '{collection_name}'.")
     items_metadata: list[DprProcessedItemMetadata] = []
     publish_mapping: list[FlowGeneratedProduct] = []

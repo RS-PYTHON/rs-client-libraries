@@ -16,7 +16,6 @@
 
 import fnmatch
 import json
-import logging
 import os
 import re
 import tempfile
@@ -56,7 +55,6 @@ async def download_adf_files(
     Returns the list of local paths to the downloaded files.
     """
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
     local_paths = []
 
     for file in files:
@@ -76,7 +74,6 @@ async def extract_files(files: list[str], extract_dir: str) -> list[str]:
     Returns the list of extracted file paths.
     """
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
     extracted_files: list[str] = []
 
     for file in files:
@@ -195,7 +192,6 @@ async def import_items(
     If `rehearsal_mode` is True, only log the actions without executing them.
     """
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
 
     # Step 1: Filter files by pattern
     logger.debug(f"Filtering files with pattern: '{extract_pattern}'")
@@ -257,8 +253,6 @@ async def create_new_stac_item(item_name: str, href: str) -> Item:
     For each output, create a STAC item with a single asset referencing the output location.
     Returns the STAC item and the asset path.
     """
-    logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
 
     # This work for ADF provided by the MPC
     # Extract the dates, product_type, platform
@@ -361,8 +355,6 @@ async def import_adf_from_obs(
     ---
     """
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
-
     logger.info(f"Starting import-adf-from-obs flow for {owner}")
     env: FlowEnvArgs = FlowEnvArgs(owner_id=owner)
 

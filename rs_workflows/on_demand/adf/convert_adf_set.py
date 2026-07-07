@@ -16,7 +16,6 @@
 
 import asyncio
 import json
-import logging
 import os
 from collections.abc import Awaitable
 from datetime import datetime, timedelta, timezone
@@ -103,7 +102,6 @@ async def convert_adf_group(
     ---
     """
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
 
     # Check input chronology
     if period_start_datetime >= period_end_datetime:
@@ -183,7 +181,6 @@ async def convert_adf_group(
 def compute_cql2(cql2_query_name: str, dta: int, dtb: int, satellite: str | None) -> dict:
     """Compute the CQL2 filter content by reading the configuration file and substituting the values."""
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
 
     try:
         # Read the file and load its content into a variable
@@ -231,8 +228,6 @@ async def past_adf_conversion(
     If `period_in_hours` is equal to 0, then the conversion is run on the whole period at once.
     """
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
-
     logger.info("🧹 Computing cql2_filter without start_datetime and end_datetime...")
     cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb, satellite)
 
@@ -310,8 +305,6 @@ async def schedule_adf_conversion(
 
     """
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
-
     logger.info("🧹 Computing cql2_filter without start_datetime and end_datetime...")
     cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb, satellite)
 
@@ -371,7 +364,6 @@ async def schedule_conversion_flow(
     """Schedule the conversion flow with the given parameters and scheduling rule."""
 
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
 
     # Retrieve the name of the workpool, GitHub URL and Branch
     work_pool_name: str | None = None
@@ -429,7 +421,6 @@ async def adf_conversion_scheduled(
     the `period` parameter, which defines the length of the period to convert starting from the flow run start time.
     """
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
 
     decoded_period: timedelta = timedelta(seconds=int(period))
 
