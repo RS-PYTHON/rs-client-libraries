@@ -665,20 +665,6 @@ def build_adfs(
     return result
 
 
-def load_storage_configuration(
-    secrets: dict,
-    config_path: str = str(CONFIG_DIR / "storage_configuration.json"),
-    logger=None,
-) -> StorageConfig:
-    """
-    Loads storage configuration from a JSON file and constructs a StorageConfig object.
-    """
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Storage configuration file not found: {config_path}")
-
-    return StorageConfig(secrets, config_path, logger)
-
-
 @task(name="Generate payload file")
 def generate_payload(  # pylint: disable=unused-argument
     flow_env: FlowEnv,
@@ -724,7 +710,7 @@ def generate_payload(  # pylint: disable=unused-argument
     secrets = Secret.load(
         prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, flow_env.owner_id),
     ).get()  # type: ignore[union-attr]
-    storage_configuration = load_storage_configuration(secrets, logger=logger)
+    storage_configuration = StorageConfig(secrets, logger)
     logger.info("Loading bucket configuration from rs-osam endpoint")
     bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
 
