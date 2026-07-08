@@ -277,7 +277,8 @@ class DprClient(OgcApiClient):
             except Exception:  # pylint: disable=broad-exception-caught
                 # maybe return True as well ? the state of protocol is unknown, but we
                 # can't stream logs anymore
-                pass
+                logger.error("Failed to check job status. Stopping log streaming.")
+                return True
             return False
 
         while True:  # pylint: disable=too-many-nested-blocks
