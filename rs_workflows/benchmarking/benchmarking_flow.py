@@ -16,7 +16,6 @@
 
 import asyncio
 import json
-import logging
 import os
 
 from prefect import flow, get_run_logger, task
@@ -61,7 +60,6 @@ async def benchmark_processor_task(
 ):
     """Task called by the flow of the same name."""
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)

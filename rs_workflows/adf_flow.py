@@ -15,7 +15,6 @@
 """Adf conversion flow implementation."""
 
 import json
-import logging
 import os
 import re
 import shutil
@@ -36,6 +35,8 @@ from rs_workflows.catalog_flow import publish
 from rs_workflows.flow_utils import (
     AdfProcessIn,
     AdfType,
+    AuxiliaryProductMapping,
+    AuxiliarySource,
     DprProcessedItemMetadata,
     FlowEnv,
     FlowGeneratedProduct,
@@ -169,6 +170,14 @@ def resolve_collection_name(mappings, product_type: str) -> str | None:
         if mapping.product_type == "*" and fallback_collection is None:
             fallback_collection = mapping.collection_name
     return fallback_collection
+
+
+def resolve_source_name(mappings: list[AuxiliaryProductMapping], product_type: str) -> AuxiliarySource:
+    """Resolve the source from mappings."""
+    for mapping in mappings:
+        if mapping.product_type == product_type:
+            return mapping.source
+    return AuxiliaryProductMapping.model_fields["source"].default  # pylint: disable=unsubscriptable-object
 
 
 def normalize_stac_datetime_value(value: str) -> str:
@@ -404,7 +413,6 @@ async def adf_conversion(adf_input: AdfProcessIn):
     Prefect flow for ADF conversion.
     """
     logger = get_run_logger()
-    logger.setLevel(logging.DEBUG)
     logger.info(f"Starting adf_conversion flow for adf_type: {adf_input.adf_type}")
 
     flow_env = FlowEnv(adf_input.env)
@@ -423,11 +431,11 @@ async def adf_conversion(adf_input: AdfProcessIn):
         for prod_type in required_types:
             cql2_filter: dict = {}
             if adf_input.cql2_filter is not None:
-                logger.info("Use the provided CQL2 filter for auxiliary data retrieval")
+                logger.info("🧹 Use the provided CQL2 filter for auxiliary data retrieval")
                 cql2_filter = substitute_values(adf_input.cql2_filter, {"product_type": prod_type})
                 logger.debug(f"Substituted CQL2 filter for product type {prod_type}: {cql2_filter}")
             else:
-                logger.info("Build a default CQL2 filter for auxiliary data retrieval with operator t_intersects")
+                logger.info("🧹 Build a default CQL2 filter for auxiliary data retrieval with operator t_intersects")
                 cql2_filter = {
                     "filter": {
                         "op": "and",
@@ -461,11 +469,18 @@ async def adf_conversion(adf_input: AdfProcessIn):
                     f"{prod_type!r} in auxiliary_product_to_collection_identifier.",
                 )
 
-            logger.info(f"Staging {prod_type} to collection {target_collection}")
+            # find source from mapping
+            source: AuxiliarySource = resolve_source_name(
+                adf_input.auxiliary_product_to_collection_identifier,
+                prod_type,
+            )
+
+            logger.info(f"📥 Staging {prod_type} to collection {target_collection} from source {source}")
             success, items = await aux_staging_task(
                 env=adf_input.env,
                 cql2_filter=cql2_filter,
                 catalog_collection_identifier=target_collection,
+                source=source,
             )
             logger.debug(f"Staging result for product type {prod_type}: success={success}, items={items}")
             if success and items:
