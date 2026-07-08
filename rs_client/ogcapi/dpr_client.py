@@ -16,13 +16,14 @@
 
 import ast
 import os.path as osp
+import re
+import time
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
 
 import anyio
 import yaml
-import re
 from openapi_core import OpenAPI  # Spec, validate_request, validate_response
 
 from rs_client.ogcapi.ogcapi_client import OgcApiClient
@@ -198,22 +199,54 @@ class DprClient(OgcApiClient):
         payload.update(asdict(cluster_info))  # Add the cluster info to the payload
         return super()._run_process("conv_safe_zarr", payload)
 
-    def _stream_logs(self, url: str, logger) -> None:
-        """Stream logs from the SSE endpoint."""
+    def stream_logs(self, url: str, logger) -> None:
+        """
+        Streams and forwards server-sent event (SSE) logs for a processing job.
+
+        This method continuously connects to the job log streaming endpoint from rs-dpr-service
+        and uses the provided logger to display log messages with their corresponding logging levels.
+        Multi-line log entries are reconstructed before being logged. If the streaming connection
+        is interrupted unexpectedly, the method automatically retries until the associated job
+        reaches a terminal state or the log endpoint becomes unavailable.
+
+        The streaming loop stops when one of the following conditions is met:
+            - the job reaches a terminal state ('successful', 'failed', or 'dismissed').
+            - the server closes the SSE connection after all logs have been sent.
+            - the log endpoint returns HTTP 404 indicating that the job id does not exist
+
+        Args:
+            url (str): URL of the SSE endpoint used to stream the job logs.
+            logger (logging.Logger): Logger instance used to emit the streamed log messages.
+
+        Raises:
+            No exceptions are propagated to the caller.
+            Connection errors, streaming interruptions, and job status lookup failures are handled
+            internally.
+            Transient failures trigger an automatic reconnection aftera short delay, while terminal
+            conditions stop the streaming loop.
+            TODO: check the comment from except Exception in is_job_finished function. Maybe we
+            should stop the reconnection in case of general exception ?
+        """
         # regex to match start of log line (YYYY-MM-DD HH:MM:SS - LEVEL - or LEVEL:)
         log_start_pattern = re.compile(
-            r"^(?:\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\s-|(?:INFO|WARNING|ERROR|DEBUG|CRITICAL):)"
+            r"^(?:\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\s-|(?:INFO|WARNING|ERROR|DEBUG|CRITICAL):)",
         )
         # regex to extract log level
         level_pattern = re.compile(r"(?: - |^)(INFO|WARNING|ERROR|DEBUG|CRITICAL)(?: - |:)")
 
         def flush_log(buffer: list[str]) -> None:
+            """
+            Flushes the buffer of log lines to the logger.
+
+            Args:
+                buffer (list[str]): Buffer of log lines to flush.
+            """
             if not buffer:
                 return
             full_message = "\n".join(buffer)
             match = level_pattern.search(buffer[0])
             level = match.group(1) if match else "INFO"
-            
+
             if level == "DEBUG":
                 logger.debug(full_message)
             elif level == "WARNING":
@@ -222,19 +255,28 @@ class DprClient(OgcApiClient):
                 logger.error(full_message)
             else:
                 logger.info(full_message)
-            
+
             buffer.clear()
 
-        import time
-
         def is_job_finished() -> bool:
+            """
+            Check if the job associated to the given url is finished.
+
+            Args:
+                url (str): URL of the SSE endpoint used to stream the job logs.
+
+            Returns:
+                bool: True if the job is finished, False otherwise.
+            """
             try:
-                # We can check job status directly via OgcApiClient
+                # the job status can be checked directly via the parent class OgcApiClient
                 job_id = url.split("/")[-2]
                 status_resp = self.get_job_info(job_id)
                 if isinstance(status_resp, dict) and status_resp.get("status") in ("successful", "failed", "dismissed"):
                     return True
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught
+                # maybe return True as well ? the state of protocol is unknown, but we
+                # can't stream logs anymore
                 pass
             return False
 
@@ -258,9 +300,12 @@ class DprClient(OgcApiClient):
                                     flush_log(buffer)
                                 buffer.append(log_line)
                     flush_log(buffer)
-                    
-                    # If iter_lines completes without raising an exception, it means the server
+
+                    # if iter_lines completes without raising an exception, it means the server
                     # cleanly closed the connection (which it does when the job finishes).
+                    break
+                elif response.status_code == 404:
+                    logger.warning("Log stream endpoint returned 404 Not Found for job. Stopping stream logs.")
                     break
                 else:
                     logger.warning(f"Failed to connect to stream (status {response.status_code}). Retrying in 5s...")
@@ -290,7 +335,7 @@ class DprClient(OgcApiClient):
                 f"curl -X 'DELETE' '{host_dpr_service}/dpr/jobs/{job_identifier}'",
             )
             url = f"{self.href_service}/{self.endpoint_prefix}jobs/{job_identifier}/logs"
-            self._stream_logs(url, logger)
+            self.stream_logs(url, logger)
 
         # Call parent method and parse results
         final_status = super().wait_for_job(
