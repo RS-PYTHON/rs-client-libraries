@@ -17,10 +17,7 @@
 import ast
 import os.path as osp
 import re
-<<<<<<< HEAD
-=======
 import time
->>>>>>> origin/feat-rspy1065/live-stream-processing-logs
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
