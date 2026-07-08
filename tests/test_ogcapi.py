@@ -603,7 +603,7 @@ class TestOgcApi:
                 logger,
                 "job_name",
                 # timeout,
-                poll_interval,
+                poll_interval,  # type: ignore
             )
             assert mock_job_info.call_count == 3
         else:  # StagingClient
@@ -663,7 +663,8 @@ class TestOgcApi:
         # Test nominal case with one retry
         # We need to mock logger to capture warning
         mock_logger = mocker.Mock()
-
+        if isinstance(client, DprClient):
+            mocker.patch.object(client, "stream_logs")
         result = client.wait_for_job(
             job_status_initial,
             logger=mock_logger,
