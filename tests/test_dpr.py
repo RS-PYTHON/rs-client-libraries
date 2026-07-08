@@ -484,5 +484,15 @@ def test_wait_for_job_with_logger(mocker, dpr_client: DprClient):
     assert result == ["result_ok"]
 
 
+def test_stream_logs_stops_when_job_status_check_fails(mocker, dpr_client: DprClient):
+    """Test stream_logs stops when checking the job status raises an exception."""
+    mock_logger = mocker.Mock()
+    mock_get = mocker.patch.object(dpr_client.http_session, "get")
+    mocker.patch.object(dpr_client, "get_job_info", side_effect=Exception("status unavailable"))
+    dpr_client.stream_logs("http://test/jobs/123/logs", mock_logger)
+    mock_get.assert_not_called()
+    mock_logger.error.assert_called_once_with("Failed to check job status. Stopping log streaming.")
+
+
 # end of rs-dpr-service logs streaming tests
 # ---------------------------------------------------------------------------
