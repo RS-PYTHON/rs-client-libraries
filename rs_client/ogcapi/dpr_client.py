@@ -16,13 +16,13 @@
 
 import ast
 import os.path as osp
+import re
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
 
 import anyio
 import yaml
-import re
 from openapi_core import OpenAPI  # Spec, validate_request, validate_response
 
 from rs_client.ogcapi.ogcapi_client import OgcApiClient
@@ -202,7 +202,7 @@ class DprClient(OgcApiClient):
         """Stream logs from the SSE endpoint."""
         # regex to match start of log line (YYYY-MM-DD HH:MM:SS - LEVEL - or LEVEL:)
         log_start_pattern = re.compile(
-            r"^(?:\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\s-|(?:INFO|WARNING|ERROR|DEBUG|CRITICAL):)"
+            r"^(?:\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\s-|(?:INFO|WARNING|ERROR|DEBUG|CRITICAL):)",
         )
         # regex to extract log level
         level_pattern = re.compile(r"(?: - |^)(INFO|WARNING|ERROR|DEBUG|CRITICAL)(?: - |:)")
@@ -213,7 +213,7 @@ class DprClient(OgcApiClient):
             full_message = "\n".join(buffer)
             match = level_pattern.search(buffer[0])
             level = match.group(1) if match else "INFO"
-            
+
             if level == "DEBUG":
                 logger.debug(full_message)
             elif level == "WARNING":
@@ -222,7 +222,7 @@ class DprClient(OgcApiClient):
                 logger.error(full_message)
             else:
                 logger.info(full_message)
-            
+
             buffer.clear()
 
         import time
@@ -258,7 +258,7 @@ class DprClient(OgcApiClient):
                                     flush_log(buffer)
                                 buffer.append(log_line)
                     flush_log(buffer)
-                    
+
                     # If iter_lines completes without raising an exception, it means the server
                     # cleanly closed the connection (which it does when the job finishes).
                     break
