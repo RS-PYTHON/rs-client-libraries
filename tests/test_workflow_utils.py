@@ -35,23 +35,6 @@ def mock_workflow_utils_logger(monkeypatch, mocker):
 
 
 @pytest.mark.asyncio
-async def test_upload_folder_flat(tmp_path, monkeypatch, mock_workflow_utils_logger):
-    """Test upload delegates folder content upload to the shared S3 helper."""
-    folder = tmp_path / "payload"
-    nested = folder / "nested"
-    nested.mkdir(parents=True)
-    (folder / "a.txt").write_text("a")
-    (nested / "b.txt").write_text("b")
-
-    upload_dir_mock = AsyncMock()
-    monkeypatch.setattr(workflow_utils, "s3_upload_dir", upload_dir_mock)
-
-    await workflow_utils.upload_folder_flat(folder, "s3://bucket/prefix/")
-
-    upload_dir_mock.assert_awaited_once_with(folder, "s3://bucket/prefix/")
-
-
-@pytest.mark.asyncio
 async def test_process_asset_zip(monkeypatch, mock_workflow_utils_logger):
     """Test ZIP assets use ZIP extraction path and return normalized prefix."""
     download_mock = AsyncMock()
@@ -72,7 +55,7 @@ async def test_process_asset_zip(monkeypatch, mock_workflow_utils_logger):
     monkeypatch.setattr(workflow_utils, "extract_tar", extract_tar_mock)
     monkeypatch.setattr(workflow_utils, "recursive_extract", MagicMock(return_value=0))
     monkeypatch.setattr(workflow_utils, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
-    monkeypatch.setattr(workflow_utils, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(workflow_utils, "s3_upload_dir", upload_mock)
     monkeypatch.setattr(workflow_utils, "get_upload_prefix", MagicMock(return_value="s3://bucket/path/"))
 
     result = await workflow_utils.process_asset("s3://bucket/path/data.zip", "data.zip")
@@ -106,7 +89,7 @@ async def test_process_asset_tar(monkeypatch, mock_workflow_utils_logger):
     monkeypatch.setattr(workflow_utils, "extract_tar", extract_tar_mock)
     monkeypatch.setattr(workflow_utils, "recursive_extract", MagicMock(return_value=1))
     monkeypatch.setattr(workflow_utils, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
-    monkeypatch.setattr(workflow_utils, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(workflow_utils, "s3_upload_dir", upload_mock)
     monkeypatch.setattr(workflow_utils, "get_upload_prefix", MagicMock(return_value="s3://bucket/path/data/"))
 
     result = await workflow_utils.process_asset("s3://bucket/path/data.tar/file.tar", "file.tar")
@@ -143,7 +126,7 @@ async def test_process_asset_returns_concrete_extracted_file_when_multiple_files
     monkeypatch.setattr(workflow_utils, "extract_zip", extract_zip_mock)
     monkeypatch.setattr(workflow_utils, "recursive_extract", MagicMock(return_value=0))
     monkeypatch.setattr(workflow_utils, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
-    monkeypatch.setattr(workflow_utils, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(workflow_utils, "s3_upload_dir", upload_mock)
     monkeypatch.setattr(
         workflow_utils,
         "get_upload_prefix",
@@ -196,7 +179,7 @@ async def test_process_asset_returns_concrete_extracted_file_for_sen3_payload(
         "normalize_extract_dir",
         MagicMock(side_effect=lambda path: next(path.iterdir())),
     )
-    monkeypatch.setattr(workflow_utils, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(workflow_utils, "s3_upload_dir", upload_mock)
     monkeypatch.setattr(
         workflow_utils,
         "get_upload_prefix",
@@ -237,7 +220,7 @@ async def test_process_asset_returns_nested_extracted_file_href(
     monkeypatch.setattr(workflow_utils, "extract_zip", extract_zip_mock)
     monkeypatch.setattr(workflow_utils, "recursive_extract", MagicMock(return_value=0))
     monkeypatch.setattr(workflow_utils, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
-    monkeypatch.setattr(workflow_utils, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(workflow_utils, "s3_upload_dir", upload_mock)
     monkeypatch.setattr(workflow_utils, "get_upload_prefix", MagicMock(return_value="s3://bucket/path/"))
 
     result = await workflow_utils.process_asset("s3://bucket/path/data.zip", "data.zip")
@@ -271,7 +254,7 @@ async def test_process_asset_returns_zarr_store_href(
     monkeypatch.setattr(workflow_utils, "extract_zip", extract_zip_mock)
     monkeypatch.setattr(workflow_utils, "recursive_extract", MagicMock(return_value=0))
     monkeypatch.setattr(workflow_utils, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
-    monkeypatch.setattr(workflow_utils, "upload_folder_flat", upload_mock)
+    monkeypatch.setattr(workflow_utils, "s3_upload_dir", upload_mock)
     monkeypatch.setattr(
         workflow_utils,
         "get_upload_prefix",

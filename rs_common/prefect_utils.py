@@ -535,6 +535,7 @@ async def s3_upload_dir(
     Uploads files *within* a folder (excluding the folder itself) to the object storage service folder.
     """
     s3_bucket, to_path = get_s3_bucket(s3_path)
+    logger.debug(f"Uploading folder {from_folder} to {s3_path}")
     return await s3_bucket.aupload_from_folder(from_folder, to_path, **upload_kwargs)
 
 

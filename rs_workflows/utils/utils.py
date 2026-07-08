@@ -272,28 +272,6 @@ async def download_and_extract_assets_task(
                     tmp_path.unlink()
 
 
-async def upload_folder_flat(
-    local_folder: Path,
-    prefix: str,
-):
-    """
-    Upload all files under ``local_folder`` to the S3 prefix.
-
-    The relative path below ``local_folder`` is preserved in the destination
-    key so extracted archives keep their original folder structure.
-    """
-    logger = get_run_logger()
-    files_to_upload = sorted(path for path in local_folder.rglob("*") if path.is_file())
-
-    logger.info(
-        f"Preparing upload of {len(files_to_upload)} file(s) from {local_folder} to {prefix}",
-    )
-
-    await s3_upload_dir(local_folder, prefix)
-
-    logger.info(f"Finished uploading {len(files_to_upload)} file(s) to {prefix}")
-
-
 async def process_asset(asset_href: str, asset_name: str, use_extension=False) -> str:
     """
     Process an archived AUXIP asset stored in S3 and replace it with its extracted content.
@@ -359,7 +337,7 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
             prefix = prefix.rstrip("/") + f"{upload_dir.suffix}/"  # .SAFE or .SEN3 for example
         logger.info(f"Uploading to prefix: {prefix}")
 
-        await upload_folder_flat(upload_dir, prefix)
+        await s3_upload_dir(upload_dir, prefix)
 
         if prefix.rstrip("/").lower().endswith(".zarr"):
             zarr_href = prefix.rstrip("/")
