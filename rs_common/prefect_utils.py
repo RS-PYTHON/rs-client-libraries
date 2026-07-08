@@ -30,6 +30,7 @@ from threading import Lock
 from typing import Any
 from uuid import UUID
 
+import anyio
 import requests
 from fastapi.concurrency import run_in_threadpool
 from prefect.blocks.system import Secret
@@ -220,7 +221,7 @@ async def init_prefect_blocks():
         # Processing storage configuration
 
         # Read config file content
-        with open(str(CONFIG_DIR / "storage_configuration.json"), encoding="utf-8") as f:
+        async with await anyio.open_file(str(CONFIG_DIR / "storage_configuration.json"), encoding="utf-8") as f:
 
             # Write Prefect variable
             await Variable.set(VAR_NAME_STORAGE_CONFIG, json.load(f), overwrite=True)

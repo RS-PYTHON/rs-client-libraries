@@ -27,8 +27,7 @@ indicating the storage backend type:
 - `shared_disk` - shared filesystem mounted into the processing pod. Admin will provide
 the shared disk the users can use, thus, the <absolute_path> will reflect the path on the
 processing node where the shared disk is mounted. Here, only the ${JOB_IDENTIFIER} variable is
-added (an UUID generated once per StorageConfig instance). But, with a future story (TODO), this storage configuration
-shall be read only from the prefect block, and not from the current storage_configuration.json file.
+added (an UUID generated once per StorageConfig instance).
 - `local_disk`  - local filesystem on the processing node
 """
 
@@ -43,7 +42,7 @@ VALID_STORAGE_KINDS = ("obs", "shared_disk", "local_disk")
 
 class StorageConfig:  # pylint: disable=too-many-instance-attributes
     """
-    A class to load and query the storage_configuration.json file.
+    A class to load and query the storage configuration info.
     """
 
     def __init__(self, secrets: dict, config_path: str, logger=None):

@@ -336,7 +336,7 @@ def build_input_products(
         unit (dict): Workflow unit definition containing input product metadata.
         dpr_process_in (DprProcessIn): Input configuration for the dpr processing prefect flow.
         storage_configuration (StorageConfig): Storage configuration parameters (S3 credentials, etc.). TODO ! as
-        written in the comment from story 800, point 3: About the storage_configuration.json : for the time being,
+        written in the comment from story 800, point 3: About the storage_configuration : for the time being,
         just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
         catalog_client (CatalogClient): Client for querying STAC collections and items.
 
@@ -459,7 +459,7 @@ def build_output_products(
         unit (dict): Workflow unit definition containing output product metadata.
         dpr_process_in (DprProcessIn): Input configuration defining generated outputs.
         storage_configuration (StorageConfig): Storage configuration parameters (S3 credentials, etc.). TODO ! as
-        written in the comment from story 800, point 3: About the storage_configuration.json : for the time being,
+        written in the comment from story 800, point 3: About the storage_configuration : for the time being,
         just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
         owner_id (str): The owner ID for the workflow.
         bucket_configuration (list[list[str]]): Parsed S3 bucket configuration entries.
@@ -578,7 +578,7 @@ def get_io(
         unit (dict): Workflow unit definition containing I/O product configurations.
         dpr_process_in (DprProcessIn): DPR input configuration containing product mappings.
         store_params (StoreParams): S3 storage configuration and credentials. TODO ! as
-        written in the comment from story 800, point 3: About the storage_configuration.json : for the time being,
+        written in the comment from story 800, point 3: About the storage_configuration : for the time being,
         just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
         flow_env (FlowEnv): Environment context holding execution metadata.
 

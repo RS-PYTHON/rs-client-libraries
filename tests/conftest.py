@@ -193,7 +193,7 @@ BUCKET_EXPIRATION_WITHOUT_FALLBACK = [
     ["other-owner", "other-coll", "L1*", "60", "s3://other-bucket"],
 ]
 
-# In-memory json content for storage_configuration.json file, check story 800
+# In-memory json content for storage configuration, check story 800
 # and STEP 3 from "How to build payload.yaml"
 STORAGE_CONFIG_JSON = """
 {
@@ -210,7 +210,7 @@ STORAGE_CONFIG_JSON = """
     ]
 }
 """
-# incomplete storage_configuration.json
+# incomplete storage configuration
 INVALID_JSON = '{"storage": [}'
 
 
