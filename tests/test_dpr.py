@@ -367,3 +367,122 @@ async def test_paths_to_delete_independent_of_final_product_flag(mocker):
     paths_called = mock_clean.call_args[0][0]
     assert "/shared/final" in paths_called
     assert "/shared/intermediate" in paths_called
+
+
+# ---------------------------------------------------------------------------
+# rs-dpr-service logs streaming tests
+
+
+class MockResponse:
+    """Mock for requests.Response returned by http_session.get"""
+
+    def __init__(self, status_code=200, lines=None):
+        """Initialize the mock response with a status code and optional lines."""
+        self.status_code = status_code
+        self.lines = lines or []
+
+    def iter_lines(self):
+        """Mock iter_lines() method of requests.Response"""
+        yield from self.lines
+
+
+def test_stream_logs_nominal(mocker, dpr_client: DprClient):
+    """Test standard streaming with multiple log formats and continuation lines."""
+    mock_logger = mocker.Mock()
+    mock_get = mocker.patch.object(dpr_client.http_session, "get")
+
+    # Mock job check: not finished initially, then finished
+    mock_get_job_info = mocker.patch.object(dpr_client, "get_job_info")
+    mock_get_job_info.side_effect = [{"status": "running"}, {"status": "successful"}]
+
+    mock_get.return_value = MockResponse(
+        status_code=200,
+        lines=[
+            b"data: 2026-07-06 09:28:09 - eopf.dask_utils - INFO - A standard log",
+            b"data: 2026-07-06 09:28:10 - eopf.dask_utils - WARNING - A warning log",
+            b"data: INFO:eopf.trigger:Another format log",
+            b"data:  continuation line",
+            b"data: ERROR:eopf:Error line",
+            b": keepalive",
+            b"data: CRITICAL:eopf:Critical line",
+        ],
+    )
+
+    dpr_client.stream_logs("http://test/jobs/123/logs", mock_logger)
+
+    mock_logger.info.assert_any_call("2026-07-06 09:28:09 - eopf.dask_utils - INFO - A standard log")
+    mock_logger.warning.assert_any_call("2026-07-06 09:28:10 - eopf.dask_utils - WARNING - A warning log")
+    mock_logger.info.assert_any_call("INFO:eopf.trigger:Another format log\n continuation line")
+    mock_logger.error.assert_any_call("ERROR:eopf:Error line")
+    mock_logger.error.assert_any_call("CRITICAL:eopf:Critical line")
+
+
+def test_stream_logs_reconnection(mocker, dpr_client: DprClient):
+    """Test stream_logs retries properly when connection exceptions occur."""
+    mock_logger = mocker.Mock()
+    mock_get = mocker.patch.object(dpr_client.http_session, "get")
+    mocker.patch("time.sleep")
+
+    mock_get_job_info = mocker.patch.object(dpr_client, "get_job_info")
+    # First check: running. Second: running. Third: finished.
+    mock_get_job_info.side_effect = [{"status": "running"}, {"status": "running"}, {"status": "successful"}]
+
+    # 1. Connection error. 2. valid data
+    mock_get.side_effect = [
+        Exception("Connection dropped"),
+        MockResponse(status_code=200, lines=[b"data: INFO:test:log"]),
+    ]
+
+    dpr_client.stream_logs("http://test/jobs/123/logs", mock_logger)
+
+    assert mock_get.call_count == 2
+    mock_logger.info.assert_any_call("INFO:test:log")
+
+
+def test_stream_logs_404_not_found(mocker, dpr_client: DprClient):
+    """Test stream_logs cleanly exits on HTTP 404."""
+    mock_logger = mocker.Mock()
+    mock_get = mocker.patch.object(dpr_client.http_session, "get")
+
+    mocker.patch.object(dpr_client, "get_job_info", return_value={"status": "running"})
+    mock_get.return_value = MockResponse(status_code=404)
+
+    dpr_client.stream_logs("http://test/jobs/123/logs", mock_logger)
+
+    assert mock_get.call_count == 1
+    mock_logger.warning.assert_called_with("Log stream endpoint returned 404 Not Found for job. Stopping stream logs.")
+
+
+def test_stream_logs_job_finished(mocker, dpr_client: DprClient):
+    """Test stream_logs exits immediately if the job is already terminal."""
+    mock_logger = mocker.Mock()
+    mock_get = mocker.patch.object(dpr_client.http_session, "get")
+
+    mocker.patch.object(dpr_client, "get_job_info", return_value={"status": "successful"})
+
+    dpr_client.stream_logs("http://test/jobs/123/logs", mock_logger)
+
+    mock_get.assert_not_called()
+
+
+def test_wait_for_job_with_logger(mocker, dpr_client: DprClient):
+    """Test wait_for_job invokes stream_logs appropriately."""
+    mock_logger = mocker.Mock()
+    mock_stream_logs = mocker.patch.object(dpr_client, "stream_logs")
+    mock_super_wait = mocker.patch(
+        "rs_client.ogcapi.dpr_client.OgcApiClient.wait_for_job",
+        return_value={"message": "['result_ok']"},
+    )
+
+    job_status = {"jobID": "123"}
+    result = dpr_client.wait_for_job(job_status=job_status, logger=mock_logger)
+
+    mock_stream_logs.assert_called_once()
+    assert "jobs/123/logs" in mock_stream_logs.call_args[0][0]
+
+    mock_super_wait.assert_called_once()
+    assert result == ["result_ok"]
+
+
+# end of rs-dpr-service logs streaming tests
+# ---------------------------------------------------------------------------

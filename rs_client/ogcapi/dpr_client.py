@@ -280,7 +280,7 @@ class DprClient(OgcApiClient):
                 pass
             return False
 
-        while True:
+        while True:  # pylint: disable=too-many-nested-blocks
             if is_job_finished():
                 break
 
@@ -304,15 +304,14 @@ class DprClient(OgcApiClient):
                     # if iter_lines completes without raising an exception, it means the server
                     # cleanly closed the connection (which it does when the job finishes).
                     break
-                elif response.status_code == 404:
+                if response.status_code == 404:
                     logger.warning("Log stream endpoint returned 404 Not Found for job. Stopping stream logs.")
                     break
-                else:
-                    logger.warning(f"Failed to connect to stream (status {response.status_code}). Retrying in 5s...")
-                    time.sleep(5)
+                logger.warning(f"Failed to connect to stream (status {response.status_code}). Retrying in 1 second")
+                time.sleep(1)
             except Exception as e:  # pylint: disable=broad-exception-caught
-                logger.warning(f"Failed to stream logs ({e}). Reconnecting in 5s...")
-                time.sleep(5)
+                logger.warning(f"Failed to stream logs ({e}). Reconnecting in 1 second")
+                time.sleep(1)
 
     def wait_for_job(  # type: ignore
         self,
