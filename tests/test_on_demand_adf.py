@@ -61,9 +61,8 @@ def test_compute_cql2_unknown_query_raises(mocker):
 # --------------------------------------------------------------------------- #
 # convert_adf_group
 # --------------------------------------------------------------------------- #
-def _patch_group(mocker, settings):
+def _patch_group(mocker):
     _logger(mocker)
-    mocker.patch.object(cas.Variable, "get", new=AsyncMock(return_value=settings))
     sched = mocker.patch.object(cas, "schedule_adf_conversion")
     sched.with_options.return_value = AsyncMock()
     past = mocker.patch.object(cas, "past_adf_conversion")
@@ -76,25 +75,19 @@ async def test_convert_adf_group_rejects_bad_chronology(mocker):
     _logger(mocker)
     now = datetime.now(timezone.utc)
     with pytest.raises(ValueError, match="before period_end"):
-        await cas.convert_adf_group.fn(now, now - timedelta(days=1), "grp")
+        await cas.convert_adf_group.fn(now, now - timedelta(days=1), {})
 
 
-async def test_convert_adf_group_missing_variable(mocker):
-    """A missing Prefect variable raises FileExistsError."""
+async def test_convert_adf_group_invalid_configuration_format(mocker):
+    """A non-dict configuration raises ValueError."""
     _logger(mocker)
-    mocker.patch.object(cas.Variable, "get", new=AsyncMock(return_value=None))
     now = datetime.now(timezone.utc)
-    with pytest.raises(FileExistsError, match="does not exist"):
-        await cas.convert_adf_group.fn(now - timedelta(days=1), now + timedelta(days=1), "grp")
-
-
-async def test_convert_adf_group_invalid_variable_format(mocker):
-    """A non-dict Prefect variable payload raises ValueError."""
-    _logger(mocker)
-    mocker.patch.object(cas.Variable, "get", new=AsyncMock(return_value="not-a-dict"))
-    now = datetime.now(timezone.utc)
-    with pytest.raises(ValueError, match="invalid format"):
-        await cas.convert_adf_group.fn(now - timedelta(days=1), now + timedelta(days=1), "grp")
+    with pytest.raises(ValueError, match="❌ Configuration has got an invalid format."):
+        await cas.convert_adf_group.fn(
+            now - timedelta(days=1),
+            now + timedelta(days=1),
+            "wrong",  # type: ignore[arg-type]
+        )
 
 
 async def test_convert_adf_group_past_only(mocker):
@@ -104,10 +97,10 @@ async def test_convert_adf_group_past_only(mocker):
         {"product_type": "ADF_B", "cql2_query_name": "ValIntersect", "period_in_hours": 0},
     ]
     settings = {"satellite": "S1A", "aux-to-be-generated": aux, "auxiliary-product-to-collection-identifier": []}
-    sched, past = _patch_group(mocker, settings)
+    sched, past = _patch_group(mocker)
     now = datetime.now(timezone.utc)
 
-    await cas.convert_adf_group.fn(now - timedelta(days=2), now - timedelta(days=1), "grp")
+    await cas.convert_adf_group.fn(now - timedelta(days=2), now - timedelta(days=1), settings)
 
     assert past.with_options.call_count == 2
     sched.with_options.assert_not_called()
@@ -117,10 +110,10 @@ async def test_convert_adf_group_future_only(mocker):
     """A fully-future period schedules a conversion for each aux and runs nothing now."""
     aux = [{"product_type": "ADF_A", "cql2_query_name": "ValIntersect", "period_in_hours": 6}]
     settings = {"satellite": "S1A", "aux-to-be-generated": aux, "auxiliary-product-to-collection-identifier": []}
-    sched, past = _patch_group(mocker, settings)
+    sched, past = _patch_group(mocker)
     now = datetime.now(timezone.utc)
 
-    await cas.convert_adf_group.fn(now + timedelta(days=1), now + timedelta(days=2), "grp")
+    await cas.convert_adf_group.fn(now + timedelta(days=1), now + timedelta(days=2), settings)
 
     assert sched.with_options.return_value.await_count == 1
     past.with_options.assert_not_called()
@@ -174,7 +167,7 @@ async def test_past_adf_conversion_splits_period(mocker):
         "S",
     )
 
-    assert conv.with_options.return_value.await_count == 3
+    assert conv.with_options.return_value.await_count == 2
 
 
 # --------------------------------------------------------------------------- #

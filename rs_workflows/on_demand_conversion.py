@@ -109,7 +109,11 @@ def read_zarr_stac_item(zarr_uri: str) -> Item:
 
     # Reuse the existing DPR STAC builder so the SAFE conversion output follows
     # the same catalog item shape as the other DPR products.
-    item_id = os.path.basename(zarr_uri.removesuffix(".zarr"))
+    item_id = os.path.basename(zarr_uri)
+    # Remove .zarr suffix if the id looks like a valid EOPF id, otherwise keep it
+    # to avoid potential conflict with existing legacy product in catalogue
+    if item_id.startswith("S0"):
+        item_id = item_id.removesuffix(".zarr")
     return create_stac_item(
         eopf_origin_datetime=None,
         eopf_feature=stac_discovery,
@@ -155,12 +159,24 @@ async def cleanup_staged_safe_item_task(
         logger.info(f"Removed staged SAFE item {item_id!r} from output collection {collection_id!r}.")
 
 
-@flow
+@flow(name="convert-safe")
 async def on_demand_conversion(
     conversion_input: ConversionIn,
     retry_config: RetryConfig = RetryConfig(),  # type: ignore
 ):
-    """Docstring"""
+    """
+    Convert a legacy SAFE product to its EOPF (Zarr) counterpart on demand.
+
+    The flow stages the input SAFE product into the target catalog collection,
+    prepares its assets (decompressing/unzipping archived items when needed),
+    maps the legacy product type to the corresponding output product type, then
+    runs the conversion and publishes the generated product.
+
+    Args:
+        conversion_input: Conversion parameters (STAC input, environment, target
+            collection mapping and optional selected assets).
+        retry_config: Retry policy applied to the staging task.
+    """
     logger = get_run_logger()
     logger.info(f"Starting on-demand conversion flow with input: {conversion_input}")
     flow_env = FlowEnv(conversion_input.env)
@@ -211,6 +227,16 @@ async def on_demand_conversion(
             ),
         )
         logger.info(f"Retrieved catalog items after staging: {catalog_items.to_dict()}")
+
+        # Staging can report a "successful" job while staging nothing (e.g. when the
+        # requested assets don't match any asset of the input item), which leaves the
+        # collection empty. Fail explicitly instead of raising an opaque IndexError.
+        if not catalog_items.items:
+            raise RuntimeError(
+                f"Staging produced no catalog item for {stac_item_id!r} in collection "
+                f"{staging_collection!r}. Check that 'selected_assets' matches an asset "
+                f"name of the input item (e.g. 'product').",
+            )
 
         # Start from the staged catalog item; if it contains an archived SAFE asset,
         # step 2 will replace this with the uncompressed item.
