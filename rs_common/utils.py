@@ -172,33 +172,47 @@ def extract_zip(zip_path: Path, extract_to: Path):
         logger.info(f"ZIP contains {count} safe entries")
 
 
-def extract_tar(file_path: Path, extract_to: Path) -> int:
-    """Extract a TAR-compatible archive into the target directory."""
+def extract_tar(file_path: Path, extract_to: Path) -> tuple[int, list[str]]:
+    """Extract a TAR-compatible archive into the target directory.
+
+    Returns:
+        Tuple[int, List[str]]: (count of extracted files, list of extracted file paths)
+    """
     logger = get_run_logger()
     logger.info(f"Extracting TAR archive: {file_path} -> {extract_to}")
 
+    extracted_files: list[str] = []
+    count = 0
+
     with tarfile.open(file_path, "r:*") as tar:
-        count = 0
         for member in tar.getmembers():
+            # Skip unsafe members (symlinks, devices, etc.)
             if member.issym() or member.islnk() or member.isdev():
                 logger.warning(f"Skipping unsafe TAR member: {member.name}")
                 continue
+
+            # Skip unsafe paths (e.g., absolute or traversal)
             if not _is_safe_extract_path(extract_to, member.name):
                 logger.warning(f"Skipping unsafe TAR member: {member.name}")
                 continue
+
             destination = (extract_to / member.name).resolve()
+
             if member.isdir():
                 destination.mkdir(parents=True, exist_ok=True)
             else:
+                # Only count and log regular files
                 extracted = tar.extractfile(member)
                 if extracted is None:
                     continue
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 with extracted, destination.open("wb") as dst:
                     shutil.copyfileobj(extracted, dst)
-            count += 1
+                extracted_files.append(str(destination.relative_to(extract_to)))
+                count += 1
+
         logger.info(f"TAR archive contains {count} safe entries")
-        return count
+        return count, extracted_files
 
 
 def strip_archive_suffix(name: str) -> str:
@@ -238,7 +252,7 @@ def _extract_nested_archive(full_path: Path) -> bool:
     """Extract a nested TAR-compatible archive and delete it on success."""
     logger = get_run_logger()
     logger.info(f"Found nested archive: {full_path}")
-    extracted_members = extract_tar(full_path, full_path.parent)
+    extracted_members, _ = extract_tar(full_path, full_path.parent)
     if not extracted_members:
         logger.warning("Skipping removal of nested archive because no members were extracted: " f"{full_path}")
         return False
