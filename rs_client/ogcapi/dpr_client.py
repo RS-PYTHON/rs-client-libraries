@@ -22,6 +22,7 @@ from pathlib import Path
 
 import anyio
 import yaml
+import re
 from openapi_core import OpenAPI  # Spec, validate_request, validate_response
 
 from rs_client.ogcapi.ogcapi_client import OgcApiClient
@@ -199,18 +200,74 @@ class DprClient(OgcApiClient):
 
     def _stream_logs(self, url: str, logger) -> None:
         """Stream logs from the SSE endpoint."""
-        try:
-            # 86400 seconds (24h) timeout for the long running stream
-            logger.info(f"Streaming logs from {url}...")
-            response = self.http_session.get(url, stream=True, **self.apikey_headers, timeout=86400)
-            if response.status_code == 200:
-                for line in response.iter_lines():
-                    if line:
-                        decoded = line.decode("utf-8")
-                        if decoded.startswith("data: "):
-                            logger.info(decoded[6:])
-        except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.warning(f"Failed to stream logs: {e}")
+        # regex to match start of log line (YYYY-MM-DD HH:MM:SS - LEVEL - or LEVEL:)
+        log_start_pattern = re.compile(
+            r"^(?:\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\s-|(?:INFO|WARNING|ERROR|DEBUG|CRITICAL):)"
+        )
+        # regex to extract log level
+        level_pattern = re.compile(r"(?: - |^)(INFO|WARNING|ERROR|DEBUG|CRITICAL)(?: - |:)")
+
+        def flush_log(buffer: list[str]) -> None:
+            if not buffer:
+                return
+            full_message = "\n".join(buffer)
+            match = level_pattern.search(buffer[0])
+            level = match.group(1) if match else "INFO"
+            
+            if level == "DEBUG":
+                logger.debug(full_message)
+            elif level == "WARNING":
+                logger.warning(full_message)
+            elif level in ("ERROR", "CRITICAL"):
+                logger.error(full_message)
+            else:
+                logger.info(full_message)
+            
+            buffer.clear()
+
+        import time
+
+        def is_job_finished() -> bool:
+            try:
+                # We can check job status directly via OgcApiClient
+                job_id = url.split("/")[-2]
+                status_resp = self.get_job_info(job_id)
+                if isinstance(status_resp, dict) and status_resp.get("status") in ("successful", "failed", "dismissed"):
+                    return True
+            except Exception:
+                pass
+            return False
+
+        while True:
+            if is_job_finished():
+                break
+
+            try:
+                # 86400 seconds (24h) timeout for the long running stream
+                # maybe we should configure this timeout from user's input?
+                logger.info(f"Connecting to log stream from {url}...")
+                response = self.http_session.get(url, stream=True, **self.apikey_headers, timeout=86400)
+                if response.status_code == 200:
+                    buffer: list[str] = []
+                    for line in response.iter_lines():
+                        if line:
+                            decoded = line.decode("utf-8")
+                            if decoded.startswith("data: "):
+                                log_line = decoded[6:]
+                                if log_start_pattern.match(log_line):
+                                    flush_log(buffer)
+                                buffer.append(log_line)
+                    flush_log(buffer)
+                    
+                    # If iter_lines completes without raising an exception, it means the server
+                    # cleanly closed the connection (which it does when the job finishes).
+                    break
+                else:
+                    logger.warning(f"Failed to connect to stream (status {response.status_code}). Retrying in 5s...")
+                    time.sleep(5)
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                logger.warning(f"Failed to stream logs ({e}). Reconnecting in 5s...")
+                time.sleep(5)
 
     def wait_for_job(  # type: ignore
         self,
@@ -225,9 +282,14 @@ class DprClient(OgcApiClient):
         Returns:
             EOPF results
         """
-        job_id = job_status.get("jobID")
-        if job_id and logger:
-            url = f"{self.href_service}/{self.endpoint_prefix}jobs/{job_id}/logs"
+        job_identifier = job_status.get("jobID")
+        host_dpr_service = get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE_PUBLIC")
+        if job_identifier and logger:
+            logger.warning(
+                "You can cancel this DPR job by calling: "
+                f"curl -X 'DELETE' '{host_dpr_service}/dpr/jobs/{job_identifier}'",
+            )
+            url = f"{self.href_service}/{self.endpoint_prefix}jobs/{job_identifier}/logs"
             self._stream_logs(url, logger)
 
         # Call parent method and parse results
