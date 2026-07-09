@@ -498,7 +498,6 @@ async def dpr_processing(
         # HACK for S1-ARD
         if dpr_input.pipeline in [
             "ARD_REFERENCE_PIPELINE",
-            "ARD_DEM_ONLY_PIPELINE",
             "ARD_REFERENCE_SINGLE_BURST_PIPELINE",
         ]:
             logger.warning(f"ARD HACK FOR PIPELINE {dpr_input.pipeline}")
@@ -512,11 +511,7 @@ async def dpr_processing(
                 bucket_name,
                 owner_id,
                 output_collection,
-                (
-                    "8d013730-3c8b-4c04-aafe-be234e27dd90"
-                    if dpr_input.pipeline == "ARD_DEM_ONLY_PIPELINE"
-                    else str(uuid4())
-                ),
+                str(uuid4()),
             )
             logger.warning(f"ARD REFERENCE_DB: {ref_db_path}")
             adfs.add(("REFERENCE_DB", adf_type, ref_db_path))
