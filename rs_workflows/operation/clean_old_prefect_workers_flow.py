@@ -22,11 +22,7 @@ from prefect.settings import PREFECT_API_URL
 
 @flow(name="cleanup-offline-workers")
 def cleanup_offline_workers(
-    work_pools_csv: str = (
-        "monitoring-k8s-pool,"
-        "processing-integrated-k8s-pool,"
-        "processing-sandbox-k8s-pool"
-    ),
+    work_pools_csv: str = ("monitoring-k8s-pool," "processing-integrated-k8s-pool," "processing-sandbox-k8s-pool"),
     max_age_days: int = 1,
 ):
     """
@@ -50,19 +46,13 @@ def cleanup_offline_workers(
 
     logger = get_run_logger()
 
-    work_pools = [
-        pool.strip()
-        for pool in work_pools_csv.split(",")
-        if pool.strip()
-    ]
+    work_pools = [pool.strip() for pool in work_pools_csv.split(",") if pool.strip()]
 
     if not work_pools:
         logger.warning("No work pools specified, nothing to do.")
         return
 
-    logger.info(
-        f"work_pools parameter = {work_pools!r}"
-    )
+    logger.info(f"work_pools parameter = {work_pools!r}")
 
     # Example:
     # http://prefect-server:4200/api
@@ -71,9 +61,7 @@ def cleanup_offline_workers(
     # Maximum accepted by the Prefect endpoint
     page_size = 200
 
-    limit_date = datetime.now(timezone.utc) - timedelta(
-        days=max_age_days
-    )
+    limit_date = datetime.now(timezone.utc) - timedelta(days=max_age_days)
 
     total_deleted = 0
 
@@ -96,16 +84,14 @@ def cleanup_offline_workers(
             )
 
             if response.status_code == 404:
-                logger.warning(
-                    f"Work pool '{pool_name}' does not exist. Skipping."
-                )
+                logger.warning(f"Work pool '{pool_name}' does not exist. Skipping.")
                 break
 
             if not response.ok:
                 logger.error(
                     f"Failed to list workers from work pool '{pool_name}' "
                     f"(offset={offset}, limit={page_size}): "
-                    f"{response.status_code} - {response.text}"
+                    f"{response.status_code} - {response.text}",
                 )
                 response.raise_for_status()
 
@@ -114,7 +100,7 @@ def cleanup_offline_workers(
             logger.info(
                 f"Retrieved {len(workers)} worker(s) "
                 f"from work pool '{pool_name}' "
-                f"(offset={offset}, limit={page_size})"
+                f"(offset={offset}, limit={page_size})",
             )
 
             for worker in workers:
@@ -125,9 +111,7 @@ def cleanup_offline_workers(
                 if worker_status != "OFFLINE":
                     continue
 
-                last_heartbeat = worker.get(
-                    "last_heartbeat_time"
-                )
+                last_heartbeat = worker.get("last_heartbeat_time")
 
                 if last_heartbeat:
 
@@ -135,7 +119,7 @@ def cleanup_offline_workers(
                         last_heartbeat.replace(
                             "Z",
                             "+00:00",
-                        )
+                        ),
                     )
 
                     if heartbeat_date > limit_date:
@@ -143,7 +127,7 @@ def cleanup_offline_workers(
                             f"Skipping worker '{worker_name}' "
                             f"from work pool '{pool_name}' "
                             f"(status={worker_status}, "
-                            f"last_heartbeat={last_heartbeat})"
+                            f"last_heartbeat={last_heartbeat})",
                         )
                         continue
 
@@ -155,24 +139,20 @@ def cleanup_offline_workers(
             offset += page_size
 
         logger.info(
-            f"Found {len(workers_to_delete)} worker(s) "
-            f"eligible for deletion from work pool "
-            f"'{pool_name}'"
+            f"Found {len(workers_to_delete)} worker(s) " f"eligible for deletion from work pool " f"'{pool_name}'",
         )
 
         for worker in workers_to_delete:
 
             worker_name = worker["name"]
             worker_status = worker["status"]
-            last_heartbeat = worker.get(
-                "last_heartbeat_time"
-            )
+            last_heartbeat = worker.get("last_heartbeat_time")
 
             logger.info(
                 f"Deleting worker '{worker_name}' "
                 f"from work pool '{pool_name}' "
                 f"(status={worker_status}, "
-                f"last_heartbeat={last_heartbeat})"
+                f"last_heartbeat={last_heartbeat})",
             )
 
             encoded_worker_name = quote(
@@ -181,8 +161,7 @@ def cleanup_offline_workers(
             )
 
             delete_response = requests.delete(
-                f"{api_url}/work_pools/{pool_name}/workers/"
-                f"{encoded_worker_name}",
+                f"{api_url}/work_pools/{pool_name}/workers/" f"{encoded_worker_name}",
                 timeout=30,
             )
 
@@ -192,17 +171,14 @@ def cleanup_offline_workers(
                     f"'{worker_name}' "
                     f"from work pool '{pool_name}': "
                     f"{delete_response.status_code} - "
-                    f"{delete_response.text}"
+                    f"{delete_response.text}",
                 )
 
             delete_response.raise_for_status()
 
             total_deleted += 1
 
-    logger.info(
-        f"Cleanup completed: "
-        f"{total_deleted} worker(s) deleted."
-    )
+    logger.info(f"Cleanup completed: " f"{total_deleted} worker(s) deleted.")
 
 
 if __name__ == "__main__":
