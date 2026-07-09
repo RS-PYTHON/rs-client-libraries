@@ -22,8 +22,12 @@ from prefect.settings import PREFECT_API_URL
 
 @flow(name="cleanup-offline-workers")
 def cleanup_offline_workers(
-    work_pools_csv: str,
-    max_age_days: int = 30,
+    work_pools_csv: str = (
+        "monitoring-k8s-pool,"
+        "processing-integrated-k8s-pool,"
+        "processing-sandbox-k8s-pool"
+    ),
+    max_age_days: int = 1,
 ):
     """
     Delete workers that:
@@ -37,12 +41,14 @@ def cleanup_offline_workers(
         Comma-separated list of work pool names to inspect.
 
         Example:
-            monitoring-k8s-pool,docker-pool,batch-pool
+            monitoring-k8s-pool,processing-integrated-k8s-pool,processing-sandbox-k8s-pool
 
     max_age_days : int
         Minimum age (in days) since the last heartbeat before a worker
         becomes eligible for deletion.
     """
+
+    logger = get_run_logger()
 
     work_pools = [
         pool.strip()
@@ -50,29 +56,27 @@ def cleanup_offline_workers(
         if pool.strip()
     ]
 
-    logger = get_run_logger()
+    if not work_pools:
+        logger.warning("No work pools specified, nothing to do.")
+        return
 
     logger.info(
         f"work_pools parameter = {work_pools!r}"
     )
 
-    # Read the Prefect API URL from the current Prefect configuration.
     # Example:
-    #   http://prefect-server:4200/api
+    # http://prefect-server:4200/api
     api_url = str(PREFECT_API_URL.value()).rstrip("/")
 
-    # Prefect API maximum accepted limit for this endpoint.
+    # Maximum accepted by the Prefect endpoint
     page_size = 200
 
-    # Compute the oldest acceptable heartbeat timestamp.
-    # Workers with a heartbeat newer than this date will be preserved.
     limit_date = datetime.now(timezone.utc) - timedelta(
         days=max_age_days
     )
 
     total_deleted = 0
 
-    # Process every requested work pool.
     for pool_name in work_pools:
 
         logger.info(f"Processing work pool '{pool_name}'")
@@ -80,8 +84,8 @@ def cleanup_offline_workers(
         offset = 0
         workers_to_delete = []
 
-        # Retrieve workers page by page.
         while True:
+
             response = requests.post(
                 f"{api_url}/work_pools/{pool_name}/workers/filter",
                 json={
@@ -113,25 +117,27 @@ def cleanup_offline_workers(
                 f"(offset={offset}, limit={page_size})"
             )
 
-            # Inspect every worker from the current page.
             for worker in workers:
 
                 worker_name = worker["name"]
                 worker_status = worker["status"]
 
-                # Only consider offline workers.
                 if worker_status != "OFFLINE":
                     continue
 
-                # Retrieve the last heartbeat timestamp, if available.
-                last_heartbeat = worker.get("last_heartbeat_time")
+                last_heartbeat = worker.get(
+                    "last_heartbeat_time"
+                )
 
                 if last_heartbeat:
+
                     heartbeat_date = datetime.fromisoformat(
-                        last_heartbeat.replace("Z", "+00:00")
+                        last_heartbeat.replace(
+                            "Z",
+                            "+00:00",
+                        )
                     )
 
-                    # Keep workers that have gone offline recently.
                     if heartbeat_date > limit_date:
                         logger.info(
                             f"Skipping worker '{worker_name}' "
@@ -141,26 +147,26 @@ def cleanup_offline_workers(
                         )
                         continue
 
-                # Collect workers first, delete them later.
-                # This avoids modifying the result set while paginating.
                 workers_to_delete.append(worker)
 
-            # Stop when the current page contains fewer items than the page size.
             if len(workers) < page_size:
                 break
 
             offset += page_size
 
         logger.info(
-            f"Found {len(workers_to_delete)} worker(s) eligible for deletion "
-            f"from work pool '{pool_name}'"
+            f"Found {len(workers_to_delete)} worker(s) "
+            f"eligible for deletion from work pool "
+            f"'{pool_name}'"
         )
 
-        # Delete collected workers after pagination is complete.
         for worker in workers_to_delete:
+
             worker_name = worker["name"]
             worker_status = worker["status"]
-            last_heartbeat = worker.get("last_heartbeat_time")
+            last_heartbeat = worker.get(
+                "last_heartbeat_time"
+            )
 
             logger.info(
                 f"Deleting worker '{worker_name}' "
@@ -169,19 +175,24 @@ def cleanup_offline_workers(
                 f"last_heartbeat={last_heartbeat})"
             )
 
-            # Worker names may contain spaces, so the name must be URL-encoded.
-            encoded_worker_name = quote(worker_name, safe="")
+            encoded_worker_name = quote(
+                worker_name,
+                safe="",
+            )
 
             delete_response = requests.delete(
-                f"{api_url}/work_pools/{pool_name}/workers/{encoded_worker_name}",
+                f"{api_url}/work_pools/{pool_name}/workers/"
+                f"{encoded_worker_name}",
                 timeout=30,
             )
 
             if not delete_response.ok:
                 logger.error(
-                    f"Failed to delete worker '{worker_name}' "
+                    f"Failed to delete worker "
+                    f"'{worker_name}' "
                     f"from work pool '{pool_name}': "
-                    f"{delete_response.status_code} - {delete_response.text}"
+                    f"{delete_response.status_code} - "
+                    f"{delete_response.text}"
                 )
 
             delete_response.raise_for_status()
@@ -189,15 +200,13 @@ def cleanup_offline_workers(
             total_deleted += 1
 
     logger.info(
-        f"Cleanup completed: {total_deleted} worker(s) deleted."
+        f"Cleanup completed: "
+        f"{total_deleted} worker(s) deleted."
     )
 
 
 if __name__ == "__main__":
     cleanup_offline_workers(
-        work_pools=[
-            "kubernetes",
-            "docker",
-        ],
-        max_age_days=30,
+        work_pools_csv="monitoring-k8s-pool,processing-integrated-k8s-pool,processing-sandbox-k8s-pool",
+        max_age_days=1,
     )
