@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 import requests
 from prefect import flow, get_run_logger
@@ -45,7 +46,10 @@ def cleanup_offline_workers(
     # Read the Prefect API URL from the current Prefect configuration.
     # Example:
     #   http://prefect-server:4200/api
-    api_url = str(PREFECT_API_URL.value())
+    api_url = str(PREFECT_API_URL.value()).rstrip("/")
+
+    # Prefect API maximum accepted limit for this endpoint.
+    page_size = 200
 
     # Compute the oldest acceptable heartbeat timestamp.
     # Workers with a heartbeat newer than this date will be preserved.
@@ -55,63 +59,112 @@ def cleanup_offline_workers(
 
     total_deleted = 0
 
-    # Process every requested work pool
+    # Process every requested work pool.
     for pool_name in work_pools:
 
         logger.info(f"Processing work pool '{pool_name}'")
 
-        # Retrieve all workers registered in the work pool
-        response = requests.post(
-            f"{api_url}/work_pools/{pool_name}/workers/filter",
-            json={
-                "offset": 0,
-                "limit": 1000,
-            },
-            timeout=30,
-        )
+        offset = 0
+        workers_to_delete = []
 
-        response.raise_for_status()
+        # Retrieve workers page by page.
+        while True:
+            response = requests.post(
+                f"{api_url}/work_pools/{pool_name}/workers/filter",
+                json={
+                    "offset": offset,
+                    "limit": page_size,
+                },
+                timeout=30,
+            )
 
-        workers = response.json()
-
-        # Inspect every worker
-        for worker in workers:
-
-            worker_name = worker["name"]
-
-            # Only consider offline workers
-            if worker["status"] != "OFFLINE":
-                continue
-
-            # Retrieve the last heartbeat timestamp, if available
-            last_heartbeat = worker.get("last_heartbeat_time")
-
-            if last_heartbeat:
-
-                heartbeat_date = datetime.fromisoformat(
-                    last_heartbeat.replace("Z", "+00:00")
+            if not response.ok:
+                logger.error(
+                    f"Failed to list workers from work pool '{pool_name}' "
+                    f"(offset={offset}, limit={page_size}): "
+                    f"{response.status_code} - {response.text}"
                 )
 
-                # Keep workers that have gone offline recently
-                if heartbeat_date > limit_date:
-                    logger.info(
-                        f"Skipping worker '{worker_name}' "
-                        f"(last heartbeat: {last_heartbeat})"
-                    )
+            response.raise_for_status()
+
+            workers = response.json()
+
+            logger.info(
+                f"Retrieved {len(workers)} worker(s) "
+                f"from work pool '{pool_name}' "
+                f"(offset={offset}, limit={page_size})"
+            )
+
+            # Inspect every worker from the current page.
+            for worker in workers:
+
+                worker_name = worker["name"]
+                worker_status = worker["status"]
+
+                # Only consider offline workers.
+                if worker_status != "OFFLINE":
                     continue
+
+                # Retrieve the last heartbeat timestamp, if available.
+                last_heartbeat = worker.get("last_heartbeat_time")
+
+                if last_heartbeat:
+                    heartbeat_date = datetime.fromisoformat(
+                        last_heartbeat.replace("Z", "+00:00")
+                    )
+
+                    # Keep workers that have gone offline recently.
+                    if heartbeat_date > limit_date:
+                        logger.info(
+                            f"Skipping worker '{worker_name}' "
+                            f"from work pool '{pool_name}' "
+                            f"(status={worker_status}, "
+                            f"last_heartbeat={last_heartbeat})"
+                        )
+                        continue
+
+                # Collect workers first, delete them later.
+                # This avoids modifying the result set while paginating.
+                workers_to_delete.append(worker)
+
+            # Stop when the current page contains fewer items than the page size.
+            if len(workers) < page_size:
+                break
+
+            offset += page_size
+
+        logger.info(
+            f"Found {len(workers_to_delete)} worker(s) eligible for deletion "
+            f"from work pool '{pool_name}'"
+        )
+
+        # Delete collected workers after pagination is complete.
+        for worker in workers_to_delete:
+            worker_name = worker["name"]
+            worker_status = worker["status"]
+            last_heartbeat = worker.get("last_heartbeat_time")
 
             logger.info(
                 f"Deleting worker '{worker_name}' "
                 f"from work pool '{pool_name}' "
-                f"(status={worker['status']}, "
+                f"(status={worker_status}, "
                 f"last_heartbeat={last_heartbeat})"
             )
 
-            # Delete the worker entry from the work pool
+            # Worker names may contain spaces, so the name must be URL-encoded.
+            encoded_worker_name = quote(worker_name, safe="")
+
             delete_response = requests.delete(
-                f"{api_url}/work_pools/{pool_name}/workers/{worker_name}",
+                f"{api_url}/work_pools/{pool_name}/workers/{encoded_worker_name}",
                 timeout=30,
             )
+
+            if not delete_response.ok:
+                logger.error(
+                    f"Failed to delete worker '{worker_name}' "
+                    f"from work pool '{pool_name}': "
+                    f"{delete_response.status_code} - {delete_response.text}"
+                )
 
             delete_response.raise_for_status()
 
