@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Delete the offline Prefect workers from a specified work pool 
+Delete the offline Prefect workers from a specified work pool
 that have not sent a heartbeat for more than a specified number of days.
 """
 
