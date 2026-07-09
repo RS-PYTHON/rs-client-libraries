@@ -184,6 +184,7 @@ class GeneralConfiguration(BasePayloadModel):
     triggering__use_basic_logging: bool | None = True
     triggering__wait_before_exit: int | None = 10
     triggering__use_datatree: bool | None = True
+    triggering__use_default_filename: bool | None = True
     dask__export_graphs: str | None = None
     dask_utils__timeout: int | None = None
     breakpoints__folder: str | None = None
