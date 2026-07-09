@@ -207,7 +207,7 @@ def test_generate_payload_success(
     mock_storage_config.default_adfs_storage = "s3"
 
     mocker.patch(
-        "rs_workflows.payload_generator.load_storage_configuration",
+        "rs_workflows.payload_generator.StorageConfig",
         return_value=mock_storage_config,
     )
     mocker.patch(
@@ -265,7 +265,7 @@ def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_e
     mock_storage_config.get_store_params.return_value = mock_store_params
 
     mocker.patch(
-        "rs_workflows.payload_generator.load_storage_configuration",
+        "rs_workflows.payload_generator.StorageConfig",
         return_value=mock_storage_config,
     )
     mocker.patch(
@@ -297,7 +297,7 @@ def test_generate_payload_deduplicates_io(mocker, sample_unit, mock_dpr_process_
     shared_output = OutputProduct(id="out1", path="s3://bucket/out1", store_type="s3")
 
     mocker.patch(
-        "rs_workflows.payload_generator.load_storage_configuration",
+        "rs_workflows.payload_generator.StorageConfig",
         return_value=MagicMock(default_adfs_storage="s3"),
     )
     mocker.patch(
@@ -341,7 +341,7 @@ def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in
         "output_products": [{"name": "S03OLCL0_", "store_type": "zarr"}],
     }
     mocker.patch(
-        "rs_workflows.payload_generator.load_storage_configuration",
+        "rs_workflows.payload_generator.StorageConfig",
         return_value=MagicMock(default_adfs_storage="s3"),
     )
     mocker.patch(

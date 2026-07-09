@@ -23,6 +23,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 import pytest
 import pytest_responses  # pylint: disable=unused-import # noqa: F401 # used to avoid adding @responses.activate
 import responses
+from prefect.variables import Variable
 from pystac import Asset, Item, ItemCollection
 from starlette import status
 
@@ -54,6 +55,9 @@ from tests.conftest import (
 from tests.test_utils import setup_worklow_test_env
 
 CONFIG_DIR = Path(__file__).parent / "resources"
+
+# Prefect variable name for the storage configuration
+STORAGE_CONFIG = "processing-storage-configuration"
 
 
 ##################
@@ -101,6 +105,21 @@ def mock_record_performance_indicators(mocker):
     return fake_task
 
 
+#####################################
+# Mock Prefect blocks and variables #
+#####################################
+
+
+@pytest.fixture(name="storage_configuration")
+def _storage_configuration():
+    """Set prefect variable that contains the storage configuration"""
+    path = Path(__file__).parent.parent / "config" / "storage_configuration.json"
+    with open(path, encoding="utf-8") as f:
+        Variable.set(STORAGE_CONFIG, json.load(f), overwrite=True)
+    yield
+    Variable.unset(STORAGE_CONFIG)
+
+
 #############
 # DPR flows #
 #############
@@ -126,6 +145,7 @@ async def test_dpr_processing(
     mocked_tasktable,  # /dpr/processes/mockup?...
     mocked_dpr_response,  # /dpr/processes/mockup/execution, /dpr/jobs/{job_id}
     mocked_processor_output,
+    storage_configuration,
 ):  # pylint: disable=unused-argument
     """Test the dpr_processing flow"""
 
