@@ -43,6 +43,10 @@ def cleanup_offline_workers(
 
     logger = get_run_logger()
 
+    logger.info(
+        f"work_pools parameter = {work_pools!r}"
+    )
+
     # Read the Prefect API URL from the current Prefect configuration.
     # Example:
     #   http://prefect-server:4200/api
