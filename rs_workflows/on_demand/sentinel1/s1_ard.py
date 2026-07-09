@@ -14,7 +14,8 @@
 
 """sentinel 1 ARD processing."""
 
-from datetime import date
+import re
+from datetime import date, datetime
 from typing import Any, Self
 
 from prefect import flow, get_run_logger, task
@@ -135,6 +136,11 @@ async def _do_process_s1ard(
             return
 
         external_variables = {"instrument_mode": unique_modes.pop()}
+        if p.pipeline == "SLC__1_NRB__1" and not reference_date:
+            # Reference date is required to fetch S2_TILES aux file (mosaicking step only)
+            match = re.search(r"(\d{8})T", slcs[0])
+            if match:
+                reference_date = datetime.strptime(match.group(1), "%Y%m%d").date()
         if reference_date:
             external_variables["reference_date"] = str(reference_date)
         if edh_api_key:
