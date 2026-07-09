@@ -189,4 +189,4 @@ def test_missing_storage():
     """Test error message when the prefect variable is missing"""
     Variable.unset(STORAGE_CONFIG)
     with pytest.raises(RuntimeError, match=f"Prefect variable {STORAGE_CONFIG!r} is missing"):
-        StorageConfig(None)
+        StorageConfig({})
