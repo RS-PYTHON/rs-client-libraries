@@ -61,8 +61,12 @@ def cleanup_offline_workers(
         logger.info(f"Processing work pool '{pool_name}'")
 
         # Retrieve all workers registered in the work pool
-        response = requests.get(
-            f"{api_url}/work_pools/{pool_name}/workers",
+        response = requests.post(
+            f"{api_url}/work_pools/{pool_name}/workers/filter",
+            json={
+                "offset": 0,
+                "limit": 1000,
+            },
             timeout=30,
         )
 
@@ -98,7 +102,9 @@ def cleanup_offline_workers(
 
             logger.info(
                 f"Deleting worker '{worker_name}' "
-                f"from work pool '{pool_name}'"
+                f"from work pool '{pool_name}' "
+                f"(status={worker['status']}, "
+                f"last_heartbeat={last_heartbeat})"
             )
 
             # Delete the worker entry from the work pool
