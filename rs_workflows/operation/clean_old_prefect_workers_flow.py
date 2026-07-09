@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Delete the offline Prefect workers from a specified work pool that have not sent a heartbeat for more than a specified number of days."""
+"""
+Delete the offline Prefect workers from a specified work pool 
+that have not sent a heartbeat for more than a specified number of days.
+"""
 
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
