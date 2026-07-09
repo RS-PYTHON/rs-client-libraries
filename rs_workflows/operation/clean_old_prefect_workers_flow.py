@@ -22,7 +22,7 @@ from prefect.settings import PREFECT_API_URL
 
 @flow(name="cleanup-offline-workers")
 def cleanup_offline_workers(
-    work_pools: list[str],
+    work_pools_csv: str,
     max_age_days: int = 30,
 ):
     """
@@ -33,13 +33,22 @@ def cleanup_offline_workers(
 
     Parameters
     ----------
-    work_pools : list[str]
-        List of work pool names to inspect.
+    work_pools_csv : str
+        Comma-separated list of work pool names to inspect.
+
+        Example:
+            monitoring-k8s-pool,docker-pool,batch-pool
 
     max_age_days : int
         Minimum age (in days) since the last heartbeat before a worker
         becomes eligible for deletion.
     """
+
+    work_pools = [
+        pool.strip()
+        for pool in work_pools_csv.split(",")
+        if pool.strip()
+    ]
 
     logger = get_run_logger()
 
