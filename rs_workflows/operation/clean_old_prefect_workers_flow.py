@@ -78,14 +78,19 @@ def cleanup_offline_workers(
                 timeout=30,
             )
 
+            if response.status_code == 404:
+                logger.warning(
+                    f"Work pool '{pool_name}' does not exist. Skipping."
+                )
+                break
+
             if not response.ok:
                 logger.error(
                     f"Failed to list workers from work pool '{pool_name}' "
                     f"(offset={offset}, limit={page_size}): "
                     f"{response.status_code} - {response.text}"
                 )
-
-            response.raise_for_status()
+                response.raise_for_status()
 
             workers = response.json()
 
