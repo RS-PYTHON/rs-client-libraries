@@ -79,9 +79,9 @@ def _extract_io_origin_from_pipeline(
         "pipeline.internal": "pipeline_internal",
     }
     # Pattern for origins chaining units inside a pipeline: unit.step_id.output_product_name or unit.output_product_name
-    # unit_origin_pattern = r"^[^.]+\.[^.]+(\.[^.]+)?$"
+    unit_origin_pattern = r"^[^.]+\.[^.]+(\.[^.]+)?$"
     # workaround for https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/issues/1103
-    unit_origin_pattern = r"^[^._]+(_[^._]+)?\.[^.]+$"
+    # unit_origin_pattern = r"^[^._]+(_[^._]+)?\.[^.]+$"
 
     # Retrieve the details of the step defining the unit and the step_id given (if any) from the pipeline definition
     pipeline_unit: dict[str, Any] = {}
@@ -113,9 +113,9 @@ def _extract_io_origin_from_pipeline(
 
     # Case 2: origin is a product from another unit
     elif re.fullmatch(unit_origin_pattern, product_origin):
-        # all_fields = product_origin.split(".")
+        all_fields = product_origin.split(".")
         # workaround for https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/issues/1103
-        all_fields = re.split(r"[._]", product_origin)
+        # all_fields = re.split(r"[._]", product_origin)
 
         # Origin unit is always the first field.
         origin_unit_name = all_fields[0]
@@ -156,9 +156,9 @@ def _extract_io_origin_from_pipeline(
                 f"but available outputs are: {origin_unit.get("output_products", {})}.",
             )
 
-        # product_origin = f"{origin_unit_name}.{origin_step_id}.{origin_product_name}"
+        product_origin = f"{origin_unit_name}.{origin_step_id}.{origin_product_name}"
         # workaround for https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/issues/1103
-        product_origin = f"{origin_unit_name}_{origin_step_id}.{origin_product_name}"
+        # product_origin = f"{origin_unit_name}_{origin_step_id}.{origin_product_name}"
 
     return product_origin
 
@@ -328,9 +328,9 @@ def _build_single_unit_details(
     # If "pipeline" mode, call the unit <unit_name>.<step_id> to be able to differenciate
     # between several steps using the same unit
     if full_pipeline:
-        # unit_name = f"{unit_name}.{step_id}"
+        unit_name = f"{unit_name}.{step_id}"
         # workaround for https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/issues/1103
-        unit_name = f"{unit_name}_{step_id}"
+        # unit_name = f"{unit_name}_{step_id}"
 
     # Build the final unit details for the payload
     out_unit: dict[str, Any] = {

@@ -112,7 +112,10 @@ def build_workflow_step(unit):
             module=unit["module"],
             # workaround for https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/issues/1103
             processing_unit=(
-                re.split(r"[._]", unit["name"])[0] if "." in unit["name"] or "_" in unit["name"] else unit["name"]
+                re.split(r"[.]", unit["name"])[0]
+                if "." in unit["name"]
+                else unit["name"]
+                # re.split(r"[._]", unit["name"])[0] if "." in unit["name"] or "_" in unit["name"] else unit["name"]
             ),
             inputs=inputs or None,
             adfs=adfs or None,
