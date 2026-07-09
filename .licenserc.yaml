@@ -33,6 +33,8 @@ header:
     - '.trivyignore'
     - 'LICENSE'
     - 'NOTICE'
+    # Vendored third-party code from the ESA EOPF project
+    # (https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file); kept as-is.
     - rs_workflows/adf_conversion
 
   comment: on-failure

@@ -22,6 +22,8 @@ from importlib import reload
 from unittest.mock import AsyncMock, Mock, mock_open, patch
 
 import pytest
+import requests
+import responses
 from prefect.blocks.system import Secret
 from prefect.exceptions import ObjectNotFound
 from prefect_aws import S3Bucket
@@ -180,6 +182,15 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
     assert env_user == (await Secret.load(user_block_name)).get()
 
 
+@responses.activate
+def test_read_artifact(monkeypatch):
+    """Test the read_artifact function"""
+    monkeypatch.setenv("PREFECT_API_URL", "https://prefect")
+    my_data = {"my": "data"}
+    responses.post(url=f"{os.environ['PREFECT_API_URL']}/artifacts/filter", json=[{"data": my_data}])
+    assert prefect_utils.read_artifact(requests.Session(), "flow_run_id", "artifact_key") == my_data
+
+
 @pytest.mark.asyncio
 async def test_wait_for_deployment(mocker):
     """Test the wait_for_deployment function"""
@@ -237,7 +248,8 @@ async def test_bucket_functions(monkeypatch, mocker):
     await prefect_utils.s3_upload_file("from_path", "s3_path")
     my_spy.assert_called_once()
 
-    my_spy.reset_mock()
+    # s3_upload_empty_file uploads in-memory bytes (no temp file) via aupload_from_file_object
+    mocker.patch.object(S3Bucket, "aupload_from_file_object", my_spy := AsyncMock())
     await prefect_utils.s3_upload_empty_file("s3_path")
     my_spy.assert_called_once()
 
@@ -262,3 +274,36 @@ async def test_bucket_functions(monkeypatch, mocker):
     # Call the function
     prefect_utils.s3_delete("s3_prefix")
     spy_delete_objects.assert_called_once()
+
+
+async def test_s3_upload_bytes_uploads_in_memory(mocker):
+    """s3_upload_bytes streams in-memory bytes straight to S3, without touching the disk."""
+    captured: dict = {}
+
+    async def fake_upload(from_file_object, to_path, **_kwargs):
+        captured["to_path"] = to_path
+        captured["contents"] = from_file_object.read()
+        return "uploaded"
+
+    mock_bucket = mocker.Mock()
+    mock_bucket.aupload_from_file_object = AsyncMock(side_effect=fake_upload)
+    mocker.patch.object(prefect_utils, "get_s3_bucket", return_value=(mock_bucket, "key"))
+
+    result = await prefect_utils.s3_upload_bytes(b"hello world", "s3://bucket/key")
+
+    assert result == "uploaded"
+    assert captured["to_path"] == "key"
+    assert captured["contents"] == b"hello world"
+    mock_bucket.aupload_from_file_object.assert_awaited_once()
+
+
+async def test_s3_read_bytes_reads_in_memory(mocker):
+    """s3_read_bytes reads an object's bytes straight from S3, without touching the disk."""
+    mock_bucket = mocker.Mock()
+    mock_bucket.aread_path = AsyncMock(return_value=b"file contents")
+    mocker.patch.object(prefect_utils, "get_s3_bucket", return_value=(mock_bucket, "key"))
+
+    result = await prefect_utils.s3_read_bytes("s3://bucket/key")
+
+    assert result == b"file contents"
+    mock_bucket.aread_path.assert_awaited_once_with("key")

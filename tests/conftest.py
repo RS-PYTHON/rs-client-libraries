@@ -30,7 +30,7 @@ import logging
 import os
 import tempfile
 import uuid
-from unittest.mock import MagicMock, mock_open
+from unittest.mock import MagicMock
 
 import boto3
 import pytest
@@ -193,7 +193,7 @@ BUCKET_EXPIRATION_WITHOUT_FALLBACK = [
     ["other-owner", "other-coll", "L1*", "60", "s3://other-bucket"],
 ]
 
-# In-memory json content for storage_configuration.json file, check story 800
+# In-memory json content for storage configuration, check story 800
 # and STEP 3 from "How to build payload.yaml"
 STORAGE_CONFIG_JSON = """
 {
@@ -210,7 +210,7 @@ STORAGE_CONFIG_JSON = """
     ]
 }
 """
-# incomplete storage_configuration.json
+# incomplete storage configuration
 INVALID_JSON = '{"storage": [}'
 
 
@@ -957,7 +957,6 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
     mocker.patch("rs_workflows.dpr_flow.catalog_flow.get_item.submit", return_value=mock_future)
 
     # use fixed UUIDs for testing mockup results, to match the ones generated in payload_generator.py
-    # we need at least 2 since build_mockup_payload generates 2 output products.
     fixed_uuids = [
         "00000000-0000-0000-0000-000000000001",
         "00000000-0000-0000-0000-000000000002",
@@ -990,11 +989,11 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
 
     mocked_s3.create_bucket(Bucket=RSPY_CATALOG_BUCKET)
     expected_items = {}
-    base_s3_path = f"dpr_mockup_results/{OWNER_ID}/TEST_FLOW_OUTPUT"
+    base_s3_path = f"{OWNER_ID}/OUTPUT_NTC_COLLECTION"
 
     # for each product
-    for i, (product_name, zattrs_data) in enumerate(zattrs_products.items()):
-        product_uuid = fixed_uuids[i]
+    for product_name, zattrs_data in zattrs_products.items():
+        product_uuid = fixed_uuids[0]
         product_s3_path = f"{base_s3_path}/{product_uuid}"
 
         # upload .zattrs file to both locations to support both old and new tests
@@ -1077,27 +1076,6 @@ def _catalog_client(generic_rs_client):
     return generic_rs_client.get_catalog_client()
 
 
-@pytest.fixture(name="mock_storage_config_json")
-def _mock_storage_config_json(mocker) -> str:
-    """
-    Fully in-memory mock of /etc/storage_configuration.json
-    Uses real json.load() and real open() so we have a realistic parsing
-    """
-    mocker.patch("builtins.open", mock_open(read_data=STORAGE_CONFIG_JSON))
-    mocker.patch("os.path.exists", return_value=True)
-    return "/fake/etc/storage_configuration.json"
-
-
-@pytest.fixture(name="mock_storage_config_invalid_json")
-def _mock_storage_config_invalid_json(mocker) -> str:
-    """
-    Mock a read for an invalid storage_configuration.json file
-    """
-    mocker.patch("builtins.open", mock_open(read_data=INVALID_JSON))
-    mocker.patch("os.path.exists", return_value=True)
-    return "/fake/etc/storage_configuration.json"
-
-
 # Mock Response Class for fetching CSV tests
 class MockResponse:
     """
@@ -1142,71 +1120,6 @@ class MockResponse:
         """
         if self.raise_error or self.status_code >= 400:
             raise requests.HTTPError(f"HTTP {self.status_code}")
-
-
-@pytest.fixture(name="sample_config_data")
-def _sample_config_data():
-    """
-    Returns a dictionary representing a sample configuration for testing StorageConfig.
-    Includes product-specific, default unit/pipeline storage, and definitions for S3, local, and shared disk storage.
-    """
-    return {
-        "product": {
-            "specific": [
-                {"product_name": "PROD_A", "storage": "s3"},
-                {"product_name": "PROD_B", "storage": "local_disk"},
-            ],
-            "default": {
-                "unit": [
-                    {"section": "input_products", "storage": "s3_default_in"},
-                    {"section": "output_products", "storage": "s3_default_out"},
-                ],
-                "pipeline": [
-                    {"section": "pipeline_input", "storage": "s3_pipeline_in"},
-                    {"section": "pipeline_output", "storage": "s3_pipeline_out"},
-                ],
-                "adfs": {"storage": "s3_adfs"},
-            },
-        },
-        "storage_configuration": [
-            {
-                "name": "s3",
-                "storage_options": {
-                    "key": "${S3_KEY}",
-                    "secret": "${S3_SECRET}",
-                    "endpoint_url": "${S3_ENDPOINT}",
-                    "region_name": "${S3_REGION}",
-                },
-            },
-            {"name": "local_disk", "opening_mode": "rw", "relative_path": "/data"},
-            {"name": "shared_disk", "opening_mode": "r", "relative_path": "/mnt/shared"},
-        ],
-    }
-
-
-@pytest.fixture(name="secrets")
-def _secrets():
-    """
-    Returns a dictionary of mock secrets corresponding to the placeholders in sample_config_data.
-    """
-    return {
-        "S3_KEY": "my_key",
-        "S3_SECRET": "my_secret",
-        "S3_ENDPOINT": "http://minio",
-        "S3_REGION": "us-east-1",
-    }
-
-
-@pytest.fixture(name="config_file")
-def _config_file(mocker, sample_config_data):  # pylint: disable=redefined-outer-name
-    """
-    Mocks the storage configuration file using the sample configuration data.
-    Avoids creating a physical file on disk.
-    Returns a dummy path.
-    """
-    content = json.dumps(sample_config_data)
-    mocker.patch("builtins.open", mock_open(read_data=content))
-    return "/dummy/path/config.json"
 
 
 @pytest.fixture(name="_mock_os_env")

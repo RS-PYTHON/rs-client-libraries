@@ -19,21 +19,25 @@ WARNING: AFTER EACH MODIFICATION, RESTART THE JUPYTER NOTEBOOK KERNEL !
 
 import asyncio
 import getpass
+import io
 import json
 import os
 import re
 import socket
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
 from typing import Any
+from uuid import UUID
 
+import anyio
+import requests
 from fastapi.concurrency import run_in_threadpool
 from prefect.blocks.system import Secret
 from prefect.client.orchestration import get_client
 from prefect.exceptions import ObjectNotFound
 from prefect.utilities.asyncutils import sync_compatible
+from prefect.variables import Variable
 from prefect_aws import AwsCredentials, S3Bucket
 from prefect_aws.client_parameters import AwsClientParameters
 from pydantic import SecretStr
@@ -51,11 +55,12 @@ CLUSTER_MODE: bool = not LOCAL_MODE
 # Current user
 OWNER_ID: str = ""
 
-# Prefect block names
+# Prefect block and variable names
 BLOCK_NAME_ENV_GLOBAL: str = "env-vars"
 BLOCK_NAME_ENV_USER: str = "env-vars-{0}"  # env variables for the user/owner_id
 BLOCK_NAME_SHARE_BUCKET_GLOBAL: str = "share-bucket"
 BLOCK_NAME_SHARE_BUCKET_USER: str = "share-bucket-{0}"  # share bucket for the user/owner_id
+VAR_NAME_STORAGE_CONFIG: str = "processing-storage-configuration"
 
 # S3 bucket object for each bucket name.
 S3_BUCKETS: dict[str, S3Bucket] = {}
@@ -63,6 +68,8 @@ S3_BUCKETS: dict[str, S3Bucket] = {}
 lock = Lock()
 
 logger = Logging.default(__name__)
+
+CONFIG_DIR = Path(__file__).parent.parent / "config"
 
 
 def init_global_env(new_owner_id: str | None = None):
@@ -100,6 +107,12 @@ def format_env_user(block_name: str, any_owner_id: str):
     return re.sub("[^a-zA-Z0-9]", "-", name)  # replace special characters by dash
 
 
+def _append_apikey_to_env(apikey: str) -> None:
+    """Append the API key to the user's ~/.env file (blocking I/O, run off the event loop)."""
+    with open(os.path.expanduser("~/.env"), "a", encoding="utf-8") as env_file:
+        env_file.write(f"\nRSPY_APIKEY={apikey}\n")
+
+
 @sync_compatible
 async def read_apikey(optional: bool = False, save_to_env: bool = True) -> None:
     """
@@ -130,9 +143,8 @@ async def read_apikey(optional: bool = False, save_to_env: bool = True) -> None:
         # Append it to the ~/.env file, if requested.
         # Don't overwrite the full ~/.env file because it can contain other user info.
         if save_to_env:
-            with open(os.path.expanduser("~/.env"), "a", encoding="utf-8") as env_file:
-                env_file.write(f"\nRSPY_APIKEY={apikey}\n")
-                logger.debug("API key saved to '~/.env'")
+            await asyncio.to_thread(_append_apikey_to_env, apikey)
+            logger.debug("API key saved to '~/.env'")
 
 
 @sync_compatible
@@ -171,13 +183,14 @@ async def update_prefect_block(block_name: str, add_values: dict | None = None, 
 
 @sync_compatible
 async def init_prefect_blocks():
-    """Init prefect blocks from the client environment (= from jupyter)"""
-    #
-    # Env vars for all users
+    """Init prefect blocks and variables from the client environment (= from jupyter)"""
 
-    # In local mode, create the block that contains the environment variables for all users.
-    # In cluster mode, this block has already been created by an admin.
+    # In local mode, automatically create prefect blocks and variables.
+    # In cluster mode, they have already been created by an admin by using rs-demo/notebooks/init-prefect/ notebooks.
     if LOCAL_MODE:
+
+        #
+        # Env vars for all users
 
         # Get all env var names that start with DASK_GATEWAY_
         regex = re.compile("^DASK_GATEWAY_.*")
@@ -203,6 +216,18 @@ async def init_prefect_blocks():
 
         # Save env vars in a secret block for all users
         await update_prefect_block(BLOCK_NAME_ENV_GLOBAL, global_env_vars)
+
+        #
+        # Processing storage configuration
+
+        if not await Variable.get(VAR_NAME_STORAGE_CONFIG):  # if this var doesn't already exist
+
+            # Read config file content
+            async with await anyio.open_file(str(CONFIG_DIR / "storage_configuration.json"), encoding="utf-8") as f:
+
+                # Write Prefect variable
+                content = await f.read()
+                await Variable.set(VAR_NAME_STORAGE_CONFIG, json.loads(content))
 
     #
     # Env vars for current user/owner_id
@@ -328,6 +353,38 @@ async def read_prefect_blocks(any_owner_id: str | None = None):
 
     # Init the env of the current module from the env vars we have just read
     init_global_env(any_owner_id)
+
+
+def read_artifact(http_session: requests.Session, flow_run_id: str | UUID, artifact_key: str) -> Any:
+    """
+    Read artifact value.
+
+    Args:
+        http_session: HTTP request session
+        flow_run_id: Prefect flow run ID
+        artifact_key: Artifact key (=name)
+
+    Returns:
+        Artifact value
+    """
+    # See: https://docs.prefect.io/v3/api-ref/rest-api/server/artifacts/read-artifacts
+    flow_run_id = str(flow_run_id)
+    response = http_session.post(
+        f"{os.environ['PREFECT_API_URL']}/artifacts/filter",
+        json={
+            "artifacts": {
+                "operator": "and_",
+                "key": {"any_": [artifact_key]},
+                "flow_run_id": {"any_": [flow_run_id]},
+            },
+        },
+        timeout=30,
+    )
+    response.raise_for_status()
+    artifacts = response.json()
+    if not artifacts:
+        raise RuntimeError(f"No artifact found for flow run ID: {flow_run_id!r} and artifact key: {artifact_key!r}")
+    return artifacts[0]["data"]
 
 
 def hack_for_jupyter(func: Callable, *args, **kwargs) -> asyncio.Task:
@@ -461,22 +518,27 @@ async def s3_upload_file(
     return await s3_bucket.aupload_from_path(from_path, to_path, **upload_kwargs)
 
 
+async def s3_upload_bytes(data: bytes, s3_path: str, **upload_kwargs: dict[str, Any]) -> str:
+    """Upload in-memory bytes straight to the S3 bucket, without writing a temporary file."""
+    s3_bucket, to_path = get_s3_bucket(s3_path)
+    return await s3_bucket.aupload_from_file_object(io.BytesIO(data), to_path, **upload_kwargs)
+
+
+@sync_compatible
+async def s3_read_bytes(s3_path: str) -> bytes:
+    """Read an object's bytes straight from the S3 bucket, without a temporary file."""
+    s3_bucket, from_path = get_s3_bucket(s3_path)
+    return await s3_bucket.aread_path(from_path)
+
+
 @sync_compatible
 async def s3_upload_empty_file(
     s3_path: str,
     **upload_kwargs: dict[str, Any],
 ) -> str:
     """Upload an empty temp file to the S3 bucket."""
-
-    # Create a tmp file
-    with tempfile.NamedTemporaryFile() as tmp:
-
-        # Add contents to the file or boto3 has a strange behavior after uploading an empty file
-        tmp.write(b"empty")
-        tmp.flush()
-
-        # Upload the file
-        return await s3_upload_file(tmp.name, s3_path, **upload_kwargs)
+    # Add contents to the file or boto3 has a strange behavior after uploading an empty file
+    return await s3_upload_bytes(b"empty", s3_path, **upload_kwargs)
 
 
 @sync_compatible

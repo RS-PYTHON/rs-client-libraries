@@ -336,7 +336,7 @@ def build_input_products(
         unit (dict): Workflow unit definition containing input product metadata.
         dpr_process_in (DprProcessIn): Input configuration for the dpr processing prefect flow.
         storage_configuration (StorageConfig): Storage configuration parameters (S3 credentials, etc.). TODO ! as
-        written in the comment from story 800, point 3: About the storage_configuration.json : for the time being,
+        written in the comment from story 800, point 3: About the storage_configuration : for the time being,
         just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
         catalog_client (CatalogClient): Client for querying STAC collections and items.
 
@@ -459,7 +459,7 @@ def build_output_products(
         unit (dict): Workflow unit definition containing output product metadata.
         dpr_process_in (DprProcessIn): Input configuration defining generated outputs.
         storage_configuration (StorageConfig): Storage configuration parameters (S3 credentials, etc.). TODO ! as
-        written in the comment from story 800, point 3: About the storage_configuration.json : for the time being,
+        written in the comment from story 800, point 3: About the storage_configuration : for the time being,
         just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
         owner_id (str): The owner ID for the workflow.
         bucket_configuration (list[list[str]]): Parsed S3 bucket configuration entries.
@@ -578,7 +578,7 @@ def get_io(
         unit (dict): Workflow unit definition containing I/O product configurations.
         dpr_process_in (DprProcessIn): DPR input configuration containing product mappings.
         store_params (StoreParams): S3 storage configuration and credentials. TODO ! as
-        written in the comment from story 800, point 3: About the storage_configuration.json : for the time being,
+        written in the comment from story 800, point 3: About the storage_configuration : for the time being,
         just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
         flow_env (FlowEnv): Environment context holding execution metadata.
 
@@ -665,105 +665,6 @@ def build_adfs(
     return result
 
 
-def load_storage_configuration(
-    secrets: dict,
-    config_path: str = str(CONFIG_DIR / "storage_configuration.json"),
-    logger=None,
-) -> StorageConfig:
-    """
-    Loads storage configuration from a JSON file and constructs a StorageConfig object.
-    """
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Storage configuration file not found: {config_path}")
-
-    return StorageConfig(secrets, config_path, logger)
-
-
-def build_mockup_payload(owner_id):
-    """
-    Builds a mock payload schema for testing or demonstration purposes.
-
-    This function generates a simplified PayloadSchema structure used for validating
-    data processing pipeline integration without invoking actual DPR (Data Processing Request)
-    logic. It creates one mock workflow step, one input product, and two output products
-    pointing to the specified S3 output location.
-
-    The resulting payload emulates a minimal working configuration for a single-unit
-    processor named mockup_processor, with placeholder input and output data paths.
-
-    Args:
-        s3_output_data (str): S3 path (e.g., 's3://bucket/output/path') representing
-            the output location for the mock products.
-
-    Returns:
-        PayloadSchema: A fully populated payload schema containing:
-            - A single workflow step (mockup_processor)
-            - One mock input product (S3ACADUS)
-            - Two mock output products (S3MWRL0_, S3OLCL0_)
-            - A default general configuration section
-            - No adfs (sets it to [])
-
-    Notes:
-        - This mock payload is typically used for testing DPR endpoints or
-          integration pipelines when real input data or cluster processing
-          is not required.
-        - The 'dask_context' section is intentionally omitted, as it is expected
-          to be injected later by the DPR service layer.
-    """
-    mockup_output_products = ["S03MWRL0_", "S03OLCL0_"]
-    workflow_steps = [
-        WorkflowStep(
-            name="mockup_processor",
-            active=True,
-            validate=False,
-            module="lm.sm.mockup_processor",
-            processing_unit="single_unit",
-            inputs={"S3ACADUS": "S3ACADUS"},
-            adfs=None,
-            outputs={"out1": mockup_output_products[0], "out2": mockup_output_products[1]},
-            parameters=None,
-        ),
-    ]
-    input_products = [
-        InputProduct(
-            id="S3ACADUS",
-            path="s3://mockup_input_path",
-            store_type="cadu",
-            store_params=None,
-        ),
-    ]
-
-    output_products = [
-        OutputProduct(
-            id=outp,
-            path=os.path.join(
-                "s3://",
-                RSPY_CATALOG_BUCKET,
-                "dpr_mockup_results",
-                owner_id,
-                "TEST_FLOW_OUTPUT",
-                str(uuid4()),
-            ),
-            store_type="zarr",
-            type="folder",
-            store_params=None,
-        )
-        for outp in mockup_output_products
-    ]
-    io_config = IOConfig(
-        input_products=input_products,
-        output_products=output_products,
-    )
-    return PayloadSchema(
-        # add some default params, as stated in a comment from jira (story 800)
-        general_configuration=GeneralConfiguration(),
-        workflow=workflow_steps,
-        io=io_config,  # type: ignore
-        # The dask_context section is updated in dpr_service
-        # dask_context=dask_context,
-    )
-
-
 @task(name="Generate payload file")
 def generate_payload(  # pylint: disable=unused-argument
     flow_env: FlowEnv,
@@ -804,24 +705,13 @@ def generate_payload(  # pylint: disable=unused-argument
     # with flow_env.start_span(__name__, "generate-payload"):
     # the values should be name of the secrets, and not the values of these secrets.
     # it's up to the processor to retrieve the values at the running time
-    # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
-    # in cluster mode, it should be mounted as volume from a predefined (?) configmap
-
-    if dpr_process_in.processor_name.lower() == "mockup":
-        logger.info("Generating payload for mockup processor")
-        # TODO: the ouput path can be also computed, by using the following 3 lines
-        # and add output_mockup_path as param to build_mockup_payload
-        # config_file_path = os.getenv(FILEPATH_ENV_VAR, DEFAULT_FILEPATH)
-        # config_rows = fetch_csv_from_endpoint(config_file_path)
-        # output_mockup_path=build_output_products(unit_list[0], dpr_process_in, store_params, flow_env, config_rows)
-        return build_mockup_payload(flow_env.owner_id)
 
     logger.info(f"🚧 Starting payload generation for DPR processor '{dpr_process_in.processor_name}'")
     logger.info("Loading storage configuration template from file")
     secrets = Secret.load(
         prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, flow_env.owner_id),
     ).get()  # type: ignore[union-attr]
-    storage_configuration = load_storage_configuration(secrets, logger=logger)
+    storage_configuration = StorageConfig(secrets, logger)
     logger.info("Loading bucket configuration from rs-osam endpoint")
     bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
 

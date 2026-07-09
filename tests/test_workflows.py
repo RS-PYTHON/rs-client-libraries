@@ -23,6 +23,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 import pytest
 import pytest_responses  # pylint: disable=unused-import # noqa: F401 # used to avoid adding @responses.activate
 import responses
+from prefect.variables import Variable
 from pystac import Asset, Item, ItemCollection
 from starlette import status
 
@@ -44,6 +45,7 @@ from rs_workflows.flow_utils import (
     FlowInputProduct,
     ProcessingMode,
 )
+from rs_workflows.payload_generator import RSPY_CATALOG_BUCKET
 from tests.conftest import (
     COLLECTION_ID,
     MOCKED_BUCKET,
@@ -53,6 +55,9 @@ from tests.conftest import (
 from tests.test_utils import setup_worklow_test_env
 
 CONFIG_DIR = Path(__file__).parent / "resources"
+
+# Prefect variable name for the storage configuration
+STORAGE_CONFIG = "processing-storage-configuration"
 
 
 ##################
@@ -65,7 +70,7 @@ DASK_CLUSTER_INSTANCE = "dask-gateway.test-cluster-instance"
 DASK_GATEWAY_PUBLIC = "http://test-dask-gateway-public"
 
 MAP_PRODUCT_TO_COLLECTION = [
-    {"name": "S03MWRL0_", "product_type": "S1_GRD", "collection_name": "OUTPUT_GRD_COLLECTION"},
+    {"name": "S03OLCL0_", "product_type": "S1_GRD", "collection_name": "OUTPUT_GRD_COLLECTION"},
     {"name": "S03OLCL0_", "product_type": "S2_NTC", "collection_name": "OUTPUT_NTC_COLLECTION"},
 ]
 
@@ -100,6 +105,21 @@ def mock_record_performance_indicators(mocker):
     return fake_task
 
 
+#####################################
+# Mock Prefect blocks and variables #
+#####################################
+
+
+@pytest.fixture(name="storage_configuration")
+def _storage_configuration():
+    """Set prefect variable that contains the storage configuration"""
+    path = Path(__file__).parent.parent / "config" / "storage_configuration.json"
+    with open(path, encoding="utf-8") as f:
+        Variable.set(STORAGE_CONFIG, json.load(f), overwrite=True)
+    yield
+    Variable.unset(STORAGE_CONFIG)
+
+
 #############
 # DPR flows #
 #############
@@ -115,6 +135,7 @@ def mock_record_performance_indicators(mocker):
 )
 @pytest.mark.parametrize("mocked_dpr_response", ["mockup"], indirect=True, ids=[""])
 async def test_dpr_processing(
+    monkeypatch,
     mocker,
     mocked_s3,
     mocked_rspy_landing_pages,  # /auxip, /cadip, /catalog, /...
@@ -124,6 +145,7 @@ async def test_dpr_processing(
     mocked_tasktable,  # /dpr/processes/mockup?...
     mocked_dpr_response,  # /dpr/processes/mockup/execution, /dpr/jobs/{job_id}
     mocked_processor_output,
+    storage_configuration,
 ):  # pylint: disable=unused-argument
     """Test the dpr_processing flow"""
 
@@ -146,8 +168,17 @@ async def test_dpr_processing(
 
     # Spy on function calls
     spy_add_item = mocker.spy(catalog_client.CatalogClient, "add_item")
-    spy_s3_upload_file = mocker.spy(prefect_utils, "s3_upload_file")
+    spy_s3_upload_bytes = mocker.spy(prefect_utils, "s3_upload_bytes")
     spy_s3_delete = mocker.spy(prefect_utils, "s3_delete")
+    monkeypatch.setenv("RSPY_HOST_OSAM", "https://dummy-osam")
+    mocker.patch(
+        "rs_workflows.payload_generator.fetch_csv_from_endpoint",
+        return_value=[["*", "*", "*", "90", RSPY_CATALOG_BUCKET]],
+    )
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value=(None, f"s3://{MOCKED_BUCKET}/S1CADUS"),
+    )
 
     ################
     # Init and run #
@@ -158,6 +189,7 @@ async def test_dpr_processing(
         {
             "JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN,
             "DASK_GATEWAY_PUBLIC": DASK_GATEWAY_PUBLIC,
+            "RSPY_HOST_OSAM": "https://dummy-osam",
         },
     )
 
@@ -169,7 +201,13 @@ async def test_dpr_processing(
         pipeline="mockup_full",
         dask_cluster_label=DASK_CLUSTER_LABEL,
         dask_cluster_instance=DASK_CLUSTER_INSTANCE,
-        input_products=[{"name": "input_name", "item_id": "dummy_id", "collection_name": "dummy_collection"}],
+        input_products=[
+            {
+                "name": "S1CADUS",
+                "item_id": "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.EOF",
+                "collection_name": COLLECTION_ID,
+            },
+        ],
         generated_product_to_collection_identifier=MAP_PRODUCT_TO_COLLECTION,  # type: ignore
         auxiliary_product_to_collection_identifier=[{"product_type": "*", "collection_name": COLLECTION_ID}],
         processing_mode=[ProcessingMode.NRT],  # type: ignore[list-item]
@@ -191,19 +229,15 @@ async def test_dpr_processing(
     _, expected_items = mocked_processor_output
 
     # Update expected origin_datetime for mockup processor, and add the UUID in the href
-    fixed_uuids = [
-        "00000000-0000-0000-0000-000000000001",
-        "00000000-0000-0000-0000-000000000002",
-    ]
-    for i, item in enumerate(expected_items.values()):
+    output_uuid = "00000000-0000-0000-0000-000000000001"
+    for item in expected_items.values():
         item["properties"]["eopf:origin_datetime"] = "2026-01-01T00:00:00Z"
         # The href must include the UUID generated by payload_generator
         product_name = item["id"]
-        product_uuid = fixed_uuids[i]
         old_href = item["assets"][product_name]["href"]
-        # wanted: s3://.../TEST_FLOW_OUTPUT/UUID/product_name
+        # wanted: s3://.../OUTPUT_COLLECTION/UUID/product_name
         base_path = old_href.rsplit("/", 1)[0]
-        item["assets"][product_name]["href"] = f"{base_path}/{product_uuid}/{product_name}"
+        item["assets"][product_name]["href"] = f"{base_path}/{output_uuid}/{product_name}"
 
     result_collection_ids = []
     result_items = {}
@@ -227,11 +261,11 @@ async def test_dpr_processing(
 
     assert result_items == expected_items
 
-    # --- verify s3_upload_file was called with the expected destination (second arg) ---
-    upload_calls = spy_s3_upload_file.call_args_list
+    # --- verify the payload was uploaded in memory to the expected destination ---
+    upload_calls = spy_s3_upload_bytes.call_args_list
     assert len(upload_calls) == 1
     args = upload_calls[0].args
-    assert isinstance(args[0], (str, Path))  # temp file path
+    assert isinstance(args[0], bytes)  # in-memory payload contents
     assert args[1] == dpr_input.s3_payload_file  # destination S3 path
 
     # --- verify s3_delete was called with the payload file ---

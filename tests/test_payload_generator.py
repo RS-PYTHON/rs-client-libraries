@@ -207,7 +207,7 @@ def test_generate_payload_success(
     mock_storage_config.default_adfs_storage = "s3"
 
     mocker.patch(
-        "rs_workflows.payload_generator.load_storage_configuration",
+        "rs_workflows.payload_generator.StorageConfig",
         return_value=mock_storage_config,
     )
     mocker.patch(
@@ -265,7 +265,7 @@ def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_e
     mock_storage_config.get_store_params.return_value = mock_store_params
 
     mocker.patch(
-        "rs_workflows.payload_generator.load_storage_configuration",
+        "rs_workflows.payload_generator.StorageConfig",
         return_value=mock_storage_config,
     )
     mocker.patch(
@@ -297,7 +297,7 @@ def test_generate_payload_deduplicates_io(mocker, sample_unit, mock_dpr_process_
     shared_output = OutputProduct(id="out1", path="s3://bucket/out1", store_type="s3")
 
     mocker.patch(
-        "rs_workflows.payload_generator.load_storage_configuration",
+        "rs_workflows.payload_generator.StorageConfig",
         return_value=MagicMock(default_adfs_storage="s3"),
     )
     mocker.patch(
@@ -329,25 +329,48 @@ def test_generate_payload_deduplicates_io(mocker, sample_unit, mock_dpr_process_
 # Mock-up processor path
 
 
-def test_generate_payload_mockup_processor(flow_env, mock_dpr_process_in):
+def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in, _mock_os_env):
     """
-    Test the special MOCKUP processor path returns a valid mock payload.
+    Test the MOCKUP processor path uses the generic payload generation.
     """
+    mockup_unit = {
+        "name": "single_unit",
+        "module": "l0.s1.mockup_processor",
+        "input_products": [{"name": "S1CADUS", "origin": "pipeline_input", "store_type": "cadu"}],
+        "input_adfs": [],
+        "output_products": [{"name": "S03OLCL0_", "store_type": "zarr"}],
+    }
+    mocker.patch(
+        "rs_workflows.payload_generator.StorageConfig",
+        return_value=MagicMock(default_adfs_storage="s3"),
+    )
+    mocker.patch(
+        "rs_workflows.payload_generator.get_io",
+        return_value=(
+            [InputProduct(id="S1CADUS", path="s3://mocked/input", store_type="cadu")],
+            [OutputProduct(id="S03OLCL0_", path="s3://mocked/output", store_type="zarr")],
+        ),
+    )
+    mocker.patch("rs_workflows.payload_generator.fetch_csv_from_endpoint", return_value=[])
+    mock_secret = MagicMock()
+    mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
+    mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
+
     mock_dpr_process_in.processor_name = "MOCKUP"
     payload = generate_payload.fn(
         flow_env=flow_env,
-        unit_list=[],
+        unit_list=[mockup_unit],
         adfs=[],
         dpr_process_in=mock_dpr_process_in,
     )
     assert isinstance(payload, PayloadSchema)
-    assert any(step.name == "mockup_processor" for step in (payload.workflow or []))
+    assert any(step.module == "l0.s1.mockup_processor" for step in (payload.workflow or []))
     # make mypy happy with the follwing 3 asserts ....
     assert payload.io is not None
     assert payload.io.input_products is not None
     assert len(payload.io.input_products) > 0
-    assert payload.io.input_products[0].id == "S3ACADUS"
-    assert "S03MWRL0_" in [op.id for op in payload.io.output_products]
+    assert payload.io.input_products[0].id == "S1CADUS"
+    assert "S03OLCL0_" in [op.id for op in payload.io.output_products]
 
 
 # ----------------------------------------------------------------------

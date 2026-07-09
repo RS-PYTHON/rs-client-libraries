@@ -19,7 +19,12 @@ from datetime import datetime, timezone
 from prefect import get_run_logger, task
 from pystac import Item, ItemCollection
 
-from rs_workflows.flow_utils import FlowEnv
+from rs_workflows.catalog_flow import publish
+from rs_workflows.flow_utils import (
+    DprProcessedItemMetadata,
+    FlowEnv,
+    FlowGeneratedProduct,
+)
 
 
 @task(name="Retrieve rs-catalog item from collection")
@@ -45,7 +50,7 @@ async def get_single_catalog_item(flow_env: FlowEnv, item_id: str, collections: 
             result = item_collection.items[0]
     else:
         logger.warning(
-            f"❌ The STAC item 🧊 '{item_id}' was not found on the rs-catalog collections {', '.join(collections)}.",
+            f"⚠️ The STAC item 🧊 '{item_id}' was not found on the rs-catalog collections {', '.join(collections)}.",
         )
 
     return result
@@ -98,3 +103,38 @@ def is_published(item: Item) -> bool:
         return published_date <= datetime.now(timezone.utc)
 
     return False
+
+
+@task
+async def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: str) -> None:
+    """ "
+    Push a STAC item into the rs-catalog.
+    """
+    logger = get_run_logger()
+    logger.info(f"The STAC item 🧊 '{item.id}' will be published on the collection '{collection_name}'.")
+    items_metadata: list[DprProcessedItemMetadata] = []
+    publish_mapping: list[FlowGeneratedProduct] = []
+
+    items_metadata.append(
+        DprProcessedItemMetadata(
+            output_product_id=item.id,
+            product_type=item.properties.get("product:type"),
+            stac_item=item,
+        ),
+    )
+
+    publish_mapping.append(
+        FlowGeneratedProduct(
+            name=item.id,
+            product_type=str(item.properties.get("product:type")),
+            collection_name=collection_name,
+        ),
+    )
+
+    logger.debug(f"items_metadata = {items_metadata}")
+    logger.debug(f"publish_mapping = {publish_mapping}")
+    await publish(
+        flow_env.serialize(),
+        publish_mapping,
+        items_metadata,
+    )
