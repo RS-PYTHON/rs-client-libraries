@@ -14,14 +14,14 @@
 
 """sentinel 3 OLCI Level-1 processing."""
 
-from prefect import flow, task
 from datetime import datetime
-from rs_workflows.flow_utils import (
-    FlowInputProduct,
-    FlowEnvArgs
-)
-from rs_workflows.utils.dpr import call_dpr_flow
+
+from prefect import flow, task
+
+from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
 from rs_workflows.on_demand.common.types import Level1FlowParams
+from rs_workflows.utils.dpr import call_dpr_flow
+
 
 @flow(name="process-s3-l1-olci")
 async def process_s3l1_olci(session: str, flow_params: Level1FlowParams):
