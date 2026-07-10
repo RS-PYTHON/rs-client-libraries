@@ -267,7 +267,7 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
     OLCI requires these triggering options, but they must not be emitted for other processors.
     """
     mocker.patch(
-        "rs_workflows.payload_generator.load_storage_configuration",
+        "rs_workflows.payload_generator.StorageConfig",
         return_value=MagicMock(default_adfs_storage="s3"),
     )
     mocker.patch(
