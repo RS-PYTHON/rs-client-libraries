@@ -15,7 +15,7 @@
 """Test the payload_builder module"""
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -61,7 +61,7 @@ SCENARIOS: dict[str, dict] = {
     # S1 ARD
     "9": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"pipeline": "s1_ard_full", "processing_mode": ["nrt", "reprocessing"]},
+        "kwargs": {"pipeline": "SLC__1_NRB__1", "processing_mode": ["nrt", "reprocessing"]},
     },
     "10": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
@@ -86,6 +86,18 @@ SCENARIOS: dict[str, dict] = {
     "15": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
         "kwargs": {"unit": "mosaicking", "processing_mode": ["nrt"]},
+    },
+    "16": {
+        "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
+        "kwargs": {"pipeline": "SLC__1_CSL__1", "processing_mode": None},
+    },
+    "17": {
+        "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
+        "kwargs": {"pipeline": "SLC__1_GSL__1", "processing_mode": None},
+    },
+    "18": {
+        "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
+        "kwargs": {"pipeline": "SLC__1_NRB__1", "processing_mode": None},
     },
 }
 
@@ -301,178 +313,206 @@ def test_case_8_exact_output():
 
     out = build_unit_list(
         tasktable=tt,
-        pipeline="s1_ard_full",
+        pipeline="SLC__1_NRB__1",
         processing_mode=["nrt", "reprocessing"],
+        external_variables={"reference_date": date(2026, 4, 8), "instrument_mode": "IW"},
     )
 
-    expected = [
-        {
-            "name": "calibration.1",
-            "module": "s1_l12_rp.computing.ard_processing_units",
-            "input_products": [
-                {
-                    "name": "cal_input",
-                    "origin": "pipeline_input",
-                    "mandatory": False,
-                    "type": "folder",
-                    "store_type": "safe",
-                },
-            ],
-            "input_adfs": [
-                {"name": "CONFIG", "mandatory": False, "type": "filename"},
-                {"name": "ETAD", "mandatory": False, "type": "folder"},
-            ],
-            "output_products": [
-                {
-                    "name": "CAL_SLCS",
-                    "origin": "pipeline_internal",
-                    "mandatory": True,
-                    "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
-                },
-            ],
-            "parameters": {"reference_date": "somevalue"},
-        },
-        {
-            "name": "reference_dem.2",
-            "module": "s1_l12_rp.computing.ard_processing_units",
-            "input_products": [
-                {
+    expected = {
+        "units": [
+            {
+                "name": "calibration",
+                "module": "s1_ard.computing.ard_processing_units",
+                "input_products": [
+                    {
+                        "name": "slcs",
+                        "origin": "pipeline_input",
+                        "mandatory": True,
+                        "type": "regex",
+                        "store_params": {"regex": "*SLC*"},
+                        "store_type": "zarr",
+                        "opening_mode": "CREATE_OVERWRITE",
+                    },
+                ],
+                "input_adfs": [
+                    {"name": "REFERENCE_DB", "mandatory": True, "type": "filename"},
+                    {"name": "ETAD", "mandatory": False, "type": "folder"},
+                    {"name": "ORBIT", "mandatory": False, "type": "folder"},
+                ],
+                "output_products": [
+                    {
                     "name": "cal_slcs",
-                    "origin": "calibration.1.CAL_SLCS",
-                    "mandatory": False,
-                    "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
-                },
-            ],
-            "input_adfs": [
-                {"name": "CONFIG", "mandatory": False, "type": "filename"},
-                {"name": "DEM", "mandatory": False, "type": "folder"},
-            ],
-            "output_products": [
-                {"name": "reference_dem", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
-            ],
-        },
-        {
-            "name": "reference_geometry.3",
-            "module": "s1_l12_rp.computing.ard_processing_units",
-            "input_products": [
-                {
-                    "name": "cal_slcs",
-                    "origin": "calibration.1.CAL_SLCS",
-                    "mandatory": False,
-                    "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
-                },
-                {
-                    "name": "reference_dem",
-                    "origin": "reference_dem.2.reference_dem",
-                    "mandatory": False,
-                    "type": "folder",
-                },
-            ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
-            "output_products": [
-                {"name": "simulation_ref", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
-            ],
-        },
-        {
-            "name": "coregistration.4",
-            "module": "s1_l12_rp.computing.ard_processing_units",
-            "input_products": [
-                {
-                    "name": "cal_slcs",
-                    "origin": "calibration.1.CAL_SLCS",
-                    "mandatory": False,
-                    "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
-                },
-                {
-                    "name": "reference_dem",
-                    "origin": "reference_dem.2.reference_dem",
-                    "mandatory": False,
-                    "type": "folder",
-                },
-                {
-                    "name": "simulation_ref",
-                    "origin": "reference_geometry.3.simulation_ref",
-                    "mandatory": False,
-                    "type": "folder",
-                },
-            ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
-            "output_products": [
-                {
-                    "name": "cslcs",
-                    "origin": "pipeline_internal",
-                    "mandatory": True,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
-                },
-            ],
-        },
-        {
-            "name": "geocoding.5",
-            "module": "s1_l12_rp.computing.ard_processing_units",
-            "input_products": [
-                {
-                    "name": "cslcs",
-                    "origin": "coregistration.4.cslcs",
-                    "mandatory": False,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
-                },
-                {
-                    "name": "simulation_ref",
-                    "origin": "reference_geometry.3.simulation_ref",
-                    "mandatory": False,
-                    "type": "folder",
-                },
-            ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
-            "output_products": [
-                {
-                    "name": "gslcs",
-                    "origin": "pipeline_internal",
-                    "mandatory": True,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
-                },
-            ],
-        },
-        {
-            "name": "mosaicking.6",
-            "module": "s1_l12_rp.computing.ard_processing_units",
-            "input_products": [
-                {
-                    "name": "gslcs",
-                    "origin": "geocoding.5.gslcs",
-                    "mandatory": False,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
-                },
-            ],
-            "input_adfs": [{"name": "S2_TILES", "mandatory": False, "type": "filename"}],
-            "output_products": [
-                {
-                    "name": "nrb",
-                    "origin": "pipeline_output",
-                    "mandatory": True,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
-                },
-            ],
-        },
-    ]
+                        "origin": "pipeline_internal",
+                        "mandatory": True,
+                        "type": "regex",
+                        "store_params": {"regex": "*SLC*"},
+                        "store_type": "zarr",
+                        "opening_mode": "CREATE_OVERWRITE",
+                    },
+                ],
+            },
+            {
+                "name": "reference_dem",
+                "module": "s1_ard.computing.ard_processing_units",
+                "input_products": [
+                    {
+                        "name": "slcs",
+                    "origin": "calibration.1.cal_slcs",
+                        "mandatory": True,
+                        "type": "regex",
+                        "store_params": {"regex": "*SLC*"},
+                        "store_type": "zarr",
+                        "opening_mode": "CREATE_OVERWRITE",
+                    },
+                ],
+                "input_adfs": [
+                    {"name": "REFERENCE_DB", "mandatory": True, "type": "filename"},
+                    {"name": "DEM", "mandatory": False, "type": "folder"},
+                ],
+                "output_products": [
+                    {"name": "DEM", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
+                ],
+            },
+            {
+                "name": "reference_geometry",
+                "module": "s1_ard.computing.ard_processing_units",
+                "input_products": [
+                    {
+                        "name": "slcs",
+                    "origin": "calibration.1.cal_slcs",
+                        "mandatory": True,
+                        "type": "regex",
+                        "store_params": {"regex": "*SLC*"},
+                        "store_type": "zarr",
+                        "opening_mode": "CREATE_OVERWRITE",
+                    },
+                    {
+                        "name": "dem",
+                        "origin": "reference_dem.DEM",
+                        "mandatory": True,
+                        "type": "folder",
+                    },
+                ],
+                "input_adfs": [{"name": "REFERENCE_DB", "mandatory": True, "type": "filename"}],
+                "output_products": [
+                    {"name": "simulation_ref", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
+                ],
+            },
+            {
+                "name": "coregistration",
+                "module": "s1_ard.computing.ard_processing_units",
+                "input_products": [
+                    {
+                        "name": "slcs",
+                    "origin": "calibration.1.cal_slcs",
+                        "mandatory": True,
+                        "type": "regex",
+                        "store_params": {"regex": "*SLC*"},
+                        "store_type": "zarr",
+                        "opening_mode": "CREATE_OVERWRITE",
+                    },
+                    {
+                        "name": "dem",
+                        "origin": "reference_dem.DEM",
+                        "mandatory": True,
+                        "type": "folder",
+                    },
+                    {
+                        "name": "simulation_ref",
+                        "origin": "reference_geometry.simulation_ref",
+                        "mandatory": True,
+                        "type": "folder",
+                    },
+                ],
+                "input_adfs": [{"name": "REFERENCE_DB", "mandatory": True, "type": "filename"}],
+                "output_products": [
+                    {
+                        "name": "cslcs",
+                        "origin": "pipeline_internal",
+                        "mandatory": True,
+                        "type": "filename",
+                        "store_type": "zarr",
+                        "store_params": {"consolidate": True},
+                    },
+                    {
+                        "name": "slcs",
+                        "origin": "pipeline_internal",
+                        "mandatory": True,
+                        "type": "regex",
+                        "store_params": {"regex": "*SLC*"},
+                        "store_type": "zarr",
+                        "opening_mode": "CREATE_OVERWRITE",
+                    },
+                ],
+            },
+            {
+                "name": "geocoding",
+                "module": "s1_ard.computing.ard_processing_units",
+                "input_products": [
+                    {
+                        "name": "slcs",
+                        "origin": "coregistration.slcs",
+                        "mandatory": True,
+                        "type": "regex",
+                        "store_params": {"regex": "*SLC*"},
+                        "store_type": "zarr",
+                        "opening_mode": "CREATE_OVERWRITE",
+                    },
+                    {
+                        "name": "simulation_ref",
+                        "origin": "reference_geometry.simulation_ref",
+                        "mandatory": True,
+                        "type": "folder",
+                    },
+                ],
+                "input_adfs": [{"name": "REFERENCE_DB", "mandatory": True, "type": "filename"}],
+                "output_products": [
+                    {
+                        "name": "gslcs",
+                        "origin": "pipeline_internal",
+                        "mandatory": True,
+                        "type": "filename",
+                        "store_type": "zarr",
+                        "store_params": {"consolidate": True},
+                    },
+                ],
+            },
+            {
+                "name": "mosaicking",
+                "module": "s1_ard.computing.ard_processing_units",
+                "input_products": [
+                    {
+                        "name": "gslcs",
+                        "origin": "geocoding.gslcs",
+                        "mandatory": True,
+                        "type": "filename",
+                        "store_type": "zarr",
+                        "store_params": {"consolidate": True},
+                    },
+                    {
+                        "name": "slcs",
+                        "origin": "coregistration.slcs",
+                        "mandatory": True,
+                        "type": "regex",
+                        "store_params": {"regex": "*SLC*"},
+                        "store_type": "zarr",
+                        "opening_mode": "CREATE_OVERWRITE",
+                    },
+                ],
+                "input_adfs": [{"name": "S2_TILES", "mandatory": True, "type": "filename"}],
+                "output_products": [
+                    {
+                        "name": "nrb",
+                        "origin": "pipeline_output",
+                        "mandatory": True,
+                        "type": "filename",
+                        "store_type": "zarr",
+                        "store_params": {"consolidate": True},
+                    },
+                ],
+            },
+        ],
+    }
 
     assert out == expected
 

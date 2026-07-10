@@ -1,0 +1,12 @@
+{
+  "slc": "S01SIWSLC_20260408T174632_0026_C132_TFC6",
+  "flow_params": {
+    "pipeline": "ARD_REFERENCE_PIPELINE",
+    "logging_level": "DEBUG",
+    "owner_identifier": "copernicus",
+    "input_collections": [
+      "s01siwslc"
+    ],
+    "dask_cluster_label": "dask-s1ard.vprivat.latest"
+  }
+}

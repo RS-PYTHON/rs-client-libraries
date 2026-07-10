@@ -152,8 +152,8 @@ class StoreParams(BasePayloadModel):
     # Or a storage options used for s3
     storage_options: StorageOptions | None = None
     # Or a regex + multiplicity
-    regex: str | None = None
-    multiplicity: str | int | None = None
+    regex: str | None = None  # FIXME to remove in CPMv3 moved to InputProduct
+    multiplicity: str | int | None = None  # FIXME to remove in CPMv3 moved to InputProduct
 
     @field_validator("multiplicity")
     @classmethod
@@ -182,7 +182,7 @@ class GeneralConfiguration(BasePayloadModel):
 
     logging: LoggingConfig | None = LoggingConfig(level="DEBUG")
     triggering__use_basic_logging: bool | None = True
-    triggering__wait_before_exit: int | None = 10
+    triggering__wait_before_exit: int | None = 120
     dask__export_graphs: str | None = None
     dask_utils__timeout: int | None = None
     breakpoints__folder: str | None = None
@@ -213,7 +213,7 @@ class Breakpoints(BasePayloadModel):
 
     activate_all: bool | None = None
     folder: str | None = None
-    store_params: StoreParams | None = None
+    breakpoint_params: StoreParams | None = None  # FIXME quick and dirty CPM v3 test
     ids: list[str] | None = None
 
 
@@ -242,10 +242,24 @@ class InputProduct(BasePayloadModel):
 
     id: str
     path: str
-    type: str | None = Field(default="filename")
-    store_type: str
-    store_params: StoreParams | None = None
+    # FIXME https://cpm.pages.eopf.copernicus.eu/eopf-cpm/v3.X.Y/v3/triggering_migration.html
+    type: str | None = Field(default="file")  # FIXME quick and dirty CPM v3 test
+    engine: str  # FIXME quick and dirty CPM v3 test
+    reader_params: StoreParams | None = None  # FIXME quick and dirty CPM v3 test
+    multiplicity: str | int | None = None  # FIXME quick and dirty CPM v3 test
     opening_mode: str | None = Field(default=None)
+
+    @field_validator("multiplicity")
+    @classmethod
+    def validate_multiplicity(cls, v):
+        """Validation of multiplicity field"""
+        if v is None:
+            return v
+        if isinstance(v, str) and v not in {"exactly_one", "at_least_one", "more_than_one"}:
+            raise ValueError('multiplicity must be "exactly_one", "at_least_one", "more_than_one" or an integer')
+        if not isinstance(v, (str, int)):
+            raise ValueError("multiplicity must be a string or an integer")
+        return v
 
 
 class OutputProduct(BasePayloadModel):
@@ -253,10 +267,11 @@ class OutputProduct(BasePayloadModel):
 
     id: str
     path: str
-    store_type: str
-    store_params: StoreParams | None = None
-    type: str | None = Field(default="filename")
-    opening_mode: str | None = Field(default="CREATE")
+    # FIXME https://cpm.pages.eopf.copernicus.eu/eopf-cpm/v3.X.Y/v3/triggering_migration.html
+    engine: str  # FIXME quick and dirty CPM v3 test
+    writer_params: StoreParams | None = None  # FIXME quick and dirty CPM v3 test
+    type: str | None = Field(default="file")  # FIXME quick and dirty CPM v3 test
+    # opening_mode: str | None = Field(default="CREATE")  # FIXME quick and dirty CPM v3 test
     apply_eoqc: bool | None = Field(default=False)
     autoclean: bool | None = Field(default=False, exclude=True)
     # Excluded from serialization by default
@@ -272,7 +287,8 @@ class AdfConfig(BasePayloadModel):
 
     id: str
     path: str | SecretStr
-    store_params: StoreParams | None = None
+    # FIXME https://cpm.pages.eopf.copernicus.eu/eopf-cpm/v3.X.Y/v3/computing_migration.html
+    adf_params: StoreParams | None = None  # FIXME quick and dirty CPM v3 test
 
 
 class IOConfig(BasePayloadModel):
@@ -300,7 +316,8 @@ class EOQCConfig(BasePayloadModel):
     config_folder: str | None = Field(default="default")
     parameters: dict[str, str | int | float | bool] | None = Field(default_factory=dict)
     update_attrs: bool | None = Field(default=True)
-    report_path: str | None = None
+    # FIXME https://cpm.pages.eopf.copernicus.eu/eopf-cpm/v3.X.Y/v3/triggering_migration.html
+    report_folder: str | None = None  # FIXME quick and dirty CPM v3 test
     config_path: str | None = None
     additional_config_folders: list[str] | None = None
 
@@ -316,7 +333,7 @@ class PayloadSchema(BasePayloadModel):
     external_modules: list[ExternalModule] | None = None
     breakpoints: Breakpoints | None = None
     workflow: list[WorkflowStep] | None = None
-    io: IOConfig | None = Field(None, alias="I/O")
+    io: IOConfig | None = None  # CPM 3.0.0rc4 forces "io" # Field(None, alias="I/O")
     dask_context: DaskContext | None = None
     logging: str | None = None
     config: list[str] | None = None

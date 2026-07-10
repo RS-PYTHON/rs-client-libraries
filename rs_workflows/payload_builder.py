@@ -19,6 +19,8 @@ from collections.abc import Iterable
 from copy import deepcopy
 from typing import Any
 
+from prefect import get_run_logger
+
 from rs_common.utils import strftime_millis
 
 EXTERNAL_VAR_PATTERN = re.compile(r"\{external_variable\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
@@ -68,6 +70,8 @@ def _extract_io_origin_from_pipeline(
         is_input: whether the product is an input (True, default value) or an output (False)
         step_id: step_id value in case we have to discriminate between several units with the same name
     """
+    logger = get_run_logger()
+
     # Origin name mapping
     origin_mapping = {
         "pipeline.input": "pipeline_input",
@@ -76,6 +80,8 @@ def _extract_io_origin_from_pipeline(
     }
     # Pattern for origins chaining units inside a pipeline: unit.step_id.output_product_name or unit.output_product_name
     unit_origin_pattern = r"^[^.]+\.[^.]+(\.[^.]+)?$"
+    # workaround for https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/issues/1103
+    # unit_origin_pattern = r"^[^._]+(_[^._]+)?\.[^.]+$"
 
     # Retrieve the details of the step defining the unit and the step_id given (if any) from the pipeline definition
     pipeline_unit: dict[str, Any] = {}
@@ -94,7 +100,7 @@ def _extract_io_origin_from_pipeline(
     io_type = "input_products" if is_input else "output_products"
 
     # Retrieve origin for the product
-    product_origin = pipeline_unit.get(io_type, {}).get(product_name)
+    product_origin: str = pipeline_unit.get(io_type, {}).get(product_name)
     if not product_origin:
         raise TaskTableError(
             f"Product '{product_name}' not found in field '{io_type}' for unit '{unit_name}' "
@@ -108,6 +114,8 @@ def _extract_io_origin_from_pipeline(
     # Case 2: origin is a product from another unit
     elif re.fullmatch(unit_origin_pattern, product_origin):
         all_fields = product_origin.split(".")
+        # workaround for https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/issues/1103
+        # all_fields = re.split(r"[._]", product_origin)
 
         # Origin unit is always the first field.
         origin_unit_name = all_fields[0]
@@ -127,6 +135,9 @@ def _extract_io_origin_from_pipeline(
                 # If we have an origin_step_id given, check that the step found matches this value aswell.
                 # If not, keep searching
                 if origin_step_id and step.get("step_id") != origin_step_id:
+                    logger.info(
+                        f"Found unit {origin_unit_name} but its step_id {step.get("step_id")} != {origin_step_id}",
+                    )
                     continue
                 origin_unit = step
                 origin_step_id = step.get("step_id")
@@ -139,13 +150,18 @@ def _extract_io_origin_from_pipeline(
             )
 
         # Check that the referenced product exists in the outputs of the unit we found
-        if origin_product_name not in origin_unit.get("output_products", {}):
+        if origin_product_name == "slcs" and origin_unit_name == "Coregistration":
+            # HACK for S1-ARD. If we add slcs outputs in Coregistration step, CPM detects a cyclic dependency
+            pass
+        elif origin_product_name not in origin_unit.get("output_products", {}):
             raise TaskTableError(
                 f"Unit '{unit_name}' needs product '{origin_product_name}' from unit '{origin_unit_name}' "
                 f"but available outputs are: {origin_unit.get("output_products", {})}.",
             )
 
         product_origin = f"{origin_unit_name}.{origin_step_id}.{origin_product_name}"
+        # workaround for https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/issues/1103
+        # product_origin = f"{origin_unit_name}_{origin_step_id}.{origin_product_name}"
 
     return product_origin
 
@@ -190,6 +206,8 @@ def _build_entry(
         return None
 
     # Retrieve product details from "io" section
+    # Ugly workaround to https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-1090
+    # io_details = io_index.get("DEM" if io_product["name"] == "dem" else io_product["name"], {})
     io_details = io_index.get(io_product["name"], {})
     if not io_details:
         raise TaskTableError(
@@ -314,6 +332,8 @@ def _build_single_unit_details(
     # between several steps using the same unit
     if full_pipeline:
         unit_name = f"{unit_name}.{step_id}"
+        # workaround for https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/issues/1103
+        # unit_name = f"{unit_name}_{step_id}"
 
     # Build the final unit details for the payload
     out_unit: dict[str, Any] = {

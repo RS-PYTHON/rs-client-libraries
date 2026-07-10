@@ -21,6 +21,7 @@ import os
 import re
 from copy import deepcopy
 from typing import Any
+from uuid import uuid4
 
 import yaml
 from prefect import flow, get_run_logger, task
@@ -41,7 +42,12 @@ from rs_workflows.flow_utils import (
     RetryConfig,
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
-from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
+from rs_workflows.payload_generator import (
+    fetch_csv_from_endpoint,
+    find_s3_output_bucket,
+    generate_payload,
+    resolve_stac_input_path,
+)
 from rs_workflows.utils.utils import get_archived_item_indexes, search_by_name
 
 SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
@@ -230,8 +236,15 @@ async def _stage_input_adfs_alternative(
 
     aux_status: bool
     aux_items: ItemCollection | None
+    # Special case for S1 ETAD products which are "auxiliary products" available at PRIP and CDSE only
+    if re.match(r"^(iw|ew|sm)_eta__ax$", collection):
+        logger.warning("ETAD products are not available at ADGS, looking for them in rs-catalog instead")
+        aux_status, aux_items = (
+            True,
+            catalog_flow.catalog_search_task.submit(dpr_input.env, aux_cql2, True, [collection]).result(),
+        )
     # Special case for Copernicus DEM available at Earthdatahub
-    if input_adfs["name"] == "DEM":
+    elif input_adfs["name"] == "DEM":
         aux_items = earthdatahub_flow.earthdatahub_search_task.submit(
             dpr_input.env,
             aux_cql2,
@@ -447,6 +460,8 @@ async def dpr_processing(
                     flow_env.rs_client,
                 )
                 for specific_input_product_stac_item in product_stac_items:
+                    if input_adfs["name"] == "REFERENCE_DB":
+                        continue
                     if specific_input_product_stac_item:
                         logger.info(
                             f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product_stac_item}",
@@ -480,6 +495,26 @@ async def dpr_processing(
                     adfs.add((name, adf_type, asset.href))
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
+        # HACK for S1-ARD
+        if dpr_input.pipeline in [
+            "ARD_REFERENCE_PIPELINE",
+            "ARD_REFERENCE_SINGLE_BURST_PIPELINE",
+        ]:
+            logger.warning(f"ARD HACK FOR PIPELINE {dpr_input.pipeline}")
+            owner_id: str = dpr_input.env.owner_id
+            output_collection = "s1-ard-reference-db"
+            adf_type = "ARD_REFERENCE_DB"
+            bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
+            bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, adf_type)
+            ref_db_path = os.path.join(
+                "s3://",
+                bucket_name,
+                owner_id,
+                output_collection,
+                str(uuid4()),
+            )
+            logger.warning(f"ARD REFERENCE_DB: {ref_db_path}")
+            adfs.add(("REFERENCE_DB", adf_type, ref_db_path))
         # generate the dpr payload file
         task_future = generate_payload.submit(flow_env, unit_list, list(adfs), dpr_input)
         # get the payload generation result

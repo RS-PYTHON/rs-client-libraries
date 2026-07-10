@@ -16,8 +16,10 @@
 
 import fnmatch
 import os
+import re
 from collections import defaultdict
 from copy import deepcopy
+from os.path import commonprefix
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from uuid import uuid4
@@ -108,7 +110,13 @@ def build_workflow_step(unit):
             active=True,
             validate_output=False,
             module=unit["module"],
-            processing_unit=unit["name"].split(".")[0] if "." in unit["name"] else unit["name"],
+            # workaround for https://gitlab.eopf.copernicus.eu/cpm/eopf-cpm/-/issues/1103
+            processing_unit=(
+                re.split(r"[.]", unit["name"])[0]
+                if "." in unit["name"]
+                else unit["name"]
+                # re.split(r"[._]", unit["name"])[0] if "." in unit["name"] or "_" in unit["name"] else unit["name"]
+            ),
             inputs=inputs or None,
             adfs=adfs or None,
             outputs=outputs or None,
@@ -347,6 +355,7 @@ def build_input_products(
         RuntimeError: If an expected input product or STAC item cannot be found.
     """
     inputs = []
+    logger = get_run_logger()
 
     # Group input products by name (needed for inputs of type regex)
     grouped_products = defaultdict(list)
@@ -362,6 +371,7 @@ def build_input_products(
 
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
+        logger.info(f"initial input store_name for name: {product_name} => {store_name}")
         if not store_name:
             if dpr_process_in.unit:
                 store_name = storage_configuration.get_storage_for_unit_section("input_products")
@@ -373,6 +383,7 @@ def build_input_products(
                 # Delete the following line once the things will be clarified with other store_names
                 # This is due to the internal discussions, disregard any other store_name but s3
                 store_name = "s3"
+        logger.info(f"final input store_name for name: {product_name} => {store_name}")
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for input product '{product_name}'")
 
@@ -404,15 +415,18 @@ def build_input_products(
                     # Verify in the rs-dpr-service tasktable (config/TaskTable_S1_L0_generated_by_rs_python_v1.json)
                     # that in the io section, the type field for input_products (S1ACADUS) is set to 'filename'.
                     # To be fixed in future iterations !
-                    type=mapping.get("type", "filename"),
-                    store_type=mapping["store_type"],
-                    store_params=store_params,
+                    # FIXME https://cpm.pages.eopf.copernicus.eu/eopf-cpm/v3.X.Y/v3/triggering_migration.html
+                    type=mapping.get("type", "file"),  # FIXME quick and dirty CPM v3 test
+                    engine=mapping["engine"],  # FIXME quick and dirty CPM v3 test
+                    reader_params=store_params,  # FIXME quick and dirty CPM v3 test
                     opening_mode=opening_mode,
                 ),
             )
         elif isinstance(store_params, StoreParams):
             # Advanced case where several input products share the same name (i.e. several STAC items)
-            store_params.multiplicity = str(len(products))
+            # FIXME it is store_params.multiplicity for CPMv2 but multiplicity in CPMv3
+            # store_params.multiplicity = str(len(products))
+            multiplicity = len(products)
 
             # Retrieve all paths
             paths = [
@@ -425,7 +439,10 @@ def build_input_products(
             ]
             # Compute longest common prefix
             common_folder, relative_parts = get_common_and_relative_paths(paths)
-            store_params.regex = rf"({'|'.join(relative_parts)})"
+            # FIXME it is store_params.regex for CPMv2 but regex in CPMv3
+            # store_params.regex = rf"({'|'.join(relative_parts)})"
+            # store_params.regex = f"{commonprefix(relative_parts)}*"  # FIXME to remove after CPM issue #1080 is solved
+            regex = f"{commonprefix(relative_parts)}*"  # FIXME to remove after CPM issue #1080 is solved # FIXME CPMv3
 
             # Add a single InputProduct of type regex listing the provided inputs in the common folder
             inputs.append(
@@ -433,8 +450,10 @@ def build_input_products(
                     id=mapping["name"],
                     path=common_folder,
                     type=mapping.get("type", "regex"),
-                    store_type=mapping["store_type"],
-                    store_params=store_params,
+                    engine=mapping["engine"],  # FIXME quick and dirty CPM v3 test
+                    reader_params=store_params,  # FIXME quick and dirty CPM v3 test
+                    regex=regex,  # FIXME quick and dirty CPM v3 test
+                    multiplicity=multiplicity,  # FIXME quick and dirty CPM v3 test
                 ),
             )
         else:
@@ -503,6 +522,7 @@ def build_output_products(
 
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
+        logger.info(f"initial output store_name for name: {product_name} => {store_name}")
         if not store_name:
             if dpr_process_in.unit:
                 store_name = storage_configuration.get_storage_for_unit_section("output_products")
@@ -510,6 +530,11 @@ def build_output_products(
                 store_name = storage_configuration.get_storage_for_pipeline_section(
                     mapping.get("origin", ""),
                 ) or storage_configuration.get_storage_for_pipeline_section("other")
+                # TODO: the following line is temporary and for tests only ! Force eveything to s3 !
+                # Delete the following line once the things will be clarified with other store_names
+                # This is due to the internal discussions, disregard any other store_name but s3
+                store_name = "s3"
+        logger.info(f"final output store_name for name: {product_name} => {store_name}")
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
 
@@ -518,10 +543,19 @@ def build_output_products(
         store_params = deepcopy(storage_configuration.get_store_params(store_name))
         opening_mode = mapping.get("opening_mode", "CREATE")
         autoclean = None
+        engine: str = mapping["engine"]
 
         if kind == "obs":
             bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
-            output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
+            # CPM v3 zarr engines (zarr/cpm_zarr) for the output path to end by ".zarr"
+            # Otherwise we face error "Engine zarr is not able to write ..."
+            output_path = os.path.join(
+                "s3://",
+                bucket_name,
+                owner_id,
+                output_collection,
+                str(uuid4()) + ".zarr" if engine.endswith("zarr") else "",
+            )
         elif kind in ("shared_disk", "local_disk"):
             disk_config = storage_configuration.get_disk_storage(store_name)
             if disk_config and disk_config.get("path"):
@@ -541,10 +575,11 @@ def build_output_products(
             OutputProduct(
                 id=mapping["name"],
                 path=output_path,
-                store_type=mapping["store_type"],
-                store_params=store_params,
-                type=mapping.get("type", "filename"),
-                opening_mode=opening_mode,
+                engine=engine,  # FIXME quick and dirty CPM v3 test
+                writer_params=store_params,  # FIXME quick and dirty CPM v3 test
+                # FIXME https://cpm.pages.eopf.copernicus.eu/eopf-cpm/v3.X.Y/v3/triggering_migration.html
+                type=mapping.get("type", "file"),  # FIXME quick and dirty CPM v3 test
+                # opening_mode=opening_mode,  # FIXME quick and dirty CPM v3 test
                 final_product=mapping.get("final_product", True),
                 autoclean=autoclean,
             ),
@@ -642,7 +677,9 @@ def build_adfs(
                 path = SecretStr(
                     path.replace(DATA_EDH_DOMAIN, f"edh:{dpr_process_in.edh_api_key}@api.earthdatahub.destine.eu"),
                 )
-            result.append(AdfConfig(id=adfs_id, path=path, store_params=store_params))
+            result.append(
+                AdfConfig(id=adfs_id, path=path, adf_params=store_params),
+            )  # FIXME quick and dirty CPM v3 test
         elif isinstance(store_params, StoreParams):
             # Advanced case where several adfs share the same id (i.e. several files)
             adfs_paths = [p for p, _ in adfs_entries]
@@ -650,13 +687,14 @@ def build_adfs(
             # Compute longest common prefix
             common_folder, relative_parts = get_common_and_relative_paths(adfs_paths)
             store_params.regex = rf"({'|'.join(relative_parts)})"
+            store_params.regex = f"{commonprefix(relative_parts)}*"  # FIXME to remove after CPM issue #1080 is solved
             # Add a single AdfConfig of type regex listing the provided adfs in the common folder
             result.append(
                 AdfConfig(
                     id=adfs_id,
                     path=common_folder,
                     # type="regex", # Unsupported by CPM but it feels needed here for S1ARD
-                    store_params=store_params,
+                    adf_params=store_params,  # FIXME quick and dirty CPM v3 test
                 ),
             )
         else:
@@ -773,6 +811,12 @@ def generate_payload(  # pylint: disable=unused-argument
                         workflow_step.parameters.update(extra_parameters)
                     else:
                         workflow_step.parameters = extra_parameters
+    elif dpr_process_in.processor_name == DprProcessor.S1ARD:
+        for workflow_step in workflow_steps:
+            if workflow_step.processing_unit == "Calibration" and dpr_process_in.reference_date:
+                workflow_step.parameters = {
+                    "reference_date": str(dpr_process_in.reference_date),
+                }
 
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service

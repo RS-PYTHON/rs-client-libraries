@@ -8,13 +8,13 @@
     "configuration_path": {}
   },
   "external_variables": [
-    "start_datetime",
-    "end_datetime"
+    "reference_date",
+    "instrument_mode"
   ],
   "units": [
     {
-      "name": "calibration",
-      "module": "s1_l12_rp.computing.ard_processing_units",
+      "name": "Calibration",
+      "module": "s1_ard.computing.ard_processing_units",
       "resources_min": {
         "dask": {
           "worker_cpu": 4,
@@ -28,26 +28,26 @@
       },
       "input_products": [
         {
-          "name": "cal_input",
+          "name": "slcs",
           "mode": "always",
-          "mandatory": false
+          "mandatory": true
         }
       ],
       "input_adfs": [
         {
-          "name": "CONFIG",
+          "name": "ETAD",
           "mode": "always",
           "mandatory": false
         },
         {
-          "name": "ETAD",
+          "name": "ORBIT",
           "mode": "always",
           "mandatory": false
         }
       ],
       "output_products": [
         {
-          "name": "CAL_SLCS",
+          "name": "slcs",
           "mode": "always",
           "mandatory": true
         }
@@ -55,7 +55,7 @@
     },
     {
       "name": "reference_dem",
-      "module": "s1_l12_rp.computing.ard_processing_units",
+      "module": "s1_ard.computing.ard_processing_units",
       "resources_min": {
         "dask": {
           "worker_cpu": 4,
@@ -69,17 +69,12 @@
       },
       "input_products": [
         {
-          "name": "cal_slcs",
+          "name": "slcs",
           "mode": "always",
-          "mandatory": false
+          "mandatory": true
         }
       ],
       "input_adfs": [
-        {
-          "name": "CONFIG",
-          "mode": "always",
-          "mandatory": false
-        },
         {
           "name": "DEM",
           "mode": "always",
@@ -88,7 +83,7 @@
       ],
       "output_products": [
         {
-          "name": "reference_dem",
+          "name": "DEM",
           "mode": "always",
           "mandatory": true
         }
@@ -96,7 +91,7 @@
     },
     {
       "name": "reference_geometry",
-      "module": "s1_l12_rp.computing.ard_processing_units",
+      "module": "s1_ard.computing.ard_processing_units",
       "resources_min": {
         "dask": {
           "worker_cpu": 4,
@@ -110,22 +105,17 @@
       },
       "input_products": [
         {
-          "name": "cal_slcs",
+          "name": "slcs",
           "mode": "always",
-          "mandatory": false
+          "mandatory": true
         },
         {
-          "name": "reference_dem",
+          "name": "dem",
           "mode": "always",
-          "mandatory": false
+          "mandatory": true
         }
       ],
       "input_adfs": [
-        {
-          "name": "CONFIG",
-          "mode": "always",
-          "mandatory": false
-        }
       ],
       "output_products": [
         {
@@ -137,7 +127,7 @@
     },
     {
       "name": "coregistration",
-      "module": "s1_l12_rp.computing.ard_processing_units",
+      "module": "s1_ard.computing.ard_processing_units",
       "resources_min": {
         "dask": {
           "worker_cpu": 4,
@@ -151,31 +141,31 @@
       },
       "input_products": [
         {
-          "name": "cal_slcs",
+          "name": "slcs",
           "mode": "always",
-          "mandatory": false
+          "mandatory": true
         },
         {
-          "name": "reference_dem",
+          "name": "dem",
           "mode": "always",
-          "mandatory": false
+          "mandatory": true
         },
         {
           "name": "simulation_ref",
           "mode": "always",
-          "mandatory": false
+          "mandatory": true
         }
       ],
       "input_adfs": [
-        {
-          "name": "CONFIG",
-          "mode": "always",
-          "mandatory": false
-        }
       ],
       "output_products": [
         {
           "name": "cslcs",
+          "mode": "always",
+          "mandatory": true
+        },
+        {
+          "name": "slcs",
           "mode": "always",
           "mandatory": true
         }
@@ -183,7 +173,7 @@
     },
     {
       "name": "geocoding",
-      "module": "s1_l12_rp.computing.ard_processing_units",
+      "module": "s1_ard.computing.ard_processing_units",
       "resources_min": {
         "dask": {
           "worker_cpu": 4,
@@ -197,22 +187,17 @@
       },
       "input_products": [
         {
-          "name": "cslcs",
+          "name": "slcs",
           "mode": "always",
-          "mandatory": false
+          "mandatory": true
         },
         {
           "name": "simulation_ref",
           "mode": "always",
-          "mandatory": false
+          "mandatory": true
         }
       ],
       "input_adfs": [
-        {
-          "name": "CONFIG",
-          "mode": "always",
-          "mandatory": false
-        }
       ],
       "output_products": [
         {
@@ -224,7 +209,7 @@
     },
     {
       "name": "mosaicking",
-      "module": "s1_l12_rp.computing.ard_processing_units",
+      "module": "s1_ard.computing.ard_processing_units",
       "resources_min": {
         "dask": {
           "worker_cpu": 4,
@@ -240,14 +225,19 @@
         {
           "name": "gslcs",
           "mode": "always",
-          "mandatory": false
+          "mandatory": true
+        },
+        {
+          "name": "slcs",
+          "mode": "always",
+          "mandatory": true
         }
       ],
       "input_adfs": [
         {
           "name": "S2_TILES",
           "mode": "always",
-          "mandatory": false
+          "mandatory": true
         }
       ],
       "output_products": [
@@ -261,38 +251,134 @@
   ],
   "io": [
     {
-      "name": "cal_input",
-      "type": "folder",
-      "store_type": "safe"
-    },
-    {
-      "name": "CONFIG",
-      "type": "filename"
+      "name": "slcs",
+      "type": "regex",
+      "store_params": {
+        "regex" : ".*SLC.*"
+      },
+      "store_type": "zarr",
+      "opening_mode": "CREATE_OVERWRITE"
     },
     {
       "name": "ETAD",
-      "type": "folder"
+      "type": "folder",
+      "multiplicity": "one_per_input",
+      "alternatives": [
+          {
+              "order": 1,
+              "timeout_seconds": 0,
+              "query": {
+                  "name": "LatestValCover",
+                  "parameters": {
+                      "product_type": "{external_variable.instrument_mode}_ETA__AX",
+                      "start_datetime": "{slcs.start_datetime}",
+                      "end_datetime": "{slcs.end_datetime}",
+                      "satellite": "{slcs.platform}",
+                      "dTa": 0,
+                      "dTb": 0
+                  }
+              }
+          }
+      ]
+    },
+    {
+      "name": "ORBIT",
+      "type": "folder",
+      "multiplicity": "one_per_input",
+      "alternatives": [
+          {
+              "order": 1,
+              "timeout_seconds": 0,
+              "query": {
+                  "name": "LatestValCover",
+                  "parameters": {
+                      "product_type": "MPL_ORBSCT",
+                      "start_datetime": "{slcs.start_datetime}",
+                      "end_datetime": "{slcs.end_datetime}",
+                      "satellite": "{slcs.platform}",
+                      "dTa": 0,
+                      "dTb": 0
+                  }
+              }
+          },
+          {
+              "order": 2,
+              "timeout_seconds": 0,
+              "query": {
+                  "name": "LatestValCover",
+                  "parameters": {
+                      "product_type": "AUX_POEORB",
+                      "start_datetime": "{slcs.start_datetime}",
+                      "end_datetime": "{slcs.end_datetime}",
+                      "satellite": "{slcs.platform}",
+                      "dTa": 0,
+                      "dTb": 0
+                  }
+              }
+          },
+          {
+              "order": 3,
+              "timeout_seconds": 0,
+              "query": {
+                  "name": "LatestValCover",
+                  "parameters": {
+                      "product_type": "AUX_MOEORB",
+                      "start_datetime": "{slcs.start_datetime}",
+                      "end_datetime": "{slcs.end_datetime}",
+                      "satellite": "{slcs.platform}",
+                      "dTa": 0,
+                      "dTb": 0
+                  }
+              }
+          },
+          {
+              "order": 4,
+              "timeout_seconds": 0,
+              "query": {
+                  "name": "LatestValCover",
+                  "parameters": {
+                      "product_type": "MPL_ORBRES",
+                      "start_datetime": "{slcs.start_datetime}",
+                      "end_datetime": "{slcs.end_datetime}",
+                      "satellite": "{slcs.platform}",
+                      "dTa": 0,
+                      "dTb": 0
+                  }
+              }
+          },
+          {
+      "name": "CAL_SLCS",
+              "timeout_seconds": 0,
+              "query": {
+                      "end_datetime": "{slcs.end_datetime}",
+                      "satellite": "{slcs.platform}",
+                      "dTa": 0,
+                      "dTb": 0
+                  }
+              }
+          }
+      ]
     },
     {
       "name": "DEM",
-      "type": "folder"
-    },
-    {
-      "name": "cal_slcs",
       "type": "folder",
-      "store_type": "safe",
-      "opening_mode": "CREATE_OVERWRITE"
-    },
-    {
-      "name": "CAL_SLCS",
-      "type": "folder",
-      "store_type": "safe",
-      "opening_mode": "CREATE_OVERWRITE"
-    },
-    {
-      "name": "reference_dem",
-      "type": "folder"
-    },
+      "alternatives": [
+          {
+              "order": 1,
+              "timeout_seconds": 0,
+              "query": {
+                  "name": "LatestValCover",
+                  "parameters": {
+                      "product_type": "XXX",
+                      "start_datetime": "{external_variable.reference_date}T00:00:00Z",
+                      "end_datetime": "{external_variable.reference_date}T23:59:59Z",
+                      "dTa": 0,
+                      "dTb": 0
+                  }
+              }
+          }
+      ]
+  },
     {
       "name": "simulation_ref",
       "type": "folder"
@@ -315,7 +401,23 @@
     },
     {
       "name": "S2_TILES",
-      "type": "filename"
+      "type": "filename",
+      "alternatives": [
+          {
+              "order": 1,
+              "timeout_seconds": 0,
+              "query": {
+                  "name": "LatestValCover",
+                  "parameters": {
+                      "product_type": "XXX",
+                      "start_datetime": "{external_variable.reference_date}T00:00:00Z",
+                      "end_datetime": "{external_variable.reference_date}T23:59:59Z",
+                      "dTa": 0,
+                      "dTb": 0
+                  }
+              }
+          }
+      ]
     },
     {
       "name": "nrb",
@@ -396,38 +498,38 @@
   ],
   "pipelines": [
     {
-      "name": "s1_ard_full",
-      "description": "Full pipeline for S1 ARD",
+      "name": "SLC__1_CSL__1",
+      "description": "S1 ARD CSL - Co-registered SLC",
       "steps": [
         {
-          "unit_name": "calibration",
+          "unit_name": "Calibration",
           "step_id": 1,
           "input_products": {
-            "cal_input": "pipeline_input"
+            "slcs": "pipeline_input"
           },
           "output_products": {
-            "CAL_SLCS": "pipeline_internal"
+            "slcs": "pipeline_internal"
           },
           "parameters": {
-            "reference_date": "somevalue"
+            "reference_date": "{external_variable.reference_date}"
           }
         },
         {
           "unit_name": "reference_dem",
           "step_id": 2,
           "input_products": {
-            "cal_slcs": "calibration.CAL_SLCS"
+            "slcs": "Calibration.slcs"
           },
           "output_products": {
-            "reference_dem": "pipeline_internal"
+            "DEM": "pipeline_internal"
           }
         },
         {
           "unit_name": "reference_geometry",
           "step_id": 3,
           "input_products": {
-            "cal_slcs": "calibration.CAL_SLCS",
-            "reference_dem": "reference_dem.reference_dem"
+            "slcs": "Calibration.slcs",
+            "dem": "reference_dem.DEM"
           },
           "output_products": {
             "simulation_ref": "pipeline_internal"
@@ -437,19 +539,131 @@
           "unit_name": "coregistration",
           "step_id": 4,
           "input_products": {
-            "cal_slcs": "calibration.CAL_SLCS",
-            "reference_dem": "reference_dem.reference_dem",
+            "slcs": "Calibration.slcs",
+            "dem": "reference_dem.DEM",
             "simulation_ref": "reference_geometry.simulation_ref"
           },
           "output_products": {
-            "cslcs": "pipeline_internal"
+            "cslcs": "pipeline_internal",
+            "slcs": "pipeline_internal"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SLC__1_GSL__1",
+      "description": "S1 ARD GSL - Geocoded Single Look Complex",
+      "steps": [
+        {
+          "unit_name": "Calibration",
+          "step_id": 1,
+          "input_products": {
+            "slcs": "pipeline_input"
+          },
+          "output_products": {
+            "slcs": "pipeline_internal"
+          }
+        },
+        {
+          "unit_name": "reference_dem",
+          "step_id": 2,
+          "input_products": {
+            "slcs": "Calibration.slcs"
+          },
+          "output_products": {
+            "DEM": "pipeline_internal"
+          }
+        },
+        {
+          "unit_name": "reference_geometry",
+          "step_id": 3,
+          "input_products": {
+            "slcs": "Calibration.slcs",
+            "dem": "reference_dem.DEM"
+          },
+          "output_products": {
+            "simulation_ref": "pipeline_internal"
+          }
+        },
+        {
+          "unit_name": "coregistration",
+          "step_id": 4,
+          "input_products": {
+            "slcs": "Calibration.slcs",
+            "dem": "reference_dem.DEM",
+            "simulation_ref": "reference_geometry.simulation_ref"
+          },
+          "output_products": {
+            "cslcs": "pipeline_internal",
+            "slcs": "pipeline_internal"
           }
         },
         {
           "unit_name": "geocoding",
           "step_id": 5,
           "input_products": {
-            "cslcs": "coregistration.cslcs",
+            "slcs": "coregistration.slcs",
+            "simulation_ref": "reference_geometry.simulation_ref"
+          },
+          "output_products": {
+            "gslcs": "pipeline_internal"
+          }
+        }
+      ]
+    },
+    {
+      "name": "SLC__1_NRB__1",
+      "description": "S1 ARD NRB - Normalised Radar Backscatter",
+      "steps": [
+        {
+          "unit_name": "Calibration",
+          "step_id": 1,
+          "input_products": {
+            "slcs": "pipeline_input"
+          },
+          "output_products": {
+            "slcs": "pipeline_internal"
+          }
+        },
+        {
+          "unit_name": "reference_dem",
+          "step_id": 2,
+          "input_products": {
+            "slcs": "Calibration.slcs"
+          },
+          "output_products": {
+            "DEM": "pipeline_internal"
+          }
+        },
+        {
+          "unit_name": "reference_geometry",
+          "step_id": 3,
+          "input_products": {
+            "slcs": "Calibration.slcs",
+            "dem": "reference_dem.DEM"
+          },
+          "output_products": {
+            "simulation_ref": "pipeline_internal"
+          }
+        },
+        {
+          "unit_name": "coregistration",
+          "step_id": 4,
+          "input_products": {
+            "slcs": "Calibration.slcs",
+            "dem": "reference_dem.DEM",
+            "simulation_ref": "reference_geometry.simulation_ref"
+          },
+          "output_products": {
+            "cslcs": "pipeline_internal",
+            "slcs": "pipeline_internal"
+          }
+        },
+        {
+          "unit_name": "geocoding",
+          "step_id": 5,
+          "input_products": {
+            "slcs": "coregistration.slcs",
             "simulation_ref": "reference_geometry.simulation_ref"
           },
           "output_products": {
@@ -460,7 +674,8 @@
           "unit_name": "mosaicking",
           "step_id": 6,
           "input_products": {
-            "gslcs": "geocoding.gslcs"
+            "gslcs": "geocoding.gslcs",
+            "slcs": "coregistration.slcs"
           },
           "output_products": {
             "nrb": "pipeline_output"

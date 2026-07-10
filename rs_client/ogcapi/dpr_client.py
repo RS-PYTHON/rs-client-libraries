@@ -56,7 +56,11 @@ class DprPipeline(str, Enum):
     # String value = resource name in the rs-dpr-service
     S1L0FULL = "s1_l0_full"
     S3L0FULL = "s3_l0_full"
-    S1ARDFULL = "s1_ard_full"
+    S1ARD_CSL = "SLC__1_CSL__1"
+    S1ARD_GSL = "SLC__1_GSL__1"
+    S1ARD_NRB = "SLC__1_NRB__1"
+    S1ARD_REF = "ARD_REFERENCE_PIPELINE"
+    S1ARD_REF_SINGLE_BURST = "ARD_REFERENCE_SINGLE_BURST_PIPELINE"
     S3L1OLCIFULL = "ol1_eo"
     # Add S3L2OLCIFULL as "ol2_fr" when implementation needed (already exists in rs-dpr-service)
 
