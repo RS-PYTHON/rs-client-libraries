@@ -336,7 +336,7 @@ def build_input_products(
         unit (dict): Workflow unit definition containing input product metadata.
         dpr_process_in (DprProcessIn): Input configuration for the dpr processing prefect flow.
         storage_configuration (StorageConfig): Storage configuration parameters (S3 credentials, etc.). TODO ! as
-        written in the comment from story 800, point 3: About the storage_configuration.json : for the time being,
+        written in the comment from story 800, point 3: About the storage_configuration : for the time being,
         just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
         catalog_client (CatalogClient): Client for querying STAC collections and items.
 
@@ -459,7 +459,7 @@ def build_output_products(
         unit (dict): Workflow unit definition containing output product metadata.
         dpr_process_in (DprProcessIn): Input configuration defining generated outputs.
         storage_configuration (StorageConfig): Storage configuration parameters (S3 credentials, etc.). TODO ! as
-        written in the comment from story 800, point 3: About the storage_configuration.json : for the time being,
+        written in the comment from story 800, point 3: About the storage_configuration : for the time being,
         just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
         owner_id (str): The owner ID for the workflow.
         bucket_configuration (list[list[str]]): Parsed S3 bucket configuration entries.
@@ -578,7 +578,7 @@ def get_io(
         unit (dict): Workflow unit definition containing I/O product configurations.
         dpr_process_in (DprProcessIn): DPR input configuration containing product mappings.
         store_params (StoreParams): S3 storage configuration and credentials. TODO ! as
-        written in the comment from story 800, point 3: About the storage_configuration.json : for the time being,
+        written in the comment from story 800, point 3: About the storage_configuration : for the time being,
         just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
         flow_env (FlowEnv): Environment context holding execution metadata.
 
@@ -665,20 +665,6 @@ def build_adfs(
     return result
 
 
-def load_storage_configuration(
-    secrets: dict,
-    config_path: str = str(CONFIG_DIR / "storage_configuration.json"),
-    logger=None,
-) -> StorageConfig:
-    """
-    Loads storage configuration from a JSON file and constructs a StorageConfig object.
-    """
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Storage configuration file not found: {config_path}")
-
-    return StorageConfig(secrets, config_path, logger)
-
-
 @task(name="Generate payload file")
 def generate_payload(  # pylint: disable=unused-argument
     flow_env: FlowEnv,
@@ -718,15 +704,13 @@ def generate_payload(  # pylint: disable=unused-argument
     # with flow_env.start_span(__name__, "generate-payload"):
     # the values should be name of the secrets, and not the values of these secrets.
     # it's up to the processor to retrieve the values at the running time
-    # The storage_configuration.json file should be mounted in /etc/storage_configuration.json
-    # in cluster mode, it should be mounted as volume from a predefined (?) configmap
 
     logger.info(f"🚧 Starting payload generation for DPR processor '{dpr_process_in.processor_name}'")
     logger.info("Loading storage configuration template from file")
     secrets = Secret.load(
         prefect_utils.format_env_user(prefect_utils.BLOCK_NAME_ENV_USER, flow_env.owner_id),
     ).get()  # type: ignore[union-attr]
-    storage_configuration = load_storage_configuration(secrets, logger=logger)
+    storage_configuration = StorageConfig(secrets, logger)
     logger.info("Loading bucket configuration from rs-osam endpoint")
     bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
 
