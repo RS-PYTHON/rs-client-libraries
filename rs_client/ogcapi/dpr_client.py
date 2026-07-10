@@ -330,10 +330,12 @@ class DprClient(OgcApiClient):
         job_identifier = job_status.get("jobID")
         host_dpr_service = get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE_PUBLIC")
         if job_identifier and logger:
+            # display the curl command to cancel the job in case of long running job
             logger.warning(
                 "You can cancel this DPR job by calling: "
                 f"curl -X 'DELETE' '{host_dpr_service}/dpr/jobs/{job_identifier}'",
             )
+            # connect to the log stream endpoint and use the logger to display the logs in real time
             url = f"{self.href_service}/{self.endpoint_prefix}jobs/{job_identifier}/logs"
             self.stream_logs(url, logger)
 
