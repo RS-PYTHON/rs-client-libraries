@@ -49,9 +49,11 @@ def s3_list(s3_prefix: str):
 def extract_products_and_zattrs(files: list[str], base_path: str):
     """Extract product names and their corresponding .zattrs file paths.
 
-    Filters a list of file paths to find .zattrs files located directly under
-    product directories within a base path, following the structure:
+    Filters a list of file paths to find .zattrs files located under product
+    directories within a base path, following one of these structures:
+    base_path/.zattrs
     base_path/product_name/.zattrs
+    base_path/products/product_name/.zattrs
 
     Args:
         files: List of file paths to search through.
@@ -62,8 +64,10 @@ def extract_products_and_zattrs(files: list[str], base_path: str):
             - product_name (str): The name of the product directory.
             - file (str): The full path to the .zattrs file.
 
-        Only includes files that are exactly two levels deep from the base_path
-        and have the filename '.zattrs'.
+        If ``base_path/.zattrs`` exists, it is treated as the product metadata
+        and nested group metadata is ignored. Otherwise, includes files that are
+        directly under a product directory, with an optional ``products``
+        container directory under the base path.
 
     Example:
         >>> files = [
@@ -77,17 +81,28 @@ def extract_products_and_zattrs(files: list[str], base_path: str):
     """
     dirs_and_attrs = []
 
-    for file in files:
-        rest = file[len(base_path) :].lstrip("/")  # noqa: E203
-        parts = rest.split("/")
+    normalized_base_path = base_path.rstrip("/")
 
-        if len(parts) != 2:
+    root_zattrs = f"{normalized_base_path}/.zattrs"
+    if root_zattrs in files:
+        product_dirname = normalized_base_path.rsplit("/", maxsplit=1)[-1]
+        return [(product_dirname, root_zattrs)]
+
+    for file in files:
+        if not file.startswith(normalized_base_path + "/"):
             continue
 
-        product_dirname = parts[0]
+        rest = file[len(normalized_base_path) :].lstrip("/")  # noqa: E203
+        parts = rest.split("/")
 
         # 1: base_path/product/.zattrs
-        if parts[1] == ".zattrs":
+        if len(parts) == 2 and parts[1] == ".zattrs":
+            product_dirname = parts[0]
+            dirs_and_attrs.append((product_dirname, file))
+
+        # 2: base_path/products/product/.zattrs
+        elif len(parts) == 3 and parts[0] == "products" and parts[2] == ".zattrs":
+            product_dirname = parts[1]
             dirs_and_attrs.append((product_dirname, file))
 
     return dirs_and_attrs
@@ -311,7 +326,8 @@ def update_eopf_assets(
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
-    if dpr_processor.lower() == "mockup":
+    # temporarily disabled for olcil1 and mockup
+    if dpr_processor.lower() in ["mockup", "s3_l1olci"]:
         eopf_origin_datetime = "2026-01-01T00:00:00Z"
     elif input_products and zattrs_list:
         eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)

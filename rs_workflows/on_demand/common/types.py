@@ -24,6 +24,7 @@ from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
     FlowGeneratedProduct,
+    FlowInputProduct,
     LoggingLevel,
     Priority,
     ProcessingMode,
@@ -220,3 +221,15 @@ class Level0FlowParams(ProcessingFlowParams):
         Merge data from Prefect variable and parameters called.
         """
         return await super()._resolve(mission, "0")
+
+
+class Level1FlowParams(ProcessingFlowParams):
+    """
+    Parameters to override default Prefect variable 'sx-l1-default-setting'..
+    """
+
+    input_products: list[FlowInputProduct] = Field(
+        default_factory=list,
+        title="Input Products",
+        description="List of input products for Level-1 processing.",
+    )

@@ -780,11 +780,19 @@ def generate_payload(  # pylint: disable=unused-argument
     temp_folder_s3_secret = (
         "s3" if dpr_process_in.temporary_folder and dpr_process_in.temporary_folder.startswith("s3://") else None
     )
+    processor_name = (
+        dpr_process_in.processor_name.value
+        if hasattr(dpr_process_in.processor_name, "value")
+        else dpr_process_in.processor_name
+    )
+    is_olci_processor = processor_name == DprProcessor.S3L1OLCI.value
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (stories 800/1050)
         general_configuration=GeneralConfiguration(
             logging=LoggingConfig(level=dpr_process_in.logging_level.name),
             triggering__temporary_shared=dpr_process_in.temporary_shared,
+            triggering__use_datatree=True if is_olci_processor else None,
+            triggering__use_default_filename=True if is_olci_processor else None,
             dask_utils__timeout=dpr_process_in.dask_task_timeout,
             temporary__folder=dpr_process_in.temporary_folder,
             temporary__folder_s3_secret=temp_folder_s3_secret,
