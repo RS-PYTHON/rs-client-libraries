@@ -150,7 +150,10 @@ def _extract_io_origin_from_pipeline(
             )
 
         # Check that the referenced product exists in the outputs of the unit we found
-        if origin_product_name not in origin_unit.get("output_products", {}):
+        if origin_product_name == "slcs" and origin_unit_name == "Coregistration":
+            # HACK for S1-ARD. If we add slcs outputs in Coregistration step, CPM detects a cyclic dependency
+            pass
+        elif origin_product_name not in origin_unit.get("output_products", {}):
             raise TaskTableError(
                 f"Unit '{unit_name}' needs product '{origin_product_name}' from unit '{origin_unit_name}' "
                 f"but available outputs are: {origin_unit.get("output_products", {})}.",
