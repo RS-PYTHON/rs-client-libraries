@@ -29,7 +29,7 @@ from tests.conftest import MOCKED_RSPY_WEBSITE
 
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = getpass.getuser()
-CLUSTER_INFO = ClusterInfo("", "", "")
+CLUSTER_INFO = ClusterInfo("", "", "", "")
 
 
 @pytest.fixture(name="dpr_client")

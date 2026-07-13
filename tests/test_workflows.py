@@ -65,6 +65,7 @@ STORAGE_CONFIG = "processing-storage-configuration"
 ##################
 
 JUPYTERHUB_API_TOKEN = "JUPYTERHUB_API_TOKEN"
+DASK_GATEWAY_ADDRESS = "DASK_GATEWAY_ADDRESS"
 DASK_CLUSTER_LABEL = "DASK_CLUSTER_LABEL"
 DASK_CLUSTER_INSTANCE = "dask-gateway.test-cluster-instance"
 DASK_GATEWAY_PUBLIC = "http://test-dask-gateway-public"
@@ -188,6 +189,7 @@ async def test_dpr_processing(
     await setup_worklow_test_env(
         {
             "JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN,
+            "DASK_GATEWAY_ADDRESS": DASK_GATEWAY_ADDRESS,
             "DASK_GATEWAY_PUBLIC": DASK_GATEWAY_PUBLIC,
             "RSPY_HOST_OSAM": "https://dummy-osam",
         },

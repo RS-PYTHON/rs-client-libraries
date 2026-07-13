@@ -25,7 +25,6 @@ from pystac import Item, ItemCollection, Link
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient
 from rs_client.stac.catalog_client import CatalogClient
-from rs_common import prefect_utils
 from rs_workflows import catalog_flow
 from rs_workflows.dpr_flow import create_stac_item
 from rs_workflows.flow_utils import (
@@ -329,10 +328,9 @@ async def on_demand_conversion(
             "output_zarr_dir_path": output_zarr_dir_path,
         }
 
-        # Create cluster info from JUPYTERHUB_API_TOKEN env var (only in cluster mode, read from the
-        # prefect blocks) and Dask cluster label.
         cluster_info = ClusterInfo(
-            jupyter_token=os.environ["JUPYTERHUB_API_TOKEN"] if prefect_utils.CLUSTER_MODE else "",
+            jupyter_token=os.environ["JUPYTERHUB_API_TOKEN"],
+            dask_gateway_address=os.environ["DASK_GATEWAY_ADDRESS"],
             cluster_label=conversion_input.dask_cluster_label,
             cluster_instance=conversion_input.dask_cluster_instance or "",
         )

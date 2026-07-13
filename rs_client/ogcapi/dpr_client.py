@@ -70,12 +70,14 @@ class ClusterInfo:
 
     Attributes:
         jupyter_token: JupyterHub API token. Only used in cluster mode, not local mode.
+        dask_gateway_address: Dask gateway address, defined in Jupyter, with a different value for each organization.
         cluster_label: Dask cluster label e.g. "dask-l0"
         cluster_instance: Dask cluster instance ID (something like "dask-gateway.17e196069443463495547eb97f532834").
         If instance is empty, the DPR processor will use the first cluster with the given label.
     """
 
     jupyter_token: str
+    dask_gateway_address: str
     cluster_label: str
     cluster_instance: str | None = ""
 
