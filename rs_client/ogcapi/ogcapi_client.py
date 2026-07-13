@@ -30,7 +30,7 @@ from requests import Response
 from requests.models import PreparedRequest
 
 from rs_client.rs_client import TIMEOUT, RsClient
-from rs_common.utils import get_href_service, read_response_error
+from rs_common.utils import read_response_error
 
 MAX_RETRIES_NUMBER_FOR_GETTING_JOB_STATUS = 20
 
@@ -267,14 +267,6 @@ class OgcApiClient(RsClient):
             if not job_identifier:
                 raise RuntimeError("Job identifier is missing.")
 
-            if type(self).__name__ == "DprClient":
-                host_dpr_service = get_href_service(self.rs_server_href, "RSPY_HOST_DPR_SERVICE_PUBLIC")
-                if logger:
-                    logger.warning(
-                        "You can cancel this DPR job by calling: "
-                        f"curl -X 'DELETE' '{host_dpr_service}/dpr/jobs/{job_identifier}'",
-                    )
-
             previous_status: dict[str, str] = {}
             # We use previous_status to remove log when the status remains unchanged.
             # This way we reduce the number of useless information
@@ -287,10 +279,11 @@ class OgcApiClient(RsClient):
                     if retries_number <= 0:
                         raise
                     time.sleep(2)
-                    logger.warning(
-                        f"Timeout while waiting for {job_name} job {job_identifier!r} status. "
-                        f"Retries left: {retries_number}",
-                    )
+                    if logger:
+                        logger.warning(
+                            f"Timeout while waiting for {job_name} job {job_identifier!r} status. "
+                            f"Retries left: {retries_number}",
+                        )
                     continue
                 to_be_logged = previous_status != job_status
                 previous_status = job_status
