@@ -41,7 +41,7 @@ def _make_worker(name: str, status: str = "OFFLINE", heartbeat: str | None = Non
 
 
 def _old_heartbeat(days: int = 2) -> str:
-    """Return a timestamp older than *days* days ago."""
+    """Return a timestamp older than `days` days ago."""
     return (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
 
@@ -53,9 +53,10 @@ def _recent_heartbeat(minutes: int = 30) -> str:
 @pytest.fixture(autouse=True)
 def _patch_prefect_api_url():
     """
-    Patch PREFECT_API_URL *inside the flow module* so that PREFECT_API_URL.value()
-    always returns MOCKED_API_URL, regardless of what Prefect's test harness sets.
-    Setting the env var is not enough because the harness overrides it at runtime.
+    Patch PREFECT_API_URL `inside the flow module` so that PREFECT_API_URL.value()
+    always returns MOCKED_API_URL, regardless of what prefect's test harness sets.
+    Setting the env var (from prefect_env fixture in conftest) is not enough because
+    the harness overrides it at runtime.
     """
     mock_setting = MagicMock()
     mock_setting.value.return_value = MOCKED_API_URL
@@ -70,7 +71,7 @@ def _patch_prefect_api_url():
 def test_cleanup_no_pools():
     """When work_pools_csv is empty (or only whitespace/commas), return early without any HTTP call."""
     cleanup_offline_workers(work_pools_csv="", max_age_days=1)
-    # No HTTP calls should have been made
+    # no HTTP calls should have been made
     assert len(responses_lib.calls) == 0
 
 
@@ -84,7 +85,7 @@ def test_cleanup_pool_not_found():
         json={"detail": "Not found"},
     )
 
-    # Should not raise
+    # should not raise
     cleanup_offline_workers(work_pools_csv=pool, max_age_days=1)
 
     assert len(responses_lib.calls) == 1
@@ -116,7 +117,7 @@ def test_cleanup_skips_online_workers():
 
     cleanup_offline_workers(work_pools_csv=pool, max_age_days=1)
 
-    # Only the filter POST should have been called; no DELETE
+    # only the filter POST should have been called; no DELETE
     assert len(responses_lib.calls) == 1
     assert "DELETE" not in [c.request.method for c in responses_lib.calls]
 
@@ -248,13 +249,13 @@ def test_cleanup_pagination():
     pool = "paged-pool"
     page_size = 200
 
-    # First page: 200 workers, all recent (should not be deleted)
+    # first page: 200 workers, all recent (should not be deleted)
     page1 = [_make_worker(f"recent-{i}", status="OFFLINE", heartbeat=_recent_heartbeat(10)) for i in range(page_size)]
-    # Second page: 1 old offline worker (should be deleted)
+    # second page: 1 old offline worker (should be deleted)
     old_name = "old-worker-page2"
     page2 = [_make_worker(old_name, status="OFFLINE", heartbeat=_old_heartbeat(3))]
 
-    # Register two POST responses (pages)
+    # register two POST responses (pages)
     responses_lib.add(
         responses_lib.POST,
         url=f"{MOCKED_API_URL}/work_pools/{pool}/workers/filter",
@@ -286,7 +287,7 @@ def test_cleanup_pagination():
 def test_cleanup_worker_name_url_encoded():
     """Worker names with special characters must be URL-encoded in the DELETE request."""
     pool = "my-pool"
-    # Slash in name requires percent-encoding: %2F
+    # slash in name requires percent-encoding: %2F
     worker_name = "namespace/worker"
     encoded_name = "namespace%2Fworker"
     old_worker = _make_worker(worker_name, status="OFFLINE", heartbeat=_old_heartbeat(3))
@@ -350,7 +351,7 @@ def test_cleanup_csv_with_whitespace_and_extra_commas():
         json=[],
     )
 
-    # Comma-padded CSV with spaces around pool name
+    # comma csv with spaces around pool name
     cleanup_offline_workers(work_pools_csv=f"  ,  {pool}  ,  ", max_age_days=1)
 
     assert len(responses_lib.calls) == 1
