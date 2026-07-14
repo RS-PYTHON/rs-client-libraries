@@ -21,7 +21,9 @@ import pytest
 import requests
 import responses as responses_lib
 
-from rs_workflows.operation.clean_old_prefect_workers_flow import cleanup_offline_workers
+from rs_workflows.operation.clean_old_prefect_workers_flow import (
+    cleanup_offline_workers,
+)
 
 # The URL we register with `responses` and that the flow must call.
 MOCKED_API_URL = "http://prefect-server:4200/api"
@@ -47,6 +49,7 @@ def _recent_heartbeat(minutes: int = 30) -> str:
     """Return a timestamp that is still within the last day."""
     return (datetime.now(timezone.utc) - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
+
 @pytest.fixture(autouse=True)
 def _patch_prefect_api_url():
     """
@@ -59,7 +62,9 @@ def _patch_prefect_api_url():
     with patch(f"{FLOW_MODULE}.PREFECT_API_URL", mock_setting):
         yield
 
+
 # Tests
+
 
 @responses_lib.activate
 def test_cleanup_no_pools():
@@ -272,7 +277,9 @@ def test_cleanup_pagination():
 
     assert len(post_calls) == 2, "Expected two paginated filter requests"
     assert len(delete_calls) == 1, "Expected exactly one deletion"
-    assert old_name in delete_calls[0].request.url
+    delete_url = delete_calls[0].request.url
+    assert delete_url is not None
+    assert old_name in delete_url
 
 
 @responses_lib.activate
@@ -297,7 +304,9 @@ def test_cleanup_worker_name_url_encoded():
 
     delete_calls = [c for c in responses_lib.calls if c.request.method == "DELETE"]
     assert len(delete_calls) == 1
-    assert encoded_name in delete_calls[0].request.url
+    delete_url = delete_calls[0].request.url
+    assert delete_url is not None
+    assert encoded_name in delete_url
 
 
 @responses_lib.activate
@@ -327,7 +336,9 @@ def test_cleanup_mixed_workers_in_pool():
 
     delete_calls = [c for c in responses_lib.calls if c.request.method == "DELETE"]
     assert len(delete_calls) == 1
-    assert old_name in delete_calls[0].request.url
+    delete_url = delete_calls[0].request.url
+    assert delete_url is not None
+    assert old_name in delete_url
 
 
 @responses_lib.activate
