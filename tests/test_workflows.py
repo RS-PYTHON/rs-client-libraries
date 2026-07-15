@@ -86,7 +86,9 @@ def _mocked_tasktable():
     with open(CONFIG_DIR / "tasktable.json", encoding="utf-8") as f:
         responses.get(
             url=f"{MOCKED_RSPY_WEBSITE}/dpr/processes/mockup?"
-            f"jupyter_token={JUPYTERHUB_API_TOKEN}&cluster_label={DASK_CLUSTER_LABEL}"
+            f"jupyter_token={JUPYTERHUB_API_TOKEN}"
+            f"&dask_gateway_address={DASK_GATEWAY_ADDRESS}"
+            f"&cluster_label={DASK_CLUSTER_LABEL}"
             f"&cluster_instance={DASK_CLUSTER_INSTANCE}",
             json=json.load(f),
             status=status.HTTP_200_OK,
@@ -488,18 +490,10 @@ async def test_dpr_processing_raises_on_unstaged_adf(
     # Init and run #
     ################
 
-    with open(CONFIG_DIR / "tasktable.json", encoding="utf-8") as f:
-        responses.get(
-            url=f"{MOCKED_RSPY_WEBSITE}/dpr/processes/mockup?"
-            f"jupyter_token={JUPYTERHUB_API_TOKEN}&cluster_label=dask-eopf-mockup"
-            f"&cluster_instance={DASK_CLUSTER_INSTANCE}",
-            json=json.load(f),
-            status=status.HTTP_200_OK,
-        )
-
     await setup_worklow_test_env(
         {
             "JUPYTERHUB_API_TOKEN": JUPYTERHUB_API_TOKEN,
+            "DASK_GATEWAY_ADDRESS": DASK_GATEWAY_ADDRESS,
             "DASK_GATEWAY_EOPF_MOCKUP_PUBLIC": DASK_GATEWAY_PUBLIC,
         },
     )
@@ -509,7 +503,7 @@ async def test_dpr_processing_raises_on_unstaged_adf(
         processor_name="mockup",
         processor_version="1.0",
         pipeline="mockup_full",
-        dask_cluster_label="dask-eopf-mockup",
+        dask_cluster_label=DASK_CLUSTER_LABEL,
         dask_cluster_instance=DASK_CLUSTER_INSTANCE,
         input_products=[
             FlowInputProduct(name="input_name", item_id="stac_item_id", collection_name="collection_name"),
