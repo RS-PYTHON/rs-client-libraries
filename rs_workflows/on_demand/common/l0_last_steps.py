@@ -56,6 +56,7 @@ async def process_l0_last_steps(
         if not item_session:
             logger.error("❌ The processing cannot be launched.")
             return
+        logger.info(f"✅ The session {session} has been found in the catalog.")
 
         # Satellite identifier
         satellite_value = f"sentinel-{mission}{session[2].lower()}"
