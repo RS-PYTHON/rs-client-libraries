@@ -24,24 +24,32 @@ from rs_workflows.on_demand.common.types import Level0FlowParams
 
 
 @flow(name="process-s3-l0")
-async def process_s3l0(session: str, flow_params: Level0FlowParams, verbose: bool = False):
+async def process_s3l0(
+    session: str,
+    flow_params: Level0FlowParams | None = None,
+    verbose: bool = False,
+):
     """
     Sentinel-3 L0 processing.
     The session should have been staged before.
     """
 
+    # Resolve values from the s3-l0-default-setting Prefect variable before
+    # using them to build the DPR input. Explicit flow parameters still win.
+    resolved_flow_params = await (flow_params or Level0FlowParams()).resolve("3")
+
     input_products = [
         FlowInputProduct(
             name="S3ACADUS",
             item_id=session,
-            collection_name=flow_params.session_collection,
+            collection_name=resolved_flow_params.session_collection,
         ),
     ]
 
     await process_l0_last_steps(
         mission="3",
         session=session,
-        flow_params=flow_params,
+        flow_params=resolved_flow_params,
         input_products=input_products,
         verbose=verbose,
     )

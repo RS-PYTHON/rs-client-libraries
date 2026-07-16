@@ -211,13 +211,18 @@ async def test_process_s1l0_builds_s1_input_and_delegates(mocker):
 async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
     """process_s3l0 builds the S3ACADUS input product and delegates to the common last steps."""
     last_steps = mocker.patch.object(s3_l0, "process_l0_last_steps", new=AsyncMock())
-    flow_params = MagicMock(session_collection="s03-cadip-session")
+    resolved_params = _resolved_params()
+    resolved_params.session_collection = "s03-cadip-session"
+    flow_params = MagicMock()
+    flow_params.resolve = AsyncMock(return_value=resolved_params)
 
     await s3_l0.process_s3l0.fn("S3A_session", flow_params, verbose=False)
 
+    flow_params.resolve.assert_awaited_once_with("3")
     last_steps.assert_awaited_once()
     kwargs = last_steps.call_args.kwargs
     assert kwargs["mission"] == "3"
+    assert kwargs["flow_params"] is resolved_params
     products = kwargs["input_products"]
     assert products[0].name == "S3ACADUS"
     assert products[0].collection_name == "s03-cadip-session"

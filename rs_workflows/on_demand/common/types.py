@@ -138,9 +138,7 @@ class ProcessingFlowParams(BaseModel):
         Merge data from Prefect variable and parameters called.
         """
         var_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
-        raw = await cast(Awaitable[Any], Variable.get(var_name))
-        if raw is None:
-            raise FileExistsError(f"Prefect variable '{var_name}' is missing.")
+        raw = await cast(Awaitable[Any], Variable.get(var_name, default={}))
         if not isinstance(raw, dict):
             raw = {}
         settings: dict[str, Any] = raw

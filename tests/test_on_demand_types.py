@@ -48,11 +48,11 @@ def test_resolve_specific_base_returns_empty():
     assert not ProcessingFlowParams()._resolve_specific({"anything": 1})
 
 
-async def test_resolve_raises_when_variable_missing(mocker):
-    """A missing Prefect variable raises FileExistsError with the variable name."""
+async def test_resolve_uses_model_defaults_when_variable_missing(mocker):
+    """A missing Prefect variable falls back to the model defaults."""
     _patch_variable(mocker, None)
-    with pytest.raises(FileExistsError, match="s1-l0-default-setting"):
-        await Level0FlowParams().resolve("1")
+    resolved = await Level0FlowParams().resolve("1")
+    assert resolved == Level0FlowParams()
 
 
 async def test_resolve_uses_defaults_when_raw_not_dict(mocker):
@@ -138,4 +138,4 @@ async def test_resolve_uses_correct_variable_name_per_mission(mocker):
     get_mock = AsyncMock(return_value={})
     mocker.patch.object(types.Variable, "get", new=get_mock)
     await Level0FlowParams().resolve("3")
-    get_mock.assert_awaited_once_with("s3-l0-default-setting")
+    get_mock.assert_awaited_once_with("s3-l0-default-setting", default={})
