@@ -214,7 +214,7 @@ async def init_prefect_blocks():
         ]:
             global_env_vars[key] = os.environ[key]
 
-        # These ones are used only in cluster mode. In local mode we give empty values.
+        # These ones are used only in cluster mode. In local mode we set empty values.
         for key in [
             "JUPYTERHUB_API_TOKEN",
             "DASK_GATEWAY_ADDRESS",
