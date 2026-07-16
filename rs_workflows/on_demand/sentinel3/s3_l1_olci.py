@@ -30,7 +30,7 @@ async def process_s3l1_olci(flow_params: Level1FlowParams):
     The input_products should have been processed before by L0.
     """
     mission = "3"
-
+    # how to use s3-l1-default-setting
     flow_parameters = await flow_params.resolve(mission)
     satellite_value = f"sentinel-3"
 
