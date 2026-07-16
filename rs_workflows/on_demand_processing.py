@@ -506,7 +506,7 @@ async def dpr_processing(
         generated_payload_res_with_secrets = generated_payload_res.dump(reveal_secrets=True)
         yaml_str = yaml.dump(generated_payload_res_with_secrets, default_flow_style=False, sort_keys=False)
         # upload the config payload contents straight to S3, without a temporary file
-        logger.debug(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
+        logger.info(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
         await prefect_utils.s3_upload_bytes(yaml_str.encode("utf-8"), dpr_input.s3_payload_file)
 
         # Run the DPR processor
