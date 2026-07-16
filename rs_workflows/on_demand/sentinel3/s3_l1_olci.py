@@ -24,38 +24,15 @@ from rs_workflows.utils.dpr import call_dpr_flow
 
 
 @flow(name="process-s3-l1-olci")
-async def process_s3l1_olci(session: str, flow_params: Level1FlowParams):
+async def process_s3l1_olci(flow_params: Level1FlowParams):
     """
     Sentinel-3 OLCI L1 processing.
     The input_products should have been processed before by L0.
     """
-
-    input_products = [
-        FlowInputProduct(
-            name="S3OLCIL0_1",
-            item_id=session,
-            collection_name=flow_params.session_collection,
-        ),
-        FlowInputProduct(
-            name="S3OLCIL0_2",
-            item_id=session,
-            collection_name=flow_params.session_collection,
-        ),
-        FlowInputProduct(
-            name="S3OLCIL0_3",
-            item_id=session,
-            collection_name=flow_params.session_collection,
-        ),
-        FlowInputProduct(
-            name="S3NAVL0_1",
-            item_id=session,
-            collection_name=flow_params.session_collection,
-        ),
-    ]
     mission = "3"
 
     flow_parameters = await flow_params.resolve(mission)
-    satellite_value = f"sentinel-{mission}{session[2].lower()}"
+    satellite_value = f"sentinel-3"
 
     # temporary
     start_datetime = datetime.now()
@@ -65,7 +42,7 @@ async def process_s3l1_olci(session: str, flow_params: Level1FlowParams):
     # Call DPR flow
     await call_dpr_flow(
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),
-        input_products=input_products,
+        input_products=flow_parameters.input_products,
         external_variables={
             "start_datetime": start_datetime,
             "end_datetime": end_datetime,
