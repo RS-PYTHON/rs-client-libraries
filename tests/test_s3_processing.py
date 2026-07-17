@@ -28,6 +28,14 @@ def _flow_run(result):
 async def test_process_s3_runs_deployments_in_sequence(mocker):
     """Staging, L0, and L1 run sequentially with L0 products passed to L1."""
     mocker.patch.object(s3_processing, "get_run_logger", return_value=MagicMock())
+    resolved_l0_parameters = MagicMock(
+        cadip_collections=["s3_ksv", "s3_sgs"],
+        session_collection="s03-cadip-session",
+    )
+    l0_parameters = mocker.patch.object(s3_processing, "Level0FlowParams")
+    l0_parameters.return_value.resolve = AsyncMock(return_value=resolved_l0_parameters)
+    mocker.patch.object(s3_processing, "FlowEnv", return_value=MagicMock())
+    mocker.patch.object(s3_processing, "get_cadip_station", new=AsyncMock(return_value="s3_ksv"))
     l0_products = [
         {
             "id": "S03OLCL0__product.zarr",
@@ -56,7 +64,9 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
             name="On-demand Cadip staging/On-demand Cadip staging",
             parameters={
                 "env": {"owner_id": "copernicus"},
+                "cadip_collection_identifier": "s3_ksv",
                 "session_identifier": "S3A_session",
+                "catalog_collection_identifier": "s03-cadip-session",
             },
             flow_run_name="stage-S3A_session",
         ),
