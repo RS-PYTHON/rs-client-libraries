@@ -192,11 +192,11 @@ class ProcessingFlowParams(BaseModel):
             "workflow": self.workflow or settings.get("workflow"),
             "generated_product_to_collection_identifier": (
                 self.generated_product_to_collection_identifier
-                or settings.get("generated_product_to_collection_identifier", [])
+                or settings.get("generated_product_to_collection_identifier")
             ),
             "auxiliary_product_to_collection_identifier": (
                 self.auxiliary_product_to_collection_identifier
-                or settings.get("auxiliary_product_to_collection_identifier", [])
+                or settings.get("auxiliary_product_to_collection_identifier")
             ),
         }
 
