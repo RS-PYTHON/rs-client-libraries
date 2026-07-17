@@ -88,7 +88,12 @@ default_cluster_info_repr = ClusterInfo.__repr__
 def custom_cluster_info_repr(self):
     """Obfuscate the jupyter token in the string representation of the dataclass"""
     return default_cluster_info_repr(
-        ClusterInfo(f"{self.jupyter_token[:8]}***", self.cluster_label, self.cluster_instance),
+        ClusterInfo(
+            f"{self.jupyter_token[:8]}***",
+            self.dask_gateway_address,
+            self.cluster_label,
+            self.cluster_instance,
+        ),
     )
 
 
