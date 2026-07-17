@@ -19,13 +19,11 @@ from typing import Any
 from prefect import flow, get_run_logger
 from prefect.deployments import run_deployment
 
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from rs_workflows.on_demand.common.types import Level0FlowParams
-from rs_workflows.utils.cadip import get_cadip_station
-
 CADIP_STAGING_DEPLOYMENT = "On-demand Cadip staging/On-demand Cadip staging"
 S3_L0_DEPLOYMENT = "process-s3-l0/on_demand_S3L0"
 S3_L1_OLCI_DEPLOYMENT = "process-s3-l1-olci/on_demand_S3L1OLCI"
+CADIP_COLLECTION = "cadip"
+STAGING_CATALOG_COLLECTION = "AUTOMATED_S3L0_INPUT"
 
 
 def _build_l1_input_products(published_items: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -41,30 +39,18 @@ def _build_l1_input_products(published_items: list[dict[str, Any]]) -> list[dict
 
 
 @flow(name="full-s3-processing-chain")
-async def process_s3(session_id: str, owner_identifier: str = "copernicus") -> list[dict[str, Any]]:
+async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> list[dict[str, Any]]:
     """Run CADIP staging, S3 L0, and S3 OLCI L1 sequentially for one session."""
     logger = get_run_logger()
-
-    l0_parameters = await Level0FlowParams().resolve("3")
-    flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
-    cadip_collection = await get_cadip_station(
-        flow_env,
-        session_id,
-        l0_parameters.cadip_collections,
-    )
-    if cadip_collection is None:
-        raise ValueError(
-            f"Session {session_id!r} was not found in CADIP collections {l0_parameters.cadip_collections!r}"
-        )
 
     logger.info("Starting CADIP staging deployment for session %s", session_id)
     staging_run = await run_deployment(
         name=CADIP_STAGING_DEPLOYMENT,
         parameters={
             "env": {"owner_id": owner_identifier},
-            "cadip_collection_identifier": cadip_collection,
+            "cadip_collection_identifier": CADIP_COLLECTION,
             "session_identifier": session_id,
-            "catalog_collection_identifier": l0_parameters.session_collection,
+            "catalog_collection_identifier": STAGING_CATALOG_COLLECTION,
         },
         flow_run_name=f"stage-{session_id}",
     )
