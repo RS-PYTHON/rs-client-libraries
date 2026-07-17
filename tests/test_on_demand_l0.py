@@ -214,10 +214,10 @@ async def test_process_s3_l0_last_steps_records_finished_in_prefect_variable(moc
 
     update_variable.assert_awaited_once()
     variable_name, updates = update_variable.call_args.args
-    assert variable_name == "s3-l0-default-setting"
-    assert set(updates) == {"finished", "s3_l0_finished"}
-    assert datetime.fromisoformat(updates["finished"].replace("Z", "+00:00")).tzinfo is not None
-    assert updates["s3_l0_finished"] == [{"S03OLCL0_": "S03OLCL0__product.zarr"}]
+    assert variable_name == "s3-processing-default-setting"
+    assert set(updates) == {"l0"}
+    assert datetime.fromisoformat(updates["l0"]["finished"].replace("Z", "+00:00")).tzinfo is not None
+    assert updates["l0"]["s3_l0_finished"] == [{"S03OLCL0_": "S03OLCL0__product.zarr"}]
 
 
 # --------------------------------------------------------------------------- #

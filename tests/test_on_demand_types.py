@@ -15,7 +15,7 @@
 """Unit tests for rs_workflows.on_demand.common.types."""
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import pytest
 
@@ -68,15 +68,19 @@ async def test_level1_resolve_uses_prefect_datetime_settings(mocker):
     _patch_variable(
         mocker,
         {
-            "satellite": "sentinel-3a",
-            "start_datetime": "2025-06-12T02:11:13Z",
-            "end_datetime": "2025-06-12T02:13:13Z",
+            "common": {"owner_identifier": "settings-owner"},
+            "l1": {
+                "satellite": "sentinel-3a",
+                "start_datetime": "2025-06-12T02:11:13Z",
+                "end_datetime": "2025-06-12T02:13:13Z",
+            },
         },
     )
 
     resolved = await Level1FlowParams().resolve("3")
 
     assert resolved.satellite == "sentinel-3a"
+    assert resolved.owner_identifier == "settings-owner"
     assert resolved.start_datetime == datetime(2025, 6, 12, 2, 11, 13, tzinfo=timezone.utc)
     assert resolved.end_datetime == datetime(2025, 6, 12, 2, 13, 13, tzinfo=timezone.utc)
 
@@ -86,8 +90,10 @@ async def test_level0_resolve_uses_prefect_datetime_settings(mocker):
     _patch_variable(
         mocker,
         {
-            "start_datetime": "2025-06-11T00:00:00Z",
-            "end_datetime": "2025-06-13T00:00:00Z",
+            "l0": {
+                "start_datetime": "2025-06-11T00:00:00Z",
+                "end_datetime": "2025-06-13T00:00:00Z",
+            },
         },
     )
 
@@ -183,8 +189,11 @@ async def test_resolve_merges_settings_and_params(mocker):
 
 
 async def test_resolve_uses_correct_variable_name_per_mission(mocker):
-    """The resolved Prefect variable name embeds the mission and level 0."""
-    get_mock = AsyncMock(return_value={})
+    """Sentinel-3 levels use the unified processing configuration."""
+    get_mock = AsyncMock(side_effect=[{"l0": {}}, {}])
     mocker.patch.object(types.Variable, "get", new=get_mock)
     await Level0FlowParams().resolve("3")
-    get_mock.assert_awaited_once_with("s3-l0-default-setting", default={})
+    assert get_mock.await_args_list == [
+        call("s3-processing-default-setting", default={}),
+        call("s3-l0-default-setting", default={}),
+    ]

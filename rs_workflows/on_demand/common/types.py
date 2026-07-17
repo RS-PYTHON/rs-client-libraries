@@ -33,8 +33,30 @@ from rs_workflows.flow_utils import (
 )
 
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
-S3_L0_DEFAULT_SETTING = "s3-l0-default-setting"
-S3_L1_DEFAULT_SETTING = "s3-l1-default-setting"
+S3_PROCESSING_CONFIGURATION = "s3-processing-default-setting"
+
+
+async def _read_prefect_settings(mission: str, level: str) -> dict[str, Any]:
+    """Read level settings, preferring the unified Sentinel-3 configuration."""
+    legacy_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
+
+    if mission == "3":
+        raw_unified = await cast(Awaitable[Any], Variable.get(S3_PROCESSING_CONFIGURATION, default={}))
+        raw_legacy = await cast(Awaitable[Any], Variable.get(legacy_name, default={}))
+        legacy = raw_legacy if isinstance(raw_legacy, dict) else {}
+        section = raw_unified.get(f"l{level}") if isinstance(raw_unified, dict) else None
+        if isinstance(section, dict):
+            common = raw_unified.get("common", {})
+            return {
+                **legacy,
+                **(common if isinstance(common, dict) else {}),
+                **section,
+            }
+        return legacy
+
+    raw_legacy = await cast(Awaitable[Any], Variable.get(legacy_name, default={}))
+    return raw_legacy if isinstance(raw_legacy, dict) else {}
+
 
 class ProcessingFlowParams(BaseModel):
     """
@@ -139,11 +161,7 @@ class ProcessingFlowParams(BaseModel):
         """
         Merge data from Prefect variable and parameters called.
         """
-        var_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
-        raw = await cast(Awaitable[Any], Variable.get(var_name, default={}))
-        if not isinstance(raw, dict):
-            raw = {}
-        settings: dict[str, Any] = raw
+        settings = await _read_prefect_settings(mission, level)
 
         user_pipeline = self.pipeline
         user_unit = self.unit

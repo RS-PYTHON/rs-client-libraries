@@ -35,7 +35,9 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
         "get",
         new=AsyncMock(
             return_value={
-                "s3_l0_finished": [{"S03OLCL0_": "S03OLCL0__product.zarr"}],
+                "l0": {
+                    "s3_l0_finished": [{"S03OLCL0_": "S03OLCL0__product.zarr"}],
+                },
             }
         ),
     )

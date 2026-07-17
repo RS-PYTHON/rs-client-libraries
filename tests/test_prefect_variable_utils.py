@@ -22,7 +22,10 @@ from rs_workflows.utils import prefect as prefect_utils
 async def test_update_prefect_variable_merges_and_verifies(mocker):
     """Existing fields are preserved while requested fields are updated."""
     mocker.patch.object(prefect_utils, "get_run_logger", return_value=MagicMock())
-    stored_value = {"processor_name": "S3-L0", "finished": "old"}
+    stored_value = {
+        "common": {"owner_identifier": "opadeanu"},
+        "l0": {"processor_name": "S3-L0", "finished": "old"},
+    }
 
     async def get_variable(*_args, **_kwargs):
         return stored_value.copy()
@@ -43,16 +46,19 @@ async def test_update_prefect_variable_merges_and_verifies(mocker):
     )
 
     result = await prefect_utils.update_prefect_variable(
-        "s3-l0-default-setting",
-        {"finished": "2026-07-17T12:00:00.000Z"},
+        "s3-processing-default-setting",
+        {"l0": {"finished": "2026-07-17T12:00:00.000Z"}},
     )
 
     assert variable_get.await_count == 2
     variable_set.assert_awaited_once_with(
-        "s3-l0-default-setting",
+        "s3-processing-default-setting",
         {
-            "processor_name": "S3-L0",
-            "finished": "2026-07-17T12:00:00.000Z",
+            "common": {"owner_identifier": "opadeanu"},
+            "l0": {
+                "processor_name": "S3-L0",
+                "finished": "2026-07-17T12:00:00.000Z",
+            },
         },
         overwrite=True,
     )
