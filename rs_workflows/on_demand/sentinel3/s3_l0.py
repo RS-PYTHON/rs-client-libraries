@@ -14,8 +14,9 @@
 
 """sentinel 3 Level-0 processing."""
 
-from prefect import flow, task
 from typing import Any
+
+from prefect import flow, task
 
 from rs_workflows.flow_utils import (
     FlowInputProduct,

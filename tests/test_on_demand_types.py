@@ -56,7 +56,7 @@ def test_level1_datetime_fields_parse_iso_strings():
         {
             "start_datetime": "2024-05-27T09:44:09.509000Z",
             "end_datetime": "2024-05-27T10:44:09.509000Z",
-        }
+        },
     )
 
     assert isinstance(params.start_datetime, datetime)

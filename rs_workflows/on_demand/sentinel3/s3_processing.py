@@ -119,7 +119,7 @@ def _ensure_completed(flow_run: Any, step: str) -> None:
     if not flow_run.state.is_completed():
         raise RuntimeError(
             f"{step} deployment did not complete successfully: "
-            f"state={flow_run.state.name!r}, message={flow_run.state.message!r}"
+            f"state={flow_run.state.name!r}, message={flow_run.state.message!r}",
         )
 
 
@@ -184,7 +184,7 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> Non
     finished_products = l0_settings.get("s3_l0_finished") if isinstance(l0_settings, dict) else None
     if not isinstance(finished_products, list):
         raise RuntimeError(
-            f"Prefect variable {S3_PROCESSING_CONFIGURATION!r} does not contain a valid " "'l0.s3_l0_finished' list"
+            f"Prefect variable {S3_PROCESSING_CONFIGURATION!r} does not contain a valid " "'l0.s3_l0_finished' list",
         )
 
     # Convert catalog product references into Level1FlowParams.input_products.

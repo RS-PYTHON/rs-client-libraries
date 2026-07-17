@@ -38,7 +38,7 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
                 "l0": {
                     "s3_l0_finished": [{"S03OLCL0_": "S03OLCL0__product.zarr"}],
                 },
-            }
+            },
         ),
     )
     run = mocker.patch.object(
@@ -49,7 +49,7 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
                 _flow_run(None),
                 _flow_run(None),
                 _flow_run(l1_products),
-            ]
+            ],
         ),
     )
 
@@ -81,9 +81,9 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
                             "name": "S03OLCL0_",
                             "item_id": "S03OLCL0__product.zarr",
                             "collection_name": "AUTOMATED_S3L0_OUTPUT",
-                        }
-                    ]
-                }
+                        },
+                    ],
+                },
             },
             flow_run_name="s3-l1-olci-S3A_session",
         ),

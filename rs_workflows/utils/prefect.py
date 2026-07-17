@@ -63,7 +63,7 @@ async def update_prefect_variable(variable_name: str, updates: dict[str, Any]) -
     if not isinstance(saved_value, dict):
         raise RuntimeError(
             f"Prefect variable {variable_name!r} was not updated: expected a dictionary, "
-            f"got {type(saved_value).__name__}"
+            f"got {type(saved_value).__name__}",
         )
 
     if not _contains_updates(saved_value, updates):

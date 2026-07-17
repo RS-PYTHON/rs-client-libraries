@@ -14,7 +14,6 @@
 
 """sentinel 3 OLCI Level-1 processing."""
 
-from datetime import datetime
 from typing import Any
 
 from prefect import flow, task
