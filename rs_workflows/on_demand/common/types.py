@@ -15,6 +15,7 @@
 """common types and class"""
 
 from collections.abc import Awaitable
+from datetime import datetime
 from typing import Any, Self, cast
 
 from prefect.variables import Variable
@@ -225,13 +226,13 @@ class Level1FlowParams(ProcessingFlowParams):
     """
     Parameters to override default Prefect variable 'sx-l1-default-setting'..
     """
-    start_datetime = Field(
+    start_datetime: datetime | None = Field(
         default=None,
         title="Start Datetime",
         description="Start datetime for processing.",
         json_schema_extra={"order": 2},
     )
-    end_datetime = Field(
+    end_datetime: datetime | None = Field(
         default=None,
         title="End Datetime",
         description="End datetime for processing.",
@@ -264,4 +265,3 @@ class Level1FlowParams(ProcessingFlowParams):
         Merge data from Prefect variable and parameters called.
         """
         return await super()._resolve(mission, "1")
-
