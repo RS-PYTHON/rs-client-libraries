@@ -36,15 +36,18 @@ def _build_l1_input_products(published_items: list[dict[str, Any]]) -> list[dict
     ]
 
 
-@flow(name="process-s3-staging-l0-l1")
-async def process_s3(session_id: str) -> list[dict[str, Any]]:
+@flow(name="full-s3-processing-chain")
+async def process_s3(session_id: str, owner_identifier: str = "copernicus") -> list[dict[str, Any]]:
     """Run CADIP staging, S3 L0, and S3 OLCI L1 sequentially for one session."""
     logger = get_run_logger()
 
     logger.info("Starting CADIP staging deployment for session %s", session_id)
     staging_run = await run_deployment(
         name=CADIP_STAGING_DEPLOYMENT,
-        parameters={"session_identifier": session_id},
+        parameters={
+            "env": {"owner_id": owner_identifier},
+            "session_identifier": session_id,
+        },
         flow_run_name=f"stage-{session_id}",
     )
     if staging_run.state is None:
