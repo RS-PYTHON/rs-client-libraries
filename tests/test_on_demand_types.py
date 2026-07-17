@@ -14,6 +14,7 @@
 
 """Unit tests for rs_workflows.on_demand.common.types."""
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -28,6 +29,7 @@ from rs_workflows.on_demand.common import types
 from rs_workflows.on_demand.common.types import (
     DEFAULT_PREFECT_CONFIGURATION,
     Level0FlowParams,
+    Level1FlowParams,
     ProcessingFlowParams,
 )
 
@@ -46,6 +48,37 @@ def test_resolve_specific_base_returns_empty():
     """The base ProcessingFlowParams injects no mission-specific field."""
     # pylint: disable=protected-access
     assert not ProcessingFlowParams()._resolve_specific({"anything": 1})
+
+
+def test_level1_datetime_fields_parse_iso_strings():
+    """Level-1 datetime fields are annotated Pydantic fields accepting ISO input."""
+    params = Level1FlowParams.model_validate(
+        {
+            "start_datetime": "2024-05-27T09:44:09.509000Z",
+            "end_datetime": "2024-05-27T10:44:09.509000Z",
+        }
+    )
+
+    assert isinstance(params.start_datetime, datetime)
+    assert isinstance(params.end_datetime, datetime)
+
+
+async def test_level1_resolve_uses_prefect_datetime_settings(mocker):
+    """Level-1 parameters fall back to the datetime window configured in Prefect."""
+    _patch_variable(
+        mocker,
+        {
+            "satellite": "sentinel-3a",
+            "start_datetime": "2025-06-12T02:11:13Z",
+            "end_datetime": "2025-06-12T02:13:13Z",
+        },
+    )
+
+    resolved = await Level1FlowParams().resolve("3")
+
+    assert resolved.satellite == "sentinel-3a"
+    assert resolved.start_datetime == datetime(2025, 6, 12, 2, 11, 13, tzinfo=timezone.utc)
+    assert resolved.end_datetime == datetime(2025, 6, 12, 2, 13, 13, tzinfo=timezone.utc)
 
 
 async def test_resolve_uses_model_defaults_when_variable_missing(mocker):

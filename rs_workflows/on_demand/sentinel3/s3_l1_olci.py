@@ -38,9 +38,9 @@ async def process_s3l1_olci(flow_params: Level1FlowParams):
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),
         input_products=flow_parameters.input_products,
         external_variables={
-            "start_datetime": flow_params.start_datetime,
-            "end_datetime": flow_params.end_datetime,
-            "satellite": flow_params.satellite,
+            "start_datetime": flow_parameters.start_datetime,
+            "end_datetime": flow_parameters.end_datetime,
+            "satellite": flow_parameters.satellite,
         },
         dask_cluster_label=flow_parameters.dask_cluster_label,
         processor_name=flow_parameters.processor_name,
