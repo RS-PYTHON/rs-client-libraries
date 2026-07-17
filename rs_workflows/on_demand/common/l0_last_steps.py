@@ -24,12 +24,10 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
     FlowInputProduct,
 )
-from rs_workflows.on_demand.common.types import Level0FlowParams
+from rs_workflows.on_demand.common.types import Level0FlowParams, S3_L0_DEFAULT_SETTING
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dpr import call_dpr_flow
 from rs_workflows.utils.prefect import update_prefect_variable
-
-S3_L0_DEFAULT_SETTING = "s3-l0-default-setting"
 
 
 async def process_l0_last_steps(
@@ -145,10 +143,19 @@ async def process_l0_last_steps(
 
         if mission == "3":
             finished = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            finished_products = [{item["properties"]["product:type"]: item["id"]} for item in s3_l0_result]
             await update_prefect_variable(
                 S3_L0_DEFAULT_SETTING,
                 {
                     "finished": finished,
-                    "s3_l0_finished": s3_l0_result,
+                    "s3_l0_finished": finished_products,
                 },
             )
+
+            # disabled temp, call for S3_L1 variable
+            # await update_prefect_variable(S3_L1_DEFAULT_SETTING,
+            #     {
+            #         "input_products": # some code to parse finished_products,
+            #     }
+            # )
+            #

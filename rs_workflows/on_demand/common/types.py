@@ -33,7 +33,8 @@ from rs_workflows.flow_utils import (
 )
 
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
-
+S3_L0_DEFAULT_SETTING = "s3-l0-default-setting"
+S3_L1_DEFAULT_SETTING = "s3-l1-default-setting"
 
 class ProcessingFlowParams(BaseModel):
     """
