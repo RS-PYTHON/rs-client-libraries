@@ -195,6 +195,20 @@ class Level0FlowParams(ProcessingFlowParams):
     optional type not used.
     """
 
+    start_datetime: datetime | None = Field(
+        default=None,
+        title="Start Datetime",
+        description="Start datetime for processing.",
+        json_schema_extra={"order": 2},
+    )
+
+    end_datetime: datetime | None = Field(
+        default=None,
+        title="End Datetime",
+        description="End datetime for processing.",
+        json_schema_extra={"order": 3},
+    )
+
     session_collection: str = Field(
         default="",
         title="Session Collection",
@@ -211,6 +225,8 @@ class Level0FlowParams(ProcessingFlowParams):
 
     def _resolve_specific(self, settings: dict[str, Any]) -> dict[str, Any]:
         return {
+            "start_datetime": self.start_datetime or settings.get("start_datetime"),
+            "end_datetime": self.end_datetime or settings.get("end_datetime"),
             "session_collection": self.session_collection or settings.get("session_collection", ""),
             "cadip_collections": self.cadip_collections or settings.get("cadip_collections", []),
         }
@@ -226,6 +242,7 @@ class Level1FlowParams(ProcessingFlowParams):
     """
     Parameters to override default Prefect variable 'sx-l1-default-setting'..
     """
+
     start_datetime: datetime | None = Field(
         default=None,
         title="Start Datetime",
@@ -250,14 +267,13 @@ class Level1FlowParams(ProcessingFlowParams):
         description="List of input products to process.",
         json_schema_extra={"order": 4},
     )
-    
+
     def _resolve_specific(self, settings: dict[str, Any]) -> dict[str, Any]:
         return {
             "start_datetime": self.start_datetime or settings.get("start_datetime", None),
             "end_datetime": self.end_datetime or settings.get("end_datetime", None),
             "satellite": self.satellite or settings.get("satellite", None),
-            "input_products": self.input_products
-            or settings.get("input_products", []),
+            "input_products": self.input_products or settings.get("input_products", []),
         }
 
     async def resolve(self, mission: str) -> Self:

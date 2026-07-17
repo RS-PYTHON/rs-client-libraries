@@ -14,8 +14,6 @@
 
 """common Level-0 processing."""
 
-from datetime import datetime
-
 from prefect import get_run_logger
 from pystac import Item
 
@@ -96,27 +94,13 @@ async def process_l0_last_steps(
         # Satellite identifier
         satellite_value = f"sentinel-{mission}{session[2].lower()}"
 
-        # Published date
-        published = item_session.properties.get("published")
-        logger.info("Catalog 'published' value=%r (type=%s)", published, type(published).__name__)
-        if not isinstance(published, str):
-            raise ValueError("Missing or invalid 'published' property in item_session")
-
-        try:
-            end_datetime = datetime.fromisoformat(published)
-        except ValueError:
-            logger.exception("Cannot parse catalog 'published' value %r as ISO datetime", published)
-            raise
-        start_datetime = end_datetime
-
         # Call DPR flow
         dpr_env = FlowEnvArgs(owner_id=p.owner_identifier)
         dpr_parameters = {
             "input_products": input_products,
             "external_variables": {
-                # temporary, later debug
-                "start_datetime": "2025-06-11T00:00:00.000Z",
-                "end_datetime": "2025-06-13T00:00:00.000Z",
+                "start_datetime": p.start_datetime,
+                "end_datetime": p.end_datetime,
                 "satellite": satellite_value,
             },
             "dask_cluster_label": p.dask_cluster_label,

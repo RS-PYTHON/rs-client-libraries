@@ -81,6 +81,22 @@ async def test_level1_resolve_uses_prefect_datetime_settings(mocker):
     assert resolved.end_datetime == datetime(2025, 6, 12, 2, 13, 13, tzinfo=timezone.utc)
 
 
+async def test_level0_resolve_uses_prefect_datetime_settings(mocker):
+    """Level-0 parameters use the datetime window configured in Prefect."""
+    _patch_variable(
+        mocker,
+        {
+            "start_datetime": "2025-06-11T00:00:00Z",
+            "end_datetime": "2025-06-13T00:00:00Z",
+        },
+    )
+
+    resolved = await Level0FlowParams().resolve("3")
+
+    assert resolved.start_datetime == datetime(2025, 6, 11, tzinfo=timezone.utc)
+    assert resolved.end_datetime == datetime(2025, 6, 13, tzinfo=timezone.utc)
+
+
 async def test_resolve_uses_model_defaults_when_variable_missing(mocker):
     """A missing Prefect variable falls back to the model defaults."""
     _patch_variable(mocker, None)

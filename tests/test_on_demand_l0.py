@@ -42,6 +42,8 @@ def _resolved_params():
         generated_product_to_collection_identifier=None,
         auxiliary_product_to_collection_identifier=None,
         logging_level="INFO",
+        start_datetime=None,
+        end_datetime=None,
     )
 
 
@@ -161,13 +163,16 @@ async def test_process_l0_last_steps_returns_early_without_item(mocker):
     dpr_mock.assert_not_awaited()
 
 
-async def test_process_l0_last_steps_raises_on_missing_published(mocker):
-    """A missing/invalid 'published' property raises ValueError."""
+async def test_process_l0_last_steps_does_not_require_published(mocker):
+    """The datetime interval comes from flow parameters, not catalog metadata."""
     item = MagicMock()
     item.properties = {}
-    _patch_last_steps(mocker, item=item)
-    with pytest.raises(ValueError, match="published"):
-        await l0_last_steps.process_l0_last_steps("1", "S1A_x", _flow_params(), [], verbose=False)
+    dpr_mock = _patch_last_steps(mocker, item=item)
+
+    await l0_last_steps.process_l0_last_steps("1", "S1A_x", _flow_params(), [], verbose=False)
+
+    assert dpr_mock.call_args.kwargs["external_variables"]["start_datetime"] is None
+    assert dpr_mock.call_args.kwargs["external_variables"]["end_datetime"] is None
 
 
 async def test_process_l0_last_steps_calls_dpr_flow(mocker):
@@ -177,14 +182,18 @@ async def test_process_l0_last_steps_calls_dpr_flow(mocker):
     dpr_mock = _patch_last_steps(mocker, item=item)
     products = [FlowInputProduct(name="S1CADUS", item_id="S1A_session", collection_name="coll")]
 
-    await l0_last_steps.process_l0_last_steps("1", "S1A_session", _flow_params(), products, verbose=True)
+    flow_params = _flow_params()
+    flow_params.resolve.return_value.start_datetime = datetime.fromisoformat("2025-06-11T00:00:00+00:00")
+    flow_params.resolve.return_value.end_datetime = datetime.fromisoformat("2025-06-13T00:00:00+00:00")
+
+    await l0_last_steps.process_l0_last_steps("1", "S1A_session", flow_params, products, verbose=True)
 
     dpr_mock.assert_awaited_once()
     kwargs = dpr_mock.call_args.kwargs
     assert kwargs["input_products"] == products
     assert kwargs["external_variables"]["satellite"] == "sentinel-1a"
-    assert kwargs["external_variables"]["start_datetime"] == datetime.fromisoformat("2023-01-01T00:00:00")
-    assert kwargs["external_variables"]["end_datetime"] == datetime.fromisoformat("2023-01-01T00:00:00")
+    assert kwargs["external_variables"]["start_datetime"] == datetime.fromisoformat("2025-06-11T00:00:00+00:00")
+    assert kwargs["external_variables"]["end_datetime"] == datetime.fromisoformat("2025-06-13T00:00:00+00:00")
 
 
 # --------------------------------------------------------------------------- #
