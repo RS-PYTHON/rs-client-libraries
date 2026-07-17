@@ -17,12 +17,12 @@
 import json
 import os
 from datetime import datetime
+from typing import Any
 
 from prefect import flow, get_run_logger, runtime, task
 from pystac import (
     Collection,
     Extent,
-    Item,
     ItemCollection,
     Link,
     SpatialExtent,
@@ -91,7 +91,7 @@ async def publish(
     env: FlowEnvArgs,
     generated_product_to_collection_identifier: list[FlowGeneratedProduct],
     items_metadata: list[DprProcessedItemMetadata],
-) -> list[Item]:
+) -> list[dict[str, Any]]:
     """
     Publish items to the catalog
 
@@ -101,13 +101,13 @@ async def publish(
         items_metadata: List of DprProcessedItemMetadata containing items to publish
 
     Returns:
-        The STAC items successfully published to the catalog.
+        The successfully published STAC items serialized as JSON-compatible dictionaries.
     """
     logger = get_run_logger()
     flow_env = FlowEnv(env)
 
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-    published_items: list[Item] = []
+    published_items: list[dict[str, Any]] = []
 
     with flow_env.start_span(__name__, "publish-to-catalog"):
         for item_metadata in items_metadata:
@@ -185,7 +185,7 @@ async def publish(
                     response.status_code,
                     response.text,
                 )
-                published_items.append(item)
+                published_items.append(item.to_dict())
 
             except Exception as e:
                 # Re-raise with full item context for easier debugging

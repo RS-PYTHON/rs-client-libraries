@@ -18,8 +18,6 @@ import time
 from typing import Any
 
 from prefect import task
-from pystac import Item
-
 from rs_client.ogcapi.dpr_client import (
     DprPipeline,
     DprProcessor,
@@ -66,7 +64,7 @@ async def call_dpr_flow(
     dask_task_timeout: int | None = None,
     temporary_folder: str | None = None,
     temporary_shared: bool = False,
-) -> list[Item]:
+) -> list[dict[str, Any]]:
     """
     Call any DPR processing flow with a set of default parameters.
     In case an optional parameter is not set, its value is get from Prefect Variable named 'prefect_settings'
@@ -102,6 +100,6 @@ async def call_dpr_flow(
 
 
 @task(name="dpr processing")
-async def dpr_processing_task(*args, **kwargs) -> list[Item]:
+async def dpr_processing_task(*args, **kwargs) -> list[dict[str, Any]]:
     """See: dpr_processing"""
     return await dpr_processing.fn(*args, **kwargs)

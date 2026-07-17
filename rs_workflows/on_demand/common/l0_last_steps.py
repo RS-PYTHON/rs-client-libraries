@@ -145,5 +145,10 @@ async def process_l0_last_steps(
 
         if mission == "3":
             finished = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-            await update_prefect_variable(S3_L0_DEFAULT_SETTING, {"finished": finished})
-            await update_prefect_variable(S3_L0_DEFAULT_SETTING, {"s3_l0_finished": s3_l0_result})
+            await update_prefect_variable(
+                S3_L0_DEFAULT_SETTING,
+                {
+                    "finished": finished,
+                    "s3_l0_finished": s3_l0_result,
+                },
+            )

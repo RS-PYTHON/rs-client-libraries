@@ -153,7 +153,7 @@ def _patch_last_steps(mocker, item):
     flow_env.start_span.return_value.__enter__.return_value = MagicMock()
     mocker.patch.object(l0_last_steps, "FlowEnv", return_value=flow_env)
     mocker.patch.object(l0_last_steps, "get_single_catalog_item", new=AsyncMock(return_value=item))
-    return mocker.patch.object(l0_last_steps, "call_dpr_flow", new=AsyncMock())
+    return mocker.patch.object(l0_last_steps, "call_dpr_flow", new=AsyncMock(return_value=[]))
 
 
 async def test_process_l0_last_steps_returns_early_without_item(mocker):
@@ -200,7 +200,8 @@ async def test_process_s3_l0_last_steps_records_finished_in_prefect_variable(moc
     """Successful S3 L0 processing records and verifies its completion timestamp."""
     item = MagicMock()
     item.properties = {}
-    _patch_last_steps(mocker, item=item)
+    dpr_mock = _patch_last_steps(mocker, item=item)
+    dpr_mock.return_value = [{"type": "Feature", "id": "S3-product"}]
     update_variable = mocker.patch.object(l0_last_steps, "update_prefect_variable", new=AsyncMock())
 
     await l0_last_steps.process_l0_last_steps("3", "S3A_session", _flow_params(), [], verbose=False)
@@ -208,8 +209,9 @@ async def test_process_s3_l0_last_steps_records_finished_in_prefect_variable(moc
     update_variable.assert_awaited_once()
     variable_name, updates = update_variable.call_args.args
     assert variable_name == "s3-l0-default-setting"
-    assert set(updates) == {"finished"}
+    assert set(updates) == {"finished", "s3_l0_finished"}
     assert datetime.fromisoformat(updates["finished"].replace("Z", "+00:00")).tzinfo is not None
+    assert updates["s3_l0_finished"] == [{"type": "Feature", "id": "S3-product"}]
 
 
 # --------------------------------------------------------------------------- #

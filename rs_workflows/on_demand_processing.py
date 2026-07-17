@@ -382,7 +382,7 @@ def _resolve_specific_input_product_stac_items(
 async def dpr_processing(
     dpr_input: DprProcessIn,
     retry_config: RetryConfig = RetryConfig(),  # type: ignore
-) -> list[Item]:
+) -> list[dict[str, Any]]:
     """
     Prefect flow for dpr-process.
 

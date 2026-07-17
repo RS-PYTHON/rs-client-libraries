@@ -247,7 +247,7 @@ async def test_dpr_processing(
         result_items[result_item.id] = result_item.to_dict()
 
     assert sorted(result_collection_ids) == sorted([col["collection_name"] for col in MAP_PRODUCT_TO_COLLECTION])
-    assert {item.id for item in published_items} == set(result_items)
+    assert {item["id"] for item in published_items} == set(result_items)
 
     links = result_items["GRD"]["links"]
     assert any(link["rel"] == "derived_from" for link in links)
