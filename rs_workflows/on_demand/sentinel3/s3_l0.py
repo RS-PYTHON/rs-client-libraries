@@ -14,13 +14,20 @@
 
 """sentinel 3 Level-0 processing."""
 
+from collections.abc import Awaitable
+from datetime import datetime, timezone
+from typing import Any, cast
+
 from prefect import flow, task
+from prefect.variables import Variable
 
 from rs_workflows.flow_utils import (
     FlowInputProduct,
 )
 from rs_workflows.on_demand.common.l0_last_steps import process_l0_last_steps
 from rs_workflows.on_demand.common.types import Level0FlowParams
+
+S3_L0_DEFAULT_SETTING = "s3-l0-default-setting"
 
 
 @flow(name="process-s3-l0")
@@ -58,4 +65,12 @@ async def process_s3l0(
 @task(name="process-s3-l0")
 async def process_s3l0_task(*args, **kwargs) -> None:
     """See: dpr_processing"""
-    return await process_s3l0.fn(*args, **kwargs)
+    await process_s3l0.fn(*args, **kwargs)
+
+    raw_settings = await cast(Awaitable[Any], Variable.get(S3_L0_DEFAULT_SETTING, default={}))
+    settings = raw_settings.copy() if isinstance(raw_settings, dict) else {}
+    settings["finished"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    await cast(
+        Awaitable[Any],
+        Variable.set(S3_L0_DEFAULT_SETTING, settings, overwrite=True),
+    )

@@ -228,15 +228,30 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
     assert products[0].collection_name == "s03-cadip-session"
 
 
+async def test_process_s3l0_task_records_finished_in_prefect_variable(mocker):
+    """The S3 L0 task preserves its settings and records successful completion."""
+    process = mocker.patch.object(s3_l0.process_s3l0, "fn", new=AsyncMock())
+    variable_get = mocker.patch.object(
+        s3_l0.Variable,
+        "get",
+        new=AsyncMock(return_value={"processor_name": "S3-L0"}),
+    )
+    variable_set = mocker.patch.object(s3_l0.Variable, "set", new=AsyncMock())
+
+    await s3_l0.process_s3l0_task.fn("S3A_session")
+
+    process.assert_awaited_once_with("S3A_session")
+    variable_get.assert_awaited_once_with("s3-l0-default-setting", default={})
+    variable_set.assert_awaited_once()
+    variable_name, updated_settings = variable_set.call_args.args
+    assert variable_name == "s3-l0-default-setting"
+    assert updated_settings["processor_name"] == "S3-L0"
+    assert datetime.fromisoformat(updated_settings["finished"].replace("Z", "+00:00")).tzinfo is not None
+    assert variable_set.call_args.kwargs == {"overwrite": True}
+
+
 async def test_process_s1l0_task_delegates_to_flow(mocker):
     """The S1 task wrapper simply runs the underlying flow function."""
     delegate = mocker.patch.object(s1_l0.process_s1l0, "fn", new=AsyncMock())
     await s1_l0.process_s1l0_task.fn(session="S1A_session", flow_params=MagicMock(), verbose=False)
-    delegate.assert_awaited_once()
-
-
-async def test_process_s3l0_task_delegates_to_flow(mocker):
-    """The S3 task wrapper simply runs the underlying flow function."""
-    delegate = mocker.patch.object(s3_l0.process_s3l0, "fn", new=AsyncMock())
-    await s3_l0.process_s3l0_task.fn(session="S3A_session", flow_params=MagicMock(), verbose=False)
     delegate.assert_awaited_once()
