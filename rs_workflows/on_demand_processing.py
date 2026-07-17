@@ -382,7 +382,7 @@ def _resolve_specific_input_product_stac_items(
 async def dpr_processing(
     dpr_input: DprProcessIn,
     retry_config: RetryConfig = RetryConfig(),  # type: ignore
-):
+) -> list[Item]:
     """
     Prefect flow for dpr-process.
 
@@ -540,6 +540,5 @@ async def dpr_processing(
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        published.result()  # type: ignore[unused-coroutine]
-
-        return
+        published_items = published.result()  # type: ignore[unused-coroutine]
+        return published_items

@@ -201,36 +201,15 @@ async def test_process_s3_l0_last_steps_records_finished_in_prefect_variable(moc
     item = MagicMock()
     item.properties = {}
     _patch_last_steps(mocker, item=item)
-    stored_settings = {"processor_name": "S3-L0"}
-
-    async def get_variable(*_args, **_kwargs):
-        return stored_settings.copy()
-
-    async def set_variable(_name, value, **_kwargs):
-        stored_settings.clear()
-        stored_settings.update(value)
-
-    variable_get = mocker.patch.object(
-        l0_last_steps.Variable,
-        "get",
-        new=AsyncMock(side_effect=get_variable),
-    )
-    variable_set = mocker.patch.object(
-        l0_last_steps.Variable,
-        "set",
-        new=AsyncMock(side_effect=set_variable),
-    )
+    update_variable = mocker.patch.object(l0_last_steps, "update_prefect_variable", new=AsyncMock())
 
     await l0_last_steps.process_l0_last_steps("3", "S3A_session", _flow_params(), [], verbose=False)
 
-    assert variable_get.await_count == 2
-    variable_get.assert_awaited_with("s3-l0-default-setting", default={})
-    variable_set.assert_awaited_once()
-    variable_name, updated_settings = variable_set.call_args.args
+    update_variable.assert_awaited_once()
+    variable_name, updates = update_variable.call_args.args
     assert variable_name == "s3-l0-default-setting"
-    assert updated_settings["processor_name"] == "S3-L0"
-    assert datetime.fromisoformat(updated_settings["finished"].replace("Z", "+00:00")).tzinfo is not None
-    assert variable_set.call_args.kwargs == {"overwrite": True}
+    assert set(updates) == {"finished"}
+    assert datetime.fromisoformat(updates["finished"].replace("Z", "+00:00")).tzinfo is not None
 
 
 # --------------------------------------------------------------------------- #

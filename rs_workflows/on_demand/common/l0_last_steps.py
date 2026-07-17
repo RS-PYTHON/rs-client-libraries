@@ -14,12 +14,9 @@
 
 """common Level-0 processing."""
 
-from collections.abc import Awaitable
 from datetime import datetime, timezone
-from typing import Any, cast
 
 from prefect import get_run_logger
-from prefect.variables import Variable
 from pystac import Item
 
 from rs_workflows.flow_utils import (
@@ -30,6 +27,7 @@ from rs_workflows.flow_utils import (
 from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dpr import call_dpr_flow
+from rs_workflows.utils.prefect import update_prefect_variable
 
 S3_L0_DEFAULT_SETTING = "s3-l0-default-setting"
 
@@ -123,34 +121,6 @@ async def process_l0_last_steps(
             "logging_level": p.logging_level,
         }
         logger.info("About to call call_dpr_flow with env=%r (type=%s)", dpr_env, type(dpr_env).__name__)
-        
-        if mission == "3":
-            logger.info("S3 L0 processing completed; reading current Prefect variable")
-
-            raw_settings = await cast(Awaitable[Any], Variable.get(S3_L0_DEFAULT_SETTING, default={}))
-            logger.info(
-                "Read Prefect variable %s: type=%s, keys=%s",
-                S3_L0_DEFAULT_SETTING,
-                type(raw_settings).__name__,
-                sorted(raw_settings) if isinstance(raw_settings, dict) else [],
-            )
-            settings = raw_settings.copy() if isinstance(raw_settings, dict) else {}
-            finished = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-            settings["finished"] = finished
-            logger.info("Writing finished=%s to Prefect variable %s", finished, S3_L0_DEFAULT_SETTING)
-            await cast(
-                Awaitable[Any],
-                Variable.set(S3_L0_DEFAULT_SETTING, settings, overwrite=True),
-            )
-
-            saved_settings = await cast(Awaitable[Any], Variable.get(S3_L0_DEFAULT_SETTING, default={}))
-            saved_finished = saved_settings.get("finished") if isinstance(saved_settings, dict) else None
-            if saved_finished != finished:
-                raise RuntimeError(
-                    f"Prefect variable {S3_L0_DEFAULT_SETTING!r} was not updated: "
-                    f"expected finished={finished!r}, got {saved_finished!r}"
-                )
-            logger.info("Verified Prefect variable %s: finished=%s", S3_L0_DEFAULT_SETTING, saved_finished)
 
         for parameter_name, parameter_value in dpr_parameters.items():
             logger.info(
@@ -161,7 +131,7 @@ async def process_l0_last_steps(
             )
 
         try:
-            await call_dpr_flow(dpr_env, **dpr_parameters)
+            s3_l0_result = await call_dpr_flow(dpr_env, **dpr_parameters)
         except Exception:
             logger.exception(
                 "call_dpr_flow failed for mission=%r, session=%r, processor=%r:%r",
@@ -172,3 +142,8 @@ async def process_l0_last_steps(
             )
             raise
         logger.info("call_dpr_flow completed successfully for mission=%r, session=%r", mission, session)
+
+        if mission == "3":
+            finished = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            await update_prefect_variable(S3_L0_DEFAULT_SETTING, {"finished": finished})
+            await update_prefect_variable(S3_L0_DEFAULT_SETTING, {"s3_l0_finished": s3_l0_result})

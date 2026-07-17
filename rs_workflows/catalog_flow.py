@@ -22,6 +22,7 @@ from prefect import flow, get_run_logger, runtime, task
 from pystac import (
     Collection,
     Extent,
+    Item,
     ItemCollection,
     Link,
     SpatialExtent,
@@ -90,7 +91,7 @@ async def publish(
     env: FlowEnvArgs,
     generated_product_to_collection_identifier: list[FlowGeneratedProduct],
     items_metadata: list[DprProcessedItemMetadata],
-):
+) -> list[Item]:
     """
     Publish items to the catalog
 
@@ -98,11 +99,15 @@ async def publish(
         env: Prefect flow environment
         collection: Catalog collection identifier where the items are published
         items_metadata: List of DprProcessedItemMetadata containing items to publish
+
+    Returns:
+        The STAC items successfully published to the catalog.
     """
     logger = get_run_logger()
     flow_env = FlowEnv(env)
 
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+    published_items: list[Item] = []
 
     with flow_env.start_span(__name__, "publish-to-catalog"):
         for item_metadata in items_metadata:
@@ -180,6 +185,7 @@ async def publish(
                     response.status_code,
                     response.text,
                 )
+                published_items.append(item)
 
             except Exception as e:
                 # Re-raise with full item context for easier debugging
@@ -188,6 +194,7 @@ async def publish(
                 ) from e
 
     logger.info("End catalog publishing")
+    return published_items
 
 
 @task(name="search-catalog")

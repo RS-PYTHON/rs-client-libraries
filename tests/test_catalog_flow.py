@@ -98,13 +98,14 @@ async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages)
         ),
     ]
 
-    await catalog_flow.publish.fn(env, catalog_mapping, items_metadata_1)
+    published_items = await catalog_flow.publish.fn(env, catalog_mapping, items_metadata_1)
 
     # verify geometry and bbox were set to None
     _, added_collection, added_item = spy_add_item.call_args_list[0][0]
     assert added_collection == collection_id
     assert added_item.geometry is None
     assert added_item.bbox is None
+    assert published_items == [added_item]
 
     # instruments as string should be converted to list
     spy_add_item.reset_mock()
@@ -126,9 +127,10 @@ async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages)
         ),
     ]
 
-    await catalog_flow.publish.fn(env, catalog_mapping, items_metadata_2)
+    published_items = await catalog_flow.publish.fn(env, catalog_mapping, items_metadata_2)
     _, _, added_item = spy_add_item.call_args_list[0][0]
     assert added_item.properties["instruments"] == ["instrument1"]
+    assert published_items == [added_item]
 
     # invalid provider roles should be filtered
     spy_add_item.reset_mock()
@@ -155,12 +157,13 @@ async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages)
         ),
     ]
 
-    await catalog_flow.publish.fn(env, catalog_mapping, items_metadata_3)
+    published_items = await catalog_flow.publish.fn(env, catalog_mapping, items_metadata_3)
     _, _, added_item = spy_add_item.call_args_list[0][0]
     providers = added_item.properties["providers"]
     assert len(providers) == 2
     assert providers[0]["name"] == "valid"
     assert providers[1]["name"] == "no_roles"  # No 'roles' key so it's kept
+    assert published_items == [added_item]
 
 
 @pytest.mark.asyncio
