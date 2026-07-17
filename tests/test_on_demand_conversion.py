@@ -132,6 +132,7 @@ async def test_on_demand_conversion_helpers_cover_mapping_zarr_and_safe_task(tmp
     }
     cluster_info = on_demand_conversion_flow.ClusterInfo(
         jupyter_token="",
+        dask_gateway_address="",
         cluster_label="dask-safe",
         cluster_instance="dask-instance-1",
     )
@@ -223,7 +224,8 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
     converted_item.add_asset("converted-product", Asset(href="s3://output-bucket/zarr/converted-product.zarr"))
 
     mocker.patch.object(on_demand_conversion_flow, "get_run_logger", return_value=MagicMock())
-    monkeypatch.setattr(on_demand_conversion_flow.prefect_utils, "CLUSTER_MODE", False)
+    monkeypatch.setenv("JUPYTERHUB_API_TOKEN", "")
+    monkeypatch.setenv("DASK_GATEWAY_ADDRESS", "")
     monkeypatch.setenv("RSPY_HOST_OSAM", "https://osam.test")
 
     flow_env_mock = MagicMock()
@@ -318,6 +320,7 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
         "output_zarr_dir_path": f"s3://output-bucket/{owner_id}/{output_collection}",
     }
     assert cluster_info.jupyter_token == ""
+    assert cluster_info.dask_gateway_address == ""
     assert cluster_info.cluster_label == "dask-safe"
     assert cluster_info.cluster_instance == "dask-instance-1"
 

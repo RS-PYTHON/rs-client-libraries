@@ -214,6 +214,13 @@ async def init_prefect_blocks():
         ]:
             global_env_vars[key] = os.environ[key]
 
+        # These ones are used only in cluster mode. In local mode we set empty values.
+        for key in [
+            "JUPYTERHUB_API_TOKEN",
+            "DASK_GATEWAY_ADDRESS",
+        ]:
+            global_env_vars[key] = ""
+
         # Save env vars in a secret block for all users
         await update_prefect_block(BLOCK_NAME_ENV_GLOBAL, global_env_vars)
 

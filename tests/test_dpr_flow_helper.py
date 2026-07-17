@@ -40,7 +40,7 @@ from rs_workflows.payload_generator import RSPY_CATALOG_BUCKET
 from tests.conftest import MOCKED_BUCKET, OWNER_ID
 from tests.test_utils import setup_worklow_test_env
 
-CLUSTER_INFO = ClusterInfo("", "", "")
+CLUSTER_INFO = ClusterInfo("", "", "", "")
 
 
 def test_s3_list_returns_full_s3_paths(mocker):
