@@ -19,7 +19,7 @@ from typing import Any
 from prefect import flow, get_run_logger
 from prefect.deployments import run_deployment
 
-CADIP_STAGING_DEPLOYMENT = "stage-cadip-with-options/Cadip staging"
+CADIP_STAGING_DEPLOYMENT = "On-demand Cadip staging/On-demand Cadip staging"
 S3_L0_DEPLOYMENT = "process-s3-l0/on_demand_S3L0"
 S3_L1_OLCI_DEPLOYMENT = "process-s3-l1-olci/on_demand_S3L1OLCI"
 
