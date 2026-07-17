@@ -32,21 +32,15 @@ async def process_s3l1_olci(flow_params: Level1FlowParams):
     mission = "3"
     # how to use s3-l1-default-setting
     flow_parameters = await flow_params.resolve(mission)
-    satellite_value = f"sentinel-3"
-
-    # temporary
-    start_datetime = datetime.now()
-    end_datetime = datetime.now()
-    #
 
     # Call DPR flow
     await call_dpr_flow(
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),
         input_products=flow_parameters.input_products,
         external_variables={
-            "start_datetime": start_datetime,
-            "end_datetime": end_datetime,
-            "satellite": satellite_value,
+            "start_datetime": flow_params.start_datetime,
+            "end_datetime": flow_params.end_datetime,
+            "satellite": flow_params.satellite,
         },
         dask_cluster_label=flow_parameters.dask_cluster_label,
         processor_name=flow_parameters.processor_name,
