@@ -225,6 +225,12 @@ class Level1FlowParams(ProcessingFlowParams):
     """
     Parameters to override default Prefect variable 'sx-l1-default-setting'..
     """
+    input_products: list[FlowInputProduct] = Field(
+        default_factory=list,
+        title="Input Products",
+        description="List of input products to process.",
+        json_schema_extra={"order": 4},
+    )
     async def resolve(self, mission: str) -> Self:
         """
         Merge data from Prefect variable and parameters called.

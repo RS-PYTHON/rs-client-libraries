@@ -18,7 +18,7 @@ from datetime import datetime
 
 from prefect import flow, task
 
-from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
+from rs_workflows.flow_utils import FlowEnvArgs
 from rs_workflows.on_demand.common.types import Level1FlowParams
 from rs_workflows.utils.dpr import call_dpr_flow
 
