@@ -231,6 +231,13 @@ class Level1FlowParams(ProcessingFlowParams):
         description="List of input products to process.",
         json_schema_extra={"order": 4},
     )
+    
+    def _resolve_specific(self, settings: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "input_products": self.input_products
+            or settings.get("input_products", []),
+        }
+
     async def resolve(self, mission: str) -> Self:
         """
         Merge data from Prefect variable and parameters called.
