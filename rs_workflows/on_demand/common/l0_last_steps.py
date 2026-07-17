@@ -114,8 +114,9 @@ async def process_l0_last_steps(
         dpr_parameters = {
             "input_products": input_products,
             "external_variables": {
-                "start_datetime": start_datetime,
-                "end_datetime": end_datetime,
+                # temporary, later debug
+                "start_datetime": "2025-06-11T00:00:00.000Z",
+                "end_datetime": "2025-06-13T00:00:00.000Z",
                 "satellite": satellite_value,
             },
             "dask_cluster_label": p.dask_cluster_label,
