@@ -225,6 +225,24 @@ class Level1FlowParams(ProcessingFlowParams):
     """
     Parameters to override default Prefect variable 'sx-l1-default-setting'..
     """
+    start_datetime = Field(
+        default=None,
+        title="Start Datetime",
+        description="Start datetime for processing.",
+        json_schema_extra={"order": 2},
+    )
+    end_datetime = Field(
+        default=None,
+        title="End Datetime",
+        description="End datetime for processing.",
+        json_schema_extra={"order": 3},
+    )
+    satellite: str | None = Field(
+        default=None,
+        title="Satellite",
+        description="Satellite identifier for processing.",
+        json_schema_extra={"order": 4},
+    )
     input_products: list[FlowInputProduct] = Field(
         default_factory=list,
         title="Input Products",
@@ -234,6 +252,9 @@ class Level1FlowParams(ProcessingFlowParams):
     
     def _resolve_specific(self, settings: dict[str, Any]) -> dict[str, Any]:
         return {
+            "start_datetime": self.start_datetime or settings.get("start_datetime", None),
+            "end_datetime": self.end_datetime or settings.get("end_datetime", None),
+            "satellite": self.satellite or settings.get("satellite", None),
             "input_products": self.input_products
             or settings.get("input_products", []),
         }
