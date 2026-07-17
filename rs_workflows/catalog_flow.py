@@ -185,7 +185,9 @@ async def publish(
                     response.status_code,
                     response.text,
                 )
-                published_items.append(item.to_dict())
+                published_item = item.to_dict()
+                published_item["collection"] = target_collection
+                published_items.append(published_item)
 
             except Exception as e:
                 # Re-raise with full item context for easier debugging

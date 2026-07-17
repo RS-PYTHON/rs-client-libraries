@@ -152,10 +152,12 @@ async def process_l0_last_steps(
                 },
             )
 
-            # disabled temp, call for S3_L1 variable
-            # await update_prefect_variable(S3_L1_DEFAULT_SETTING,
-            #     {
-            #         "input_products": # some code to parse finished_products,
-            #     }
-            # )
-            #
+        return s3_l0_result
+
+        # disabled temp, call for S3_L1 variable
+        # await update_prefect_variable(S3_L1_DEFAULT_SETTING,
+        #     {
+        #         "input_products": # some code to parse finished_products,
+        #     }
+        # )
+        #

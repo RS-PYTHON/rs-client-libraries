@@ -15,6 +15,7 @@
 """sentinel 3 Level-0 processing."""
 
 from prefect import flow, task
+from typing import Any
 
 from rs_workflows.flow_utils import (
     FlowInputProduct,
@@ -28,7 +29,7 @@ async def process_s3l0(
     session: str,
     flow_params: Level0FlowParams | None = None,
     verbose: bool = False,
-):
+) -> list[dict[str, Any]]:
     """
     Sentinel-3 L0 processing.
     The session should have been staged before.
@@ -46,7 +47,7 @@ async def process_s3l0(
         ),
     ]
 
-    await process_l0_last_steps(
+    return await process_l0_last_steps(
         mission="3",
         session=session,
         flow_params=resolved_flow_params,
@@ -56,6 +57,6 @@ async def process_s3l0(
 
 
 @task(name="process-s3-l0")
-async def process_s3l0_task(*args, **kwargs) -> None:
+async def process_s3l0_task(*args, **kwargs) -> list[dict[str, Any]]:
     """See: dpr_processing"""
-    await process_s3l0.fn(*args, **kwargs)
+    return await process_s3l0.fn(*args, **kwargs)

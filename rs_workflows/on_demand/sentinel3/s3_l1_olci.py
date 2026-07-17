@@ -15,6 +15,7 @@
 """sentinel 3 OLCI Level-1 processing."""
 
 from datetime import datetime
+from typing import Any
 
 from prefect import flow, task
 
@@ -24,7 +25,7 @@ from rs_workflows.utils.dpr import call_dpr_flow
 
 
 @flow(name="process-s3-l1-olci")
-async def process_s3l1_olci(flow_params: Level1FlowParams):
+async def process_s3l1_olci(flow_params: Level1FlowParams) -> list[dict[str, Any]]:
     """
     Sentinel-3 OLCI L1 processing.
     The input_products should have been processed before by L0.
@@ -34,7 +35,7 @@ async def process_s3l1_olci(flow_params: Level1FlowParams):
     flow_parameters = await flow_params.resolve(mission)
 
     # Call DPR flow
-    await call_dpr_flow(
+    return await call_dpr_flow(
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),
         input_products=flow_parameters.input_products,
         external_variables={
@@ -57,6 +58,6 @@ async def process_s3l1_olci(flow_params: Level1FlowParams):
 
 
 @task(name="process-s3-l1-olci")
-async def process_s3l1_olci_task(*args, **kwargs) -> None:
+async def process_s3l1_olci_task(*args, **kwargs) -> list[dict[str, Any]]:
     """See: dpr_processing"""
     return await process_s3l1_olci.fn(*args, **kwargs)
