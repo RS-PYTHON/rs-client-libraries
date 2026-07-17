@@ -239,18 +239,25 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
 
 async def test_process_s3l0_task_records_finished_in_prefect_variable(mocker):
     """The S3 L0 task preserves its settings and records successful completion."""
+    mocker.patch.object(s3_l0, "get_run_logger", return_value=MagicMock())
     process = mocker.patch.object(s3_l0.process_s3l0, "fn", new=AsyncMock())
-    variable_get = mocker.patch.object(
-        s3_l0.Variable,
-        "get",
-        new=AsyncMock(return_value={"processor_name": "S3-L0"}),
-    )
-    variable_set = mocker.patch.object(s3_l0.Variable, "set", new=AsyncMock())
+    stored_settings = {"processor_name": "S3-L0"}
+
+    async def get_variable(*_args, **_kwargs):
+        return stored_settings.copy()
+
+    async def set_variable(_name, value, **_kwargs):
+        stored_settings.clear()
+        stored_settings.update(value)
+
+    variable_get = mocker.patch.object(s3_l0.Variable, "get", new=AsyncMock(side_effect=get_variable))
+    variable_set = mocker.patch.object(s3_l0.Variable, "set", new=AsyncMock(side_effect=set_variable))
 
     await s3_l0.process_s3l0_task.fn("S3A_session")
 
     process.assert_awaited_once_with("S3A_session")
-    variable_get.assert_awaited_once_with("s3-l0-default-setting", default={})
+    assert variable_get.await_count == 2
+    variable_get.assert_awaited_with("s3-l0-default-setting", default={})
     variable_set.assert_awaited_once()
     variable_name, updated_settings = variable_set.call_args.args
     assert variable_name == "s3-l0-default-setting"

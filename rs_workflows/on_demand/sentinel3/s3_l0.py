@@ -18,7 +18,7 @@ from collections.abc import Awaitable
 from datetime import datetime, timezone
 from typing import Any, cast
 
-from prefect import flow, task
+from prefect import flow, get_run_logger, task
 from prefect.variables import Variable
 
 from rs_workflows.flow_utils import (
@@ -65,12 +65,33 @@ async def process_s3l0(
 @task(name="process-s3-l0")
 async def process_s3l0_task(*args, **kwargs) -> None:
     """See: dpr_processing"""
+    logger = get_run_logger()
+    logger.info("Starting S3 L0 task; Prefect variable to update: %s", S3_L0_DEFAULT_SETTING)
+
     await process_s3l0.fn(*args, **kwargs)
+    logger.info("S3 L0 processing completed; reading current Prefect variable")
 
     raw_settings = await cast(Awaitable[Any], Variable.get(S3_L0_DEFAULT_SETTING, default={}))
+    logger.info(
+        "Read Prefect variable %s: type=%s, keys=%s",
+        S3_L0_DEFAULT_SETTING,
+        type(raw_settings).__name__,
+        sorted(raw_settings) if isinstance(raw_settings, dict) else [],
+    )
     settings = raw_settings.copy() if isinstance(raw_settings, dict) else {}
-    settings["finished"] = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    finished = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    settings["finished"] = finished
+    logger.info("Writing finished=%s to Prefect variable %s", finished, S3_L0_DEFAULT_SETTING)
     await cast(
         Awaitable[Any],
         Variable.set(S3_L0_DEFAULT_SETTING, settings, overwrite=True),
     )
+
+    saved_settings = await cast(Awaitable[Any], Variable.get(S3_L0_DEFAULT_SETTING, default={}))
+    saved_finished = saved_settings.get("finished") if isinstance(saved_settings, dict) else None
+    if saved_finished != finished:
+        raise RuntimeError(
+            f"Prefect variable {S3_L0_DEFAULT_SETTING!r} was not updated: "
+            f"expected finished={finished!r}, got {saved_finished!r}"
+        )
+    logger.info("Verified Prefect variable %s: finished=%s", S3_L0_DEFAULT_SETTING, saved_finished)
