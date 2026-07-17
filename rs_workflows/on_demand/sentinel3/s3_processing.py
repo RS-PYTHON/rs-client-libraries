@@ -38,8 +38,19 @@ def _build_l1_input_products(published_items: list[dict[str, Any]]) -> list[dict
     ]
 
 
+def _ensure_completed(flow_run: Any, step: str) -> None:
+    """Raise when a deployment run did not finish successfully."""
+    if flow_run.state is None:
+        raise RuntimeError(f"{step} deployment completed without a state")
+    if not flow_run.state.is_completed():
+        raise RuntimeError(
+            f"{step} deployment did not complete successfully: "
+            f"state={flow_run.state.name!r}, message={flow_run.state.message!r}"
+        )
+
+
 @flow(name="full-s3-processing-chain")
-async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> list[dict[str, Any]]:
+async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> None:
     """Run CADIP staging, S3 L0, and S3 OLCI L1 sequentially for one session."""
     logger = get_run_logger()
 
@@ -54,9 +65,7 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> lis
         },
         flow_run_name=f"stage-{session_id}",
     )
-    if staging_run.state is None:
-        raise RuntimeError(f"CADIP staging deployment for {session_id!r} completed without a state")
-    await staging_run.state.result()
+    _ensure_completed(staging_run, "CADIP staging")
 
     logger.info("CADIP staging completed; starting S3 L0 deployment for session %s", session_id)
     l0_run = await run_deployment(
@@ -64,8 +73,8 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> lis
         parameters={"session": session_id},
         flow_run_name=f"s3-l0-{session_id}",
     )
-    if l0_run.state is None:
-        raise RuntimeError(f"S3 L0 deployment for {session_id!r} completed without a state")
+    _ensure_completed(l0_run, "S3 L0")
+    assert l0_run.state is not None
     l0_products = await l0_run.state.result()
     if not isinstance(l0_products, list):
         raise RuntimeError(f"S3 L0 deployment returned {type(l0_products).__name__}, expected a list")
@@ -77,11 +86,5 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> lis
         parameters={"flow_params": {"input_products": l1_input_products}},
         flow_run_name=f"s3-l1-olci-{session_id}",
     )
-    if l1_run.state is None:
-        raise RuntimeError(f"S3 OLCI L1 deployment for {session_id!r} completed without a state")
-    l1_result = await l1_run.state.result()
-    if not isinstance(l1_result, list):
-        raise RuntimeError(f"S3 OLCI L1 deployment returned {type(l1_result).__name__}, expected a list")
-
-    logger.info("S3 processing completed for session %s with %d L1 products", session_id, len(l1_result))
-    return l1_result
+    _ensure_completed(l1_run, "S3 OLCI L1")
+    logger.info("S3 processing completed successfully for session %s", session_id)

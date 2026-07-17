@@ -21,6 +21,7 @@ from rs_workflows.on_demand.sentinel3 import s3_processing
 
 def _flow_run(result):
     state = MagicMock()
+    state.is_completed.return_value = True
     state.result = AsyncMock(return_value=result)
     return MagicMock(state=state)
 
@@ -50,7 +51,7 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
 
     result = await s3_processing.process_s3.fn("S3A_session")
 
-    assert result == l1_products
+    assert result is None
     assert run.await_args_list == [
         call(
             name="stage-cadip-with-options/On-demand Cadip staging",
