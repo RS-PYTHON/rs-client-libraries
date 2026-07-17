@@ -42,7 +42,7 @@ from rs_workflows.flow_utils import (
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
-from rs_workflows.utils.utils import get_archived_item_indexes, search_by_name
+from rs_workflows.utils.utils import get_archived_item_indexes, search_by_name, build_output_lineage
 
 SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
@@ -411,6 +411,13 @@ async def dpr_processing(
             cluster_info,
         )
 
+        lineage = build_output_lineage(
+            task_table,
+            dpr_input.pipeline,
+        )
+        source_items: dict[str, list[Item]] = {}
+        logger.info(f"lineage: {lineage}")
+
         # Persist the full task table as a Prefect artifact for later investigation.
         md = "# Task table\n\n```json\n" + json.dumps(task_table, indent=2) + "\n```"
         artifact_key_name: str = "dpr-task-table"
@@ -446,6 +453,12 @@ async def dpr_processing(
                     dpr_input.input_products,
                     flow_env.rs_client,
                 )
+                if specific_input_name:
+                    source_items.setdefault(specific_input_name, []).extend(
+                        item
+                        for item in product_stac_items
+                        if item is not None
+                    )
                 for specific_input_product_stac_item in product_stac_items:
                     if specific_input_product_stac_item:
                         logger.info(
@@ -467,12 +480,11 @@ async def dpr_processing(
         except (RuntimeError, KeyError) as err:
             raise err
         # Set of ADFS. Each tuple includes the adfs name, type and the s3/https storage path
-        source_items: list[Item] = []
         adfs: set[tuple[str, str, str]] = set()
         for name, adf_type, (status, item_collection) in aux_items:
             for item in item_collection.items:
                 # list with links to be added in derived_from
-                source_items.append(item)
+                source_items.setdefault(name, []).append(item)
 
                 if status:
                     asset = next(iter(item.assets.values()))
@@ -525,11 +537,14 @@ async def dpr_processing(
             prefect_utils.s3_delete(dpr_input.s3_payload_file)
 
         # add derived_from link
+        logger.info(f"source_items: {source_items}")
         processed = processed_items.result()
-        logger.debug(f"processed_items: {processed}")
-
         for processed_item in processed:
-            processed_item.stac_item.add_derived_from(*source_items)
+            logger.info(f"processed_item: {processed_item.stac_item.to_dict()}")
+            output_id = processed_item.output_product_id
+            for logical_source in lineage.get(output_id, set()):
+                for source_item in source_items.get(logical_source, []):
+                    processed_item.stac_item.add_derived_from(source_item)
 
         # Publish processed items to the catalog
         published = catalog_flow.publish.submit(

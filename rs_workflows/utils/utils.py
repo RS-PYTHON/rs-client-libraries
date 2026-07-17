@@ -386,3 +386,41 @@ async def asset_unzip_decompress(stac_item: Item, use_extension: bool = False) -
 async def asset_unzip_decompress_task(*args, **kwargs) -> Item:
     """See: asset_unzip_decompress"""
     return await asset_unzip_decompress.fn(*args, **kwargs)
+
+def build_output_lineage(task_table: dict, pipeline_name: str) -> dict[str, set[str]]:
+    """Parse the task_table and retrieve necessary information."""
+    pipeline = next(
+        p for p in task_table["pipelines"]
+        if p["name"] == pipeline_name
+    )
+
+    units = {u["name"]: u for u in task_table["units"]}
+
+    lineage: dict[str, set[str]] = {}
+
+    for step in sorted(pipeline["steps"], key=lambda s: s["step_id"]):
+
+        sources: set[str] = set()
+
+        # inherit lineage from inputs
+        for logical_name, source in step.get("input_products", {}).items():
+
+            if source == "pipeline_input":
+                sources.add(logical_name)
+
+            else:
+                # e.g. "single_unit_mockup.S03OLCL0_"
+                output_name = source.split(".", 1)[1]
+                sources.update(lineage[output_name])
+
+        # add ADFs declared by this unit
+        unit = units[step["unit_name"]]
+
+        for adf in unit.get("input_adfs", []):
+            sources.add(adf["name"])
+
+        # every output produced by this step gets the same lineage
+        for output_name in step["output_products"].keys():
+            lineage[output_name] = set(sources)
+
+    return lineage
