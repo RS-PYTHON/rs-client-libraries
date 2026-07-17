@@ -53,7 +53,7 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
     assert result == l1_products
     assert run.await_args_list == [
         call(
-            name="On-demand Cadip staging/On-demand Cadip staging",
+            name="stage-cadip-with-options/On-demand Cadip staging",
             parameters={
                 "env": {"owner_id": "opadeanu"},
                 "cadip_collection_identifier": "cadip",
