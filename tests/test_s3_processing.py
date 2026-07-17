@@ -29,21 +29,23 @@ def _flow_run(result):
 async def test_process_s3_runs_deployments_in_sequence(mocker):
     """Staging, L0, and L1 run sequentially with L0 products passed to L1."""
     mocker.patch.object(s3_processing, "get_run_logger", return_value=MagicMock())
-    l0_products = [
-        {
-            "id": "S03OLCL0__product.zarr",
-            "collection": "s3-l0-products",
-            "properties": {"product:type": "S03OLCL0_"},
-        }
-    ]
     l1_products = [{"id": "S03OLCL1__product.zarr"}]
+    mocker.patch.object(
+        s3_processing.Variable,
+        "get",
+        new=AsyncMock(
+            return_value={
+                "s3_l0_finished": [{"S03OLCL0_": "S03OLCL0__product.zarr"}],
+            }
+        ),
+    )
     run = mocker.patch.object(
         s3_processing,
         "run_deployment",
         new=AsyncMock(
             side_effect=[
                 _flow_run(None),
-                _flow_run(l0_products),
+                _flow_run(None),
                 _flow_run(l1_products),
             ]
         ),
@@ -76,7 +78,7 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
                         {
                             "name": "S03OLCL0_",
                             "item_id": "S03OLCL0__product.zarr",
-                            "collection_name": "s3-l0-products",
+                            "collection_name": "AUTOMATED_S3L0_OUTPUT",
                         }
                     ]
                 }

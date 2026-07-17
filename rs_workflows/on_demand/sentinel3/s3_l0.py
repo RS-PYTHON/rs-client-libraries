@@ -24,7 +24,7 @@ from rs_workflows.on_demand.common.l0_last_steps import process_l0_last_steps
 from rs_workflows.on_demand.common.types import Level0FlowParams
 
 
-@flow(name="process-s3-l0", persist_result=True)
+@flow(name="process-s3-l0")
 async def process_s3l0(
     session: str,
     flow_params: Level0FlowParams | None = None,
