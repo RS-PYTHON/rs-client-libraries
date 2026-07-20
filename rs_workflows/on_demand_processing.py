@@ -42,7 +42,11 @@ from rs_workflows.flow_utils import (
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
-from rs_workflows.utils.utils import get_archived_item_indexes, search_by_name, build_output_lineage
+from rs_workflows.utils.utils import (
+    build_output_lineage,
+    get_archived_item_indexes,
+    search_by_name,
+)
 
 SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
@@ -473,9 +477,7 @@ async def dpr_processing(
                 )
                 if specific_input_name:
                     source_items.setdefault(specific_input_name, []).extend(
-                        item
-                        for item in product_stac_items
-                        if item is not None
+                        item for item in product_stac_items if item is not None
                     )
                 for specific_input_product_stac_item in product_stac_items:
                     if specific_input_product_stac_item:

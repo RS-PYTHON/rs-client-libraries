@@ -387,17 +387,15 @@ async def asset_unzip_decompress_task(*args, **kwargs) -> Item:
     """See: asset_unzip_decompress"""
     return await asset_unzip_decompress.fn(*args, **kwargs)
 
+
 def build_output_lineage(task_table: dict, pipeline_name: str) -> dict[str, set[str]]:
     """
     Parse the task_table and retrieve necessary information.
-    
+
     For mockup returns: {'S03MWRL0_': {'S3BCADUS', 'osf'}, 'S03OLCL0_': {'fro', 'S3BCADUS'}}
     """
 
-    pipeline = next(
-        p for p in task_table["pipelines"]
-        if p["name"] == pipeline_name
-    )
+    pipeline = next(p for p in task_table["pipelines"] if p["name"] == pipeline_name)
 
     units = {u["name"]: u for u in task_table["units"]}
 
