@@ -416,7 +416,26 @@ async def dpr_processing(
             dpr_input.pipeline,
         )
         source_items: dict[str, list[Item]] = {}
-        logger.info(f"lineage: {lineage}")
+
+        # Add pipeline input products to source_items
+        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+        for input_product in dpr_input.input_products:
+            stac_item, _ = resolve_stac_input_path(
+                catalog_client,
+                input_product.collection_name,
+                input_product.item_id,
+            )
+
+            if stac_item is None:
+                logger.warning(
+                    "Could not resolve input product %s (%s/%s)",
+                    input_product.name,
+                    input_product.collection_name,
+                    input_product.item_id,
+                )
+                continue
+
+            source_items.setdefault(input_product.name, []).append(stac_item)
 
         # Persist the full task table as a Prefect artifact for later investigation.
         md = "# Task table\n\n```json\n" + json.dumps(task_table, indent=2) + "\n```"
@@ -483,7 +502,6 @@ async def dpr_processing(
         adfs: set[tuple[str, str, str]] = set()
         for name, adf_type, (status, item_collection) in aux_items:
             for item in item_collection.items:
-                # list with links to be added in derived_from
                 source_items.setdefault(name, []).append(item)
 
                 if status:
@@ -536,11 +554,10 @@ async def dpr_processing(
         finally:
             prefect_utils.s3_delete(dpr_input.s3_payload_file)
 
-        # add derived_from link
-        logger.info(f"source_items: {source_items}")
         processed = processed_items.result()
+
+        # add derived_from links
         for processed_item in processed:
-            logger.info(f"processed_item: {processed_item.stac_item.to_dict()}")
             output_id = processed_item.output_product_id
             for logical_source in lineage.get(output_id, set()):
                 for source_item in source_items.get(logical_source, []):
