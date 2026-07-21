@@ -35,7 +35,7 @@ from tests.conftest import MOCKED_RSPY_WEBSITE
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
 OWNER_ID = getpass.getuser()
 TIMEOUT = 5
-CLUSTER_INFO = ClusterInfo("", "", "")
+CLUSTER_INFO = ClusterInfo("", "", "", "")
 
 logger = Logging.default(__name__)
 
