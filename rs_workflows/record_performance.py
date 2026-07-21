@@ -396,6 +396,7 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
             ("S03HKMRAW", 1, 1),
             ("S03HKM2L0", 1, 1),
             ("S03NATL0_", 2, 2),
+            ("S03ALTL0_ ", 1, 1),
         ]
     else:
         return
