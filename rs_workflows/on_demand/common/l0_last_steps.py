@@ -146,7 +146,16 @@ async def process_l0_last_steps(
 
         if mission == "3":
             finished = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-            finished_products = [{item["properties"]["product:type"]: item["id"]} for item in s3_l0_result]
+            finished_products = [
+                {item["properties"]["product:type"]: item["id"]}
+                for item in s3_l0_result
+                if item["properties"]["product:type"] in {"S03OLCL0_", "S03NATL0_"}
+            ]
+            logger.info(
+                "Finished S3 OLCI/NAV L0 products selected for Prefect variable: count=%d, products=%r",
+                len(finished_products),
+                finished_products,
+            )
             await update_prefect_variable(
                 S3_PROCESSING_CONFIGURATION,
                 {

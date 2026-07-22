@@ -36,7 +36,13 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
         new=AsyncMock(
             return_value={
                 "l0": {
-                    "s3_l0_finished": [{"S03OLCL0_": "S03OLCL0__product.zarr"}],
+                    "s3_l0_finished": [
+                        {"S03OLCL0_": "S03OLCL0__product-1.zarr"},
+                        {"S03OLCL0_": "S03OLCL0__product-2.zarr"},
+                        {"S03OLCL0_": "S03OLCL0__product-3.zarr"},
+                        {"S03OLCL0_": "S03OLCL0__product-4.zarr"},
+                        {"S03NATL0_": "S03NATL0__product.zarr"},
+                    ],
                 },
             },
         ),
@@ -78,8 +84,23 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
                 "flow_params": {
                     "input_products": [
                         {
-                            "name": "S03OLCL0_",
-                            "item_id": "S03OLCL0__product.zarr",
+                            "name": "S3OLCIL0_1",
+                            "item_id": "S03OLCL0__product-1.zarr",
+                            "collection_name": "AUTOMATED_S3L0_OUTPUT",
+                        },
+                        {
+                            "name": "S3OLCIL0_2",
+                            "item_id": "S03OLCL0__product-2.zarr",
+                            "collection_name": "AUTOMATED_S3L0_OUTPUT",
+                        },
+                        {
+                            "name": "S3OLCIL0_3",
+                            "item_id": "S03OLCL0__product-3.zarr",
+                            "collection_name": "AUTOMATED_S3L0_OUTPUT",
+                        },
+                        {
+                            "name": "S3NAVL0_1",
+                            "item_id": "S03NATL0__product.zarr",
                             "collection_name": "AUTOMATED_S3L0_OUTPUT",
                         },
                     ],

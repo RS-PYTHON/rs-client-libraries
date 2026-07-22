@@ -69,15 +69,22 @@ def _build_l1_input_products(finished_products: list[dict[str, str]]) -> list[di
 
     L1 expects objects compatible with ``FlowInputProduct``::
 
-        {
-            "name": "S03OLCL0_",
-            "item_id": "S03OLCL0__20200121T045644_....zarr",
-            "collection_name": "AUTOMATED_S3L0_OUTPUT",
-        }
+        [
+            {
+                "name": "S3OLCIL0_1",
+                "item_id": "S03OLCL0__20200121T045644_....zarr",
+                "collection_name": "AUTOMATED_S3L0_OUTPUT",
+            },
+            ...
+            {
+                "name": "S3NAVL0_1",
+                "item_id": "S03NATL0__20200121T045644_....zarr",
+                "collection_name": "AUTOMATED_S3L0_OUTPUT",
+            },
+        ]
 
-    A compact dictionary normally contains one product type and item ID. The
-    nested comprehension also behaves predictably if a dictionary contains
-    multiple entries: each entry becomes a distinct L1 input product.
+    The OLCI L1 processor expects exactly three OLCI L0 inputs and one NAV L0
+    input. Products retain the order in which L0 published them.
 
     Args:
         finished_products: Compact ``product_type -> catalog item ID`` mappings
@@ -86,16 +93,40 @@ def _build_l1_input_products(finished_products: list[dict[str, str]]) -> list[di
     Returns:
         Parameters accepted by the ``input_products`` field of
         ``Level1FlowParams``.
+
+    Raises:
+        ValueError: If fewer than three OLCI products or no NAV product were
+            published by L0.
     """
-    return [
-        {
-            "name": product_type,
-            "item_id": item_id,
-            "collection_name": S3_L0_OUTPUT_COLLECTION,
-        }
+    product_entries = [
+        (product_type, item_id)
         for product in finished_products
         for product_type, item_id in product.items()
     ]
+    olci_item_ids = [item_id for product_type, item_id in product_entries if product_type == "S03OLCL0_"]
+    nav_item_ids = [item_id for product_type, item_id in product_entries if product_type == "S03NATL0_"]
+
+    if len(olci_item_ids) < 3:
+        raise ValueError(f"Expected at least 3 S03OLCL0_ products from L0, found {len(olci_item_ids)}")
+    if not nav_item_ids:
+        raise ValueError("Expected at least 1 S03NATL0_ product from L0, found 0")
+
+    input_products = [
+        {
+            "name": f"S3OLCIL0_{index}",
+            "item_id": item_id,
+            "collection_name": S3_L0_OUTPUT_COLLECTION,
+        }
+        for index, item_id in enumerate(olci_item_ids[:3], start=1)
+    ]
+    input_products.append(
+        {
+            "name": "S3NAVL0_1",
+            "item_id": nav_item_ids[0],
+            "collection_name": S3_L0_OUTPUT_COLLECTION,
+        },
+    )
+    return input_products
 
 
 def _ensure_completed(flow_run: Any, step: str) -> None:

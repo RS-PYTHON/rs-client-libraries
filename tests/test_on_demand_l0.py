@@ -207,6 +207,16 @@ async def test_process_s3_l0_last_steps_records_finished_in_prefect_variable(moc
             "id": "S03OLCL0__product.zarr",
             "properties": {"product:type": "S03OLCL0_"},
         },
+        {
+            "type": "Feature",
+            "id": "S03DORDOP_product.zarr",
+            "properties": {"product:type": "S03DORDOP"},
+        },
+        {
+            "type": "Feature",
+            "id": "S03NATL0__product.zarr",
+            "properties": {"product:type": "S03NATL0_"},
+        },
     ]
     update_variable = mocker.patch.object(l0_last_steps, "update_prefect_variable", new=AsyncMock())
 
@@ -217,7 +227,10 @@ async def test_process_s3_l0_last_steps_records_finished_in_prefect_variable(moc
     assert variable_name == "s3-processing-default-setting"
     assert set(updates) == {"l0"}
     assert datetime.fromisoformat(updates["l0"]["finished"].replace("Z", "+00:00")).tzinfo is not None
-    assert updates["l0"]["s3_l0_finished"] == [{"S03OLCL0_": "S03OLCL0__product.zarr"}]
+    assert updates["l0"]["s3_l0_finished"] == [
+        {"S03OLCL0_": "S03OLCL0__product.zarr"},
+        {"S03NATL0_": "S03NATL0__product.zarr"},
+    ]
 
 
 # --------------------------------------------------------------------------- #
