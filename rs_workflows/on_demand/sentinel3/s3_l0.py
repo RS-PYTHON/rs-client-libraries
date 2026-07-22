@@ -24,8 +24,14 @@ from rs_workflows.flow_utils import (
 from rs_workflows.on_demand.common.l0_last_steps import process_l0_last_steps
 from rs_workflows.on_demand.common.types import Level0FlowParams
 
+S3_L0_RESULT_STORAGE = "local-file-system/s3-processing-shared-results"
 
-@flow(name="process-s3-l0")
+
+@flow(
+    name="process-s3-l0",
+    persist_result=True,
+    result_storage=S3_L0_RESULT_STORAGE,
+)
 async def process_s3l0(
     session: str,
     flow_params: Level0FlowParams | None = None,

@@ -26,12 +26,11 @@ waits for each child run to reach a terminal state, while ``_ensure_completed``
 prevents the next processing stage from starting after a failed, crashed, or
 cancelled child run.
 
-Level-0 products are currently exchanged through the unified Prefect variable
-``s3-processing-default-setting``. The L0 flow writes a compact list under
-``l0.s3_l0_finished`` and this orchestrator converts that list into the
-``FlowInputProduct`` representation expected by L1. This bridge avoids reading
-a child flow result from pod-local Prefect storage, which is not shared between
-Kubernetes flow-run pods.
+Level-0 products are exchanged through Prefect's persisted flow result. The L0
+deployment writes its return value to a shared-disk ``LocalFileSystem`` block,
+and this orchestrator reads that result before converting it into the
+``FlowInputProduct`` representation expected by L1. The shared storage makes
+the result available across the separate Kubernetes flow-run pods.
 """
 
 from collections.abc import Awaitable
@@ -40,32 +39,43 @@ from typing import Any, cast
 from prefect import flow, get_run_logger
 from prefect.deployments import run_deployment
 from prefect.variables import Variable
+from pydantic import BaseModel, Field
 
 from rs_workflows.on_demand.common.types import S3_PROCESSING_CONFIGURATION
 
-# Full Prefect deployment names use the ``<flow-name>/<deployment-name>`` form.
-# Keeping them as constants makes environment-specific deployment names easy to
-# find and change without touching the orchestration logic.
-CADIP_STAGING_DEPLOYMENT = "stage-cadip-with-options/On-demand Cadip staging"
-S3_L0_DEPLOYMENT = "process-s3-l0/on_demand_S3L0"
-S3_L1_OLCI_DEPLOYMENT = "process-s3-l1-olci/on_demand_S3L1OLCI"
 
-# Staging searches the CADIP service through the logical ``cadip`` collection
-# and publishes the staged session into the catalog collection consumed by L0.
-CADIP_COLLECTION = "cadip"
-STAGING_CATALOG_COLLECTION = "AUTOMATED_S3L0_INPUT"
+class S3ProcessingOrchestrationSettings(BaseModel):
+    """Environment-specific deployment and collection names for the S3 chain."""
 
-# Every dynamically generated L1 input points to the collection where the L0
-# deployment publishes its products.
-S3_L0_OUTPUT_COLLECTION = "AUTOMATED_S3L0_OUTPUT"
+    cadip_staging_deployment: str = Field(min_length=1)
+    s3_l0_deployment: str = Field(min_length=1)
+    s3_l1_olci_deployment: str = Field(min_length=1)
+    cadip_collection: str = Field(min_length=1)
+    staging_catalog_collection: str = Field(min_length=1)
+    s3_l0_output_collection: str = Field(min_length=1)
 
 
-def _build_l1_input_products(finished_products: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Convert compact L0 output mappings into L1 input parameters.
+async def _read_orchestration_settings() -> S3ProcessingOrchestrationSettings:
+    """Load and validate the ``orchestration`` section of the unified S3 variable."""
+    raw_settings = await cast(Awaitable[Any], Variable.get(S3_PROCESSING_CONFIGURATION, default={}))
+    if not isinstance(raw_settings, dict):
+        raise ValueError(f"Prefect variable {S3_PROCESSING_CONFIGURATION!r} must contain a dictionary")
 
-    L0 stores its successful outputs in a compact, JSON-serializable form::
+    return S3ProcessingOrchestrationSettings.model_validate(raw_settings.get("orchestration"))
 
-        [{"S03OLCL0_": "S03OLCL0__20200121T045644_....zarr"}]
+
+def _build_l1_input_products(
+    l0_products: list[dict[str, Any]],
+    input_collection: str,
+) -> list[dict[str, str]]:
+    """Convert the persisted L0 flow result into L1 input parameters.
+
+    L0 returns STAC-like product dictionaries::
+
+        [{
+            "id": "S03OLCL0__20200121T045644_....zarr",
+            "properties": {"product:type": "S03OLCL0_"},
+        }]
 
     L1 expects objects compatible with ``FlowInputProduct``::
 
@@ -87,8 +97,9 @@ def _build_l1_input_products(finished_products: list[dict[str, str]]) -> list[di
     input. Products retain the order in which L0 published them.
 
     Args:
-        finished_products: Compact ``product_type -> catalog item ID`` mappings
-            written by the L0 flow.
+        l0_products: Products returned by the L0 flow and loaded from its
+            persisted Prefect result.
+        input_collection: Catalog collection containing the L0 products.
 
     Returns:
         Parameters accepted by the ``input_products`` field of
@@ -98,13 +109,12 @@ def _build_l1_input_products(finished_products: list[dict[str, str]]) -> list[di
         ValueError: If fewer than three OLCI products or no NAV product were
             published by L0.
     """
-    product_entries = [
-        (product_type, item_id)
-        for product in finished_products
-        for product_type, item_id in product.items()
+    olci_item_ids = [
+        product["id"] for product in l0_products if product["properties"]["product:type"] == "S03OLCL0_"
     ]
-    olci_item_ids = [item_id for product_type, item_id in product_entries if product_type == "S03OLCL0_"]
-    nav_item_ids = [item_id for product_type, item_id in product_entries if product_type == "S03NATL0_"]
+    nav_item_ids = [
+        product["id"] for product in l0_products if product["properties"]["product:type"] == "S03NATL0_"
+    ]
 
     if len(olci_item_ids) < 3:
         raise ValueError(f"Expected at least 3 S03OLCL0_ products from L0, found {len(olci_item_ids)}")
@@ -115,7 +125,7 @@ def _build_l1_input_products(finished_products: list[dict[str, str]]) -> list[di
         {
             "name": f"S3OLCIL0_{index}",
             "item_id": item_id,
-            "collection_name": S3_L0_OUTPUT_COLLECTION,
+            "collection_name": input_collection,
         }
         for index, item_id in enumerate(olci_item_ids[:3], start=1)
     ]
@@ -123,7 +133,7 @@ def _build_l1_input_products(finished_products: list[dict[str, str]]) -> list[di
         {
             "name": "S3NAVL0_1",
             "item_id": nav_item_ids[0],
-            "collection_name": S3_L0_OUTPUT_COLLECTION,
+            "collection_name": input_collection,
         },
     )
     return input_products
@@ -175,21 +185,23 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> Non
 
     Raises:
         RuntimeError: If a child deployment does not complete successfully or
-            L0 does not publish a valid ``l0.s3_l0_finished`` list.
+            L0 does not return a valid product list.
     """
     logger = get_run_logger()
+    settings = await _read_orchestration_settings()
+    logger.info("Loaded S3 orchestration settings from Prefect variable %s", S3_PROCESSING_CONFIGURATION)
 
     # Stage the raw CADIP session first. Other required staging parameters are
     # stable for this environment, while ``session_identifier`` changes for
     # every parent-flow run.
     logger.info("Starting CADIP staging deployment for session %s", session_id)
     staging_run = await run_deployment(
-        name=CADIP_STAGING_DEPLOYMENT,
+        name=settings.cadip_staging_deployment,
         parameters={
             "env": {"owner_id": owner_identifier},
-            "cadip_collection_identifier": CADIP_COLLECTION,
+            "cadip_collection_identifier": settings.cadip_collection,
             "session_identifier": session_id,
-            "catalog_collection_identifier": STAGING_CATALOG_COLLECTION,
+            "catalog_collection_identifier": settings.staging_catalog_collection,
         },
         flow_run_name=f"stage-{session_id}",
     )
@@ -200,31 +212,27 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> Non
     # session ID from this parent flow.
     logger.info("CADIP staging completed; starting S3 L0 deployment for session %s", session_id)
     l0_run = await run_deployment(
-        name=S3_L0_DEPLOYMENT,
+        name=settings.s3_l0_deployment,
         parameters={"session": session_id},
         flow_run_name=f"s3-l0-{session_id}",
     )
     _ensure_completed(l0_run, "S3 L0")
 
-    # L0 writes compact output references into the unified variable after DPR
-    # and catalog publication succeed. We use this JSON bridge because child
-    # deployment results otherwise live in pod-local ``~/.prefect/storage`` and
-    # cannot be read from the separate orchestrator pod.
-    s3_settings = await cast(Awaitable[Any], Variable.get(S3_PROCESSING_CONFIGURATION, default={}))
-    l0_settings = s3_settings.get("l0") if isinstance(s3_settings, dict) else None
-    finished_products = l0_settings.get("s3_l0_finished") if isinstance(l0_settings, dict) else None
-    if not isinstance(finished_products, list):
-        raise RuntimeError(
-            f"Prefect variable {S3_PROCESSING_CONFIGURATION!r} does not contain a valid " "'l0.s3_l0_finished' list",
-        )
+    # L0 persists its return value on the shared disk configured as Prefect
+    # result storage, so this orchestrator can load it from its separate pod.
+    logger.info("Loading persisted S3 L0 result for flow_run_id=%s", l0_run.id)
+    s3_l0_result = await l0_run.state.result()
+    if not isinstance(s3_l0_result, list):
+        raise RuntimeError(f"S3 L0 returned {type(s3_l0_result).__name__}, expected a list of products")
+    logger.info("Loaded %d products from the persisted S3 L0 result", len(s3_l0_result))
 
     # Convert catalog product references into Level1FlowParams.input_products.
     # Passing ``flow_params`` here overrides only these dynamic inputs; all
     # remaining L1 defaults are resolved from ``common`` + ``l1`` by the child.
-    l1_input_products = _build_l1_input_products(finished_products)
+    l1_input_products = _build_l1_input_products(s3_l0_result, settings.s3_l0_output_collection)
     logger.info("S3 L0 completed with %d products; starting S3 OLCI L1 deployment", len(l1_input_products))
     l1_run = await run_deployment(
-        name=S3_L1_OLCI_DEPLOYMENT,
+        name=settings.s3_l1_olci_deployment,
         parameters={"flow_params": {"input_products": l1_input_products}},
         flow_run_name=f"s3-l1-olci-{session_id}",
     )

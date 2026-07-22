@@ -14,8 +14,6 @@
 
 """common Level-0 processing."""
 
-from datetime import datetime, timezone
-
 from prefect import get_run_logger
 from pystac import Item
 
@@ -24,13 +22,9 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
     FlowInputProduct,
 )
-from rs_workflows.on_demand.common.types import (
-    S3_PROCESSING_CONFIGURATION,
-    Level0FlowParams,
-)
+from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dpr import call_dpr_flow
-from rs_workflows.utils.prefect import update_prefect_variable
 
 
 async def process_l0_last_steps(
@@ -145,25 +139,10 @@ async def process_l0_last_steps(
         logger.info("call_dpr_flow completed successfully for mission=%r, session=%r", mission, session)
 
         if mission == "3":
-            finished = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-            finished_products = [
-                {item["properties"]["product:type"]: item["id"]}
-                for item in s3_l0_result
-                if item["properties"]["product:type"] in {"S03OLCL0_", "S03NATL0_"}
-            ]
             logger.info(
-                "Finished S3 OLCI/NAV L0 products selected for Prefect variable: count=%d, products=%r",
-                len(finished_products),
-                finished_products,
-            )
-            await update_prefect_variable(
-                S3_PROCESSING_CONFIGURATION,
-                {
-                    "l0": {
-                        "finished": finished,
-                        "s3_l0_finished": finished_products,
-                    },
-                },
+                "S3 L0 products prepared for persisted flow result: count=%d, products=%r",
+                len(s3_l0_result),
+                s3_l0_result,
             )
 
         return s3_l0_result

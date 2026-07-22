@@ -196,8 +196,8 @@ async def test_process_l0_last_steps_calls_dpr_flow(mocker):
     assert kwargs["external_variables"]["end_datetime"] == datetime.fromisoformat("2025-06-13T00:00:00+00:00")
 
 
-async def test_process_s3_l0_last_steps_records_finished_in_prefect_variable(mocker):
-    """Successful S3 L0 processing records and verifies its completion timestamp."""
+async def test_process_s3_l0_last_steps_returns_all_products(mocker):
+    """Successful S3 L0 processing returns every product for Prefect persistence."""
     item = MagicMock()
     item.properties = {}
     dpr_mock = _patch_last_steps(mocker, item=item)
@@ -218,19 +218,9 @@ async def test_process_s3_l0_last_steps_records_finished_in_prefect_variable(moc
             "properties": {"product:type": "S03NATL0_"},
         },
     ]
-    update_variable = mocker.patch.object(l0_last_steps, "update_prefect_variable", new=AsyncMock())
+    result = await l0_last_steps.process_l0_last_steps("3", "S3A_session", _flow_params(), [], verbose=False)
 
-    await l0_last_steps.process_l0_last_steps("3", "S3A_session", _flow_params(), [], verbose=False)
-
-    update_variable.assert_awaited_once()
-    variable_name, updates = update_variable.call_args.args
-    assert variable_name == "s3-processing-default-setting"
-    assert set(updates) == {"l0"}
-    assert datetime.fromisoformat(updates["l0"]["finished"].replace("Z", "+00:00")).tzinfo is not None
-    assert updates["l0"]["s3_l0_finished"] == [
-        {"S03OLCL0_": "S03OLCL0__product.zarr"},
-        {"S03NATL0_": "S03NATL0__product.zarr"},
-    ]
+    assert result == dpr_mock.return_value
 
 
 # --------------------------------------------------------------------------- #

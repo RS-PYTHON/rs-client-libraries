@@ -29,23 +29,35 @@ def _flow_run(result):
 async def test_process_s3_runs_deployments_in_sequence(mocker):
     """Staging, L0, and L1 run sequentially with L0 products passed to L1."""
     mocker.patch.object(s3_processing, "get_run_logger", return_value=MagicMock())
-    l1_products = [{"id": "S03OLCL1__product.zarr"}]
     mocker.patch.object(
         s3_processing.Variable,
         "get",
         new=AsyncMock(
             return_value={
-                "l0": {
-                    "s3_l0_finished": [
-                        {"S03OLCL0_": "S03OLCL0__product-1.zarr"},
-                        {"S03OLCL0_": "S03OLCL0__product-2.zarr"},
-                        {"S03OLCL0_": "S03OLCL0__product-3.zarr"},
-                        {"S03OLCL0_": "S03OLCL0__product-4.zarr"},
-                        {"S03NATL0_": "S03NATL0__product.zarr"},
-                    ],
+                "orchestration": {
+                    "cadip_staging_deployment": "stage-cadip-with-options/On-demand Cadip staging",
+                    "s3_l0_deployment": "process-s3-l0/on_demand_S3L0",
+                    "s3_l1_olci_deployment": "process-s3-l1-olci/on_demand_S3L1OLCI",
+                    "cadip_collection": "cadip",
+                    "staging_catalog_collection": "AUTOMATED_S3L0_INPUT",
+                    "s3_l0_output_collection": "AUTOMATED_S3L0_OUTPUT",
                 },
             },
         ),
+    )
+    l1_products = [{"id": "S03OLCL1__product.zarr"}]
+    l0_products = [
+        {
+            "id": f"S03OLCL0__product-{index}.zarr",
+            "properties": {"product:type": "S03OLCL0_"},
+        }
+        for index in range(1, 5)
+    ]
+    l0_products.append(
+        {
+            "id": "S03NATL0__product.zarr",
+            "properties": {"product:type": "S03NATL0_"},
+        },
     )
     run = mocker.patch.object(
         s3_processing,
@@ -53,7 +65,7 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
         new=AsyncMock(
             side_effect=[
                 _flow_run(None),
-                _flow_run(None),
+                _flow_run(l0_products),
                 _flow_run(l1_products),
             ],
         ),
