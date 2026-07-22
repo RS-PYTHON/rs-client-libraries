@@ -554,14 +554,12 @@ async def dpr_processing(
 
                 for source_item in resolved_sources:
                     source_href = source_item if isinstance(source_item, str) else source_item.get_self_href()
-                    if source_href:
-                        parsed_href = urlsplit(source_href)
-                        source_href = urlunsplit(("", "", parsed_href.path, parsed_href.query, parsed_href.fragment))
+    
                     if not source_href:
                         logger.warning("Skip lineage source '%s' because it has no STAC self link", logical_source)
                         continue
-                    if source_href in added_hrefs:
-                        continue
+                    parsed_href = urlsplit(source_href)
+                    source_href = urlunsplit(("", "", parsed_href.path, parsed_href.query, parsed_href.fragment))
                     processed_item.stac_item.add_derived_from(source_href)
                     added_hrefs.add(source_href)
 
