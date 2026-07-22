@@ -670,11 +670,17 @@ def test_build_input_products_success_multiple_inputs_regex(sample_unit, mock_st
     Test successful build of input products when multiple inputs share the same name (regex case).
     """
     # Mock STAC resolution to return different paths
+    item1 = MagicMock(spec=Item)
+    item1.get_self_href.return_value = "https://catalog/item1"
+
+    item2 = MagicMock(spec=Item)
+    item2.get_self_href.return_value = "https://catalog/item2"
+
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
         side_effect=[
-            ("item1", "s3://path/to/item1"),
-            ("item2", "s3://path/to/item2"),
+            (item1, "s3://path/to/item1"),
+            (item2, "s3://path/to/item2"),
         ],
     )
 
