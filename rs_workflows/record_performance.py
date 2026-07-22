@@ -384,14 +384,12 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
     logger.debug(f"Database session initialized with engine={engine!r}")
     product_expected = Table("product_expected", metadata, autoload_with=engine)
     logger.debug(
-        "Loaded product_expected table metadata: "
-        f"columns={[column.name for column in product_expected.columns]}",
+        "Loaded product_expected table metadata: " f"columns={[column.name for column in product_expected.columns]}",
     )
 
     if not eopf_types:
         logger.debug(
-            "No EOPF types supplied; skipping expected-product recording "
-            f"for flow_run_id={flow_run_id!r}",
+            "No EOPF types supplied; skipping expected-product recording " f"for flow_run_id={flow_run_id!r}",
         )
         return
     eopf_type_dict = []
@@ -417,15 +415,13 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
         ]
     else:
         logger.debug(
-            f"Unsupported DPR processor={dpr_processor_name!r}; "
-            f"skipping flow_run_id={flow_run_id!r}",
+            f"Unsupported DPR processor={dpr_processor_name!r}; " f"skipping flow_run_id={flow_run_id!r}",
         )
         return
 
     eopf_type_lookup = {k: (min_c, max_c) for k, min_c, max_c in eopf_type_dict}
     logger.debug(
-        f"Built EOPF type lookup with {len(eopf_type_lookup)} entries: "
-        f"{sorted(eopf_type_lookup)}",
+        f"Built EOPF type lookup with {len(eopf_type_lookup)} entries: " f"{sorted(eopf_type_lookup)}",
     )
 
     list_items = []
@@ -446,15 +442,13 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
         for eopf_type in eopf_types:
             processed_count += 1
             logger.debug(
-                f"Processing expected EOPF type={eopf_type!r} "
-                f"for flow_run_id={flow_run_id!r}",
+                f"Processing expected EOPF type={eopf_type!r} " f"for flow_run_id={flow_run_id!r}",
             )
 
             try:
                 min_c, max_c = eopf_type_lookup[eopf_type]
                 logger.debug(
-                    f"Resolved count range for eopf_type={eopf_type!r}: "
-                    f"min_count={min_c}, max_count={max_c}",
+                    f"Resolved count range for eopf_type={eopf_type!r}: " f"min_count={min_c}, max_count={max_c}",
                 )
             except KeyError:
                 logger.error(
@@ -502,8 +496,7 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
                 logger.info(f"Inserted product_expected for flow_run_id={flow_run_id} for eopf_type={eopf_type}")
             else:
                 logger.debug(
-                    f"Skipping insert for eopf_type={eopf_type!r}; "
-                    f"existing product_expected id={existing[0]!r}",
+                    f"Skipping insert for eopf_type={eopf_type!r}; " f"existing product_expected id={existing[0]!r}",
                 )
 
             logger.debug(f"Committing transaction after processing eopf_type={eopf_type!r}")

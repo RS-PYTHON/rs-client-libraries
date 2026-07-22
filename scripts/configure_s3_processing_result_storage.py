@@ -31,8 +31,7 @@ def main() -> None:
 
     block_id = LocalFileSystem(basepath=str(SHARED_RESULTS_PATH)).save(BLOCK_NAME, overwrite=True)
     print(
-        f"Saved Prefect block local-file-system/{BLOCK_NAME} with id={block_id} "
-        f"and basepath={SHARED_RESULTS_PATH}",
+        f"Saved Prefect block local-file-system/{BLOCK_NAME} with id={block_id} " f"and basepath={SHARED_RESULTS_PATH}",
     )
 
 

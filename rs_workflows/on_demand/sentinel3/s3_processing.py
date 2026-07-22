@@ -109,12 +109,8 @@ def _build_l1_input_products(
         ValueError: If fewer than three OLCI products or no NAV product were
             published by L0.
     """
-    olci_item_ids = [
-        product["id"] for product in l0_products if product["properties"]["product:type"] == "S03OLCL0_"
-    ]
-    nav_item_ids = [
-        product["id"] for product in l0_products if product["properties"]["product:type"] == "S03NATL0_"
-    ]
+    olci_item_ids = [product["id"] for product in l0_products if product["properties"]["product:type"] == "S03OLCL0_"]
+    nav_item_ids = [product["id"] for product in l0_products if product["properties"]["product:type"] == "S03NATL0_"]
 
     if len(olci_item_ids) < 3:
         raise ValueError(f"Expected at least 3 S03OLCL0_ products from L0, found {len(olci_item_ids)}")
@@ -128,6 +124,8 @@ def _build_l1_input_products(
             "collection_name": input_collection,
         }
         for index, item_id in enumerate(olci_item_ids[:3], start=1)
+        # Tempfix, use just first 3 OLCI products for L1, even if more were produced by L0
+        # To be discussed and logic to be improved in future
     ]
     input_products.append(
         {
