@@ -353,10 +353,13 @@ def build_input_products(
     for input_product in dpr_process_in.input_products:
         grouped_products[input_product.name].append(input_product)
 
+    logger = get_run_logger()
+
     # Iterate over each group of products
     for product_name, products in grouped_products.items():
-
+        logger.info(f"product_name, products: {product_name} and {products}")
         mapping = search_by_name(unit.get("input_products", []), product_name)
+        logger.info(f"mapping {mapping}")
         if not mapping:
             raise RuntimeError(f"Couldn't find any input for task table entry '{product_name}'")
 
@@ -382,11 +385,19 @@ def build_input_products(
         if len(products) == 1:
             # Standard case where each input product has a different name (i.e. single STAC item)
             input_product = products[0]
-            _, stac_item_path = resolve_stac_input_path(
+            stac_item, stac_item_path = resolve_stac_input_path(
                 catalog_client,
                 input_product.collection_name,
                 input_product.item_id,
             )
+            logger.info(f"stac_item, stac_item_path {stac_item}, {stac_item_path}")
+
+            # Reuse the resolved STAC item later when derived_from links are built.
+            source_item_href = None
+            try:
+                source_item_href = stac_item.get_self_href()
+            except:
+                continue
 
             opening_mode = None
             if kind in ("shared_disk", "local_disk"):
@@ -408,6 +419,7 @@ def build_input_products(
                     store_type=mapping["store_type"],
                     store_params=store_params,
                     opening_mode=opening_mode,
+                    source_item_hrefs=[source_item_href] if source_item_href else [],
                 ),
             )
         elif isinstance(store_params, StoreParams):
@@ -415,17 +427,26 @@ def build_input_products(
             store_params.multiplicity = str(len(products))
 
             # Retrieve all paths
-            paths = [
+            resolved_products = [
                 resolve_stac_input_path(
                     catalog_client,
                     product.collection_name,
                     product.item_id,
-                )[1]
+                )
                 for product in products
             ]
+            paths = [path for _, path in resolved_products]
+            source_item_hrefs = [
+                source_item_href
+                for stac_item, _ in resolved_products
+                if (source_item_href := stac_item.get_self_href())
+            ]
+
             # Compute longest common prefix
             common_folder, relative_parts = get_common_and_relative_paths(paths)
             store_params.regex = rf"({'|'.join(relative_parts)})"
+
+            logger.warning(f" common_folder, relative_parts: { common_folder} and {relative_parts}")
 
             # Add a single InputProduct of type regex listing the provided inputs in the common folder
             inputs.append(
@@ -435,10 +456,12 @@ def build_input_products(
                     type=mapping.get("type", "regex"),
                     store_type=mapping["store_type"],
                     store_params=store_params,
+                    source_item_hrefs=source_item_hrefs,
                 ),
             )
         else:
             raise RuntimeError(f"Couldn't find any storage configuration for input product '{product_name}'")
+    logger.warning(f"inputs: {inputs}")
     return inputs
 
 
@@ -733,6 +756,15 @@ def generate_payload(  # pylint: disable=unused-argument
             io_config.output_products += [p for p in output_products if p.id not in seen_outputs]
         except KeyError as ke:
             raise ValueError(f"Key {ke} not found in unit list") from ke
+
+    provided_input_names = {input_product.name for input_product in dpr_process_in.input_products}
+    payload_input_names = {input_product.id for input_product in io_config.input_products}
+    unused_input_names = provided_input_names - payload_input_names
+    logger.info(
+        f"provided_input_names {provided_input_names}\n payload_input_names {payload_input_names}\n unused_input_names {unused_input_names}",
+    )
+    if unused_input_names:
+        raise RuntimeError(f"Provided inputs are not used by the selected workflow: {sorted(unused_input_names)}")
 
     logger.info("Building ADFs section")
     io_config.adfs = build_adfs(storage_configuration, adfs, dpr_process_in)

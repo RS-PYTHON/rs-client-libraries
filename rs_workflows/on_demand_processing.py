@@ -21,6 +21,7 @@ import os
 import re
 from copy import deepcopy
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import yaml
 from prefect import flow, get_run_logger, task
@@ -414,31 +415,8 @@ async def dpr_processing(
             cluster_info,
         )
 
-        lineage = build_output_lineage(
-            task_table,
-            dpr_input.pipeline,
-        )
-        source_items: dict[str, list[Item]] = {}
-
-        # Add pipeline input products to source_items
-        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-        for input_product in dpr_input.input_products:
-            stac_item, _ = resolve_stac_input_path(
-                catalog_client,
-                input_product.collection_name,
-                input_product.item_id,
-            )
-
-            if stac_item is None:
-                logger.warning(
-                    "Could not resolve input product %s (%s/%s)",
-                    input_product.name,
-                    input_product.collection_name,
-                    input_product.item_id,
-                )
-                continue
-
-            source_items.setdefault(input_product.name, []).append(stac_item)
+        # A lineage source is either a staged ADF item or an input STAC self link.
+        source_items: dict[str, list[Item | str]] = {}
 
         # Persist the full task table as a Prefect artifact for later investigation.
         md = "# Task table\n\n```json\n" + json.dumps(task_table, indent=2) + "\n```"
@@ -475,10 +453,6 @@ async def dpr_processing(
                     dpr_input.input_products,
                     flow_env.rs_client,
                 )
-                if specific_input_name:
-                    source_items.setdefault(specific_input_name, []).extend(
-                        item for item in product_stac_items if item is not None
-                    )
                 for specific_input_product_stac_item in product_stac_items:
                     if specific_input_product_stac_item:
                         logger.info(
@@ -515,6 +489,12 @@ async def dpr_processing(
         task_future = generate_payload.submit(flow_env, unit_list, list(adfs), dpr_input)
         # get the payload generation result
         generated_payload_res = task_future.result()
+        # Build lineage from the exact workflow that will be executed.
+        lineage = build_output_lineage(generated_payload_res)
+        # Reuse links resolved during payload generation; do not query the catalog again.
+        if generated_payload_res.io:
+            for input_product in generated_payload_res.io.input_products:
+                source_items.setdefault(input_product.id, []).extend(input_product.source_item_hrefs)
         # create the generated payload as a dictionary, as it will be used for
         # the prefect artifact. the SecretStr will be masked here
         generated_payload_res_as_dict = generated_payload_res.dump()
@@ -560,9 +540,29 @@ async def dpr_processing(
         # add derived_from links
         for processed_item in processed:
             output_id = processed_item.output_product_id
-            for logical_source in lineage.get(output_id, set()):
-                for source_item in source_items.get(logical_source, []):
-                    processed_item.stac_item.add_derived_from(source_item)
+            logger.info(f"processed_item: {output_id}")
+
+            if output_id not in lineage:
+                raise ValueError(f"No payload lineage found for processed output '{output_id}'")
+
+            added_hrefs: set[str] = set()
+            for logical_source in sorted(lineage[output_id]):
+                resolved_sources = source_items.get(logical_source, [])
+                if not resolved_sources:
+                    logger.warning("Skip lineage source '%s' because no STAC item was resolved", logical_source)
+                    continue
+
+                for source_item in resolved_sources:
+                    source_href = source_item if isinstance(source_item, str) else source_item.get_self_href()
+                    parsed_href = urlsplit(source_href)
+                    source_href = urlunsplit(("", "", parsed_href.path, parsed_href.query, parsed_href.fragment))
+                    if not source_href:
+                        logger.warning("Skip lineage source '%s' because it has no STAC self link", logical_source)
+                        continue
+                    if source_href in added_hrefs:
+                        continue
+                    processed_item.stac_item.add_derived_from(source_href)
+                    added_hrefs.add(source_href)
 
         # Publish processed items to the catalog
         published = catalog_flow.publish.submit(
