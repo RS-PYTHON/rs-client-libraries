@@ -554,7 +554,7 @@ async def dpr_processing(
 
                 for source_item in resolved_sources:
                     source_href = source_item if isinstance(source_item, str) else source_item.get_self_href()
-    
+
                     if not source_href:
                         logger.warning("Skip lineage source '%s' because it has no STAC self link", logical_source)
                         continue
