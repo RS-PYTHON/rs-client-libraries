@@ -38,22 +38,18 @@ S3_PROCESSING_CONFIGURATION = "s3-processing-default-setting"
 
 async def _read_prefect_settings(mission: str, level: str) -> dict[str, Any]:
     """Read level settings, preferring the unified Sentinel-3 configuration."""
-    legacy_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
-
     if mission == "3":
         raw_unified = await cast(Awaitable[Any], Variable.get(S3_PROCESSING_CONFIGURATION, default={}))
-        raw_legacy = await cast(Awaitable[Any], Variable.get(legacy_name, default={}))
-        legacy = raw_legacy if isinstance(raw_legacy, dict) else {}
         section = raw_unified.get(f"l{level}") if isinstance(raw_unified, dict) else None
         if isinstance(section, dict):
             common = raw_unified.get("common", {})
             return {
-                **legacy,
                 **(common if isinstance(common, dict) else {}),
                 **section,
             }
-        return legacy
+        return {}
 
+    legacy_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
     raw_legacy = await cast(Awaitable[Any], Variable.get(legacy_name, default={}))
     return raw_legacy if isinstance(raw_legacy, dict) else {}
 

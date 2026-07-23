@@ -64,7 +64,7 @@ async def _read_orchestration_settings() -> S3ProcessingOrchestrationSettings:
     return S3ProcessingOrchestrationSettings.model_validate(raw_settings.get("orchestration"))
 
 
-def _build_l1_input_products(
+def _build_olci_l1_input_products(
     l0_products: list[dict[str, Any]],
     input_collection: str,
 ) -> list[dict[str, str]]:
@@ -162,6 +162,23 @@ def _ensure_completed(flow_run: Any, step: str) -> None:
         )
 
 
+async def _run_child_deployment(
+    step: str,
+    *,
+    name: str,
+    parameters: dict[str, Any],
+    flow_run_name: str,
+) -> Any:
+    """Run a child deployment and return only after successful completion."""
+    flow_run = await run_deployment(
+        name=name,
+        parameters=parameters,
+        flow_run_name=flow_run_name,
+    )
+    _ensure_completed(flow_run, step)
+    return flow_run
+
+
 @flow(name="full-s3-processing-chain")
 async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> None:
     """Run CADIP staging, S3 L0, and S3 OLCI L1 for one session.
@@ -193,7 +210,8 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> Non
     # stable for this environment, while ``session_identifier`` changes for
     # every parent-flow run.
     logger.info("Starting CADIP staging deployment for session %s", session_id)
-    staging_run = await run_deployment(
+    await _run_child_deployment(
+        "CADIP staging",
         name=settings.cadip_staging_deployment,
         parameters={
             "env": {"owner_id": owner_identifier},
@@ -203,18 +221,17 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> Non
         },
         flow_run_name=f"stage-{session_id}",
     )
-    _ensure_completed(staging_run, "CADIP staging")
 
     # The S3 L0 deployment reads its processor configuration from the ``l0``
     # section of the unified Prefect variable. It receives only the staged
     # session ID from this parent flow.
     logger.info("CADIP staging completed; starting S3 L0 deployment for session %s", session_id)
-    l0_run = await run_deployment(
+    l0_run = await _run_child_deployment(
+        "S3 L0",
         name=settings.s3_l0_deployment,
         parameters={"session": session_id},
         flow_run_name=f"s3-l0-{session_id}",
     )
-    _ensure_completed(l0_run, "S3 L0")
 
     # L0 persists its return value on the shared disk configured as Prefect
     # result storage, so this orchestrator can load it from its separate pod.
@@ -227,14 +244,14 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> Non
     # Convert catalog product references into Level1FlowParams.input_products.
     # Passing ``flow_params`` here overrides only these dynamic inputs; all
     # remaining L1 defaults are resolved from ``common`` + ``l1`` by the child.
-    l1_input_products = _build_l1_input_products(s3_l0_result, settings.s3_l0_output_collection)
+    l1_input_products = _build_olci_l1_input_products(s3_l0_result, settings.s3_l0_output_collection)
     logger.info("S3 L0 completed with %d products; starting S3 OLCI L1 deployment", len(l1_input_products))
-    l1_run = await run_deployment(
+    await _run_child_deployment(
+        "S3 OLCI L1",
         name=settings.s3_l1_olci_deployment,
         parameters={"flow_params": {"input_products": l1_input_products}},
         flow_run_name=f"s3-l1-olci-{session_id}",
     )
-    _ensure_completed(l1_run, "S3 OLCI L1")
 
     # Reaching this log means all three independently deployed flows completed
     # successfully. Any exception above marks this parent run as failed.

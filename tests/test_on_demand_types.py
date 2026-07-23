@@ -189,11 +189,10 @@ async def test_resolve_merges_settings_and_params(mocker):
 
 
 async def test_resolve_uses_correct_variable_name_per_mission(mocker):
-    """Sentinel-3 levels use the unified processing configuration."""
-    get_mock = AsyncMock(side_effect=[{"l0": {}}, {}])
+    """Sentinel-3 levels use only the unified processing configuration."""
+    get_mock = AsyncMock(return_value={"l0": {}})
     mocker.patch.object(types.Variable, "get", new=get_mock)
     await Level0FlowParams().resolve("3")
     assert get_mock.await_args_list == [
         call("s3-processing-default-setting", default={}),
-        call("s3-l0-default-setting", default={}),
     ]
