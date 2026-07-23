@@ -14,6 +14,7 @@
 
 """sentinel 3 Level-0 processing."""
 
+import json
 from typing import Any
 from uuid import uuid4
 
@@ -81,6 +82,7 @@ async def process_s3l0(
         products,
         orchestration_settings.s3_l0_output_collection,
     )
+    l1_input_products_json = json.dumps(l1_input_products, separators=(",", ":"))
 
     flow_run_id = str(runtime.flow_run.id or "unknown")
     emitted_event = emit_event(
@@ -103,6 +105,7 @@ async def process_s3l0(
             "mocked": True,
             "products": products,
             "input_products": l1_input_products,
+            "input_products_json": l1_input_products_json,
         },
     )
     if emitted_event is None:

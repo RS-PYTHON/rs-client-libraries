@@ -14,6 +14,7 @@
 
 """sentinel 3 OLCI Level-1 processing."""
 
+import json
 from typing import Any
 
 from prefect import flow, get_run_logger, task
@@ -107,14 +108,37 @@ async def build_olci_l1_inputs_from_catalog(
 
 
 @flow(name="process-s3-l1-olci")
-async def process_s3l1_olci(flow_params: Level1FlowParams) -> list[dict[str, Any]]:
+async def process_s3l1_olci(
+    flow_params: Level1FlowParams | None = None,
+    input_products_json: str | None = None,
+) -> list[dict[str, Any]]:
     """
     Sentinel-3 OLCI L1 processing.
     The input_products should have been processed before by L0.
+
+    ``input_products_json`` is intended for Prefect Automations, where passing
+    one rendered string is more reliable than rendering a nested model. When
+    provided, it overrides ``flow_params.input_products``.
     """
     mission = "3"
     # how to use s3-l1-default-setting
-    flow_parameters = await flow_params.resolve(mission)
+    flow_parameters = await (flow_params or Level1FlowParams()).resolve(mission)
+
+    if input_products_json is not None:
+        try:
+            raw_input_products = json.loads(input_products_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError("input_products_json must contain valid JSON") from exc
+        if not isinstance(raw_input_products, list):
+            raise ValueError("input_products_json must contain a JSON list")
+        flow_parameters.input_products = [
+            FlowInputProduct.model_validate(product)
+            for product in raw_input_products
+        ]
+        get_run_logger().info(
+            "Loaded %d S3 L1 input product(s) from input_products_json",
+            len(flow_parameters.input_products),
+        )
 
     # Alternative catalog-based input resolution (currently paused; do not enable yet):
     #

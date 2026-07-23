@@ -14,6 +14,7 @@
 
 """Tests for the Sentinel-3 deployment orchestrator."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, call
 
 from rs_workflows.on_demand.sentinel3 import (
@@ -77,6 +78,37 @@ async def test_build_olci_l1_inputs_from_catalog(mocker):
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
     ]
+
+
+async def test_process_s3l1_olci_loads_automation_inputs_from_json(mocker):
+    """Automation JSON inputs override the inputs resolved from Prefect settings."""
+    resolved_params = MagicMock()
+    resolved_params.owner_identifier = "opadeanu"
+    resolved_params.input_products = []
+    flow_params = MagicMock()
+    flow_params.resolve = AsyncMock(return_value=resolved_params)
+    call_dpr_flow = mocker.patch.object(
+        s3_l1_olci,
+        "call_dpr_flow",
+        new=AsyncMock(return_value=[]),
+    )
+    mocker.patch.object(s3_l1_olci, "get_run_logger", return_value=MagicMock())
+    input_products = [
+        {
+            "name": "S3OLCIL0_1",
+            "item_id": "S03OLCL0__product.zarr",
+            "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+        },
+    ]
+
+    await s3_l1_olci.process_s3l1_olci.fn(
+        flow_params=flow_params,
+        input_products_json=json.dumps(input_products),
+    )
+
+    flow_params.resolve.assert_awaited_once_with("3")
+    actual_inputs = call_dpr_flow.call_args.kwargs["input_products"]
+    assert [product.model_dump() for product in actual_inputs] == input_products
 
 
 async def test_process_s3_runs_deployments_in_sequence(mocker):
