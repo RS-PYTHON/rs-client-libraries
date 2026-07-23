@@ -540,7 +540,6 @@ async def dpr_processing(
         # add derived_from links
         for processed_item in processed:
             output_id = processed_item.output_product_id
-            logger.info(f"processed_item: {output_id}")
 
             if output_id not in lineage:
                 raise ValueError(f"No payload lineage found for processed output '{output_id}'")

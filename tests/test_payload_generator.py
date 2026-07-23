@@ -26,6 +26,7 @@ from rs_workflows.flow_utils import (
     FlowGeneratedProduct,
     FlowInputProduct,
 )
+from rs_workflows.on_demand_processing import build_output_lineage
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
     DATA_EDH_DOMAIN,
     build_adfs,
@@ -421,6 +422,11 @@ def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in
     assert len(payload.io.input_products) > 0
     assert payload.io.input_products[0].id == "S1CADUS"
     assert "S03OLCL0_" in [op.id for op in payload.io.output_products]
+
+    lineage = build_output_lineage(payload)
+    assert lineage == {
+        "S03OLCL0_": {"S1CADUS"},
+    }
 
 
 # ----------------------------------------------------------------------

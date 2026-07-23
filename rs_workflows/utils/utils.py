@@ -390,7 +390,12 @@ async def asset_unzip_decompress_task(*args, **kwargs) -> Item:
 
 
 def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
-    """Build each final output lineage by walking the executed payload workflow backwards."""
+    """
+    Build each final output lineage by walking the executed payload workflow backwards.
+    The mockup will have the result below.
+    {'S03MWRL0_': {'S3BCADUS', 'osf'}, 'S03OLCL0_': {'S3BCADUS', 'fro'}}
+    """
+
     if payload.io is None:
         raise ValueError("Payload I/O configuration is missing")
 
@@ -455,6 +460,4 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
                 f"Final output '{output_product.id}' must have exactly one workflow producer, found {references}",
             )
         lineage[output_product.id] = set(resolve_sources(references[0]))
-    logger = get_run_logger()
-    logger.info(f"lineage: {lineage}")
     return lineage
