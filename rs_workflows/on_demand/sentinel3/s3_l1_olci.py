@@ -16,11 +16,94 @@
 
 from typing import Any
 
-from prefect import flow, task
+from prefect import flow, get_run_logger, task
+from pystac import Item
 
-from rs_workflows.flow_utils import FlowEnvArgs
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct
 from rs_workflows.on_demand.common.types import Level1FlowParams
 from rs_workflows.utils.dpr import call_dpr_flow
+
+OLCI_L0_PRODUCT_TYPE = "S03OLCL0_"
+NAV_L0_PRODUCT_TYPE = "S03NATL0_"
+
+
+async def build_olci_l1_inputs_from_catalog(
+    owner_identifier: str,
+    input_collection: str,
+    timestamp: str,
+) -> list[FlowInputProduct]:
+    """Build OLCI L1 inputs by searching published L0 products in the catalog.
+
+    This is an alternative, currently unused, to passing the persisted L0 flow
+    result through shared storage. ``timestamp`` must be a STAC datetime value
+    or interval (for example ``2026-06-30T11:40:00Z/2026-06-30T12:30:00Z``)
+    that identifies the relevant L0 processing window. It prevents products
+    belonging to older sessions in the same collection from being selected.
+
+    The OLCI L1 processor expects the first three OLCI L0 products and the
+    first navigation L0 product, ordered by catalog item ID.
+
+    Args:
+        owner_identifier: Catalog owner used to initialize the RS client.
+        input_collection: Catalog collection where L0 published its products.
+        timestamp: STAC datetime or interval used to restrict both searches.
+
+    Returns:
+        Three ``S3OLCIL0_*`` inputs followed by one ``S3NAVL0_1`` input.
+
+    Raises:
+        ValueError: If the catalog contains fewer than three matching OLCI
+            products or no matching navigation product.
+    """
+    logger = get_run_logger()
+    flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
+    catalog_client = flow_env.rs_client.get_catalog_client()
+
+    def search_product_type(product_type: str) -> list[Item]:
+        logger.info(
+            "Searching catalog collection=%r for product_type=%r, timestamp=%r",
+            input_collection,
+            product_type,
+            timestamp,
+        )
+        found = catalog_client.search(
+            method="POST",
+            owner_id=owner_identifier,
+            collections=[input_collection],
+            timestamp=timestamp,
+            stac_filter={"op": "=", "args": [{"property": "product:type"}, product_type]},
+            max_items=100,
+            limit=100,
+        )
+        items = sorted(found.items, key=lambda item: item.id) if found else []
+        logger.info("Catalog search found %d product(s) for product_type=%r", len(items), product_type)
+        return items
+
+    olci_items = search_product_type(OLCI_L0_PRODUCT_TYPE)
+    nav_items = search_product_type(NAV_L0_PRODUCT_TYPE)
+
+    if len(olci_items) < 3:
+        raise ValueError(f"Expected at least 3 {OLCI_L0_PRODUCT_TYPE} catalog products, found {len(olci_items)}")
+    if not nav_items:
+        raise ValueError(f"Expected at least 1 {NAV_L0_PRODUCT_TYPE} catalog product, found 0")
+
+    input_products = [
+        FlowInputProduct(
+            name=f"S3OLCIL0_{index}",
+            item_id=item.id,
+            collection_name=input_collection,
+        )
+        for index, item in enumerate(olci_items[:3], start=1)
+    ]
+    input_products.append(
+        FlowInputProduct(
+            name="S3NAVL0_1",
+            item_id=nav_items[0].id,
+            collection_name=input_collection,
+        ),
+    )
+    logger.info("Built OLCI L1 catalog inputs: %r", input_products)
+    return input_products
 
 
 @flow(name="process-s3-l1-olci")
@@ -32,6 +115,29 @@ async def process_s3l1_olci(flow_params: Level1FlowParams) -> list[dict[str, Any
     mission = "3"
     # how to use s3-l1-default-setting
     flow_parameters = await flow_params.resolve(mission)
+
+    # Alternative catalog-based input resolution (currently paused; do not enable yet):
+    #
+    # - owner_identifier comes from the resolved ``common.owner_identifier`` setting;
+    # - start_datetime and end_datetime come from the resolved ``l1`` settings or
+    #   from explicit ``flow_params`` overrides supplied by the orchestrator;
+    # - input_collection comes from
+    #   ``s3-processing-default-setting.orchestration.s3_l0_output_collection``.
+    #
+    # raw_settings = await Variable.get("s3-processing-default-setting", default={})
+    # input_collection = raw_settings["orchestration"]["s3_l0_output_collection"]
+    # start_datetime = flow_parameters.start_datetime.isoformat().replace("+00:00", "Z")
+    # end_datetime = flow_parameters.end_datetime.isoformat().replace("+00:00", "Z")
+    # timestamp = f"{start_datetime}/{end_datetime}"
+    # catalog_input_products = await build_olci_l1_inputs_from_catalog(
+    #     owner_identifier=flow_parameters.owner_identifier,
+    #     input_collection=input_collection,
+    #     timestamp=timestamp,
+    # )
+    #
+    # To switch from shared-result inputs to catalog inputs, pass
+    # ``catalog_input_products`` to ``call_dpr_flow`` below instead of
+    # ``flow_parameters.input_products``.
 
     # Call DPR flow
     return await call_dpr_flow(

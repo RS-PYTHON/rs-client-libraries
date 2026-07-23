@@ -16,7 +16,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, call
 
-from rs_workflows.on_demand.sentinel3 import s3_processing
+from rs_workflows.on_demand.sentinel3 import s3_l1_olci, s3_processing
 
 
 def _flow_run(result):
@@ -24,6 +24,55 @@ def _flow_run(result):
     state.is_completed.return_value = True
     state.result = AsyncMock(return_value=result)
     return MagicMock(state=state)
+
+
+async def test_build_olci_l1_inputs_from_catalog(mocker):
+    """The dormant catalog alternative builds the processor's four expected inputs."""
+    mocker.patch.object(s3_l1_olci, "get_run_logger", return_value=MagicMock())
+    catalog_client = MagicMock()
+    catalog_client.search.side_effect = [
+        MagicMock(
+            items=[
+                MagicMock(id="S03OLCL0__product-3.zarr"),
+                MagicMock(id="S03OLCL0__product-1.zarr"),
+                MagicMock(id="S03OLCL0__product-4.zarr"),
+                MagicMock(id="S03OLCL0__product-2.zarr"),
+            ],
+        ),
+        MagicMock(items=[MagicMock(id="S03NATL0__product.zarr")]),
+    ]
+    flow_env = MagicMock()
+    flow_env.rs_client.get_catalog_client.return_value = catalog_client
+    mocker.patch.object(s3_l1_olci, "FlowEnv", return_value=flow_env)
+
+    result = await s3_l1_olci.build_olci_l1_inputs_from_catalog(
+        owner_identifier="opadeanu",
+        input_collection="AUTOMATED_S3L0_OUTPUT_2026",
+        timestamp="2026-06-30T11:40:00Z/2026-06-30T12:30:00Z",
+    )
+
+    assert [product.model_dump() for product in result] == [
+        {
+            "name": "S3OLCIL0_1",
+            "item_id": "S03OLCL0__product-1.zarr",
+            "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+        },
+        {
+            "name": "S3OLCIL0_2",
+            "item_id": "S03OLCL0__product-2.zarr",
+            "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+        },
+        {
+            "name": "S3OLCIL0_3",
+            "item_id": "S03OLCL0__product-3.zarr",
+            "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+        },
+        {
+            "name": "S3NAVL0_1",
+            "item_id": "S03NATL0__product.zarr",
+            "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+        },
+    ]
 
 
 async def test_process_s3_runs_deployments_in_sequence(mocker):
