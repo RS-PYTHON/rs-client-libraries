@@ -97,7 +97,6 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
         "POSTGRES_HOST": "test_host",
         "POSTGRES_PORT": "5432",
         "POSTGRES_PI_DB": "test_db",
-        "DASK_GATEWAY_ADDRESS": "DASK_GATEWAY_ADDRESS",
         "LOCAL_DASK_USERNAME": "LOCAL_DASK_USERNAME",
         "LOCAL_DASK_PASSWORD": "LOCAL_DASK_PASSWORD",
     }
@@ -106,6 +105,13 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
     if local_mode:
         for key, value in env_global.items():
             monkeypatch.setenv(key, value)
+
+        # These ones will be set by the prefect init
+        for key in [
+            "JUPYTERHUB_API_TOKEN",
+            "DASK_GATEWAY_ADDRESS",
+        ]:
+            env_global[key] = ""
 
     # In cluster mode, they must be set in a prefect block
     else:
@@ -165,7 +171,7 @@ async def test_init_prefect_blocks(monkeypatch, mock_prefect, local_mode):  # py
     assert env_global == (await Secret.load(prefect_utils.BLOCK_NAME_ENV_GLOBAL)).get()
     assert env_user == (await Secret.load(user_block_name)).get()
 
-    # Check that the values were save as env vars
+    # Check that the values were saved as env vars
     for key, value in {**env_global, **env_user}.items():
         assert os.environ[key] == value
 
