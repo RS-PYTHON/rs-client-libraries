@@ -246,14 +246,29 @@ async def test_process_s1l0_builds_s1_input_and_delegates(mocker):
 
 async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
     """process_s3l0 builds the S3ACADUS input product and delegates to the common last steps."""
-    last_steps = mocker.patch.object(s3_l0, "process_l0_last_steps", new=AsyncMock())
+    products_result = [
+        {
+            "id": "S03OLCL0__product.zarr",
+            "properties": {"product:type": "S03OLCL0_"},
+        },
+    ]
+    last_steps = mocker.patch.object(
+        s3_l0,
+        "process_l0_last_steps",
+        new=AsyncMock(return_value=products_result),
+    )
+    emitted_event = MagicMock(id="event-id")
+    emit_event = mocker.patch.object(s3_l0, "emit_event", return_value=emitted_event)
+    mocker.patch.object(s3_l0, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(s3_l0.runtime.flow_run, "id", "flow-run-id")
     resolved_params = _resolved_params()
     resolved_params.session_collection = "s03-cadip-session"
     flow_params = MagicMock()
     flow_params.resolve = AsyncMock(return_value=resolved_params)
 
-    await s3_l0.process_s3l0.fn("S3A_session", flow_params, verbose=False)
+    result = await s3_l0.process_s3l0.fn("S3A_session", flow_params, verbose=False)
 
+    assert result == products_result
     flow_params.resolve.assert_awaited_once_with("3")
     last_steps.assert_awaited_once()
     kwargs = last_steps.call_args.kwargs
@@ -262,6 +277,26 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
     products = kwargs["input_products"]
     assert products[0].name == "S3ACADUS"
     assert products[0].collection_name == "s03-cadip-session"
+    emit_event.assert_called_once_with(
+        event="rs-python.s3-l0.products-ready",
+        resource={
+            "prefect.resource.id": "rs-python.s3-l0-result.flow-run-id",
+            "prefect.resource.name": "S3A_session",
+            "rs-python.session-id": "S3A_session",
+        },
+        related=[
+            {
+                "prefect.resource.id": "prefect.flow-run.flow-run-id",
+                "prefect.resource.role": "flow-run",
+            },
+        ],
+        payload={
+            "flow_run_id": "flow-run-id",
+            "session_id": "S3A_session",
+            "owner_identifier": resolved_params.owner_identifier,
+            "products": products_result,
+        },
+    )
 
 
 async def test_process_s3l0_task_delegates_to_flow(mocker):
