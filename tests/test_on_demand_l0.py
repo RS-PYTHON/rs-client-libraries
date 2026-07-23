@@ -248,10 +248,17 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
     """process_s3l0 builds the S3ACADUS input product and delegates to the common last steps."""
     products_result = [
         {
-            "id": "S03OLCL0__product.zarr",
+            "id": f"S03OLCL0__product-{index}.zarr",
             "properties": {"product:type": "S03OLCL0_"},
-        },
+        }
+        for index in range(1, 4)
     ]
+    products_result.append(
+        {
+            "id": "S03NATL0__product.zarr",
+            "properties": {"product:type": "S03NATL0_"},
+        },
+    )
     last_steps = mocker.patch.object(
         s3_l0,
         "process_l0_last_steps",
@@ -261,6 +268,12 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
     emit_event = mocker.patch.object(s3_l0, "emit_event", return_value=emitted_event)
     mocker.patch.object(s3_l0, "get_run_logger", return_value=MagicMock())
     mocker.patch.object(s3_l0.runtime.flow_run, "id", "flow-run-id")
+    orchestration_settings = MagicMock(s3_l0_output_collection="AUTOMATED_S3L0_OUTPUT_2026")
+    mocker.patch.object(
+        s3_l0,
+        "read_s3_orchestration_settings",
+        new=AsyncMock(return_value=orchestration_settings),
+    )
     resolved_params = _resolved_params()
     resolved_params.session_collection = "s03-cadip-session"
     flow_params = MagicMock()
@@ -295,6 +308,28 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
             "session_id": "S3A_session",
             "owner_identifier": resolved_params.owner_identifier,
             "products": products_result,
+            "input_products": [
+                {
+                    "name": "S3OLCIL0_1",
+                    "item_id": "S03OLCL0__product-1.zarr",
+                    "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+                },
+                {
+                    "name": "S3OLCIL0_2",
+                    "item_id": "S03OLCL0__product-2.zarr",
+                    "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+                },
+                {
+                    "name": "S3OLCIL0_3",
+                    "item_id": "S03OLCL0__product-3.zarr",
+                    "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+                },
+                {
+                    "name": "S3NAVL0_1",
+                    "item_id": "S03NATL0__product.zarr",
+                    "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+                },
+            ],
         },
     )
 

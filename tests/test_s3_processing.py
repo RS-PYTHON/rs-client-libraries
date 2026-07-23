@@ -16,7 +16,11 @@
 
 from unittest.mock import AsyncMock, MagicMock, call
 
-from rs_workflows.on_demand.sentinel3 import s3_l1_olci, s3_processing
+from rs_workflows.on_demand.sentinel3 import (
+    s3_l1_olci,
+    s3_processing,
+    s3_processing_utils,
+)
 
 
 def _flow_run(result):
@@ -79,7 +83,7 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
     """Staging, L0, and L1 run sequentially with L0 products passed to L1."""
     mocker.patch.object(s3_processing, "get_run_logger", return_value=MagicMock())
     mocker.patch.object(
-        s3_processing.Variable,
+        s3_processing_utils.Variable,
         "get",
         new=AsyncMock(
             return_value={

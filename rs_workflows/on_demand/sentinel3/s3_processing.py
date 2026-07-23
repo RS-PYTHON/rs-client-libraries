@@ -33,108 +33,16 @@ and this orchestrator reads that result before converting it into the
 the result available across the separate Kubernetes flow-run pods.
 """
 
-from collections.abc import Awaitable
-from typing import Any, cast
+from typing import Any
 
 from prefect import flow, get_run_logger
 from prefect.deployments import run_deployment
-from prefect.variables import Variable
-from pydantic import BaseModel, Field
 
 from rs_workflows.on_demand.common.types import S3_PROCESSING_CONFIGURATION
-
-
-class S3ProcessingOrchestrationSettings(BaseModel):
-    """Environment-specific deployment and collection names for the S3 chain."""
-
-    cadip_staging_deployment: str = Field(min_length=1)
-    s3_l0_deployment: str = Field(min_length=1)
-    s3_l1_olci_deployment: str = Field(min_length=1)
-    cadip_collection: str = Field(min_length=1)
-    staging_catalog_collection: str = Field(min_length=1)
-    s3_l0_output_collection: str = Field(min_length=1)
-
-
-async def _read_orchestration_settings() -> S3ProcessingOrchestrationSettings:
-    """Load and validate the ``orchestration`` section of the unified S3 variable."""
-    raw_settings = await cast(Awaitable[Any], Variable.get(S3_PROCESSING_CONFIGURATION, default={}))
-    if not isinstance(raw_settings, dict):
-        raise ValueError(f"Prefect variable {S3_PROCESSING_CONFIGURATION!r} must contain a dictionary")
-
-    return S3ProcessingOrchestrationSettings.model_validate(raw_settings.get("orchestration"))
-
-
-def _build_olci_l1_input_products(
-    l0_products: list[dict[str, Any]],
-    input_collection: str,
-) -> list[dict[str, str]]:
-    """Convert the persisted L0 flow result into L1 input parameters.
-
-    L0 returns STAC-like product dictionaries::
-
-        [{
-            "id": "S03OLCL0__20200121T045644_....zarr",
-            "properties": {"product:type": "S03OLCL0_"},
-        }]
-
-    L1 expects objects compatible with ``FlowInputProduct``::
-
-        [
-            {
-                "name": "S3OLCIL0_1",
-                "item_id": "S03OLCL0__20200121T045644_....zarr",
-                "collection_name": "AUTOMATED_S3L0_OUTPUT",
-            },
-            ...
-            {
-                "name": "S3NAVL0_1",
-                "item_id": "S03NATL0__20200121T045644_....zarr",
-                "collection_name": "AUTOMATED_S3L0_OUTPUT",
-            },
-        ]
-
-    The OLCI L1 processor expects exactly three OLCI L0 inputs and one NAV L0
-    input. Products retain the order in which L0 published them.
-
-    Args:
-        l0_products: Products returned by the L0 flow and loaded from its
-            persisted Prefect result.
-        input_collection: Catalog collection containing the L0 products.
-
-    Returns:
-        Parameters accepted by the ``input_products`` field of
-        ``Level1FlowParams``.
-
-    Raises:
-        ValueError: If fewer than three OLCI products or no NAV product were
-            published by L0.
-    """
-    olci_item_ids = [product["id"] for product in l0_products if product["properties"]["product:type"] == "S03OLCL0_"]
-    nav_item_ids = [product["id"] for product in l0_products if product["properties"]["product:type"] == "S03NATL0_"]
-
-    if len(olci_item_ids) < 3:
-        raise ValueError(f"Expected at least 3 S03OLCL0_ products from L0, found {len(olci_item_ids)}")
-    if not nav_item_ids:
-        raise ValueError("Expected at least 1 S03NATL0_ product from L0, found 0")
-
-    input_products = [
-        {
-            "name": f"S3OLCIL0_{index}",
-            "item_id": item_id,
-            "collection_name": input_collection,
-        }
-        for index, item_id in enumerate(olci_item_ids[:3], start=1)
-        # Tempfix, use just first 3 OLCI products for L1, even if more were produced by L0
-        # To be discussed and logic to be improved in future
-    ]
-    input_products.append(
-        {
-            "name": "S3NAVL0_1",
-            "item_id": nav_item_ids[0],
-            "collection_name": input_collection,
-        },
-    )
-    return input_products
+from rs_workflows.on_demand.sentinel3.s3_processing_utils import (
+    build_olci_l1_input_products,
+    read_s3_orchestration_settings,
+)
 
 
 def _ensure_completed(flow_run: Any, step: str) -> None:
@@ -203,7 +111,7 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> Non
             L0 does not return a valid product list.
     """
     logger = get_run_logger()
-    settings = await _read_orchestration_settings()
+    settings = await read_s3_orchestration_settings()
     logger.info("Loaded S3 orchestration settings from Prefect variable %s", S3_PROCESSING_CONFIGURATION)
 
     # Stage the raw CADIP session first. Other required staging parameters are
@@ -244,7 +152,7 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> Non
     # Convert catalog product references into Level1FlowParams.input_products.
     # Passing ``flow_params`` here overrides only these dynamic inputs; all
     # remaining L1 defaults are resolved from ``common`` + ``l1`` by the child.
-    l1_input_products = _build_olci_l1_input_products(s3_l0_result, settings.s3_l0_output_collection)
+    l1_input_products = build_olci_l1_input_products(s3_l0_result, settings.s3_l0_output_collection)
     logger.info("S3 L0 completed with %d products; starting S3 OLCI L1 deployment", len(l1_input_products))
     await _run_child_deployment(
         "S3 OLCI L1",

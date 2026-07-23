@@ -1,0 +1,74 @@
+# Copyright 2023-2026 Airbus, CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Shared configuration and product-mapping helpers for Sentinel-3 processing."""
+
+from collections.abc import Awaitable
+from typing import Any, cast
+
+from prefect.variables import Variable
+from pydantic import BaseModel, Field
+
+from rs_workflows.on_demand.common.types import S3_PROCESSING_CONFIGURATION
+
+
+class S3ProcessingOrchestrationSettings(BaseModel):
+    """Environment-specific deployment and collection names for the S3 chain."""
+
+    cadip_staging_deployment: str = Field(min_length=1)
+    s3_l0_deployment: str = Field(min_length=1)
+    s3_l1_olci_deployment: str = Field(min_length=1)
+    cadip_collection: str = Field(min_length=1)
+    staging_catalog_collection: str = Field(min_length=1)
+    s3_l0_output_collection: str = Field(min_length=1)
+
+
+async def read_s3_orchestration_settings() -> S3ProcessingOrchestrationSettings:
+    """Load and validate the ``orchestration`` section of the unified S3 variable."""
+    raw_settings = await cast(Awaitable[Any], Variable.get(S3_PROCESSING_CONFIGURATION, default={}))
+    if not isinstance(raw_settings, dict):
+        raise ValueError(f"Prefect variable {S3_PROCESSING_CONFIGURATION!r} must contain a dictionary")
+
+    return S3ProcessingOrchestrationSettings.model_validate(raw_settings.get("orchestration"))
+
+
+def build_olci_l1_input_products(
+    l0_products: list[dict[str, Any]],
+    input_collection: str,
+) -> list[dict[str, str]]:
+    """Convert L0 product results into the four inputs expected by OLCI L1."""
+    olci_item_ids = [product["id"] for product in l0_products if product["properties"]["product:type"] == "S03OLCL0_"]
+    nav_item_ids = [product["id"] for product in l0_products if product["properties"]["product:type"] == "S03NATL0_"]
+
+    if len(olci_item_ids) < 3:
+        raise ValueError(f"Expected at least 3 S03OLCL0_ products from L0, found {len(olci_item_ids)}")
+    if not nav_item_ids:
+        raise ValueError("Expected at least 1 S03NATL0_ product from L0, found 0")
+
+    input_products = [
+        {
+            "name": f"S3OLCIL0_{index}",
+            "item_id": item_id,
+            "collection_name": input_collection,
+        }
+        for index, item_id in enumerate(olci_item_ids[:3], start=1)
+    ]
+    input_products.append(
+        {
+            "name": "S3NAVL0_1",
+            "item_id": nav_item_ids[0],
+            "collection_name": input_collection,
+        },
+    )
+    return input_products
