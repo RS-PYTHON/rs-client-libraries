@@ -47,16 +47,33 @@ def build_olci_l1_input_products(
     l0_products: list[dict[str, Any]],
     input_collection: str,
 ) -> list[dict[str, str]]:
-    """Convert L0 product results into the four inputs expected by OLCI L1."""
+    """Convert full STAC items or compact event products into OLCI L1 inputs."""
+
+    normalized_products: list[tuple[str, str]] = []
+    for product in l0_products:
+        if "id" in product and "properties" in product:
+            product_type = product["properties"]["product:type"]
+            item_id = product["id"]
+        elif len(product) == 1:
+            product_type, item_id = next(iter(product.items()))
+        else:
+            raise ValueError(
+                "Invalid L0 product: expected a STAC item or a single "
+                "{product_type: item_id} entry",
+            )
+        if not isinstance(product_type, str) or not isinstance(item_id, str):
+            raise ValueError("Invalid L0 product: product type and item ID must be strings")
+        normalized_products.append((product_type, item_id))
+
     olci_item_ids = [
-        product["id"].removesuffix(".zarr")
-        for product in l0_products
-        if product["properties"]["product:type"] == "S03OLCL0_"
+        item_id.removesuffix(".zarr")
+        for product_type, item_id in normalized_products
+        if product_type == "S03OLCL0_"
     ]
     nav_item_ids = [
-        product["id"].removesuffix(".zarr")
-        for product in l0_products
-        if product["properties"]["product:type"] == "S03NATL0_"
+        item_id.removesuffix(".zarr")
+        for product_type, item_id in normalized_products
+        if product_type == "S03NATL0_"
     ]
 
     if len(olci_item_ids) < 3:

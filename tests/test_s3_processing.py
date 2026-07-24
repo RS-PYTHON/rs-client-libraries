@@ -103,15 +103,13 @@ async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
     )
     l0_products = [
         {
-            "id": f"S03OLCL0__product-{index}.zarr",
-            "properties": {"product:type": "S03OLCL0_"},
+            "S03OLCL0_": f"S03OLCL0__product-{index}.zarr",
         }
         for index in range(1, 4)
     ]
     l0_products.append(
         {
-            "id": "S03NATL0__product.zarr",
-            "properties": {"product:type": "S03NATL0_"},
+            "S03NATL0_": "S03NATL0__product.zarr",
         },
     )
 
@@ -124,22 +122,22 @@ async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
     assert [product.model_dump() for product in actual_inputs] == [
         {
             "name": "S3OLCIL0_1",
-            "item_id": "S03OLCL0__product-1.zarr",
+            "item_id": "S03OLCL0__product-1",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
         {
             "name": "S3OLCIL0_2",
-            "item_id": "S03OLCL0__product-2.zarr",
+            "item_id": "S03OLCL0__product-2",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
         {
             "name": "S3OLCIL0_3",
-            "item_id": "S03OLCL0__product-3.zarr",
+            "item_id": "S03OLCL0__product-3",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
         {
             "name": "S3NAVL0_1",
-            "item_id": "S03NATL0__product.zarr",
+            "item_id": "S03NATL0__product",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
     ]
@@ -178,13 +176,15 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
             "properties": {"product:type": "S03NATL0_"},
         },
     )
+    l0_run = _flow_run(l0_products)
+    l0_run.id = "12345678-abcd-4321-abcd-1234567890ab"
     run = mocker.patch.object(
         s3_processing,
         "run_deployment",
         new=AsyncMock(
             side_effect=[
                 _flow_run(None),
-                _flow_run(l0_products),
+                l0_run,
                 _flow_run(l1_products),
             ],
         ),
@@ -236,7 +236,8 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
                         },
                     ],
                 },
+                "source_l0_run_id": "12345678",
             },
-            flow_run_name="s3-l1-olci-S3A_session",
+            flow_run_name="s3-l1-olci-from-12345678",
         ),
     ]

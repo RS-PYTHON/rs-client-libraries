@@ -153,12 +153,16 @@ async def process_s3(session_id: str, owner_identifier: str = "opadeanu") -> Non
     # Passing ``flow_params`` here overrides only these dynamic inputs; all
     # remaining L1 defaults are resolved from ``common`` + ``l1`` by the child.
     l1_input_products = build_olci_l1_input_products(s3_l0_result, settings.s3_l0_output_collection)
+    source_l0_run_id = str(l0_run.id)[:8]
     logger.info("S3 L0 completed with %d products; starting S3 OLCI L1 deployment", len(l1_input_products))
     await _run_child_deployment(
         "S3 OLCI L1",
         name=settings.s3_l1_olci_deployment,
-        parameters={"flow_params": {"input_products": l1_input_products}},
-        flow_run_name=f"s3-l1-olci-{session_id}",
+        parameters={
+            "flow_params": {"input_products": l1_input_products},
+            "source_l0_run_id": source_l0_run_id,
+        },
+        flow_run_name=f"s3-l1-olci-from-{source_l0_run_id}",
     )
 
     # Reaching this log means all three independently deployed flows completed

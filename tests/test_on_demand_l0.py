@@ -282,7 +282,11 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
         "collection_name": "s03-cadip-session",
     }
     payload = emit_event.call_args.kwargs["payload"]
-    assert payload["products"] == result
+    assert payload["products"] == [
+        {
+            "S03OLCL0_": "S03OLCL0__product.zarr",
+        },
+    ]
     assert "mocked" not in payload
     assert "input_products" not in payload
 

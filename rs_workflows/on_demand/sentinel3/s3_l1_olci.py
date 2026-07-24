@@ -110,10 +110,14 @@ async def build_olci_l1_inputs_from_catalog(
     return input_products
 
 
-@flow(name="process-s3-l1-olci")
+@flow(
+    name="process-s3-l1-olci",
+    flow_run_name="s3-l1-olci-from-{source_l0_run_id}",
+)
 async def process_s3l1_olci(
     flow_params: Level1FlowParams | None = None,
     l0_products: list[dict[str, Any]] | None = None,
+    source_l0_run_id: str = "manual",
 ) -> list[dict[str, Any]]:
     """
     Sentinel-3 OLCI L1 processing.
@@ -121,7 +125,8 @@ async def process_s3l1_olci(
 
     ``l0_products`` is the raw product list emitted by S3 L0. When supplied by
     a Prefect Automation, it is converted here into the four processor inputs
-    expected by OLCI L1.
+    expected by OLCI L1. ``source_l0_run_id`` provides a short upstream
+    reference used in the L1 flow-run name.
     """
     mission = "3"
     # how to use s3-l1-default-setting

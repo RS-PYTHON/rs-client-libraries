@@ -61,8 +61,16 @@ async def process_s3l0(
         input_products=input_products,
         verbose=verbose,
     )
+    event_products = [
+        {
+            product["properties"]["product:type"]: product["id"],
+        }
+        for product in products
+    ]
 
     flow_run_id = str(runtime.flow_run.id or "unknown")
+    # Prefect event payloads are limited to 1.5 MB. Send only product type and
+    # item ID instead of the complete STAC items with links and assets.
     emitted_event = emit_event(
         event=S3_L0_PRODUCTS_READY_EVENT,
         resource={
@@ -80,7 +88,7 @@ async def process_s3l0(
             "flow_run_id": flow_run_id,
             "session_id": session,
             "owner_identifier": resolved_flow_params.owner_identifier,
-            "products": products,
+            "products": event_products,
         },
     )
     if emitted_event is None:
@@ -97,7 +105,7 @@ async def process_s3l0(
             emitted_event.id,
             flow_run_id,
             session,
-            len(products),
+            len(event_products),
         )
 
     return products
