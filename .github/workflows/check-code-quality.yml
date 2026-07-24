@@ -19,6 +19,7 @@ on:
     branches: [develop, main] # pushes on the 'develop' or 'main' branches
     tags: ['**'] # new git tags (including hierarchical tags like v1.0/beta)
   pull_request:
+    # branches: none
     types: [opened, synchronize, reopened]
     # run this worflow only for code/test related changes (avoid it for documentation)
     paths: ['**.json', '**.lock', '**.py', '**.raw', '**.sh', '**.toml', '**.yaml', '**.yml']
