@@ -245,17 +245,22 @@ async def test_process_s1l0_builds_s1_input_and_delegates(mocker):
 
 
 async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
-    """process_s3l0 temporarily emits mock S3 L0 products without running the processor."""
+    """process_s3l0 runs the real L0 last steps and emits their products."""
+    products_result = [
+        {
+            "id": "S03OLCL0__product.zarr",
+            "properties": {"product:type": "S03OLCL0_"},
+        },
+    ]
+    last_steps = mocker.patch.object(
+        s3_l0,
+        "process_l0_last_steps",
+        new=AsyncMock(return_value=products_result),
+    )
     emitted_event = MagicMock(id="event-id")
     emit_event = mocker.patch.object(s3_l0, "emit_event", return_value=emitted_event)
     mocker.patch.object(s3_l0, "get_run_logger", return_value=MagicMock())
     mocker.patch.object(s3_l0.runtime.flow_run, "id", "flow-run-id")
-    orchestration_settings = MagicMock(s3_l0_output_collection="AUTOMATED_S3L0_OUTPUT_2026")
-    mocker.patch.object(
-        s3_l0,
-        "read_s3_orchestration_settings",
-        new=AsyncMock(return_value=orchestration_settings),
-    )
     resolved_params = _resolved_params()
     resolved_params.session_collection = "s03-cadip-session"
     flow_params = MagicMock()
@@ -264,15 +269,21 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
     result = await s3_l0.process_s3l0.fn("S3A_session", flow_params, verbose=False)
 
     flow_params.resolve.assert_awaited_once_with("3")
-    assert [product["properties"]["product:type"] for product in result] == [
-        "S03OLCL0_",
-        "S03OLCL0_",
-        "S03OLCL0_",
-        "S03NATL0_",
-    ]
+    assert result == products_result
+    last_steps.assert_awaited_once()
+    kwargs = last_steps.call_args.kwargs
+    assert kwargs["mission"] == "3"
+    assert kwargs["session"] == "S3A_session"
+    assert kwargs["flow_params"] is resolved_params
+    assert kwargs["verbose"] is False
+    assert kwargs["input_products"][0].model_dump() == {
+        "name": "S3ACADUS",
+        "item_id": "S3A_session",
+        "collection_name": "s03-cadip-session",
+    }
     payload = emit_event.call_args.kwargs["payload"]
-    assert payload["mocked"] is True
     assert payload["products"] == result
+    assert "mocked" not in payload
     assert "input_products" not in payload
 
 

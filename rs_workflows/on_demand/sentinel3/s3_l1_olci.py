@@ -133,10 +133,7 @@ async def process_s3l1_olci(
             l0_products,
             orchestration_settings.s3_l0_output_collection,
         )
-        flow_parameters.input_products = [
-            FlowInputProduct.model_validate(product)
-            for product in prepared_inputs
-        ]
+        flow_parameters.input_products = [FlowInputProduct.model_validate(product) for product in prepared_inputs]
         get_run_logger().info(
             "Built %d S3 L1 input product(s) from %d raw L0 product(s) received from Automation",
             len(flow_parameters.input_products),

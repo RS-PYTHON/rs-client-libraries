@@ -15,38 +15,16 @@
 """sentinel 3 Level-0 processing."""
 
 from typing import Any
-from uuid import uuid4
 
 from prefect import flow, get_run_logger, runtime, task
 from prefect.events import emit_event
 
+from rs_workflows.flow_utils import FlowInputProduct
+from rs_workflows.on_demand.common.l0_last_steps import process_l0_last_steps
 from rs_workflows.on_demand.common.types import Level0FlowParams
-from rs_workflows.on_demand.sentinel3.s3_processing_utils import (
-    read_s3_orchestration_settings,
-)
 
 S3_L0_RESULT_STORAGE = "local-file-system/s3-processing-shared-results"
 S3_L0_PRODUCTS_READY_EVENT = "rs-python.s3-l0.products-ready"
-
-
-def _build_mock_l0_products(output_collection: str) -> list[dict[str, Any]]:
-    """Build fake OLCI/NAV products for testing the event-driven L1 trigger."""
-
-    def mock_product(product_type: str) -> dict[str, Any]:
-        item_id = f"{product_type}_MOCK_{uuid4().hex}.zarr"
-        return {
-            "type": "Feature",
-            "id": item_id,
-            "properties": {"product:type": product_type},
-            "collection": output_collection,
-        }
-
-    return [
-        mock_product("S03OLCL0_"),
-        mock_product("S03OLCL0_"),
-        mock_product("S03OLCL0_"),
-        mock_product("S03NATL0_"),
-    ]
 
 
 @flow(
@@ -68,13 +46,21 @@ async def process_s3l0(
     # using them to build the DPR input. Explicit flow parameters still win.
     resolved_flow_params = await (flow_params or Level0FlowParams()).resolve("3")
 
-    orchestration_settings = await read_s3_orchestration_settings()
     logger = get_run_logger()
-    logger.warning(
-        "TEMPORARY TEST MODE: skipping S3 L0 processing and emitting fake OLCI/NAV products for session=%s",
-        session,
+    input_products = [
+        FlowInputProduct(
+            name="S3ACADUS",
+            item_id=session,
+            collection_name=resolved_flow_params.session_collection,
+        ),
+    ]
+    products = await process_l0_last_steps(
+        mission="3",
+        session=session,
+        flow_params=resolved_flow_params,
+        input_products=input_products,
+        verbose=verbose,
     )
-    products = _build_mock_l0_products(orchestration_settings.s3_l0_output_collection)
 
     flow_run_id = str(runtime.flow_run.id or "unknown")
     emitted_event = emit_event(
@@ -94,7 +80,6 @@ async def process_s3l0(
             "flow_run_id": flow_run_id,
             "session_id": session,
             "owner_identifier": resolved_flow_params.owner_identifier,
-            "mocked": True,
             "products": products,
         },
     )

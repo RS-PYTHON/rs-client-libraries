@@ -48,8 +48,16 @@ def build_olci_l1_input_products(
     input_collection: str,
 ) -> list[dict[str, str]]:
     """Convert L0 product results into the four inputs expected by OLCI L1."""
-    olci_item_ids = [product["id"] for product in l0_products if product["properties"]["product:type"] == "S03OLCL0_"]
-    nav_item_ids = [product["id"] for product in l0_products if product["properties"]["product:type"] == "S03NATL0_"]
+    olci_item_ids = [
+        product["id"].removesuffix(".zarr")
+        for product in l0_products
+        if product["properties"]["product:type"] == "S03OLCL0_"
+    ]
+    nav_item_ids = [
+        product["id"].removesuffix(".zarr")
+        for product in l0_products
+        if product["properties"]["product:type"] == "S03NATL0_"
+    ]
 
     if len(olci_item_ids) < 3:
         raise ValueError(f"Expected at least 3 S03OLCL0_ products from L0, found {len(olci_item_ids)}")
