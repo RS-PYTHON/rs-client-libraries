@@ -31,21 +31,6 @@ env:
   DOCKER_REGISTRY: ghcr.io
 
 jobs:
-
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-        - id: a
-          uses: RS-PYTHON/actions/.github/actions/get-repo-branch@feat-rspy1108/jupyter-cicd
-          with:
-            repo: RS-PYTHON/rs-workflow-env
-            branches: feat-rspy1108/jupyter-cicd--,feat-rspy1108/jupyter-cicd,develop
-        - run: |
-            set -x
-            echo "branch: ${{ steps.a.outputs.branch }}"
-
-
   build-wheel:
     name: Build wheel
     runs-on: ubuntu-latest
