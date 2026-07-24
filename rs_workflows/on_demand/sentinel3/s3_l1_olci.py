@@ -14,7 +14,6 @@
 
 """sentinel 3 OLCI Level-1 processing."""
 
-import json
 from typing import Any
 
 from prefect import flow, get_run_logger, task
@@ -22,6 +21,10 @@ from pystac import Item
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct
 from rs_workflows.on_demand.common.types import Level1FlowParams
+from rs_workflows.on_demand.sentinel3.s3_processing_utils import (
+    build_olci_l1_input_products,
+    read_s3_orchestration_settings,
+)
 from rs_workflows.utils.dpr import call_dpr_flow
 
 OLCI_L0_PRODUCT_TYPE = "S03OLCL0_"
@@ -110,34 +113,34 @@ async def build_olci_l1_inputs_from_catalog(
 @flow(name="process-s3-l1-olci")
 async def process_s3l1_olci(
     flow_params: Level1FlowParams | None = None,
-    input_products_json: str | None = None,
+    l0_products: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Sentinel-3 OLCI L1 processing.
     The input_products should have been processed before by L0.
 
-    ``input_products_json`` is intended for Prefect Automations, where passing
-    one rendered string is more reliable than rendering a nested model. When
-    provided, it overrides ``flow_params.input_products``.
+    ``l0_products`` is the raw product list emitted by S3 L0. When supplied by
+    a Prefect Automation, it is converted here into the four processor inputs
+    expected by OLCI L1.
     """
     mission = "3"
     # how to use s3-l1-default-setting
     flow_parameters = await (flow_params or Level1FlowParams()).resolve(mission)
 
-    if input_products_json is not None:
-        try:
-            raw_input_products = json.loads(input_products_json)
-        except json.JSONDecodeError as exc:
-            raise ValueError("input_products_json must contain valid JSON") from exc
-        if not isinstance(raw_input_products, list):
-            raise ValueError("input_products_json must contain a JSON list")
+    if l0_products is not None:
+        orchestration_settings = await read_s3_orchestration_settings()
+        prepared_inputs = build_olci_l1_input_products(
+            l0_products,
+            orchestration_settings.s3_l0_output_collection,
+        )
         flow_parameters.input_products = [
             FlowInputProduct.model_validate(product)
-            for product in raw_input_products
+            for product in prepared_inputs
         ]
         get_run_logger().info(
-            "Loaded %d S3 L1 input product(s) from input_products_json",
+            "Built %d S3 L1 input product(s) from %d raw L0 product(s) received from Automation",
             len(flow_parameters.input_products),
+            len(l0_products),
         )
 
     # Alternative catalog-based input resolution (currently paused; do not enable yet):

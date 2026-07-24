@@ -14,7 +14,6 @@
 
 """sentinel 3 Level-0 processing."""
 
-import json
 from typing import Any
 from uuid import uuid4
 
@@ -23,7 +22,6 @@ from prefect.events import emit_event
 
 from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.on_demand.sentinel3.s3_processing_utils import (
-    build_olci_l1_input_products,
     read_s3_orchestration_settings,
 )
 
@@ -78,12 +76,6 @@ async def process_s3l0(
     )
     products = _build_mock_l0_products(orchestration_settings.s3_l0_output_collection)
 
-    l1_input_products = build_olci_l1_input_products(
-        products,
-        orchestration_settings.s3_l0_output_collection,
-    )
-    l1_input_products_json = json.dumps(l1_input_products, separators=(",", ":"))
-
     flow_run_id = str(runtime.flow_run.id or "unknown")
     emitted_event = emit_event(
         event=S3_L0_PRODUCTS_READY_EVENT,
@@ -104,8 +96,6 @@ async def process_s3l0(
             "owner_identifier": resolved_flow_params.owner_identifier,
             "mocked": True,
             "products": products,
-            "input_products": l1_input_products,
-            "input_products_json": l1_input_products_json,
         },
     )
     if emitted_event is None:

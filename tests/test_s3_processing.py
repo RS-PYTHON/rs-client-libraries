@@ -14,7 +14,6 @@
 
 """Tests for the Sentinel-3 deployment orchestrator."""
 
-import json
 from unittest.mock import AsyncMock, MagicMock, call
 
 from rs_workflows.on_demand.sentinel3 import (
@@ -80,8 +79,8 @@ async def test_build_olci_l1_inputs_from_catalog(mocker):
     ]
 
 
-async def test_process_s3l1_olci_loads_automation_inputs_from_json(mocker):
-    """Automation JSON inputs override the inputs resolved from Prefect settings."""
+async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
+    """Raw products from the L0 event are prepared inside the L1 flow."""
     resolved_params = MagicMock()
     resolved_params.owner_identifier = "opadeanu"
     resolved_params.input_products = []
@@ -93,22 +92,57 @@ async def test_process_s3l1_olci_loads_automation_inputs_from_json(mocker):
         new=AsyncMock(return_value=[]),
     )
     mocker.patch.object(s3_l1_olci, "get_run_logger", return_value=MagicMock())
-    input_products = [
+    mocker.patch.object(
+        s3_l1_olci,
+        "read_s3_orchestration_settings",
+        new=AsyncMock(
+            return_value=MagicMock(
+                s3_l0_output_collection="AUTOMATED_S3L0_OUTPUT_2026",
+            ),
+        ),
+    )
+    l0_products = [
         {
-            "name": "S3OLCIL0_1",
-            "item_id": "S03OLCL0__product.zarr",
-            "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
-        },
+            "id": f"S03OLCL0__product-{index}.zarr",
+            "properties": {"product:type": "S03OLCL0_"},
+        }
+        for index in range(1, 4)
     ]
+    l0_products.append(
+        {
+            "id": "S03NATL0__product.zarr",
+            "properties": {"product:type": "S03NATL0_"},
+        },
+    )
 
     await s3_l1_olci.process_s3l1_olci.fn(
         flow_params=flow_params,
-        input_products_json=json.dumps(input_products),
+        l0_products=l0_products,
     )
 
-    flow_params.resolve.assert_awaited_once_with("3")
     actual_inputs = call_dpr_flow.call_args.kwargs["input_products"]
-    assert [product.model_dump() for product in actual_inputs] == input_products
+    assert [product.model_dump() for product in actual_inputs] == [
+        {
+            "name": "S3OLCIL0_1",
+            "item_id": "S03OLCL0__product-1.zarr",
+            "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+        },
+        {
+            "name": "S3OLCIL0_2",
+            "item_id": "S03OLCL0__product-2.zarr",
+            "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+        },
+        {
+            "name": "S3OLCIL0_3",
+            "item_id": "S03OLCL0__product-3.zarr",
+            "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+        },
+        {
+            "name": "S3NAVL0_1",
+            "item_id": "S03NATL0__product.zarr",
+            "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
+        },
+    ]
 
 
 async def test_process_s3_runs_deployments_in_sequence(mocker):

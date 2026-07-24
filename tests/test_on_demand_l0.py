@@ -14,7 +14,6 @@
 
 """Unit tests for the on_demand Level-0 flows (common.l0, common.l0_last_steps, sentinel1/3)."""
 
-import json
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
@@ -274,13 +273,7 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
     payload = emit_event.call_args.kwargs["payload"]
     assert payload["mocked"] is True
     assert payload["products"] == result
-    assert json.loads(payload["input_products_json"]) == payload["input_products"]
-    assert [product["name"] for product in payload["input_products"]] == [
-        "S3OLCIL0_1",
-        "S3OLCIL0_2",
-        "S3OLCIL0_3",
-        "S3NAVL0_1",
-    ]
+    assert "input_products" not in payload
 
 
 async def test_process_s3l0_task_delegates_to_flow(mocker):
