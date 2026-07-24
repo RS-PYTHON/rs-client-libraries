@@ -27,16 +27,9 @@ S3_L0_RESULT_STORAGE = "local-file-system/s3-processing-shared-results"
 S3_L0_PRODUCTS_READY_EVENT = "rs-python.s3-l0.products-ready"
 
 
-def _s3_l0_flow_run_name() -> str:
-    """Build a readable L0 run name from the current flow parameters."""
-    parameters = runtime.flow_run.parameters or {}
-    session = parameters.get("session") or "manual"
-    return f"s3-l0-{session}"
-
-
 @flow(
     name="process-s3-l0",
-    flow_run_name=_s3_l0_flow_run_name,
+    flow_run_name="s3-l0-{session}",
     persist_result=True,
     result_storage=S3_L0_RESULT_STORAGE,
 )
