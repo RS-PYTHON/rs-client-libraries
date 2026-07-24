@@ -58,22 +58,22 @@ async def test_build_olci_l1_inputs_from_catalog(mocker):
     assert [product.model_dump() for product in result] == [
         {
             "name": "S3OLCIL0_1",
-            "item_id": "S03OLCL0__product-1",
+            "item_id": "S03OLCL0__product-1.zarr",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
         {
             "name": "S3OLCIL0_2",
-            "item_id": "S03OLCL0__product-2",
+            "item_id": "S03OLCL0__product-2.zarr",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
         {
             "name": "S3OLCIL0_3",
-            "item_id": "S03OLCL0__product-3",
+            "item_id": "S03OLCL0__product-3.zarr",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
         {
             "name": "S3NAVL0_1",
-            "item_id": "S03NATL0__product",
+            "item_id": "S03NATL0__product.zarr",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
     ]
@@ -122,22 +122,22 @@ async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
     assert [product.model_dump() for product in actual_inputs] == [
         {
             "name": "S3OLCIL0_1",
-            "item_id": "S03OLCL0__product-1",
+            "item_id": "S03OLCL0__product-1.zarr",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
         {
             "name": "S3OLCIL0_2",
-            "item_id": "S03OLCL0__product-2",
+            "item_id": "S03OLCL0__product-2.zarr",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
         {
             "name": "S3OLCIL0_3",
-            "item_id": "S03OLCL0__product-3",
+            "item_id": "S03OLCL0__product-3.zarr",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
         {
             "name": "S3NAVL0_1",
-            "item_id": "S03NATL0__product",
+            "item_id": "S03NATL0__product.zarr",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
     ]
@@ -216,22 +216,22 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
                     "input_products": [
                         {
                             "name": "S3OLCIL0_1",
-                            "item_id": "S03OLCL0__product-1",
+                            "item_id": "S03OLCL0__product-1.zarr",
                             "collection_name": "AUTOMATED_S3L0_OUTPUT",
                         },
                         {
                             "name": "S3OLCIL0_2",
-                            "item_id": "S03OLCL0__product-2",
+                            "item_id": "S03OLCL0__product-2.zarr",
                             "collection_name": "AUTOMATED_S3L0_OUTPUT",
                         },
                         {
                             "name": "S3OLCIL0_3",
-                            "item_id": "S03OLCL0__product-3",
+                            "item_id": "S03OLCL0__product-3.zarr",
                             "collection_name": "AUTOMATED_S3L0_OUTPUT",
                         },
                         {
                             "name": "S3NAVL0_1",
-                            "item_id": "S03NATL0__product",
+                            "item_id": "S03NATL0__product.zarr",
                             "collection_name": "AUTOMATED_S3L0_OUTPUT",
                         },
                     ],

@@ -66,12 +66,12 @@ def build_olci_l1_input_products(
         normalized_products.append((product_type, item_id))
 
     olci_item_ids = [
-        item_id.removesuffix(".zarr")
+        item_id
         for product_type, item_id in normalized_products
         if product_type == "S03OLCL0_"
     ]
     nav_item_ids = [
-        item_id.removesuffix(".zarr")
+        item_id
         for product_type, item_id in normalized_products
         if product_type == "S03NATL0_"
     ]
