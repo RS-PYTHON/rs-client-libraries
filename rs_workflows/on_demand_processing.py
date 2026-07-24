@@ -21,6 +21,7 @@ import os
 import re
 from copy import deepcopy
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import yaml
 from prefect import flow, get_run_logger, task
@@ -42,7 +43,11 @@ from rs_workflows.flow_utils import (
 )
 from rs_workflows.payload_builder import build_cql2_json, build_unit_list
 from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
-from rs_workflows.utils.utils import get_archived_item_indexes, search_by_name
+from rs_workflows.utils.utils import (
+    build_output_lineage,
+    get_archived_item_indexes,
+    search_by_name,
+)
 
 SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
@@ -410,6 +415,9 @@ async def dpr_processing(
             cluster_info,
         )
 
+        # A lineage source is either a staged ADF item or an input STAC self link.
+        source_items: dict[str, list[Item | str]] = {}
+
         # Persist the full task table as a Prefect artifact for later investigation.
         md = "# Task table\n\n```json\n" + json.dumps(task_table, indent=2) + "\n```"
         artifact_key_name: str = "dpr-task-table"
@@ -466,12 +474,10 @@ async def dpr_processing(
         except (RuntimeError, KeyError) as err:
             raise err
         # Set of ADFS. Each tuple includes the adfs name, type and the s3/https storage path
-        source_items: list[Item] = []
         adfs: set[tuple[str, str, str]] = set()
         for name, adf_type, (status, item_collection) in aux_items:
             for item in item_collection.items:
-                # list with links to be added in derived_from
-                source_items.append(item)
+                source_items.setdefault(name, []).append(item)
 
                 if status:
                     asset = next(iter(item.assets.values()))
@@ -483,6 +489,12 @@ async def dpr_processing(
         task_future = generate_payload.submit(flow_env, unit_list, list(adfs), dpr_input)
         # get the payload generation result
         generated_payload_res = task_future.result()
+        # Build lineage from the exact workflow that will be executed.
+        lineage = build_output_lineage(generated_payload_res)
+        # Reuse links resolved during payload generation; do not query the catalog again.
+        if generated_payload_res.io:
+            for input_product in generated_payload_res.io.input_products:
+                source_items.setdefault(input_product.id, []).extend(input_product.source_item_hrefs)
         # create the generated payload as a dictionary, as it will be used for
         # the prefect artifact. the SecretStr will be masked here
         generated_payload_res_as_dict = generated_payload_res.dump()
@@ -523,12 +535,32 @@ async def dpr_processing(
         finally:
             prefect_utils.s3_delete(dpr_input.s3_payload_file)
 
-        # add derived_from link
         processed = processed_items.result()
-        logger.debug(f"processed_items: {processed}")
 
+        # add derived_from links
         for processed_item in processed:
-            processed_item.stac_item.add_derived_from(*source_items)
+            output_id = processed_item.output_product_id
+
+            if output_id not in lineage:
+                raise ValueError(f"No payload lineage found for processed output '{output_id}'")
+
+            added_hrefs: set[str] = set()
+            for logical_source in sorted(lineage[output_id]):
+                resolved_sources = source_items.get(logical_source, [])
+                if not resolved_sources:
+                    logger.warning("Skip lineage source '%s' because no STAC item was resolved", logical_source)
+                    continue
+
+                for source_item in resolved_sources:
+                    source_href = source_item if isinstance(source_item, str) else source_item.get_self_href()
+
+                    if not source_href:
+                        logger.warning("Skip lineage source '%s' because it has no STAC self link", logical_source)
+                        continue
+                    parsed_href = urlsplit(source_href)
+                    source_href = urlunsplit(("", "", parsed_href.path, parsed_href.query, parsed_href.fragment))
+                    processed_item.stac_item.add_derived_from(source_href)
+                    added_hrefs.add(source_href)
 
         # Publish processed items to the catalog
         published = catalog_flow.publish.submit(
