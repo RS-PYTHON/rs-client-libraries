@@ -17,6 +17,14 @@ name: Publish wheels and Docker images (reusable workflow)
 on:
   workflow_call: # reusable workflow
     inputs:
+      caller-repository:
+        description: $ {{ github.repository }} coming from the calling workflow
+        default: ${{ github.repository }}
+        type: string
+      caller-ref:
+        description: $ {{ github.ref }} coming from the calling workflow, e.g. refs/heads/my-branch-name  or refs/pull/<pr_number>/merge
+        default: ${{ github.ref }}
+        type: string
       called_by:
         type: string
         default: 'rs-client-libraries' # can be called by other git repositories
@@ -37,6 +45,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          repository: ${{ inputs.caller-repository }}
+          ref: ${{ inputs.caller-ref }}
           fetch-depth: 0 # so that Dunamai produce the correct version
       - id: build-wheel
         uses: RS-PYTHON/actions/.github/actions/build-wheel@develop
@@ -105,6 +115,9 @@ jobs:
     steps:
       - if: ${{ matrix.if }}
         uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.caller-repository }}
+          ref: ${{ inputs.caller-ref }}
       - if: ${{ matrix.if }}
         name: Download .whl dependency
         uses: actions/download-artifact@v8

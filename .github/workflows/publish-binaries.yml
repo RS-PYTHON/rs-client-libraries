@@ -34,7 +34,6 @@ jobs:
     uses: ./.github/workflows/reusable-publish-binaries.yml
     secrets:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-
     permissions:
       security-events: write # needed for github/codeql-action/upload-sarif
       packages: write # needed for 'docker push'
