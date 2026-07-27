@@ -17,13 +17,16 @@ name: Publish wheels and Docker images
 # Run workflow only for ...
 on:
   pull_request: # pull requests
-    branches: none
+    # branches: none
     types: [opened, synchronize, reopened]
   push:
     branches: [develop, main] # pushes on the 'develop' or 'main' branches
     tags: ['**'] # new git tags (including hierarchical tags like v1.0/beta)
   workflow_dispatch: # manual trigger
     inputs:
+      called_by:
+        type: string
+        default: 'rs-client-libraries' # can be called by other git repositories
       docker_tag:
         description: Add this tag to the docker images as e.g. 'latest' or 'feat-rspy123'
         required: false
@@ -93,27 +96,37 @@ jobs:
             dockerfile: ./.github/dockerfiles/Dockerfile.jupyter
             image_suffix: jupyter/rs-client-libraries/local
             build_args: "BASE_TAG=${{ needs.set-binary-env.outputs.first_tag }}"
+            # If called by rs-client-libraries or after rebuilding the base jupyter image
+            if: ${{ contains('rs-client-libraries,rebuild-base-jupyter', inputs.called_by) }}
 
           - image: prefect-local # Local prefect image with rs-client-libraries
             dockerfile: ./.github/dockerfiles/Dockerfile.prefect
             image_suffix: prefect/rs-client-libraries/local
             build_args: "K8S_IMAGE="
+            if: ${{ contains('rs-client-libraries', inputs.called_by) }} # If called by rs-client-libraries
+
           - image: prefect-k8s # Prefect image for kubernetes with rs-client-libraries.
             dockerfile: ./.github/dockerfiles/Dockerfile.prefect
             image_suffix: prefect/rs-client-libraries/k8s
             build_args: "K8S_IMAGE=-k8s"
+            if: ${{ contains('rs-client-libraries', inputs.called_by) }} # If called by rs-client-libraries
 
     steps:
-      - uses: actions/checkout@v6
-      - name: Download .whl dependency
+      - if: ${{ matrix.if }}
+        uses: actions/checkout@v6
+      - if: ${{ matrix.if }}
+        name: Download .whl dependency
         uses: actions/download-artifact@v8
         with:
           pattern: rs_client_libraries-*.whl
           path: ./build_context_path
-      - name: Copy Dockerfile requirements
+      - if: ${{ matrix.if }}
+        name: Copy Dockerfile requirements
         run: cp -t ./build_context_path ./.github/scripts/layer-cleanup.sh ./.github/scripts/restore-apt.sh
-      - run: ls ./build_context_path
-      - id: publish-docker
+      - if: ${{ matrix.if }}
+        run: ls ./build_context_path
+      - if: ${{ matrix.if }}
+        id: publish-docker
         uses: RS-PYTHON/actions/.github/actions/publish-docker@develop
         with:
           dockerfile: ${{ matrix.dockerfile }}
@@ -125,7 +138,8 @@ jobs:
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           build_args: ${{ matrix.build_args }}
-      - uses: cloudposse/github-action-matrix-outputs-write@81ea135d4c4f90a5220bb38304380073c571dbb8
+      - if: ${{ matrix.if }}
+        uses: cloudposse/github-action-matrix-outputs-write@81ea135d4c4f90a5220bb38304380073c571dbb8
         with:
           matrix-step-name: publish-docker-images
           matrix-key: ${{ matrix.image }}
