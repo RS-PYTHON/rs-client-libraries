@@ -58,7 +58,7 @@ def build_olci_l1_input_products(
             product_type, item_id = next(iter(product.items()))
         else:
             raise ValueError(
-                "Invalid L0 product: expected a STAC item or a single " "{product_type: item_id} entry",
+                "Invalid L0 product: expected a STAC item or a single {product_type: item_id} entry",
             )
         if not isinstance(product_type, str) or not isinstance(item_id, str):
             raise ValueError("Invalid L0 product: product type and item ID must be strings")
