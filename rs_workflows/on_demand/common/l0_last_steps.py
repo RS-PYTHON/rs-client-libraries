@@ -126,7 +126,30 @@ async def process_l0_last_steps(
             )
 
         try:
-            s3_l0_result = await call_dpr_flow(dpr_env, **dpr_parameters)
+            s3_l0_result = await call_dpr_flow(
+                dpr_env,
+                input_products=input_products,
+                external_variables={
+                    "start_datetime": p.start_datetime,
+                    "end_datetime": p.end_datetime,
+                    "satellite": satellite_value,
+                },
+                dask_cluster_label=p.dask_cluster_label,
+                processor_name=p.processor_name,
+                processor_version=p.processor_version,
+                pipeline=p.pipeline,
+                unit=p.unit,
+                priority=p.priority,
+                processing_mode=p.processing_mode,
+                workflow=p.workflow,
+                generated_product_to_collection_identifier=(
+                    p.generated_product_to_collection_identifier or []
+                ),
+                auxiliary_product_to_collection_identifier=(
+                    p.auxiliary_product_to_collection_identifier or []
+                ),
+                logging_level=p.logging_level,
+            )
         except Exception:
             logger.exception(
                 "call_dpr_flow failed for mission=%r, session=%r, processor=%r:%r",

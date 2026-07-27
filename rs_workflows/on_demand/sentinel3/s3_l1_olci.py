@@ -117,7 +117,7 @@ async def build_olci_l1_inputs_from_catalog(
 async def process_s3l1_olci(
     flow_params: Level1FlowParams | None = None,
     l0_products: list[dict[str, Any]] | None = None,
-    source_l0_run_id: str = "manual",
+    source_l0_run_id: str = "manual",  # pylint: disable=unused-argument
 ) -> list[dict[str, Any]]:
     """
     Sentinel-3 OLCI L1 processing.
