@@ -157,11 +157,10 @@ async def process_l0_last_steps(
             raise
         logger.info("call_dpr_flow completed successfully for mission=%r, session=%r", mission, session)
 
-        if mission == "3":
-            logger.info(
-                "S3 L0 products prepared for persisted flow result: count=%d, products=%r",
-                len(s3_l0_result),
-                s3_l0_result,
-            )
+        logger.info(
+            "S3 L0 products prepared for persisted flow result: count=%d, products=%r",
+            len(s3_l0_result),
+            s3_l0_result,
+        )
 
         return s3_l0_result
