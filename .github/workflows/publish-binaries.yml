@@ -25,8 +25,14 @@ on:
   workflow_dispatch: # manual trigger
     inputs:
       called_by:
+        type: choice
+        options:
+          - rs-client-libraries
+          - rebuild-base-jupyter # called by rs-workflow-env after rebuilding the base jupyter image
+      base_jupyter_tag:
         type: string
-        default: 'rs-client-libraries' # can be called by other git repositories
+        description: Tag of the base Jupyter Docker image (optional)
+        required: false
       docker_tag:
         description: Add this tag to the docker images as e.g. 'latest' or 'feat-rspy123'
         required: false
@@ -59,7 +65,7 @@ jobs:
       branch_name: ${{ steps.set-binary-env.outputs.branch_name }}
       docker_tags: ${{ steps.set-binary-env.outputs.docker_tags }}
       docker_final_tags: ${{ steps.set-binary-env.outputs.docker_final_tags }}
-      first_tag: ${{ steps.first-tag.outputs.value }}
+      base_jupyter_tag: ${{ steps.base-jupyter-tag.outputs.value }}
     steps:
       - id: set-binary-env
         name: Call action 'set-binary-env'
@@ -67,12 +73,22 @@ jobs:
         with:
           wheel_version_name: ${{ needs.build-wheel.outputs.version_name }}
           manual_tag: ${{ github.event.inputs.docker_tag }}
-      - name: First docker tag
-        id: first-tag
+
+      - name: Tag of the base Jupyter Docker image
+        id: base-jupyter-tag
+        env:
+          BASE_JUPYTER_TAG: ${{ inputs.base_jupyter_tag }}
         run: |
           set -x
-          # Keep the first image tag from a list as tag1,tag2,tag3
-          value=$(echo ${{ steps.set-binary-env.outputs.docker_tags }} | cut -d , -f1)
+          # If it's given as input, use it
+          if [[ -n $BASE_JUPYTER_TAG ]]; then
+            value=$BASE_JUPYTER_TAG
+
+          # Else keep last tag (after the last ',')
+          else
+            docker_tags=${{ steps.set-binary-env.outputs.docker_tags }}
+            value=${docker_tags##*,}
+          fi
           echo "value=$value" >> $GITHUB_OUTPUT
 
   publish-docker-images:
@@ -95,7 +111,7 @@ jobs:
           - image: jupyter # Local jupyter image with rs-client-libraries
             dockerfile: ./.github/dockerfiles/Dockerfile.jupyter
             image_suffix: jupyter/rs-client-libraries/local
-            build_args: "BASE_TAG=${{ needs.set-binary-env.outputs.first_tag }}"
+            build_args: "BASE_TAG=${{ needs.set-binary-env.outputs.base_jupyter_tag }}"
             # If called by rs-client-libraries or after rebuilding the base jupyter image
             if: ${{ contains('rs-client-libraries,rebuild-base-jupyter', inputs.called_by) }}
 
@@ -215,8 +231,9 @@ jobs:
       # we tag the images with the real tags and push them.
       - name: Tag and push Docker images
         if: ${{ needs.set-binary-env.outputs.docker_final_tags != '' }}
-        uses: RS-PYTHON/actions/.github/actions/tag-push-docker@develop
+        uses: RS-PYTHON/actions/.github/actions/tag-push-docker@feat-rspy1108/jupyter-cicd
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           old_docker_images: ${{ needs.get-pushed-images.outputs.pushed_images }}
           new_tags: ${{ needs.set-binary-env.outputs.docker_final_tags }}
 
