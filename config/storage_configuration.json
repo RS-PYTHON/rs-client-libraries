@@ -25,7 +25,7 @@
         },
         {
           "section": "other",
-          "storage": "my_shared_disk_1"
+          "storage": "rspython-dev-cs-01"
         }
       ]
     },
@@ -36,7 +36,7 @@
       },
       {
         "product_name": "Orbit",
-        "storage": "my_shared_disk_1"
+        "storage": "rspython-dev-cs-01"
       }
     ]
   },
@@ -63,7 +63,7 @@
       }
     },
     {
-      "name": "my_shared_disk_1",
+      "name": "rspython-dev-cs-01",
       "kind" : "shared_disk",
       "opening_mode": "CREATE_OVERWRITE",
       "absolute_path": "/mnt/share/cs-01/",
