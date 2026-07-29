@@ -18,8 +18,8 @@ name: Test downstream deployments
 on:
   pull_request: # pull requests
     types: [opened, synchronize, reopened]
-    branches-ignore:
-      - feat/prepare-new-release
+    branches:
+      - '!feat/prepare-new-release'
   push:
     branches: [develop, main] # pushes on the 'develop' or 'main' branches
     # run this worflow only for rs_workflows code related changes
