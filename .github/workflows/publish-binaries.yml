@@ -29,12 +29,19 @@ on:
         options:
           - rs-client-libraries
           - rebuild-base-jupyter # called by rs-workflow-env after rebuilding the base jupyter image
+        default: rs-client-libraries
       base_jupyter_tag:
         type: string
         description: Tag of the base Jupyter Docker image (optional)
         required: false
-      docker_tag:
-        description: Add this tag to the docker images as e.g. 'latest' or 'feat-rspy123'
+      add_docker_tags:
+        description: Add these tags to the docker images as e.g. 'custom-tag1,custom-tag-2'
+        required: false
+      force_docker_tags:
+        description: If set, force these docker tags (used when called from other repository)
+        required: false
+      force_docker_final_tags:
+        description: If set, force these final docker tags (used when called from other repository)
         required: false
 
 env:
@@ -69,10 +76,12 @@ jobs:
     steps:
       - id: set-binary-env
         name: Call action 'set-binary-env'
-        uses: RS-PYTHON/actions/.github/actions/set-binary-env@develop
+        uses: RS-PYTHON/actions/.github/actions/set-binary-env@feat-rspy1108/jupyter-cicd
         with:
           wheel_version_name: ${{ needs.build-wheel.outputs.version_name }}
-          manual_tag: ${{ github.event.inputs.docker_tag }}
+          add_docker_tags: ${{ inputs.add_docker_tags }}
+          force_docker_tags: ${{ inputs.force_docker_tags }}
+          force_docker_final_tags: ${{ inputs.force_docker_final_tags }}
 
       - name: Tag of the base Jupyter Docker image
         id: base-jupyter-tag
@@ -109,23 +118,23 @@ jobs:
         # Options specific to each image, from the publish-docker action.
         include:
           - image: jupyter # Local jupyter image with rs-client-libraries
+            # If called by rs-client-libraries or after rebuilding the base jupyter image
+            if: ${{ contains('rs-client-libraries,rebuild-base-jupyter', inputs.called_by) }}
             dockerfile: ./.github/dockerfiles/Dockerfile.jupyter
             image_suffix: jupyter/rs-client-libraries/local
             build_args: "BASE_TAG=${{ needs.set-binary-env.outputs.base_jupyter_tag }}"
-            # If called by rs-client-libraries or after rebuilding the base jupyter image
-            if: ${{ contains('rs-client-libraries,rebuild-base-jupyter', inputs.called_by) }}
 
           - image: prefect-local # Local prefect image with rs-client-libraries
+            if: ${{ contains('rs-client-libraries', inputs.called_by) }} # If called by rs-client-libraries
             dockerfile: ./.github/dockerfiles/Dockerfile.prefect
             image_suffix: prefect/rs-client-libraries/local
             build_args: "K8S_IMAGE="
-            if: ${{ contains('rs-client-libraries', inputs.called_by) }} # If called by rs-client-libraries
 
           - image: prefect-k8s # Prefect image for kubernetes with rs-client-libraries.
+            if: ${{ contains('rs-client-libraries', inputs.called_by) }} # If called by rs-client-libraries
             dockerfile: ./.github/dockerfiles/Dockerfile.prefect
             image_suffix: prefect/rs-client-libraries/k8s
             build_args: "K8S_IMAGE=-k8s"
-            if: ${{ contains('rs-client-libraries', inputs.called_by) }} # If called by rs-client-libraries
 
     steps:
       - if: ${{ matrix.if }}

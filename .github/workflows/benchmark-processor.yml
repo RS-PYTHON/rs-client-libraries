@@ -69,8 +69,8 @@ jobs:
       # To use python scripts under this directory
       PYTHONPATH: ${{ '.github/scripts:env.PYTHONPATH' }}
       # Name of the github variable and secret to use
-      CONFIG: ${{ case(github.event.inputs.cluster == 'dev', 'PREFECT_CONFIG_DEV', 'PREFECT_CONFIG_OPS') }}
-      CREDENTIALS: ${{ case(github.event.inputs.cluster == 'dev', 'PREFECT_CREDENTIALS_DEV', 'PREFECT_CREDENTIALS_OPS') }}
+      CONFIG: ${{ case(inputs.cluster == 'dev', 'PREFECT_CONFIG_DEV', 'PREFECT_CONFIG_OPS') }}
+      CREDENTIALS: ${{ case(inputs.cluster == 'dev', 'PREFECT_CREDENTIALS_DEV', 'PREFECT_CREDENTIALS_OPS') }}
 
     steps:
       - uses: actions/checkout@v6
@@ -92,12 +92,12 @@ jobs:
           body = {
               "parameters": {
                   "env": {
-                    "owner_id": "${{ github.event.inputs.keycloak_user }}",
+                    "owner_id": "${{ inputs.keycloak_user }}",
                     "called_by": "${{ env.THIS_URL }}",
                   },
-                  "processor_name": "${{ github.event.inputs.processor_name }}",
-                  "processor_version": "${{ github.event.inputs.processor_version }}",
-                  "scenario_name": "${{ github.event.inputs.scenario }}",
+                  "processor_name": "${{ inputs.processor_name }}",
+                  "processor_version": "${{ inputs.processor_version }}",
+                  "scenario_name": "${{ inputs.scenario }}",
               },
           }
           flow_run_id = trigger_flow_run("${{ env.DEPLOY_NAME }}", body)
