@@ -50,7 +50,7 @@ async def test_build_olci_l1_inputs_from_catalog(mocker):
     mocker.patch.object(s3_l1_olci, "FlowEnv", return_value=flow_env)
 
     result = await s3_l1_olci.build_olci_l1_inputs_from_catalog(
-        owner_identifier="opadeanu",
+        owner_identifier="toto",
         input_collection="AUTOMATED_S3L0_OUTPUT_2026",
         timestamp="2026-06-30T11:40:00Z/2026-06-30T12:30:00Z",
     )
@@ -82,7 +82,7 @@ async def test_build_olci_l1_inputs_from_catalog(mocker):
 async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
     """Raw products from the L0 event are prepared inside the L1 flow."""
     resolved_params = MagicMock()
-    resolved_params.owner_identifier = "opadeanu"
+    resolved_params.owner_identifier = "toto"
     resolved_params.input_products = []
     flow_params = MagicMock()
     flow_params.resolve = AsyncMock(return_value=resolved_params)
@@ -197,7 +197,7 @@ async def test_process_s3_runs_deployments_in_sequence(mocker):
         call(
             name="stage-cadip-with-options/On-demand Cadip staging",
             parameters={
-                "env": {"owner_id": "opadeanu"},
+                "env": {"owner_id": "toto"},
                 "cadip_collection_identifier": "cadip",
                 "session_identifier": "S3A_session",
                 "catalog_collection_identifier": "AUTOMATED_S3L0_INPUT",
