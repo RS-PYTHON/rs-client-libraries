@@ -40,7 +40,7 @@ jobs:
     steps:
       - name: Check if branch exists in ${{ matrix.repo }}
         id: check_branch
-        uses: RS-PYTHON/actions/.github/actions/get-repo-branch@feat-rspy1108/jupyter-cicd
+        uses: RS-PYTHON/actions/.github/actions/get-repo-branch@develop
         with:
           repo: RS-PYTHON/${{ matrix.repo }}
           # Try current branch, then develop
