@@ -26,6 +26,10 @@ on:
     paths: ['rs_workflows/**.py', '**.toml', 'install.sh']
   workflow_dispatch: # manual trigger
 
+env:
+  # Current branch name (or source branch for a pull request) or git tag (if we are pushing a git tag)
+  BRANCH_NAME: ${{ case(github.event_name == 'pull_request', github.event.pull_request.head.ref, github.ref_name) }}
+
 jobs:
   test-deploy:
     runs-on: ubuntu-latest
@@ -36,22 +40,18 @@ jobs:
     steps:
       - name: Check if branch exists in ${{ matrix.repo }}
         id: check_branch
-        env:
-          LOCAL_BRANCH: ${{ github.head_ref }}
-          TARGET_REPO: ${{ matrix.repo }}
-        run: |
-          if git ls-remote --heads "https://github.com/RS-PYTHON/${TARGET_REPO}.git" ${LOCAL_BRANCH} | grep -q ${LOCAL_BRANCH}; then
-            echo "branch_to_use=$LOCAL_BRANCH" >> $GITHUB_OUTPUT
-          else
-            echo "branch_to_use=develop" >> $GITHUB_OUTPUT
-          fi
+        uses: RS-PYTHON/actions/.github/actions/get-repo-branch@feat-rspy1108/jupyter-cicd
+        with:
+          repo: RS-PYTHON/${{ matrix.repo }}
+          # Try current branch, then develop
+          branches: ${{ env.BRANCH_NAME }},develop
       - name: Trigger deployment of ${{ matrix.repo }}
         uses: benc-uk/workflow-dispatch@7a027648b88c2413826b6ddd6c76114894dc5ec4
         with:
           workflow: test-deployment.yml
           repo: RS-PYTHON/${{ matrix.repo }}
-          ref: ${{ steps.check_branch.outputs.branch_to_use }}
-          inputs: '{ "infra_core_ref": "${{ github.head_ref }}"}'
+          ref: ${{ steps.check_branch.outputs.branch }}
+          inputs: '{ "infra_core_ref": "${{ env.BRANCH_NAME }}"}'
           token: '${{ secrets.TRIGGER_WORKFLOWS }}'
           wait-for-completion: true
           wait-timeout-seconds: 3600

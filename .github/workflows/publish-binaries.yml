@@ -23,15 +23,30 @@ on:
     tags: ['**'] # new git tags (including hierarchical tags like v1.0/beta)
   workflow_dispatch: # manual trigger
     inputs:
-      docker_tag:
-        description: Add this tag to the docker images as e.g. 'latest' or 'feat-rspy123'
+      called_by:
+        type: choice
+        options:
+          - rs-client-libraries
+          - rebuild-base-jupyter # called by rs-workflow-env after rebuilding the base jupyter image
+        default: rs-client-libraries
+      base_jupyter_tag:
+        type: string
+        description: Tag of the base Jupyter Docker image (optional)
+        required: false
+      add_docker_tags:
+        description: Add these tags to the docker images as e.g. 'custom-tag1,custom-tag-2'
+        required: false
+      force_docker_tags:
+        description: If set, force these docker tags (used when called from other repository)
+        required: false
+      force_docker_final_tags:
+        description: If set, force these final docker tags (used when called from other repository)
         required: false
 
 env:
   DOCKER_REGISTRY: ghcr.io
 
 jobs:
-
   build-wheel:
     name: Build wheel
     runs-on: ubuntu-latest
@@ -47,8 +62,8 @@ jobs:
         with:
           package_directory: .
 
-  set-env:
-    name: Set environment
+  set-binary-env:
+    name: Set Docker environment
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     needs: build-wheel
@@ -56,19 +71,39 @@ jobs:
       branch_name: ${{ steps.set-binary-env.outputs.branch_name }}
       docker_tags: ${{ steps.set-binary-env.outputs.docker_tags }}
       docker_final_tags: ${{ steps.set-binary-env.outputs.docker_final_tags }}
+      base_jupyter_tag: ${{ steps.base-jupyter-tag.outputs.value }}
     steps:
       - id: set-binary-env
         name: Call action 'set-binary-env'
-        uses: RS-PYTHON/actions/.github/actions/set-binary-env@develop
+        uses: RS-PYTHON/actions/.github/actions/set-binary-env@feat-rspy1108/jupyter-cicd
         with:
           wheel_version_name: ${{ needs.build-wheel.outputs.version_name }}
-          manual_tag: ${{ github.event.inputs.docker_tag }}
+          add_docker_tags: ${{ inputs.add_docker_tags }}
+          force_docker_tags: ${{ inputs.force_docker_tags }}
+          force_docker_final_tags: ${{ inputs.force_docker_final_tags }}
+
+      - name: Tag of the base Jupyter Docker image
+        id: base-jupyter-tag
+        env:
+          BASE_JUPYTER_TAG: ${{ inputs.base_jupyter_tag }}
+        run: |
+          set -x
+          # If it's given as input, use it
+          if [[ -n $BASE_JUPYTER_TAG ]]; then
+            value=$BASE_JUPYTER_TAG
+
+          # Else keep last tag (after the last ',')
+          else
+            docker_tags=${{ steps.set-binary-env.outputs.docker_tags }}
+            value=${docker_tags##*,}
+          fi
+          echo "value=$value" >> $GITHUB_OUTPUT
 
   publish-docker-images:
     name: "Build and publish Docker images"
     runs-on: ubuntu-latest
     if: github.actor != 'dependabot[bot]'
-    needs: set-env
+    needs: set-binary-env
     permissions:
       security-events: write # needed for github/codeql-action/upload-sarif
       packages: write # needed for 'docker push'
@@ -82,40 +117,53 @@ jobs:
         # Options specific to each image, from the publish-docker action.
         include:
           - image: jupyter # Local jupyter image with rs-client-libraries
+            # If called by rs-client-libraries or after rebuilding the base jupyter image
+            if: ${{ contains('rs-client-libraries,rebuild-base-jupyter', inputs.called_by) }}
             dockerfile: ./.github/dockerfiles/Dockerfile.jupyter
             image_suffix: jupyter/rs-client-libraries/local
+            build_args: "BASE_TAG=${{ needs.set-binary-env.outputs.base_jupyter_tag }}"
+
           - image: prefect-local # Local prefect image with rs-client-libraries
+            if: ${{ contains('rs-client-libraries', inputs.called_by) }} # If called by rs-client-libraries
             dockerfile: ./.github/dockerfiles/Dockerfile.prefect
             image_suffix: prefect/rs-client-libraries/local
             build_args: "K8S_IMAGE="
+
           - image: prefect-k8s # Prefect image for kubernetes with rs-client-libraries.
+            if: ${{ contains('rs-client-libraries', inputs.called_by) }} # If called by rs-client-libraries
             dockerfile: ./.github/dockerfiles/Dockerfile.prefect
             image_suffix: prefect/rs-client-libraries/k8s
             build_args: "K8S_IMAGE=-k8s"
 
     steps:
-      - uses: actions/checkout@v6
-      - name: Download .whl dependency
+      - if: ${{ matrix.if }}
+        uses: actions/checkout@v6
+      - if: ${{ matrix.if }}
+        name: Download .whl dependency
         uses: actions/download-artifact@v8
         with:
           pattern: rs_client_libraries-*.whl
           path: ./build_context_path
-      - name: Copy Dockerfile requirements
+      - if: ${{ matrix.if }}
+        name: Copy Dockerfile requirements
         run: cp -t ./build_context_path ./.github/scripts/layer-cleanup.sh ./.github/scripts/restore-apt.sh
-      - run: ls ./build_context_path
-      - id: publish-docker
+      - if: ${{ matrix.if }}
+        run: ls ./build_context_path
+      - if: ${{ matrix.if }}
+        id: publish-docker
         uses: RS-PYTHON/actions/.github/actions/publish-docker@develop
         with:
           dockerfile: ${{ matrix.dockerfile }}
           build_context_path: ./build_context_path
           image_basename: ${{ github.repository_owner }}/
           image_suffix: ${{ matrix.image_suffix }}
-          image_tags: ${{ needs.set-env.outputs.docker_tags }}
+          image_tags: ${{ needs.set-binary-env.outputs.docker_tags }}
           dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
           dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           build_args: ${{ matrix.build_args }}
-      - uses: cloudposse/github-action-matrix-outputs-write@81ea135d4c4f90a5220bb38304380073c571dbb8
+      - if: ${{ matrix.if }}
+        uses: cloudposse/github-action-matrix-outputs-write@81ea135d4c4f90a5220bb38304380073c571dbb8
         with:
           matrix-step-name: publish-docker-images
           matrix-key: ${{ matrix.image }}
@@ -124,19 +172,19 @@ jobs:
 
   get-pushed-images:
     name: Get pushed Docker image names
-    needs: [set-env, publish-docker-images]
+    needs: [set-binary-env, publish-docker-images]
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     outputs:
       pushed_images: ${{ steps.read.outputs.pushed_images }}
     steps:
       - id: read-matrix-outputs
-        if: ${{ needs.set-env.outputs.docker_final_tags != '' }} # only if a temp Docker tag has been set
+        if: ${{ needs.set-binary-env.outputs.docker_final_tags != '' }} # only if a temp Docker tag has been set
         uses: cloudposse/github-action-matrix-outputs-read@ddb62566e896c85614f5eeec2daa43d6d1dc6cb0
         with:
             matrix-step-name: publish-docker-images
       - id: read
-        if: ${{ needs.set-env.outputs.docker_final_tags != '' }}
+        if: ${{ needs.set-binary-env.outputs.docker_final_tags != '' }}
         run: |
           set -x
           # Docker images that have been pushed
@@ -151,7 +199,7 @@ jobs:
     name: Test rs-demo
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
-    needs: [set-env, publish-docker-images, get-pushed-images]
+    needs: [set-binary-env, publish-docker-images, get-pushed-images]
     permissions:
       packages: write # needed for 'docker push'
     steps:
@@ -164,8 +212,8 @@ jobs:
 
       - name: Test rs-demo
         env:
-          BRANCH_NAME: ${{ needs.set-env.outputs.branch_name }}
-          DOCKER_TAGS: ${{ needs.set-env.outputs.docker_tags }}
+          BRANCH_NAME: ${{ needs.set-binary-env.outputs.branch_name }}
+          DOCKER_TAGS: ${{ needs.set-binary-env.outputs.docker_tags }}
         run: |
           set -x
 
@@ -190,11 +238,12 @@ jobs:
       # If we used a temp docker tag, and only if the tests succeeded, then
       # we tag the images with the real tags and push them.
       - name: Tag and push Docker images
-        if: ${{ needs.set-env.outputs.docker_final_tags != '' }}
-        uses: RS-PYTHON/actions/.github/actions/tag-push-docker@develop
+        if: ${{ needs.set-binary-env.outputs.docker_final_tags != '' }}
+        uses: RS-PYTHON/actions/.github/actions/tag-push-docker@feat-rspy1108/jupyter-cicd
         with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           old_docker_images: ${{ needs.get-pushed-images.outputs.pushed_images }}
-          new_tags: ${{ needs.set-env.outputs.docker_final_tags }}
+          new_tags: ${{ needs.set-binary-env.outputs.docker_final_tags }}
 
   publish-wheels-pypi:
     name: "Publish wheels and sdists to PyPI"
@@ -217,30 +266,20 @@ jobs:
           packages-dir: ./dist
           verbose: true
 
-  # See https://docs.github.com/en/rest/actions/workflows?apiVersion=2022-11-28#create-a-workflow-dispatch-event
-  trigger-jupyter-k8s-image-build:
+  trigger-rs-workflow-env:
     runs-on: ubuntu-latest
-    name: Trigger rs-workflow-env CI to build the Jupyter k8s image
-    needs: [set-env, publish-docker-images, test-demo] # only if the tests succeeded
+    name: Trigger rs-workflow-env # to build the jupyter image for cluster mode with the latest rs-client-libraries changes
+    if: (github.event_name == 'push') && (github.ref_name == 'develop') # Only when we push to develop
     steps:
-      - env:
-          DOCKER_TAGS: ${{ needs.set-env.outputs.docker_tags }}
-          DOCKER_FINAL_TAGS: ${{ needs.set-env.outputs.docker_final_tags }}
-          TRIGGER_WORKFLOWS_TOKEN: ${{ secrets.TRIGGER_WORKFLOWS }}
-        run: |
-          set -x
-
-          # Get final tags if defined, else nominal tags
-          [[ -n $DOCKER_FINAL_TAGS ]] && docker_tags=$DOCKER_FINAL_TAGS || docker_tags=$DOCKER_TAGS
-
-          # Keep last tag (after the last ',')
-          docker_tag=${docker_tags##*,}
-
-          curl --proto "=https" -L \
-            -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${TRIGGER_WORKFLOWS_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/RS-PYTHON/rs-workflow-env/actions/workflows/build-jupyter.yml/dispatches \
-            -d '{"ref":"${{ needs.set-env.outputs.branch_name }}","inputs":{"docker_tag":"'"$docker_tag"'","build_base_image":"false"}}'
-        shell: bash
+      - name: Trigger rs-workflow-env
+        uses: benc-uk/workflow-dispatch@7a027648b88c2413826b6ddd6c76114894dc5ec4
+        with:
+          workflow: build-jupyter.yml
+          repo: RS-PYTHON/rs-workflow-env
+          ref: develop
+          inputs: '{
+            "build_base_image": false
+            }'
+          token: '${{ secrets.TRIGGER_WORKFLOWS }}'
+          wait-for-completion: true
+          wait-timeout-seconds: 3600
