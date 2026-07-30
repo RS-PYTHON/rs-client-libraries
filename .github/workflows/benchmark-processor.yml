@@ -71,6 +71,11 @@ jobs:
       # Name of the github variable and secret to use
       CONFIG: ${{ case(inputs.cluster == 'dev', 'PREFECT_CONFIG_DEV', 'PREFECT_CONFIG_OPS') }}
       CREDENTIALS: ${{ case(inputs.cluster == 'dev', 'PREFECT_CREDENTIALS_DEV', 'PREFECT_CREDENTIALS_OPS') }}
+      # Inputs
+      KEYCLOAK_USER: ${{ inputs.keycloak_user }}
+      PROCESSOR_NAME: ${{ inputs.processor_name }}
+      PROCESSOR_VERSION: ${{ inputs.processor_version }}
+      SCENARIO: ${{ inputs.scenario }}
 
     steps:
       - uses: actions/checkout@v6
@@ -92,12 +97,12 @@ jobs:
           body = {
               "parameters": {
                   "env": {
-                    "owner_id": "${{ inputs.keycloak_user }}",
-                    "called_by": "${{ env.THIS_URL }}",
+                    "owner_id": "${KEYCLOAK_USER}",
+                    "called_by": "${THIS_URL}",
                   },
-                  "processor_name": "${{ inputs.processor_name }}",
-                  "processor_version": "${{ inputs.processor_version }}",
-                  "scenario_name": "${{ inputs.scenario }}",
+                  "processor_name": "${PROCESSOR_NAME}",
+                  "processor_version": "${PROCESSOR_VERSION}",
+                  "scenario_name": "${SCENARIO}",
               },
           }
           flow_run_id = trigger_flow_run("${{ env.DEPLOY_NAME }}", body)
