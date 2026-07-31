@@ -29,10 +29,6 @@ on:
           - rs-client-libraries
           - rebuild-base-jupyter # called by rs-workflow-env after rebuilding the base jupyter image
         default: rs-client-libraries
-      base_jupyter_tag:
-        type: string
-        description: Tag of the base Jupyter Docker image (optional)
-        required: false
       add_docker_tags:
         description: Add these tags to the docker images as e.g. 'custom-tag1,custom-tag-2'
         required: false
@@ -71,7 +67,7 @@ jobs:
       branch_name: ${{ steps.set-binary-env.outputs.branch_name }}
       docker_tags: ${{ steps.set-binary-env.outputs.docker_tags }}
       docker_final_tags: ${{ steps.set-binary-env.outputs.docker_final_tags }}
-      base_jupyter_tag: ${{ steps.base-jupyter-tag.outputs.value }}
+      base_jupyter_tag: ${{ steps.base-jupyter-tag.outputs.tag }}
     steps:
       - id: set-binary-env
         name: Call action 'set-binary-env'
@@ -82,22 +78,13 @@ jobs:
           force_docker_tags: ${{ inputs.force_docker_tags }}
           force_docker_final_tags: ${{ inputs.force_docker_final_tags }}
 
-      - name: Tag of the base Jupyter Docker image
-        id: base-jupyter-tag
-        env:
-          BASE_JUPYTER_TAG: ${{ inputs.base_jupyter_tag }}
-        run: |
-          set -x
-          # If it's given as input, use it
-          if [[ -n $BASE_JUPYTER_TAG ]]; then
-            value=$BASE_JUPYTER_TAG
-
-          # Else keep last tag (after the last ',')
-          else
-            docker_tags=${{ steps.set-binary-env.outputs.docker_tags }}
-            value=${docker_tags##*,}
-          fi
-          echo "value=$value" >> $GITHUB_OUTPUT
+      - id: base-jupyter-tag
+        name: Resolve base jupyter image tag
+        uses: RS-PYTHON/actions/.github/actions/get-image-tag@develop
+        with:
+          image: ghcr.io/rs-python/quay.io/jupyter/base-notebook
+          # Test image tags with the same name as current branch, else latest
+          tags: ${{ steps.set-binary-env.outputs.docker_tags }},latest
 
   publish-docker-images:
     name: "Build and publish Docker images"
