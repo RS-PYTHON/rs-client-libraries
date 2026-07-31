@@ -29,6 +29,15 @@ on:
           - rs-client-libraries
           - rebuild-base-jupyter # called by rs-workflow-env after rebuilding the base jupyter image
         default: rs-client-libraries
+      caller_name:
+        description: Caller name, to be displayed in the info job name
+        required: false
+      caller_url:
+        description: Caller url, to be displayed in the info job details
+        required: false
+      caller_reason:
+        description: Why this run was called, to be displayed in the info job details
+        required: false
       add_docker_tags:
         description: Add these tags to the docker images as e.g. 'custom-tag1,custom-tag-2'
         required: false
@@ -43,6 +52,21 @@ env:
   DOCKER_REGISTRY: ghcr.io
 
 jobs:
+  info:
+    runs-on: ubuntu-latest
+    name: "Triggered by: ${{ inputs.caller_name }}"
+    env:
+      CALLER_URL: ${{ inputs.caller_url }}
+      CALLER_REASON: ${{ inputs.caller_reason }}
+    steps:
+    - if: ${{ inputs.caller_name != '' }}
+      run: >
+        echo
+        ":information_source: <br>
+        This run has been triggered by: ${CALLER_URL}<br>
+        Reason: ${CALLER_REASON}"
+        >> $GITHUB_STEP_SUMMARY
+
   build-wheel:
     name: Build wheel
     runs-on: ubuntu-latest
@@ -259,14 +283,21 @@ jobs:
     if: (github.event_name == 'push') && (github.ref_name == 'develop') # Only when we push to develop
     steps:
       - name: Trigger rs-workflow-env
-        uses: benc-uk/workflow-dispatch@7a027648b88c2413826b6ddd6c76114894dc5ec4
+        # Link to the URL of this current github actions run
+        env:
+          THIS_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        uses: benc-uk/workflow-dispatch@ba9b031f598534deb29873396ef7b0acf17aa94a
         with:
           workflow: build-jupyter.yml
           repo: RS-PYTHON/rs-workflow-env
           ref: develop
           inputs: '{
-            "build_base_image": false
+            "build_base_image": false,
+            "caller_name": "rs-client-libraries",
+            "caller_url": "${{ env.THIS_URL }}",
+            "caller_reason": "Build the Jupyter image for cluster mode with the latest rs-client-libraries."
             }'
           token: '${{ secrets.TRIGGER_WORKFLOWS }}'
           wait-for-completion: true
           wait-timeout-seconds: 3600
+          sync-status: true
