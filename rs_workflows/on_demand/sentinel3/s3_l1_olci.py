@@ -17,9 +17,8 @@
 from typing import Any
 
 from prefect import flow, get_run_logger, task
-from pystac import Item
 
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct
+from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
 from rs_workflows.on_demand.common.types import Level1FlowParams
 from rs_workflows.on_demand.sentinel3.s3_processing_utils import (
     build_olci_l1_input_products,
