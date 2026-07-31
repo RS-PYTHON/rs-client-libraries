@@ -126,7 +126,7 @@ async def process_l0_last_steps(
             )
 
         try:
-            s3_l0_result = await call_dpr_flow(
+            l0_result = await call_dpr_flow(
                 dpr_env,
                 input_products=input_products,
                 external_variables={
@@ -158,9 +158,9 @@ async def process_l0_last_steps(
         logger.info("call_dpr_flow completed successfully for mission=%r, session=%r", mission, session)
 
         logger.info(
-            "S3 L0 products prepared for persisted flow result: count=%d, products=%r",
-            len(s3_l0_result),
-            s3_l0_result,
+            "L0 products prepared for persisted flow result: count=%d, products=%r",
+            len(l0_result),
+            l0_result,
         )
 
-        return s3_l0_result
+        return l0_result

@@ -30,18 +30,25 @@ from rs_workflows.on_demand.common.types import (
     DEFAULT_PREFECT_CONFIGURATION,
     Level0FlowParams,
     Level1FlowParams,
+    PROCESSING_PREFECT_CONFIGURATION,
     ProcessingFlowParams,
 )
 
 
-def _patch_variable(mocker, value):
+def _patch_variable(mocker, value, *, unified=False):
     """Patch the Prefect Variable.get used by ProcessingFlowParams._resolve."""
-    mocker.patch.object(types.Variable, "get", new=AsyncMock(return_value=value))
+    async def get_variable(name, default=None):
+        if "processing-default-setting" in name:
+            return value if unified else default
+        return value
+
+    mocker.patch.object(types.Variable, "get", new=AsyncMock(side_effect=get_variable))
 
 
 def test_default_prefect_configuration_format():
     """The default configuration template resolves to the sX-lY variable name."""
     assert DEFAULT_PREFECT_CONFIGURATION.format(mission="1", level="0") == "s1-l0-default-setting"
+    assert PROCESSING_PREFECT_CONFIGURATION.format(mission="1") == "s1-processing-default-setting"
 
 
 def test_resolve_specific_base_returns_empty():
@@ -75,6 +82,7 @@ async def test_level1_resolve_uses_prefect_datetime_settings(mocker):
                 "end_datetime": "2025-06-12T02:13:13Z",
             },
         },
+        unified=True,
     )
 
     resolved = await Level1FlowParams().resolve("3")
@@ -95,6 +103,7 @@ async def test_level0_resolve_uses_prefect_datetime_settings(mocker):
                 "end_datetime": "2025-06-13T00:00:00Z",
             },
         },
+        unified=True,
     )
 
     resolved = await Level0FlowParams().resolve("3")
@@ -189,10 +198,24 @@ async def test_resolve_merges_settings_and_params(mocker):
 
 
 async def test_resolve_uses_correct_variable_name_per_mission(mocker):
-    """Sentinel-3 levels use only the unified processing configuration."""
+    """Every mission uses its unified processing configuration when available."""
     get_mock = AsyncMock(return_value={"l0": {}})
     mocker.patch.object(types.Variable, "get", new=get_mock)
-    await Level0FlowParams().resolve("3")
+    await Level0FlowParams().resolve("1")
     assert get_mock.await_args_list == [
-        call("s3-processing-default-setting", default={}),
+        call("s1-processing-default-setting", default=None),
+    ]
+
+
+async def test_resolve_falls_back_to_legacy_variable(mocker):
+    """A missing unified processing configuration falls back to the previous level-specific variable."""
+    get_mock = AsyncMock(side_effect=[None, {"owner_identifier": "legacy-owner"}])
+    mocker.patch.object(types.Variable, "get", new=get_mock)
+
+    resolved = await Level0FlowParams().resolve("1")
+
+    assert resolved.owner_identifier == "legacy-owner"
+    assert get_mock.await_args_list == [
+        call("s1-processing-default-setting", default=None),
+        call("s1-l0-default-setting", default={}),
     ]

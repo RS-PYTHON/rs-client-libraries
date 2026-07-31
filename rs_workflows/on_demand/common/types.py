@@ -33,13 +33,15 @@ from rs_workflows.flow_utils import (
 )
 
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
-S3_PROCESSING_CONFIGURATION = "s3-processing-default-setting"
+PROCESSING_PREFECT_CONFIGURATION = "s{mission}-processing-default-setting"
+S3_PROCESSING_CONFIGURATION = PROCESSING_PREFECT_CONFIGURATION.format(mission="3")
 
 
 async def _read_prefect_settings(mission: str, level: str) -> dict[str, Any]:
-    """Read unified Sentinel-3 settings or the mission-specific legacy variable."""
-    if mission == "3":
-        raw_unified = await cast(Awaitable[Any], Variable.get(S3_PROCESSING_CONFIGURATION, default={}))
+    """Read unified mission settings, falling back to the level-specific legacy variable."""
+    processing_name = PROCESSING_PREFECT_CONFIGURATION.format(mission=mission)
+    raw_unified = await cast(Awaitable[Any], Variable.get(processing_name, default=None))
+    if raw_unified is not None:
         section = raw_unified.get(f"l{level}") if isinstance(raw_unified, dict) else None
         if isinstance(section, dict):
             common = raw_unified.get("common", {})

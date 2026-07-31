@@ -88,7 +88,7 @@ async def _run_child_deployment(
 
 
 @flow(name="full-s3-processing-chain")
-async def process_s3(session_id: str, owner_identifier: str = "toto") -> None:
+async def process_s3(session_id: str) -> None:
     """Run CADIP staging, S3 L0, and S3 OLCI L1 for one session.
 
     The flow is deliberately sequential. Each deployment starts only after its
@@ -97,14 +97,12 @@ async def process_s3(session_id: str, owner_identifier: str = "toto") -> None:
     ``CADIP staging -> S3 L0 -> S3 OLCI L1``
 
     Parameters configured on the child deployments remain in effect. This
-    orchestrator overrides only the run-specific values: the session and owner
-    for staging, the session for L0, and the generated L0 inputs for L1.
+    orchestrator overrides only the run-specific values: the session for
+    staging and L0, and the generated L0 inputs for L1.
 
     Args:
         session_id: Sentinel-3 CADIP session identifier, for example
             ``S3A_20200121061417020456``.
-        owner_identifier: Owner used by ``FlowEnvArgs`` during staging. It
-            selects the appropriate user credentials and catalog namespace.
 
     Raises:
         RuntimeError: If a child deployment does not complete successfully or
@@ -122,7 +120,6 @@ async def process_s3(session_id: str, owner_identifier: str = "toto") -> None:
         "CADIP staging",
         name=settings.cadip_staging_deployment,
         parameters={
-            "env": {"owner_id": owner_identifier},
             "cadip_collection_identifier": settings.cadip_collection,
             "session_identifier": session_id,
             "catalog_collection_identifier": settings.staging_catalog_collection,
