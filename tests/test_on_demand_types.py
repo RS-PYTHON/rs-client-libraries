@@ -28,15 +28,16 @@ from rs_workflows.flow_utils import (
 from rs_workflows.on_demand.common import types
 from rs_workflows.on_demand.common.types import (
     DEFAULT_PREFECT_CONFIGURATION,
+    PROCESSING_PREFECT_CONFIGURATION,
     Level0FlowParams,
     Level1FlowParams,
-    PROCESSING_PREFECT_CONFIGURATION,
     ProcessingFlowParams,
 )
 
 
 def _patch_variable(mocker, value, *, unified=False):
     """Patch the Prefect Variable.get used by ProcessingFlowParams._resolve."""
+
     async def get_variable(name, default=None):
         if "processing-default-setting" in name:
             return value if unified else default

@@ -29,6 +29,7 @@ def _flow_run(result):
     state.result = AsyncMock(return_value=result)
     return MagicMock(state=state)
 
+
 async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
     """Raw products from the L0 event are prepared inside the L1 flow."""
     resolved_params = MagicMock()

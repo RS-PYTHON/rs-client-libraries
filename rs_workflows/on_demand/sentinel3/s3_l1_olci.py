@@ -30,6 +30,7 @@ from rs_workflows.utils.dpr import call_dpr_flow
 OLCI_L0_PRODUCT_TYPE = "S03OLCL0_"
 NAV_L0_PRODUCT_TYPE = "S03NATL0_"
 
+
 @flow(
     name="process-s3-l1-olci",
     flow_run_name="s3-l1-olci-from-{source_l0_run_id}",

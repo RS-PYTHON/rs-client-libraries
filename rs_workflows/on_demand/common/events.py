@@ -16,7 +16,8 @@
 
 PRODUCTS_READY_EVENT = "rs-python.{mission}-{level}.products-ready"
 
-#s3l0, s3L1
+# s3l0, s3L1
+
 
 def products_ready_event_name(mission: str, level: str) -> str:
     """Return the generic products-ready event name for a processing step."""
