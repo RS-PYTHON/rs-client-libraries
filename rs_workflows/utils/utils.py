@@ -36,6 +36,7 @@ from rs_common.utils import (
     strip_archive_suffix,
 )
 from rs_workflows.flow_utils import ARCHIVE_SUFFIXES
+from rs_workflows.payload_template import PayloadSchema, WorkflowStep
 
 
 def search_by_name(values: list[dict[str, Any]], name: str) -> Any:
@@ -386,3 +387,77 @@ async def asset_unzip_decompress(stac_item: Item, use_extension: bool = False) -
 async def asset_unzip_decompress_task(*args, **kwargs) -> Item:
     """See: asset_unzip_decompress"""
     return await asset_unzip_decompress.fn(*args, **kwargs)
+
+
+def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
+    """
+    Build each final output lineage by walking the executed payload workflow backwards.
+    The mockup will have the result below.
+    {'S03MWRL0_': {'S3BCADUS', 'osf'}, 'S03OLCL0_': {'S3BCADUS', 'fro'}}
+    """
+
+    if payload.io is None:
+        raise ValueError("Payload I/O configuration is missing")
+
+    workflow = payload.workflow or []
+    input_ids = {input_product.id for input_product in payload.io.input_products}
+    adf_ids = {adf.id for adf in payload.io.adfs}
+
+    # Internal products are addressed by their complete payload reference:
+    # <unit>.<step_id>.<output>. This keeps identically named outputs separate.
+    producers: dict[str, WorkflowStep] = {}
+    output_references: dict[str, list[str]] = {}
+    for step in workflow:
+        for output_id in set((step.outputs or {}).values()):
+            output_reference = f"{step.name}.{output_id}"
+            if output_reference in producers:
+                raise ValueError(f"Duplicate workflow output reference '{output_reference}'")
+            producers[output_reference] = step
+            output_references.setdefault(output_id, []).append(output_reference)
+
+    resolved: dict[str, set[str]] = {}
+    resolving: set[str] = set()
+
+    def resolve_sources(output_reference: str) -> set[str]:
+        """Resolve pipeline inputs and ADFs inherited by one workflow output."""
+        if output_reference in resolved:
+            return resolved[output_reference]
+        if output_reference in resolving:
+            raise ValueError(f"Cyclic workflow dependency detected at '{output_reference}'")
+
+        step = producers[output_reference]
+        resolving.add(output_reference)
+        sources = set()
+
+        for input_reference in (step.inputs or {}).values():
+            if input_reference in producers:
+                sources.update(resolve_sources(input_reference))
+            elif input_reference in input_ids:
+                sources.add(input_reference)
+            else:
+                raise ValueError(
+                    f"Workflow input '{input_reference}' from step '{step.name}' "
+                    "does not reference a payload input or a workflow output",
+                )
+
+        for adf_reference in (step.adfs or {}).values():
+            if adf_reference not in adf_ids:
+                raise ValueError(f"Workflow ADF '{adf_reference}' from step '{step.name}' is missing from payload I/O")
+            sources.add(adf_reference)
+
+        resolving.remove(output_reference)
+        resolved[output_reference] = sources
+        return sources
+
+    lineage: dict[str, set[str]] = {}
+    for output_product in payload.io.output_products:
+        if not output_product.final_product:
+            continue
+
+        references = output_references.get(output_product.id, [])
+        if len(references) != 1:
+            raise ValueError(
+                f"Final output '{output_product.id}' must have exactly one workflow producer, found {references}",
+            )
+        lineage[output_product.id] = set(resolve_sources(references[0]))
+    return lineage

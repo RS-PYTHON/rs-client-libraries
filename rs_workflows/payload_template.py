@@ -248,6 +248,8 @@ class InputProduct(BasePayloadModel):
     store_type: str
     store_params: StoreParams | None = None
     opening_mode: str | None = Field(default=None)
+    # STAC self links used for lineage only; never serialized to the EOPF payload.
+    source_item_hrefs: list[str] = Field(default_factory=list, exclude=True)
 
 
 class OutputProduct(BasePayloadModel):
@@ -320,7 +322,7 @@ class PayloadSchema(BasePayloadModel):
     workflow: list[WorkflowStep] | None = None
     io: IOConfig | None = Field(None, alias="I/O")
     dask_context: DaskContext | None = None
-    logging: str | None = None
+    logging: list[str] | None = None
     config: list[str] | None = None
     secret: list[str] | None = None
     eoqc: EOQCConfig | None = None
