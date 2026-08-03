@@ -14,8 +14,8 @@
 
 """Tests the code from the script configure_s3_processing_result_storage"""
 
-import pytest
 import prefect.variables as pv
+import pytest
 
 from scripts.configure_s3_processing_result_storage import (
     PREFECT_VAR_NAME,
@@ -36,9 +36,7 @@ class DummyVariableResult:
 
 def test_returns_absolute_path_stripped_trailing_slash(monkeypatch):
     """Should return absolute_path without a trailing '/'."""
-    storage_configuration = [
-        {"kind": "shared_disk", "name": "x", "absolute_path": "/mnt/shared/"}
-    ]
+    storage_configuration = [{"kind": "shared_disk", "name": "x", "absolute_path": "/mnt/shared/"}]
 
     def fake_variable_get(var_name):
         """Mock Prefect Variable.get to return storage_configuration."""
@@ -118,7 +116,7 @@ def test_allows_create_overwrite_case_insensitive(monkeypatch):
             "name": "ok",
             "absolute_path": "/mnt/ok/",
             "opening_mode": "create_overwrite",
-        }
+        },
     ]
 
     def fake_variable_get(_var_name):
@@ -156,6 +154,7 @@ def test_returns_first_matching_entry(monkeypatch):
 
 def test_raises_when_prefect_variable_cannot_be_loaded(monkeypatch):
     """Should raise RuntimeError when Variable.get throws."""
+
     def fake_variable_get(_var_name):
         """Simulate Prefect variable loading failure."""
         raise RuntimeError("boom")
@@ -171,6 +170,7 @@ def test_raises_when_prefect_variable_cannot_be_loaded(monkeypatch):
 
 def test_raises_when_storage_configuration_missing_or_not_list(monkeypatch):
     """Should raise RuntimeError when storage_configuration is missing or not a list."""
+
     def fake_missing(_var_name):
         """Return payload without storage_configuration."""
         return DummyVariableResult({})
@@ -211,6 +211,4 @@ def test_raises_when_no_matching_entry_found(monkeypatch):
     with pytest.raises(RuntimeError) as excinfo:
         get_storage_path()
 
-    assert "Failed to get the shared mounted path from the Prefect values" in str(
-        excinfo.value
-    )
+    assert "Failed to get the shared mounted path from the Prefect values" in str(excinfo.value)
