@@ -685,6 +685,7 @@ def generate_payload(  # pylint: disable=unused-argument
     unit_list: list[dict],
     adfs: list[tuple[str, str, str]],
     dpr_process_in: DprProcessIn,
+    external_modules: list[dict[str, str]] | None = None,
 ) -> PayloadSchema:
     """
     Assembles and generates a payload schema for a DPR (Data Processing Request) job.
@@ -757,7 +758,7 @@ def generate_payload(  # pylint: disable=unused-argument
     logging = None
     config = None
     if dpr_process_in.processor_name in (DprProcessor.S1L0, DprProcessor.S3L0):
-        logging = "/opt/dask-l0/logging_config.yaml"
+        logging = ["/opt/dask-l0/logging_config.yaml"]
         match dpr_process_in.processor_name:
             case DprProcessor.S1L0:
                 config = ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
@@ -811,6 +812,7 @@ def generate_payload(  # pylint: disable=unused-argument
             temporary__folder=dpr_process_in.temporary_folder,
             temporary__folder_s3_secret=temp_folder_s3_secret,
         ),
+        external_modules=external_modules,
         workflow=workflow_steps,
         io=io_config,  # type: ignore
         # The dask_context section is built in the dpr_service

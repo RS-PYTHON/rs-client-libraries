@@ -11,6 +11,9 @@
     "start_datetime",
     "end_datetime"
   ],
+  "external_modules": [
+    "testmodule.submodule.testclass"
+  ],
   "units": [
     {
       "name": "calibration",
