@@ -68,7 +68,7 @@ def get_storage_path():
         # make sure the path is not read only
         if opening_mode is not None and opening_mode.upper() != "CREATE_OVERWRITE":
             continue
-        return entry.get("absolute_path")
+        return entry.get("absolute_path").rstrip("/")
     raise RuntimeError(f"Failed to get the shared mounted path from the Prefect values: {storage_configuration}")
 
 
