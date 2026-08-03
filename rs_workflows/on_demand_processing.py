@@ -41,7 +41,11 @@ from rs_workflows.flow_utils import (
     FlowInputProduct,
     RetryConfig,
 )
-from rs_workflows.payload_builder import build_cql2_json, build_unit_list
+from rs_workflows.payload_builder import (
+    build_cql2_json,
+    build_unit_list,
+    extract_external_modules,
+)
 from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
 from rs_workflows.utils.utils import (
     build_output_lineage,
@@ -485,8 +489,18 @@ async def dpr_processing(
                     adfs.add((name, adf_type, asset.href))
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
+
+        # Get optional list of external_modules
+        external_modules = extract_external_modules(task_table)
+
         # generate the dpr payload file
-        task_future = generate_payload.submit(flow_env, unit_list, list(adfs), dpr_input)
+        task_future = generate_payload.submit(
+            flow_env,
+            unit_list,
+            list(adfs),
+            dpr_input,
+            external_modules=external_modules,
+        )
         # get the payload generation result
         generated_payload_res = task_future.result()
         # Build lineage from the exact workflow that will be executed.

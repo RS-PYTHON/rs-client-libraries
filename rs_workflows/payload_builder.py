@@ -453,3 +453,26 @@ def build_cql2_json(query: dict[str, Any], values: dict[str, Any]):
 
     # Work on a deep copy so we don't mutate the original
     return _replace(deepcopy(query))["stac"]
+
+
+def extract_external_modules(tasktable: dict[str, Any]) -> list[dict[str, str]] | None:
+    """
+    Extracts the list of external modules from the tasktable and formats it for the payload
+    Returns an empty list if no external modules are defined.
+    """
+    if "external_modules" not in tasktable:
+        return None
+    if not isinstance(tasktable["external_modules"], list):
+        raise TaskTableError(
+            f"Found 'external_modules' but is a '{type(tasktable['external_modules']).__name__}' instead of a list.",
+        )
+
+    payload_external_modules: list[dict[str, str]] = []
+    for module in tasktable["external_modules"]:
+        module_dict = {
+            "name": module,
+            "nested": "true",
+        }
+        payload_external_modules.append(module_dict)
+
+    return payload_external_modules

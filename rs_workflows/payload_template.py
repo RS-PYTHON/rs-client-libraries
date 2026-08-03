@@ -322,7 +322,7 @@ class PayloadSchema(BasePayloadModel):
     workflow: list[WorkflowStep] | None = None
     io: IOConfig | None = Field(None, alias="I/O")
     dask_context: DaskContext | None = None
-    logging: str | None = None
+    logging: list[str] | None = None
     config: list[str] | None = None
     secret: list[str] | None = None
     eoqc: EOQCConfig | None = None
