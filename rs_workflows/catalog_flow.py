@@ -174,7 +174,7 @@ async def publish(
                 )
                 try:
                     response = catalog_client.add_item(target_collection, item, timeout=21600)
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught
                     # continue to the next item (cf request from story 1125)
                     logger.warning(
                         f"Exception `{e}` while publishing item: {json.dumps(item.to_dict(), indent=2)}",
