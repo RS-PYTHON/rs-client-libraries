@@ -62,13 +62,16 @@ def get_storage_path():
             continue
         if entry.get("kind") != "shared_disk":
             continue
-        if not entry.get("name") or not entry.get("absolute_path"):
+        if not entry.get("name"):
+            continue
+        absolute_path = entry.get("absolute_path")
+        if not absolute_path:
             continue
         opening_mode = entry.get("opening_mode")
         # make sure the path is not read only
         if opening_mode is not None and opening_mode.upper() != "CREATE_OVERWRITE":
             continue
-        return entry.get("absolute_path").rstrip("/")
+        return absolute_path.rstrip("/")
     raise RuntimeError(f"Failed to get the shared mounted path from the Prefect values: {storage_configuration}")
 
 
