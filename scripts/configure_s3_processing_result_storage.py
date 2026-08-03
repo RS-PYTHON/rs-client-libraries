@@ -73,18 +73,17 @@ def get_storage_path():
 
 
 BLOCK_NAME = "s3-processing-shared-results"
-SHARED_RESULTS_PATH = Path(f"{get_storage_path()}/prefect-results")
 
 
 def main() -> None:
     """Create the shared directory and register its LocalFileSystem block."""
-    SHARED_RESULTS_PATH.mkdir(parents=True, exist_ok=True)
-    if not os.access(SHARED_RESULTS_PATH, os.W_OK):
-        raise RuntimeError(f"Shared result path is not writable: {SHARED_RESULTS_PATH}")
-
-    block_id = LocalFileSystem(basepath=str(SHARED_RESULTS_PATH)).save(BLOCK_NAME, overwrite=True)
+    shared_results_path = Path(f"{get_storage_path()}/prefect-results")
+    shared_results_path.mkdir(parents=True, exist_ok=True)
+    if not os.access(shared_results_path, os.W_OK):
+        raise RuntimeError(f"Shared result path is not writable: {shared_results_path}")
+    block_id = LocalFileSystem(basepath=str(shared_results_path)).save(BLOCK_NAME, overwrite=True)
     print(
-        f"Saved Prefect block local-file-system/{BLOCK_NAME} with id={block_id} " f"and basepath={SHARED_RESULTS_PATH}",
+        f"Saved Prefect block local-file-system/{BLOCK_NAME} with id={block_id} " f"and basepath={shared_results_path}",
     )
 
 
