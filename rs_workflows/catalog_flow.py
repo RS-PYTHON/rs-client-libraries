@@ -191,7 +191,8 @@ async def publish(
             except Exception as e:
                 # Re-raise with full item context for easier debugging
                 raise RuntimeError(
-                    f"Exception while preparing/publishing item `{item.id}`: {json.dumps(item.to_dict(), indent=2)}",
+                    f"Exception `{e}` while preparing/publishing "
+                    f"item `{item.id}`: {json.dumps(item.to_dict(), indent=2)}",
                 ) from e
 
     logger.info("End catalog publishing")
