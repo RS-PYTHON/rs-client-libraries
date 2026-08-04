@@ -72,8 +72,8 @@ dask-gateway = "2026.3.0"
 uv = ">=0.9.7"
 psycopg2-binary = ">=2.9.10"
 werkzeug = ">=3.1.6"
-cryptography = "^48.0.1"
-aiohttp = "^3.14.1"
+cryptography = "^50.0.0"
+aiohttp = "^3.14.3"
 
 [tool.poetry.group.dev]
 optional = true

@@ -172,7 +172,14 @@ async def publish(
                 logger.info(
                     "Using timeout of 21600 seconds for catalog item publishing",
                 )
-                response = catalog_client.add_item(target_collection, item, timeout=21600)
+                try:
+                    response = catalog_client.add_item(target_collection, item, timeout=21600)
+                except Exception as e:  # pylint: disable=broad-exception-caught
+                    # continue to the next item (cf request from story 1125)
+                    logger.warning(
+                        f"Exception `{e}` while publishing item: {json.dumps(item.to_dict(), indent=2)}",
+                    )
+                    continue
                 logger.info(
                     "Publishing product %s to %s done. Response %s with message: \n%s",
                     item.id,
@@ -184,7 +191,8 @@ async def publish(
             except Exception as e:
                 # Re-raise with full item context for easier debugging
                 raise RuntimeError(
-                    f"Exception while publishing item: {json.dumps(item.to_dict(), indent=2)}",
+                    f"Exception `{e}` while preparing/publishing "
+                    f"item `{item.id}`: {json.dumps(item.to_dict(), indent=2)}",
                 ) from e
 
     logger.info("End catalog publishing")
