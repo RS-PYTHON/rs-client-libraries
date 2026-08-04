@@ -44,12 +44,14 @@ from rs_common.footprint_facility import (
     rework_to_linestring_geometry,
     rework_to_polygon_geometry,
 )
+
 shapely_to_geojson_cls = {
     LineString: GeoLineString,
     MultiLineString: GeoMultiLineString,
     Polygon: GeoPolygon,
     MultiPolygon: GeoMultiPolygon,
 }
+
 
 def looks_like_swath_polygon(geometry: Polygon) -> bool:
     """Return True for a polygon that can be rebuilt as a swath strip.
@@ -69,6 +71,7 @@ def looks_like_swath_polygon(geometry: Polygon) -> bool:
         return False
 
     return True
+
 
 def rebuild_swath_polygon(geometry: Polygon) -> MultiPolygon | Polygon:
     """Rebuild a two-edge swath footprint into antimeridian-safe geometry.
@@ -96,6 +99,7 @@ def rebuild_swath_polygon(geometry: Polygon) -> MultiPolygon | Polygon:
             elif isinstance(part, (MultiPolygon, GeometryCollection)):
                 parts.extend(polygon_parts(part))
         return parts
+
     logger = get_run_logger()
     # Drop the closing coordinate and split the ring into the two swath borders.
     points = [(float(lon), float(lat)) for lon, lat in geometry.exterior.coords[:-1]]
