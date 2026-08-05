@@ -64,7 +64,7 @@ async def process_s3l1_olci(
             len(flow_parameters.input_products),
             len(l0_products),
         )
-
+    get_run_logger().info(f"Flow params: {flow_parameters}")
     # Call DPR flow
     return await call_dpr_flow(
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),
