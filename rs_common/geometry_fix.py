@@ -16,13 +16,16 @@
 
 from typing import Any
 
-import antimeridian
-from geojson_pydantic.geometries import LineString as GeoLineString
-from geojson_pydantic.geometries import MultiLineString as GeoMultiLineString
-from geojson_pydantic.geometries import MultiPolygon as GeoMultiPolygon
-from geojson_pydantic.geometries import Polygon as GeoPolygon
 from prefect import get_run_logger
-from pystac import Item
+
+import antimeridian
+from rs_common.footprint_facility import (
+    AlreadyReworkedPolygonError,
+    check_raw_antimeridian_jump,
+    rework_to_polygon_geometry,
+    check_cross_antimeridian,
+    rework_to_linestring_geometry,
+)
 from shapely import get_parts, make_valid, union_all
 from shapely.geometry import (
     GeometryCollection,
@@ -32,26 +35,24 @@ from shapely.geometry import (
     MultiPolygon,
     Point,
     Polygon,
-    mapping,
+     mapping,
     shape,
 )
 from shapely.geometry.polygon import orient
 
-from rs_common.footprint_facility import (
-    AlreadyReworkedPolygonError,
-    check_cross_antimeridian,
-    check_raw_antimeridian_jump,
-    rework_to_linestring_geometry,
-    rework_to_polygon_geometry,
-)
+from pystac import Item
+from geojson_pydantic.geometries import LineString as GeoLineString
+from geojson_pydantic.geometries import MultiLineString as GeoMultiLineString
+from geojson_pydantic.geometries import MultiPolygon as GeoMultiPolygon
+from geojson_pydantic.geometries import Polygon as GeoPolygon
 
+# Map Shapely types to Pydantic GeoJSON types
 shapely_to_geojson_cls = {
     LineString: GeoLineString,
     MultiLineString: GeoMultiLineString,
     Polygon: GeoPolygon,
     MultiPolygon: GeoMultiPolygon,
 }
-
 
 def looks_like_swath_polygon(geometry: Polygon) -> bool:
     """Return True for a polygon that can be rebuilt as a swath strip.
@@ -71,7 +72,6 @@ def looks_like_swath_polygon(geometry: Polygon) -> bool:
         return False
 
     return True
-
 
 def rebuild_swath_polygon(geometry: Polygon) -> MultiPolygon | Polygon:
     """Rebuild a two-edge swath footprint into antimeridian-safe geometry.
@@ -99,7 +99,6 @@ def rebuild_swath_polygon(geometry: Polygon) -> MultiPolygon | Polygon:
             elif isinstance(part, (MultiPolygon, GeometryCollection)):
                 parts.extend(polygon_parts(part))
         return parts
-
     logger = get_run_logger()
     # Drop the closing coordinate and split the ring into the two swath borders.
     points = [(float(lon), float(lat)) for lon, lat in geometry.exterior.coords[:-1]]
@@ -188,26 +187,21 @@ def fix_geojson_geometry(item: Item):
 
     reworked_geometry = shapely_geom
     if isinstance(shapely_geom, (Polygon, MultiPolygon)):
-        # A polygon can be valid and still fail ingestion because its ring orientation is wrong.
-        # Therefore we must continue through the normalization path for polygons, and only apply
-        # antimeridian rework when the footprint actually needs raw antimeridian repair.
-        if not shapely_geom.is_valid and check_cross_antimeridian(shapely_geom):
-            # Rework geometry to be a valid Polygon / MultiPolygon when the footprint is both
-            # invalid and antimeridian-related.
-            try:
-                reworked_geometry = rework_to_polygon_geometry(shapely_geom)
-            except AlreadyReworkedPolygonError:
-                if not isinstance(shapely_geom, MultiPolygon):
-                    logger.error(f"Failed to rework geometry: {shapely_geom}")
-                    raise
-                # make_valid can leave an antimeridian footprint as a MultiPolygon that footprint-facility
-                # considers already reworked; keep it instead of failing the whole items response.
-                reworked_geometry = shapely_geom
-        else:
-            logger.info(
-                "Item has a polygon geometry that does not need antimeridian rework; "
-                "continuing to orientation normalization.",
-            )
+        # Only retry polygon rework for invalid geometries that still look antimeridian-related.
+        if shapely_geom.is_valid or not check_cross_antimeridian(shapely_geom):
+            logger.info("Item has a valid polygon geometry or does not cross the "
+                        "antimeridian, skipping fix_geojson_geometry.")
+            return
+        # Rework geometry to be a valid Polygon / MultiPolygon
+        try:
+            reworked_geometry = rework_to_polygon_geometry(shapely_geom)
+        except AlreadyReworkedPolygonError:
+            if not isinstance(shapely_geom, MultiPolygon):
+                logger.error(f"Failed to rework geometry: {shapely_geom}")
+                raise
+            # make_valid can leave an antimeridian footprint as a MultiPolygon that footprint-facility
+            # considers already reworked; keep it instead of failing the whole items response.
+            reworked_geometry = shapely_geom
     elif isinstance(shapely_geom, (LineString, MultiLineString)):
         # Rework only raw line crossings to avoid unnecessary processing and to keep already split
         # lines idempotent: they may touch +/-180 but should not be reworked again.
@@ -224,10 +218,8 @@ def fix_geojson_geometry(item: Item):
 
     # Re-apply orientation after antimeridian rework because the split can yield MultiPolygons.
     normalized_geometry = repair_and_orient_geojson_geometry(mapping(reworked_geometry))
-    # Store a plain GeoJSON mapping on the STAC item. The `geojson_pydantic` model instance is
-    # not JSON-serializable by itself, so passing it through `item.geometry` breaks later JSON
-    # serialization during catalog publication.
-    item.geometry = normalized_geometry
+    item.geometry = geo_cls.parse_obj(normalized_geometry)  # type: ignore
     # Keep bbox consistent with the reworked geometry.
     item.bbox = shape(normalized_geometry).bounds
     logger.info(f"Item geometry fixed and oriented: {item.geometry}")
+    
