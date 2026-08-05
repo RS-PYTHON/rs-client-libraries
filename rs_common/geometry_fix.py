@@ -184,6 +184,10 @@ def fix_geojson_geometry(item: Item):
         logger.info("Item has no geometry, skipping fix_geojson_geometry.")
         return
 
+    # Apply the general repair first; the remaining logic handles antimeridian-specific cases.
+    geometry = repair_and_orient_geojson_geometry(geometry)
+    item.geometry = geometry
+    item.bbox = shape(geometry).bounds
     # Skip if geometry does not cross the antimeridian
     shapely_geom = shape(geometry)
     # Points do not define a path, so antimeridian crossing checks can be false positives for MultiPoint.
@@ -194,16 +198,13 @@ def fix_geojson_geometry(item: Item):
     reworked_geometry = shapely_geom
     if isinstance(shapely_geom, (Polygon, MultiPolygon)):
         # Only retry polygon rework for invalid geometries that still look antimeridian-related.
-        # For already-valid polygons or geometries that do not cross the antimeridian, keep the
-        # original raw GeoJSON untouched, which preserves the exact item payload expected by the tests.
         if shapely_geom.is_valid or not check_cross_antimeridian(shapely_geom):
             logger.info(
-                "Item has a polygon geometry that does not need antimeridian rework; "
-                "skipping fix_geojson_geometry.",
+                "Item has a valid polygon geometry or does not cross the "
+                "antimeridian, skipping fix_geojson_geometry.",
             )
             return
-        # Rework geometry to be a valid Polygon / MultiPolygon when the footprint is both
-        # invalid and antimeridian-related.
+        # Rework geometry to be a valid Polygon / MultiPolygon
         try:
             reworked_geometry = rework_to_polygon_geometry(shapely_geom)
         except AlreadyReworkedPolygonError:
@@ -221,9 +222,6 @@ def fix_geojson_geometry(item: Item):
             return
         # Rework geometry to be a valid LineString / MultiLineString
         reworked_geometry = rework_to_linestring_geometry(shapely_geom)
-    else:
-        logger.info(f"Item geometry type {type(shapely_geom)} is not repaired by fix_geojson_geometry; skipping.")
-        return
 
     geo_cls = shapely_to_geojson_cls.get(type(reworked_geometry))
     if not geo_cls:
@@ -232,9 +230,7 @@ def fix_geojson_geometry(item: Item):
 
     # Re-apply orientation after antimeridian rework because the split can yield MultiPolygons.
     normalized_geometry = repair_and_orient_geojson_geometry(mapping(reworked_geometry))
-    # Store a plain GeoJSON mapping on the STAC item. The `geojson_pydantic` model instance is
-    # not JSON-serializable by itself, so passing it through `item.geometry` breaks later JSON
-    # serialization during catalog publication.
+    # PySTAC expects a plain GeoJSON mapping, not a geojson-pydantic model.
     item.geometry = normalized_geometry
     # Keep bbox consistent with the reworked geometry.
     item.bbox = shape(normalized_geometry).bounds
