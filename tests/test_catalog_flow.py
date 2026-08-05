@@ -43,6 +43,10 @@ async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages)
         "rs_workflows.catalog_flow.get_run_logger",
         return_value=mock_logger,
     )
+    mocker.patch(
+        "rs_common.geometry_fix.get_run_logger",
+        return_value=mock_logger,
+    )
     real_catalog_client = catalog_client.CatalogClient(
         MOCKED_RSPY_WEBSITE,
         "test-api-key",
@@ -175,6 +179,10 @@ async def test_publish_continues_after_item_publish_failure(
     mock_logger = MagicMock()
     mocker.patch(
         "rs_workflows.catalog_flow.get_run_logger",
+        return_value=mock_logger,
+    )
+    mocker.patch(
+        "rs_common.geometry_fix.get_run_logger",
         return_value=mock_logger,
     )
 
