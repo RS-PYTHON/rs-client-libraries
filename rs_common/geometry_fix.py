@@ -22,7 +22,15 @@ from geojson_pydantic.geometries import MultiLineString as GeoMultiLineString
 from geojson_pydantic.geometries import MultiPolygon as GeoMultiPolygon
 from geojson_pydantic.geometries import Polygon as GeoPolygon
 from prefect import get_run_logger
+from prefect.exceptions import MissingContextError
 from pystac import Item
+import logging
+
+def _get_logger():
+    try:
+        return get_run_logger()
+    except MissingContextError:
+        return logging.getLogger(__name__)
 from shapely import get_parts, make_valid, union_all
 from shapely.geometry import (
     GeometryCollection,
@@ -101,7 +109,7 @@ def rebuild_swath_polygon(geometry: Polygon) -> MultiPolygon | Polygon:
                 parts.extend(polygon_parts(part))
         return parts
 
-    logger = get_run_logger()
+    logger = _get_logger()
     # Drop the closing coordinate and split the ring into the two swath borders.
     points = [(float(lon), float(lat)) for lon, lat in geometry.exterior.coords[:-1]]
     half = len(points) // 2
@@ -143,7 +151,7 @@ def repair_and_orient_geojson_geometry(geometry: dict[str, Any]) -> dict[str, An
     # here, not check_cross_antimeridian: a longitude jump > 180 is the raw-data signal that a segment
     # should cross the antimeridian, while coordinates already placed on +/-180 are often the result of
     # a previous split/rework and must not trigger another early polygon rework.
-    logger = get_run_logger()
+    logger = _get_logger()
     if isinstance(shapely_geometry, Polygon) and check_raw_antimeridian_jump(shapely_geometry):
         if looks_like_swath_polygon(shapely_geometry):
             # Swath footprints are strips encoded as two borders; rebuild them as small cells so
@@ -178,7 +186,7 @@ def fix_geojson_geometry(item: Item):
     This function is a wrapper around repair_and_orient_geojson_geometry that logs any exceptions
     raised during the repair process. If an exception occurs, the original geometry is returned unchanged.
     """
-    logger = get_run_logger()
+    logger = _get_logger()
     # Skip if feature does not have geometry
     if not (geometry := item.geometry):
         logger.info("Item has no geometry, skipping fix_geojson_geometry.")
