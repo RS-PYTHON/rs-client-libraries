@@ -14,6 +14,7 @@
 
 """This module is used to share common functions between apis"""
 
+import logging
 from typing import Any
 
 import antimeridian
@@ -24,13 +25,6 @@ from geojson_pydantic.geometries import Polygon as GeoPolygon
 from prefect import get_run_logger
 from prefect.exceptions import MissingContextError
 from pystac import Item
-import logging
-
-def _get_logger():
-    try:
-        return get_run_logger()
-    except MissingContextError:
-        return logging.getLogger(__name__)
 from shapely import get_parts, make_valid, union_all
 from shapely.geometry import (
     GeometryCollection,
@@ -52,6 +46,14 @@ from rs_common.footprint_facility import (
     rework_to_linestring_geometry,
     rework_to_polygon_geometry,
 )
+
+
+def _get_logger():
+    try:
+        return get_run_logger()
+    except MissingContextError:
+        return logging.getLogger(__name__)
+
 
 # Map Shapely types to Pydantic GeoJSON types
 shapely_to_geojson_cls = {
