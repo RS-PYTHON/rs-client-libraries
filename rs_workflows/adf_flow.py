@@ -429,6 +429,23 @@ async def adf_conversion(adf_input: AdfProcessIn):
 
         staged_items: list[Item] = []
         for prod_type in required_types:
+            # find target collection from mapping, preferring an exact product type match
+            target_collection = resolve_collection_name(
+                adf_input.auxiliary_product_to_collection_identifier,
+                prod_type,
+            )
+            if target_collection is None:
+                raise RuntimeError(
+                    "❌ No target collection found for input product type "
+                    f"{prod_type!r} in auxiliary_product_to_collection_identifier.",
+                )
+
+            # find source from mapping
+            source: AuxiliarySource = resolve_source_name(
+                adf_input.auxiliary_product_to_collection_identifier,
+                prod_type,
+            )
+
             cql2_filter: dict = {}
             if adf_input.cql2_filter is not None:
                 logger.info("🧹 Use the provided CQL2 filter for auxiliary data retrieval")
@@ -456,24 +473,17 @@ async def adf_conversion(adf_input: AdfProcessIn):
                         ],
                     },
                 }
+
+            # When the source is the catalog, no staging occurs: collection_name is both the source
+            # and destination collection, so the search must be restricted to it, otherwise the STAC
+            # search returns the most recent matching item across all collections (e.g. another OLCI
+            # baseline collection). For other sources, collection_name is only the destination
+            # collection where staged items will be uploaded, and must not be used to filter the
+            # search performed against the external source.
+            if source == AuxiliarySource.CATALOG:
+                cql2_filter["collections"] = [target_collection]
+
             logger.info(f"Built CQL2 filter for product type {prod_type}: {cql2_filter}")
-
-            # find target collection from mapping, preferring an exact product type match
-            target_collection = resolve_collection_name(
-                adf_input.auxiliary_product_to_collection_identifier,
-                prod_type,
-            )
-            if target_collection is None:
-                raise RuntimeError(
-                    "❌ No target collection found for input product type "
-                    f"{prod_type!r} in auxiliary_product_to_collection_identifier.",
-                )
-
-            # find source from mapping
-            source: AuxiliarySource = resolve_source_name(
-                adf_input.auxiliary_product_to_collection_identifier,
-                prod_type,
-            )
 
             logger.info(f"📥 Staging {prod_type} to collection {target_collection} from source {source}")
             success, items = await aux_staging_task(
