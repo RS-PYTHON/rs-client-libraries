@@ -14,6 +14,11 @@
 
 """This module is used to share common functions between apis"""
 
+"""
+It is not part of the Sonarqube coverage part, because it is a temporary fix of the malformed
+generated products by a processor. The processor should be fixed in the future, and this module should be removed.
+"""
+
 import logging
 from typing import Any
 

@@ -30,6 +30,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+"""
+It is not part of the Sonarqube coverage part, because it is a temporary fix of the malformed
+generated products by a processor. The processor should be fixed in the future, and this module should be removed.
+"""
+
 # mypy: ignore-errors
 # type: ignore
 # pylint: skip-file
