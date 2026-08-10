@@ -26,6 +26,7 @@ from rs_workflows.flow_utils import (
     AdfProcessIn,
     AdfType,
     AuxiliaryProductMapping,
+    AuxiliarySource,
     FlowEnvArgs,
 )
 from rs_workflows.utils import utils as workflow_utils
@@ -1226,3 +1227,131 @@ async def test_adf_conversion_uses_custom_cql2_filter(
     assert staging_mock.call_count == 1
     cql2_filter_used = staging_mock.call_args.kwargs["cql2_filter"]
     assert cql2_filter_used["filter"]["args"][0]["args"][1] == "AX___MA1_AX"  # product_type substitué
+
+
+@pytest.mark.asyncio
+async def test_adf_conversion_restricts_search_to_collection_for_catalog_source(
+    monkeypatch,
+    mocker,
+    tmp_path,
+    _mock_os_env,
+    create_stac_item_mock,
+    sample_adf_process_in,
+):  # pylint: disable=redefined-outer-name,unused-argument
+    """When the AUX source is the catalog, no staging occurs: collection_name is both the source
+    and destination collection, so the default CQL2 filter must restrict the search to it,
+    otherwise the STAC search returns the most recent matching item across all collections
+    (regression test for RSPY-1044: baseline 3.23 vs 3.38 OLCI collections)."""
+    sample_adf_process_in.auxiliary_product_to_collection_identifier = [
+        AuxiliaryProductMapping(
+            product_type="AX___MA1_AX",
+            collection_name="adf-olci-baseline-3-23",
+            source=AuxiliarySource.CATALOG,
+        ),
+        AuxiliaryProductMapping(product_type="ADF_ECMWA", collection_name="ADF_PUBLISH"),
+        AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
+    ]
+
+    # Mock logger & FlowEnv
+    mock_logger = MagicMock()
+    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+
+    flow_env_mock = mocker.MagicMock()
+    flow_env_mock.start_span.return_value = MagicMock()
+    flow_env_mock.start_span.return_value.__enter__.return_value = MagicMock()
+    flow_env_mock.owner_id = "test-user"
+    flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id="test-user")
+    monkeypatch.setattr(adf_flow, "FlowEnv", lambda env: flow_env_mock)
+
+    # Mock aux_staging_task — return failure so the flow exits early after staging.
+    # The test only cares about the cql2_filter argument passed to the staging call.
+    staging_mock = AsyncMock(return_value=(False, None))
+    monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
+
+    # Run the flow
+    await adf_flow.adf_conversion.fn(sample_adf_process_in)
+
+    # Check that the CQL2 filter restricts the search to the target collection.
+    assert staging_mock.call_count == 1
+    staging_kwargs = staging_mock.call_args.kwargs
+    assert staging_kwargs["cql2_filter"]["collections"] == ["adf-olci-baseline-3-23"]
+    assert staging_kwargs["catalog_collection_identifier"] == "adf-olci-baseline-3-23"
+    assert staging_kwargs["source"] == AuxiliarySource.CATALOG
+
+
+@pytest.mark.asyncio
+async def test_adf_conversion_default_cql2_filter_has_no_collections_for_non_catalog_source(
+    monkeypatch,
+    mocker,
+    tmp_path,
+    _mock_os_env,
+    create_stac_item_mock,
+    sample_adf_process_in,
+):  # pylint: disable=redefined-outer-name,unused-argument
+    """For a non-catalog source (e.g. auxip), collection_name is only the destination collection
+    where staged items will be uploaded: it must NOT be used to filter the search performed
+    against the external source, otherwise valid items would be silently discarded."""
+    # sample_adf_process_in's mapping uses the default AuxiliarySource.AUXIP source.
+    mock_logger = MagicMock()
+    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+
+    flow_env_mock = mocker.MagicMock()
+    flow_env_mock.start_span.return_value = MagicMock()
+    flow_env_mock.start_span.return_value.__enter__.return_value = MagicMock()
+    flow_env_mock.owner_id = "test-user"
+    flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id="test-user")
+    monkeypatch.setattr(adf_flow, "FlowEnv", lambda env: flow_env_mock)
+
+    staging_mock = AsyncMock(return_value=(False, None))
+    monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
+
+    await adf_flow.adf_conversion.fn(sample_adf_process_in)
+
+    assert staging_mock.call_count == 1
+    staging_kwargs = staging_mock.call_args.kwargs
+    assert staging_kwargs["source"] == AuxiliarySource.AUXIP
+    assert "collections" not in staging_kwargs["cql2_filter"]
+
+
+@pytest.mark.asyncio
+async def test_adf_conversion_honors_collection_name_with_custom_cql2_filter(
+    monkeypatch,
+    mocker,
+    tmp_path,
+    _mock_os_env,
+    create_stac_item_mock,
+    sample_adf_process_in,
+):  # pylint: disable=redefined-outer-name,unused-argument
+    """collection_name must also be honored when a custom cql2_filter is provided, not only when
+    the default filter is built."""
+    sample_adf_process_in.auxiliary_product_to_collection_identifier = [
+        AuxiliaryProductMapping(
+            product_type="AX___MA1_AX",
+            collection_name="adf-olci-baseline-3-23",
+            source=AuxiliarySource.CATALOG,
+        ),
+        AuxiliaryProductMapping(product_type="ADF_ECMWA", collection_name="ADF_PUBLISH"),
+        AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
+    ]
+    sample_adf_process_in.cql2_filter = {
+        "filter": {"op": "=", "args": [{"property": "product:type"}, "{product_type}"]},
+    }
+
+    mock_logger = MagicMock()
+    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+
+    flow_env_mock = mocker.MagicMock()
+    flow_env_mock.start_span.return_value = MagicMock()
+    flow_env_mock.start_span.return_value.__enter__.return_value = MagicMock()
+    flow_env_mock.owner_id = "test-user"
+    flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id="test-user")
+    monkeypatch.setattr(adf_flow, "FlowEnv", lambda env: flow_env_mock)
+
+    staging_mock = AsyncMock(return_value=(False, None))
+    monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
+
+    await adf_flow.adf_conversion.fn(sample_adf_process_in)
+
+    assert staging_mock.call_count == 1
+    cql2_filter_used = staging_mock.call_args.kwargs["cql2_filter"]
+    assert cql2_filter_used["collections"] == ["adf-olci-baseline-3-23"]

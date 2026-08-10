@@ -264,6 +264,7 @@ async def test_dpr_processing(
     for item in expected_items.values():
         item.pop("links", None)
 
+    result_items = json.loads(json.dumps(result_items))
     assert result_items == expected_items
 
     # --- verify the payload was uploaded in memory to the expected destination ---

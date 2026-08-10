@@ -43,6 +43,10 @@ async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages)
         "rs_workflows.catalog_flow.get_run_logger",
         return_value=mock_logger,
     )
+    mocker.patch(
+        "rs_common.geometry_fix.get_run_logger",
+        return_value=mock_logger,
+    )
     real_catalog_client = catalog_client.CatalogClient(
         MOCKED_RSPY_WEBSITE,
         "test-api-key",
@@ -164,6 +168,105 @@ async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages)
     assert providers[0]["name"] == "valid"
     assert providers[1]["name"] == "no_roles"  # No 'roles' key so it's kept
     assert published_items == [{**added_item.to_dict(), "collection": collection_id}]
+
+
+@pytest.mark.asyncio
+async def test_publish_continues_after_item_publish_failure(
+    mocker,
+    monkeypatch,
+    mocked_rspy_landing_pages,
+):  # pylint: disable=unused-argument
+    """Test that publish continues to the next item if a catalog publish fails."""
+    env = FlowEnvArgs(owner_id=OWNER_ID)
+
+    mock_logger = MagicMock()
+    mocker.patch(
+        "rs_workflows.catalog_flow.get_run_logger",
+        return_value=mock_logger,
+    )
+    mocker.patch(
+        "rs_common.geometry_fix.get_run_logger",
+        return_value=mock_logger,
+    )
+
+    real_catalog_client = catalog_client.CatalogClient(
+        MOCKED_RSPY_WEBSITE,
+        "test-api-key",
+        OWNER_ID,
+    )
+    flow_env_mock = MagicMock()
+    flow_env_mock.rs_client.get_catalog_client.return_value = real_catalog_client
+    flow_env_mock.start_span.return_value.__enter__ = lambda self: MagicMock()
+    flow_env_mock.start_span.return_value.__exit__ = lambda self, *args: None
+    monkeypatch.setattr(
+        catalog_flow,
+        "FlowEnv",
+        lambda env: flow_env_mock,
+    )
+
+    monkeypatch.setattr(
+        catalog_flow,
+        "check_and_create_collection",
+        AsyncMock(),
+    )
+
+    catalog_mapping = [
+        FlowGeneratedProduct(name="item1", product_type="S1_GRD", collection_name="OUTPUT_GRD_COLLECTION"),
+        FlowGeneratedProduct(name="item2", product_type="S1_GRD", collection_name="OUTPUT_GRD_COLLECTION"),
+    ]
+
+    item_1 = DprProcessedItemMetadata(
+        stac_item=Item(
+            id="item1",
+            properties={
+                "product:type": "S1_GRD",
+                "datetime": "2024-01-01T00:00:00Z",
+            },
+            datetime=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            geometry={"type": "Point", "coordinates": [0, 0]},
+            bbox=[0, 0, 0, 0],
+        ),
+        product_type="S1_GRD",
+        output_product_id="item1",
+    )
+    item_2 = DprProcessedItemMetadata(
+        stac_item=Item(
+            id="item2",
+            properties={
+                "product:type": "S1_GRD",
+                "datetime": "2024-01-02T00:00:00Z",
+            },
+            datetime=datetime(2024, 1, 2, tzinfo=timezone.utc),
+            geometry={"type": "Point", "coordinates": [1, 1]},
+            bbox=[1, 1, 1, 1],
+        ),
+        product_type="S1_GRD",
+        output_product_id="item2",
+    )
+
+    def add_item_side_effect(collection_id, item, timeout=21600):
+        if item.id == "item1":
+            raise RuntimeError("catalog publish failed")
+        response = MagicMock()
+        response.status_code = status.HTTP_200_OK
+        response.text = "ok"
+        return response
+
+    add_item_mock = mocker.patch.object(
+        catalog_client.CatalogClient,
+        "add_item",
+        side_effect=add_item_side_effect,
+    )
+
+    await catalog_flow.publish.fn(env, catalog_mapping, [item_1, item_2])
+
+    assert add_item_mock.call_count == 2
+    assert add_item_mock.call_args_list[0][0][1].id == "item1"
+    assert add_item_mock.call_args_list[1][0][1].id == "item2"
+    mock_logger.warning.assert_called_once()
+    warning_message = mock_logger.warning.call_args[0][0]
+    assert "catalog publish failed" in warning_message
+    assert "item1" in warning_message
 
 
 @pytest.mark.asyncio
