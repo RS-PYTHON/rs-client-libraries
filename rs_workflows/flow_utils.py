@@ -142,6 +142,10 @@ class FlowEnvArgs(BaseModel):
     owner_id: str = Field(
         description="User/owner ID (necessary to retrieve the user info) from the right Prefect block",
     )
+    log_level: LoggingLevel = Field(
+        default=LoggingLevel.INFO,  # TODO get configured logging level as default
+        description="Level of logs wanted for this flow",
+    )
     calling_span: tuple[int, int, bool] | None = Field(
         default=None,
         description="Serialized OpenTelemetry span of the calling flow, if any",
@@ -171,6 +175,10 @@ class FlowEnv:
         self.calling_span: SpanContext | None = None
         self.this_span: SpanContext | None = None
 
+        # Set logging level to the one selected for this flow
+        logger = get_run_logger()
+        logger.setLevel(args.log_level.value)
+
         # Deserialize the calling span, if any
         if args.calling_span:
             self.calling_span = SpanContext(*args.calling_span)
@@ -186,7 +194,7 @@ class FlowEnv:
             rs_server_href=os.getenv("RSPY_WEBSITE"),
             rs_server_api_key=os.getenv("RSPY_APIKEY"),
             owner_id=self.owner_id,
-            logger=get_run_logger(),  # type: ignore
+            logger=logger,  # type: ignore
         )
 
     def serialize(self) -> FlowEnvArgs:
