@@ -15,6 +15,7 @@
 """Test rs-client-libraries dpr functions"""
 
 import getpass
+import re
 import tempfile
 from unittest.mock import AsyncMock
 
@@ -515,8 +516,6 @@ def test_generate_payload_path_hardcoded(monkeypatch):
     # Check format: s3://prip-rs-playground/{owner_id}/YYYY-MM-DD--HH-MM-SS
     assert path.startswith("s3://prip-rs-playground/test_user/")
     # Verify timestamp format YYYY-MM-DD--HH-MM-SS
-    import re
-
     timestamp_pattern = r"\d{4}-\d{2}-\d{2}--\d{2}-\d{2}-\d{2}$"
     assert re.search(timestamp_pattern, path)
 
@@ -564,7 +563,6 @@ def test_generate_payload_path_shared_disk_variable_error(monkeypatch, mocker):
     mocker.patch.object(dpr_module.Variable, "get", side_effect=Exception("Variable not found"))
 
     owner_id = "test_user"
-    import pytest
 
     with pytest.raises(RuntimeError, match=r"Unable to load Prefect variable 'processing-storage-configuration'"):
         dpr_module.generate_payload_path(owner_id)
@@ -608,7 +606,6 @@ def test_generate_payload_path_shared_disk_no_valid_config(monkeypatch, mocker):
     }
 
     owner_id = "test_user"
-    import pytest
 
     with pytest.raises(
         RuntimeError,
@@ -627,7 +624,6 @@ def test_generate_payload_path_shared_disk_empty_config(monkeypatch, mocker):
     mock_variable_get.return_value = {"storage_configuration": []}
 
     owner_id = "test_user"
-    import pytest
 
     with pytest.raises(
         RuntimeError,
@@ -646,7 +642,6 @@ def test_generate_payload_path_shared_disk_missing_storage_configuration_key(mon
     mock_variable_get.return_value = {}  # missing storage_configuration key
 
     owner_id = "test_user"
-    import pytest
 
     with pytest.raises(
         RuntimeError,
