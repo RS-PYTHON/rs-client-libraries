@@ -23,6 +23,7 @@ import pytest
 import responses
 from starlette import status
 
+import rs_workflows.utils.dpr as dpr_module
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_client.rs_client import RsClient
 from rs_workflows.dpr_flow import run_processor
@@ -505,7 +506,6 @@ def test_stream_logs_stops_when_job_status_check_fails(mocker, dpr_client: DprCl
 
 def test_generate_payload_path_hardcoded(monkeypatch):
     """Test generate_payload_path returns the hardcoded S3 path when k8s namespace flag is False."""
-    import rs_workflows.utils.dpr as dpr_module
 
     # Ensure the flag is False (default)
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", False)
@@ -522,7 +522,6 @@ def test_generate_payload_path_hardcoded(monkeypatch):
 
 def test_generate_payload_path_shared_disk_success(monkeypatch, mocker):
     """Test generate_payload_path returns shared disk path when config is valid."""
-    import rs_workflows.utils.dpr as dpr_module
 
     # Enable the shared disk path branch
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
@@ -547,7 +546,6 @@ def test_generate_payload_path_shared_disk_success(monkeypatch, mocker):
 
     # Should use the first valid shared_disk with CREATE_OVERWRITE
     assert path.startswith("/mnt/shared/test_user/")
-    import re
 
     timestamp_pattern = r"\d{4}-\d{2}-\d{2}--\d{2}-\d{2}-\d{2}$"
     assert re.search(timestamp_pattern, path)
@@ -555,7 +553,6 @@ def test_generate_payload_path_shared_disk_success(monkeypatch, mocker):
 
 def test_generate_payload_path_shared_disk_variable_error(monkeypatch, mocker):
     """Test generate_payload_path raises RuntimeError when Prefect variable cannot be retrieved."""
-    import rs_workflows.utils.dpr as dpr_module
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
@@ -570,7 +567,6 @@ def test_generate_payload_path_shared_disk_variable_error(monkeypatch, mocker):
 
 def test_generate_payload_path_shared_disk_no_valid_config(monkeypatch, mocker):
     """Test generate_payload_path raises RuntimeError when no valid shared_disk config found."""
-    import rs_workflows.utils.dpr as dpr_module
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
@@ -616,7 +612,6 @@ def test_generate_payload_path_shared_disk_no_valid_config(monkeypatch, mocker):
 
 def test_generate_payload_path_shared_disk_empty_config(monkeypatch, mocker):
     """Test generate_payload_path raises RuntimeError when storage_configuration is empty."""
-    import rs_workflows.utils.dpr as dpr_module
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
@@ -634,7 +629,6 @@ def test_generate_payload_path_shared_disk_empty_config(monkeypatch, mocker):
 
 def test_generate_payload_path_shared_disk_missing_storage_configuration_key(monkeypatch, mocker):
     """Test generate_payload_path raises RuntimeError when storage_configuration key is missing."""
-    import rs_workflows.utils.dpr as dpr_module
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
@@ -652,7 +646,6 @@ def test_generate_payload_path_shared_disk_missing_storage_configuration_key(mon
 
 def test_generate_payload_path_shared_disk_case_insensitive_opening_mode(monkeypatch, mocker):
     """Test generate_payload_path accepts CREATE_OVERWRITE in any case."""
-    import rs_workflows.utils.dpr as dpr_module
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
@@ -672,7 +665,6 @@ def test_generate_payload_path_shared_disk_case_insensitive_opening_mode(monkeyp
     path = dpr_module.generate_payload_path(owner_id)
 
     assert path.startswith("/mnt/shared/test_user/")
-    import re
 
     timestamp_pattern = r"\d{4}-\d{2}-\d{2}--\d{2}-\d{2}-\d{2}$"
     assert re.search(timestamp_pattern, path)
@@ -680,7 +672,6 @@ def test_generate_payload_path_shared_disk_case_insensitive_opening_mode(monkeyp
 
 def test_generate_payload_path_shared_disk_none_opening_mode(monkeypatch, mocker):
     """Test generate_payload_path skips entry when opening_mode is None."""
-    import rs_workflows.utils.dpr as dpr_module
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
