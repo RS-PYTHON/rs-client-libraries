@@ -18,6 +18,7 @@ import time
 from typing import Any
 
 from prefect import task
+from prefect.variables import Variable
 from pystac import ItemCollection
 
 from rs_client.ogcapi.dpr_client import (
@@ -37,15 +38,76 @@ from rs_workflows.flow_utils import (
 )
 from rs_workflows.on_demand_processing import dpr_processing
 
+PREFECT_VAR_NAME = "processing-storage-configuration"
+# TODO: Once the namespace issue is resolved, we can remove this hard coded path and
+# use the shared disk path instead implemented in generate_payload_path().
+KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT = False
+
 
 def generate_payload_path(owner_id: str) -> str:
     """
-    Generate an hard coded path to store the payload.
-    This is a workaroud, waiting for share disk solution.
+    Generates the shared disk path used to store a processing payload for a processor
+
+    This function retrieves the storage configuration from a Prefect variable
+    and searches for the first shared-disk configuration that has a valid
+    name and absolute path and uses the `CREATE_OVERWRITE` opening mode. The
+    resulting shared-disk path is combined with the owner identifier and the
+    current timestamp to create a unique payload path.
+    TODO: How to retrieve the shared disk related to an organization, and not
+    the first one found in the Prefect variable?
+
+    Args:
+        owner_id (str): Identifier of the owner for whom the payload path is
+            generated.
+
+    Returns:
+        str: The generated payload path containing the configured shared-disk
+            base path, owner identifier, and current timestamp in the
+            `YYYY-MM-DD--HH-MM-SS` format.
+
+    Raises:
+        RuntimeError: If the Prefect variable cannot be retrieved or does not
+            contain a suitable shared-disk configuration with an absolute path
+            and `CREATE_OVERWRITE` opening mode.
     """
-    # TODO : use a local path on the share disk
-    s3_payload = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}"
-    return s3_payload
+    if KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT:
+        try:
+            prefect_variable_result = Variable.get(PREFECT_VAR_NAME)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Unable to load Prefect variable {PREFECT_VAR_NAME!r}",
+            ) from exc
+        storage_configuration = prefect_variable_result.get("storage_configuration")
+        shared_disk_path = None
+        for entry in storage_configuration:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("kind") != "shared_disk":
+                continue
+            if not entry.get("name") or not entry.get("absolute_path"):
+                continue
+            opening_mode = entry.get("opening_mode")
+            if opening_mode is None or opening_mode.upper() != "CREATE_OVERWRITE":
+                continue
+            shared_disk_path = entry.get("absolute_path")
+            break
+        if shared_disk_path is None:
+            raise RuntimeError(
+                f"Unable to find a shared disk path in Prefect variable {PREFECT_VAR_NAME!r}",
+            )
+
+        payload_path = f"{shared_disk_path.strip('/')}/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}"
+    else:
+        # Generate a hard coded path to store the payload.
+        # This is a workaroud, waiting for the shared disk solution.
+        # The shared disk solution will be available only when the dask workers
+        # are running on the same kuberenets namespace as the prefect server / prefect workers. This
+        # is due to the fact that the shared disk has to be mounted on both prefect workers and dask workers, and this
+        # is only possible when they are running on the same kubernetes namespace (the PVC can't be shared by 2 namespaces).
+        # TODO: Once the namespace issue is resolved, we can remove this hard coded path and use the
+        # shared disk path instead implemented above.
+        payload_path = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}"
+    return payload_path
 
 
 async def call_dpr_flow(
