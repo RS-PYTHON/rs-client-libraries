@@ -15,6 +15,7 @@
 """Helper task to interact with the DPR as a service."""
 
 import time
+from pathlib import Path
 from typing import Any
 
 from prefect import task
@@ -79,7 +80,7 @@ def generate_payload_path(owner_id: str) -> str:
             ) from exc
         storage_configuration = prefect_variable_result.get("storage_configuration")
         shared_disk_path = None
-        for entry in storage_configuration:
+        for entry in storage_configuration or []:
             if not isinstance(entry, dict):
                 continue
             if entry.get("kind") != "shared_disk":
@@ -95,8 +96,9 @@ def generate_payload_path(owner_id: str) -> str:
             raise RuntimeError(
                 f"Unable to find a shared disk path in Prefect variable {PREFECT_VAR_NAME!r}",
             )
-
-        payload_path = f"{shared_disk_path.strip('/')}/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}"
+        base = Path(shared_disk_path)
+        ts = time.strftime("%Y-%m-%d--%H-%M-%S")
+        payload_path = str(base / owner_id / ts)
     else:
         # Generate a hard coded path to store the payload.
         # This is a workaroud, waiting for the shared disk solution.
