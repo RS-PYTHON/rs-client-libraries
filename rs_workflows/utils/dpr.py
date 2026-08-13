@@ -103,7 +103,8 @@ def generate_payload_path(owner_id: str) -> str:
         # The shared disk solution will be available only when the dask workers
         # are running on the same kuberenets namespace as the prefect server / prefect workers. This
         # is due to the fact that the shared disk has to be mounted on both prefect workers and dask workers, and this
-        # is only possible when they are running on the same kubernetes namespace (the PVC can't be shared by 2 namespaces).
+        # is only possible when they are running on the same kubernetes namespace (the PVC can't
+        # be shared by 2 namespaces)
         # TODO: Once the namespace issue is resolved, we can remove this hard coded path and use the
         # shared disk path instead implemented above.
         payload_path = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}"
