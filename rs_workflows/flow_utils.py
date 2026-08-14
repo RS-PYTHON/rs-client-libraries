@@ -142,8 +142,8 @@ class FlowEnvArgs(BaseModel):
     owner_id: str = Field(
         description="User/owner ID (necessary to retrieve the user info) from the right Prefect block",
     )
-    log_level: LoggingLevel = Field(
-        default=LoggingLevel.INFO,  # TODO get configured logging level as default
+    log_level: str = Field(
+        default=LoggingLevel.INFO.value,  # TODO get configured logging level as default
         description="Level of logs wanted for this flow",
     )
     calling_span: tuple[int, int, bool] | None = Field(
