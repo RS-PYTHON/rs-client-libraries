@@ -84,10 +84,10 @@ jobs:
           import os
           from call_prefect import *
 
-          print("Read configuration from github variable: '${{env.CONFIG}}'")
+          print("Read configuration from github variable: '${{ env.CONFIG }}'")
           config_yaml = """${{ vars[env.CONFIG] }}"""
 
-          print("Read credentials from github secret: '${{env.CREDENTIALS}}'")
+          print("Read credentials from github secret: '${{ env.CREDENTIALS }}'")
           credentials_yaml = """${{ secrets[env.CREDENTIALS] }}"""
 
           # Read config and credentials
@@ -97,12 +97,12 @@ jobs:
           body = {
               "parameters": {
                   "env": {
-                    "owner_id": "${KEYCLOAK_USER}",
-                    "called_by": "${THIS_URL}",
+                    "owner_id": "${{ env.KEYCLOAK_USER }}",
+                    "called_by": "${{ env.THIS_URL }}",
                   },
-                  "processor_name": "${PROCESSOR_NAME}",
-                  "processor_version": "${PROCESSOR_VERSION}",
-                  "scenario_name": "${SCENARIO}",
+                  "processor_name": "${{ env.PROCESSOR_NAME }}",
+                  "processor_version": "${{ env.PROCESSOR_VERSION }}",
+                  "scenario_name": "${{ env.SCENARIO }}",
               },
           }
           flow_run_id = trigger_flow_run("${{ env.DEPLOY_NAME }}", body)
