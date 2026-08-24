@@ -86,7 +86,7 @@ async def search(
     )
 
 
-@flow(name="stage-aux")
+@flow(name="stage-aux-cql2")
 async def aux_staging(
     env: FlowEnvArgs,
     cql2_filter: dict,
@@ -189,7 +189,7 @@ async def aux_staging(
         return return_status, catalog_items
 
 
-@flow(name="On-demand AUX staging")
+@flow(name="stage-aux")
 async def on_demand_aux_staging(
     env: FlowEnvArgs,
     start_datetime: datetime.datetime | str,

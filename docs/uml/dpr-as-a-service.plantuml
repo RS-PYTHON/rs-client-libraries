@@ -16,13 +16,15 @@
 
 actor John
 
-actor JupyterLab_Python_3.13 as Jupyter
-actor Prefect_Python_3.13 as Prefect
-actor DPR_service_Python_3.11 as DPR
+entity JupyterLab_Python_3.13 as Jupyter
+entity Prefect_Python_3.13 as Prefect
+entity DPR_service_Python_3.11 as DPR
+collections Catalog
 
 activate Jupyter
 activate Prefect
 activate DPR
+activate Catalog
 
 John -> Jupyter: Edit/Run flow in notebook
 
@@ -41,6 +43,13 @@ DPR -> DPR: dask async processing
 loop until_complete
   Prefect -> DPR: GET /dpr/jobs/{job_id}
   DPR --> Prefect: progress (%)
+end
+
+Prefect -> Catalog: POST item(s)
+
+alt S3L1
+  Prefect -> Prefect: generate quicklooks
+  Prefect -> Catalog: PATCH item(s)
 end
 
 Prefect --> Jupyter: flow result
