@@ -142,7 +142,7 @@ class FlowEnvArgs(BaseModel):
     owner_id: str = Field(
         description="User/owner ID (necessary to retrieve the user info) from the right Prefect block",
     )
-    log_level: str = Field(
+    logging_level: LoggingLevel = Field(
         default=LoggingLevel.INFO.value,  # TODO get configured logging level as default
         description="Level of logs wanted for this flow",
     )
@@ -176,8 +176,7 @@ class FlowEnv:
         self.this_span: SpanContext | None = None
 
         # Set logging level to the one selected for this flow
-        logger = get_run_logger()
-        logger.setLevel(args.log_level.value)
+        self.set_logging_level(args.logging_level)
 
         # Deserialize the calling span, if any
         if args.calling_span:
@@ -194,7 +193,7 @@ class FlowEnv:
             rs_server_href=os.getenv("RSPY_WEBSITE"),
             rs_server_api_key=os.getenv("RSPY_APIKEY"),
             owner_id=self.owner_id,
-            logger=logger,  # type: ignore
+            logger=get_run_logger(),  # type: ignore
         )
 
     def serialize(self) -> FlowEnvArgs:
@@ -210,6 +209,10 @@ class FlowEnv:
             serialized_span = None
 
         return FlowEnvArgs(owner_id=self.owner_id, calling_span=serialized_span)  # type: ignore
+
+    def set_logging_level(self, level: LoggingLevel):
+        # TODO Set Logging level for the flow
+        return
 
     @_agnosticcontextmanager
     def start_span(
