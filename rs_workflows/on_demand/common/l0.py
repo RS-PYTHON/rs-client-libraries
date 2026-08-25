@@ -28,7 +28,11 @@ from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0_task
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0_task
 from rs_workflows.utils.cadip import get_cadip_station
-from rs_workflows.utils.catalog import get_single_catalog_item, is_evicted, is_published
+from rs_workflows.utils.catalog import (
+    get_single_catalog_item,
+    is_published,
+    is_unpublished,
+)
 from rs_workflows.utils.dask import is_dask_cluster_running
 
 
@@ -79,13 +83,14 @@ async def process_l0(
         # If the session is not on the rs-catalog, we will try to stage it
         if item_session:
             found = True
-            evicted, eviction_date = is_evicted(item_session)
-            if evicted:
-                logger.error(f"❌ The session '{session}' has been evicted (eviction date = {eviction_date}) ")
-                raise ValueError(f"'{session}' has been evicted")
-            if is_published(item_session) is False:
+            unpublished, unpublished_date = is_unpublished(item_session)
+            if unpublished:
+                logger.error(f"❌ The session '{session}' has been unpublished on {unpublished_date}")
+                raise ValueError(f"'{session}' has been unpublished on {unpublished_date}")
+            published, _ = is_published(item_session)
+            if not published:
                 logger.error(f"❌ The session '{session}' has not been published yet")
-                raise ValueError(f"'{session}' has not been publised")
+                raise ValueError(f"'{session}' has not been published")
         else:
             logger.info(f"📥 Try to stage session {session} from {mission} stations :{p.cadip_collections}")
             station = await get_cadip_station(
@@ -96,7 +101,7 @@ async def process_l0(
             if station is not None:
                 found = await stage_session_common(flow_env, station, session)
 
-        # The session is stagged at this step.
+        # The session is staged at this step.
         # We can call the flow
         logger.info(f"🚧 We start Sentinel-{mission} processing.")
         if found:

@@ -21,11 +21,23 @@ from prefect import (
     get_run_logger,
     task,
 )
-from pystac import ItemCollection
+from pystac import Item, ItemCollection
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
-from rs_workflows.utils.catalog import is_evicted, is_published
+from rs_workflows.utils.catalog import is_published
+
+
+def is_evicted(item: Item) -> tuple[bool, datetime | None]:
+    """
+    Check if the CADIP session is evicted.
+    """
+    for asset in item.assets.values():
+        if "eviction_datetime" in asset.extra_fields:
+            eviction_date = datetime.fromisoformat(asset.extra_fields["eviction_datetime"].replace("Z", "+00:00"))
+            return eviction_date <= datetime.now(timezone.utc), eviction_date
+
+    return False, None
 
 
 @task(name="Search the cadip station that owns the session")
@@ -57,7 +69,8 @@ async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections: 
         if evicted:
             logger.error(f"❌ The session '{session}' has been evicted (eviction date = {eviction_date}) ")
         else:
-            if is_published(item_col[0]):
+            published, _ = is_published(item_col[0])
+            if published:
                 # Extract of the station name
                 collection_links = [link for link in item_col[0].links if link.rel == "collection"]
                 if collection_links:
