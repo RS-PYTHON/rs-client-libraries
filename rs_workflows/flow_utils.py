@@ -14,6 +14,7 @@
 
 """Utility module for the Prefect flows."""
 
+import logging
 import os
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -175,8 +176,12 @@ class FlowEnv:
         self.calling_span: SpanContext | None = None
         self.this_span: SpanContext | None = None
 
-        # Set logging level to the one selected for this flow
-        self.set_logging_level(args.logging_level)
+        # Set root logging level to the one selected for this flow
+        logging.getLogger().setLevel(args.logging_level.value)
+
+        # Set logging level for flows and tasks
+        logging.getLogger("prefect.flow_runs").setLevel(args.logging_level.value)
+        logging.getLogger("prefect.task_runs").setLevel(args.logging_level.value)
 
         # Deserialize the calling span, if any
         if args.calling_span:
@@ -209,10 +214,6 @@ class FlowEnv:
             serialized_span = None
 
         return FlowEnvArgs(owner_id=self.owner_id, calling_span=serialized_span)  # type: ignore
-
-    def set_logging_level(self, level: LoggingLevel):
-        # TODO Set Logging level for the flow
-        return
 
     @_agnosticcontextmanager
     def start_span(
