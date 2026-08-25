@@ -84,10 +84,10 @@ jobs:
           import os
           from call_prefect import *
 
-          print("Read configuration from github variable: '${{env.CONFIG}}'")
+          print("Read configuration from github variable: '${{ env.CONFIG }}'")
           config_yaml = """${{ vars[env.CONFIG] }}"""
 
-          print("Read credentials from github secret: '${{env.CREDENTIALS}}'")
+          print("Read credentials from github secret: '${{ env.CREDENTIALS }}'")
           credentials_yaml = """${{ secrets[env.CREDENTIALS] }}"""
 
           # Read config and credentials
@@ -97,23 +97,23 @@ jobs:
           body = {
               "parameters": {
                   "env": {
-                    "owner_id": "${KEYCLOAK_USER}",
-                    "called_by": "${THIS_URL}",
+                    "owner_id": os.environ["KEYCLOAK_USER"],
+                    "called_by": os.environ["THIS_URL"],
                   },
-                  "processor_name": "${PROCESSOR_NAME}",
-                  "processor_version": "${PROCESSOR_VERSION}",
-                  "scenario_name": "${SCENARIO}",
+                  "processor_name": os.environ["PROCESSOR_NAME"],
+                  "processor_version": os.environ["PROCESSOR_VERSION"],
+                  "scenario_name": os.environ["SCENARIO"],
               },
           }
-          flow_run_id = trigger_flow_run("${{ env.DEPLOY_NAME }}", body)
+          flow_run_id = trigger_flow_run(os.environ["DEPLOY_NAME"], body)
 
           # Wait for the Prefect flow run to finish, with a timeout in seconds.
           wait_flow_finish(flow_run_id, delay=5)
 
           # Read artifact value
-          artifact_value = read_artifact(flow_run_id, "${{ env.ARTIFACT_KEY }}")
+          artifact_value = read_artifact(flow_run_id, os.environ["ARTIFACT_KEY"])
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as opened:
-            opened.write(f"`Artifact ${{ env.ARTIFACT_KEY }}`\n\n")
+            opened.write(f"`Artifact '{os.environ['ARTIFACT_KEY']}'`\n\n")
             opened.write(artifact_value)
 
         shell: python
