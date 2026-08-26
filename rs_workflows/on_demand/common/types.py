@@ -15,6 +15,7 @@
 """common types and class"""
 
 from collections.abc import Awaitable
+from datetime import datetime
 from typing import Any, Self, cast
 
 from prefect.variables import Variable
@@ -32,6 +33,27 @@ from rs_workflows.flow_utils import (
 )
 
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
+PROCESSING_PREFECT_CONFIGURATION = "s{mission}-processing-default-setting"
+S3_PROCESSING_CONFIGURATION = PROCESSING_PREFECT_CONFIGURATION.format(mission="3")
+
+
+async def _read_prefect_settings(mission: str, level: str) -> dict[str, Any]:
+    """Read unified mission settings, falling back to the level-specific legacy variable."""
+    processing_name = PROCESSING_PREFECT_CONFIGURATION.format(mission=mission)
+    raw_unified = await cast(Awaitable[Any], Variable.get(processing_name, default=None))
+    if raw_unified is not None:
+        section = raw_unified.get(f"l{level}") if isinstance(raw_unified, dict) else None
+        if isinstance(section, dict):
+            common = raw_unified.get("common", {})
+            return {
+                **(common if isinstance(common, dict) else {}),
+                **section,
+            }
+        return {}
+
+    legacy_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
+    raw_legacy = await cast(Awaitable[Any], Variable.get(legacy_name, default={}))
+    return raw_legacy if isinstance(raw_legacy, dict) else {}
 
 
 class ProcessingFlowParams(BaseModel):
@@ -137,13 +159,7 @@ class ProcessingFlowParams(BaseModel):
         """
         Merge data from Prefect variable and parameters called.
         """
-        var_name = DEFAULT_PREFECT_CONFIGURATION.format(mission=mission, level=level)
-        raw = await cast(Awaitable[Any], Variable.get(var_name))
-        if raw is None:
-            raise FileExistsError(f"Prefect variable '{var_name}' is missing.")
-        if not isinstance(raw, dict):
-            raw = {}
-        settings: dict[str, Any] = raw
+        settings = await _read_prefect_settings(mission, level)
 
         user_pipeline = self.pipeline
         user_unit = self.unit
@@ -174,11 +190,11 @@ class ProcessingFlowParams(BaseModel):
             "workflow": self.workflow or settings.get("workflow"),
             "generated_product_to_collection_identifier": (
                 self.generated_product_to_collection_identifier
-                or settings.get("generated_product_to_collection_identifier", [])
+                or settings.get("generated_product_to_collection_identifier")
             ),
             "auxiliary_product_to_collection_identifier": (
                 self.auxiliary_product_to_collection_identifier
-                or settings.get("auxiliary_product_to_collection_identifier", [])
+                or settings.get("auxiliary_product_to_collection_identifier")
             ),
         }
 
@@ -196,6 +212,20 @@ class Level0FlowParams(ProcessingFlowParams):
     optional type not used.
     """
 
+    start_datetime: datetime | None = Field(
+        default=None,
+        title="Start Datetime",
+        description="Start datetime for processing.",
+        json_schema_extra={"order": 2},
+    )
+
+    end_datetime: datetime | None = Field(
+        default=None,
+        title="End Datetime",
+        description="End datetime for processing.",
+        json_schema_extra={"order": 3},
+    )
+
     session_collection: str = Field(
         default="",
         title="Session Collection",
@@ -212,6 +242,8 @@ class Level0FlowParams(ProcessingFlowParams):
 
     def _resolve_specific(self, settings: dict[str, Any]) -> dict[str, Any]:
         return {
+            "start_datetime": self.start_datetime or settings.get("start_datetime"),
+            "end_datetime": self.end_datetime or settings.get("end_datetime"),
             "session_collection": self.session_collection or settings.get("session_collection", ""),
             "cadip_collections": self.cadip_collections or settings.get("cadip_collections", []),
         }
@@ -228,8 +260,41 @@ class Level1FlowParams(ProcessingFlowParams):
     Parameters to override default Prefect variable 'sx-l1-default-setting'..
     """
 
+    start_datetime: datetime | None = Field(
+        default=None,
+        title="Start Datetime",
+        description="Start datetime for processing.",
+        json_schema_extra={"order": 2},
+    )
+    end_datetime: datetime | None = Field(
+        default=None,
+        title="End Datetime",
+        description="End datetime for processing.",
+        json_schema_extra={"order": 3},
+    )
+    satellite: str | None = Field(
+        default=None,
+        title="Satellite",
+        description="Satellite identifier for processing.",
+        json_schema_extra={"order": 4},
+    )
     input_products: list[FlowInputProduct] = Field(
         default_factory=list,
         title="Input Products",
-        description="List of input products for Level-1 processing.",
+        description="List of input products to process.",
+        json_schema_extra={"order": 4},
     )
+
+    def _resolve_specific(self, settings: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "start_datetime": self.start_datetime or settings.get("start_datetime", None),
+            "end_datetime": self.end_datetime or settings.get("end_datetime", None),
+            "satellite": self.satellite or settings.get("satellite", None),
+            "input_products": self.input_products or settings.get("input_products", []),
+        }
+
+    async def resolve(self, mission: str) -> Self:
+        """
+        Merge data from Prefect variable and parameters called.
+        """
+        return await super()._resolve(mission, "1")

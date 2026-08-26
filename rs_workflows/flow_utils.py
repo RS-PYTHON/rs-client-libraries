@@ -167,6 +167,8 @@ class FlowEnv:
 
     def __init__(self, args: FlowEnvArgs):
         """Constructor."""
+        logger = get_run_logger()
+        logger.info("Initializing FlowEnv with args: %r", args)
         self.owner_id: str = args.owner_id
         self.calling_span: SpanContext | None = None
         self.this_span: SpanContext | None = None
@@ -177,7 +179,7 @@ class FlowEnv:
 
         # Read prefect blocks into env vars
         prefect_utils.read_prefect_blocks(self.owner_id, _sync=True)  # type: ignore
-
+        logger.info("Prefect blocks read into env vars for owner_id=%r", self.owner_id)
         # Init opentelemetry traces
         init_opentelemetry.init_traces(args.service_name)
 

@@ -14,62 +14,65 @@
 
 """sentinel 3 OLCI Level-1 processing."""
 
-from datetime import datetime
+from typing import Any
 
-from prefect import flow, task
+from prefect import flow, get_run_logger, task
 
 from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
 from rs_workflows.on_demand.common.types import Level1FlowParams
+from rs_workflows.on_demand.sentinel3.s3_processing_utils import (
+    build_olci_l1_input_products,
+    read_s3_orchestration_settings,
+)
 from rs_workflows.utils.dpr import call_dpr_flow
 
+OLCI_L0_PRODUCT_TYPE = "S03OLCL0_"
+NAV_L0_PRODUCT_TYPE = "S03NATL0_"
 
-@flow(name="process-s3-l1-olci")
-async def process_s3l1_olci(session: str, flow_params: Level1FlowParams):
+
+@flow(
+    name="process-s3-l1-olci",
+    flow_run_name="s3-l1-olci-from-{source_l0_run_id}",
+)
+async def process_s3l1_olci(
+    flow_params: Level1FlowParams | None = None,
+    l0_products: list[dict[str, Any]] | None = None,
+    source_l0_run_id: str = "manual",  # pylint: disable=unused-argument
+) -> list[dict[str, Any]]:
     """
     Sentinel-3 OLCI L1 processing.
     The input_products should have been processed before by L0.
+
+    ``l0_products`` is the raw product list emitted by S3 L0. When supplied by
+    a Prefect Automation, it is converted here into the four (or more) processor inputs
+    expected by OLCI L1. ``source_l0_run_id`` provides a short upstream
+    reference used in the L1 flow-run name.
     """
-
-    input_products = [
-        FlowInputProduct(
-            name="S3OLCIL0_1",
-            item_id=session,
-            collection_name=flow_params.session_collection,
-        ),
-        FlowInputProduct(
-            name="S3OLCIL0_2",
-            item_id=session,
-            collection_name=flow_params.session_collection,
-        ),
-        FlowInputProduct(
-            name="S3OLCIL0_3",
-            item_id=session,
-            collection_name=flow_params.session_collection,
-        ),
-        FlowInputProduct(
-            name="S3NAVL0_1",
-            item_id=session,
-            collection_name=flow_params.session_collection,
-        ),
-    ]
     mission = "3"
+    # how to use s3-l1-default-setting
+    flow_parameters = await (flow_params or Level1FlowParams()).resolve(mission)
 
-    flow_parameters = await flow_params.resolve(mission)
-    satellite_value = f"sentinel-{mission}{session[2].lower()}"
-
-    # temporary
-    start_datetime = datetime.now()
-    end_datetime = datetime.now()
-    #
-
+    if l0_products is not None:
+        orchestration_settings = await read_s3_orchestration_settings()
+        prepared_inputs = build_olci_l1_input_products(
+            l0_products,
+            orchestration_settings.s3_l0_output_collection,
+        )
+        flow_parameters.input_products = [FlowInputProduct.model_validate(product) for product in prepared_inputs]
+        get_run_logger().info(
+            "Built %d S3 L1 input product(s) from %d raw L0 product(s) received from Automation",
+            len(flow_parameters.input_products),
+            len(l0_products),
+        )
+    get_run_logger().info(f"Flow params: {flow_parameters}")
     # Call DPR flow
-    await call_dpr_flow(
+    return await call_dpr_flow(
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),
-        input_products=input_products,
+        input_products=flow_parameters.input_products,
         external_variables={
-            "start_datetime": start_datetime,
-            "end_datetime": end_datetime,
-            "satellite": satellite_value,
+            "start_datetime": flow_parameters.start_datetime,
+            "end_datetime": flow_parameters.end_datetime,
+            "satellite": flow_parameters.satellite,
         },
         dask_cluster_label=flow_parameters.dask_cluster_label,
         processor_name=flow_parameters.processor_name,
@@ -86,6 +89,6 @@ async def process_s3l1_olci(session: str, flow_params: Level1FlowParams):
 
 
 @task(name="process-s3-l1-olci")
-async def process_s3l1_olci_task(*args, **kwargs) -> None:
+async def process_s3l1_olci_task(*args, **kwargs) -> list[dict[str, Any]]:
     """See: dpr_processing"""
     return await process_s3l1_olci.fn(*args, **kwargs)
