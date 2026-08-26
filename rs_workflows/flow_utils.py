@@ -144,7 +144,7 @@ class FlowEnvArgs(BaseModel):
         description="User/owner ID (necessary to retrieve the user info) from the right Prefect block",
     )
     logging_level: LoggingLevel = Field(
-        default=LoggingLevel.INFO.value,  # TODO get configured logging level as default
+        default=os.getenv("PREFECT_LOGGING_ROOT_LEVEL", LoggingLevel.INFO),
         description="Level of logs wanted for this flow",
     )
     calling_span: tuple[int, int, bool] | None = Field(
@@ -177,11 +177,11 @@ class FlowEnv:
         self.this_span: SpanContext | None = None
 
         # Set root logging level to the one selected for this flow
-        logging.getLogger().setLevel(args.logging_level.value)
+        logging.getLogger().setLevel(args.logging_level)
 
         # Set logging level for flows and tasks
-        logging.getLogger("prefect.flow_runs").setLevel(args.logging_level.value)
-        logging.getLogger("prefect.task_runs").setLevel(args.logging_level.value)
+        logging.getLogger("prefect.flow_runs").setLevel(args.logging_level)
+        logging.getLogger("prefect.task_runs").setLevel(args.logging_level)
 
         # Deserialize the calling span, if any
         if args.calling_span:
