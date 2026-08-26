@@ -74,35 +74,26 @@ async def get_catalog_items(flow_env: FlowEnv, item_ids: list[str], collections:
     )
 
 
-def is_evicted(item: Item) -> tuple[bool, datetime | None]:
+def is_unpublished(item: Item) -> tuple[bool, datetime | None]:
     """
-    Check if the item is evicted.
+    Check if the item is unpublished.
     """
-    eviction_date_str: str = ""
-
-    for asset in item.assets.values():
-        if "eviction_datetime" in asset.extra_fields:
-            eviction_date_str = asset.extra_fields["eviction_datetime"]
-            break
-
-    if eviction_date_str:
-        eviction_date = datetime.fromisoformat(eviction_date_str.replace("Z", "+00:00"))
-        return eviction_date <= datetime.now(timezone.utc), eviction_date
+    if unpublished_date_str := item.properties.get("unpublished"):
+        unpublished_date = datetime.fromisoformat(unpublished_date_str.replace("Z", "+00:00"))
+        return unpublished_date <= datetime.now(timezone.utc), unpublished_date
 
     return False, None
 
 
-def is_published(item: Item) -> bool:
+def is_published(item: Item) -> tuple[bool, datetime | None]:
     """
     Check if the item is published.
     """
-    published_date_str = item.properties.get("published")
-
-    if published_date_str:
+    if published_date_str := item.properties.get("published"):
         published_date = datetime.fromisoformat(published_date_str.replace("Z", "+00:00"))
-        return published_date <= datetime.now(timezone.utc)
+        return published_date <= datetime.now(timezone.utc), published_date
 
-    return False
+    return False, None
 
 
 @task
