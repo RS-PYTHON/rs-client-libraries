@@ -33,6 +33,7 @@ from rs_client.rs_client import RsClient
 from rs_common import init_opentelemetry, prefect_utils
 
 ARCHIVE_SUFFIXES = (".zip", ".tar", ".tgz", ".tar.gz")
+DEFAULT_ROOT_LOGGING_LEVEL = os.getenv("PREFECT_LOGGING_ROOT_LEVEL", "INFO")
 
 
 class Priority(str, Enum):
@@ -144,8 +145,13 @@ class FlowEnvArgs(BaseModel):
         description="User/owner ID (necessary to retrieve the user info) from the right Prefect block",
     )
     logging_level: LoggingLevel = Field(
-        default=os.getenv("PREFECT_LOGGING_ROOT_LEVEL", LoggingLevel.INFO),
-        description="Level of logs wanted for this flow",
+        default=(
+            LoggingLevel[DEFAULT_ROOT_LOGGING_LEVEL]
+            if DEFAULT_ROOT_LOGGING_LEVEL in LoggingLevel
+            else LoggingLevel.INFO
+        ),
+        title="Overall logging level",
+        description="Level of logs wanted for this flow. Also applied to EOPF logs.",
     )
     calling_span: tuple[int, int, bool] | None = Field(
         default=None,
@@ -329,12 +335,6 @@ class DprProcessIn(BaseModel):
         description="Default timeout on a submitted task",
     )
 
-    logging_level: LoggingLevel = Field(
-        default=LoggingLevel.INFO,
-        title="Overall EOPF logging level",
-        description="Overall EOPF logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
-    )
-
     temporary_shared: bool = Field(
         default=False,
         title="Temporary folder shared",
@@ -444,6 +444,9 @@ class DprProcessIn(BaseModel):
         title="EarthDataHub Standard API key",
         description="Destination Earth / EarthDataHub standard API key used to access Copernicus DEM",
     )
+
+    # Logging level is not an input field, it is set from FlowEnvArgs when DprProcessIn is created
+    logging_level: LoggingLevel
 
     # -----------------------
     # Validators

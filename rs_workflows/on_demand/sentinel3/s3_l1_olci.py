@@ -81,7 +81,6 @@ async def process_s3l1_olci(session: str, flow_params: Level1FlowParams):
         workflow=flow_parameters.workflow,
         generated_product_to_collection_identifier=flow_parameters.generated_product_to_collection_identifier or [],
         auxiliary_product_to_collection_identifier=flow_parameters.auxiliary_product_to_collection_identifier or [],
-        logging_level=flow_parameters.logging_level,
     )
 
 
