@@ -183,11 +183,11 @@ class FlowEnv:
         self.this_span: SpanContext | None = None
 
         # Set root logging level to the one selected for this flow
-        logging.getLogger().setLevel(args.logging_level)
+        logging.getLogger().setLevel(args.logging_level.value)
 
         # Set logging level for flows and tasks
-        logging.getLogger("prefect.flow_runs").setLevel(args.logging_level)
-        logging.getLogger("prefect.task_runs").setLevel(args.logging_level)
+        logging.getLogger("prefect.flow_runs").setLevel(args.logging_level.value)
+        logging.getLogger("prefect.task_runs").setLevel(args.logging_level.value)
 
         # Deserialize the calling span, if any
         if args.calling_span:
