@@ -26,6 +26,7 @@ from rs_workflows.flow_utils import (
     FlowGeneratedProduct,
     FlowInputProduct,
 )
+from rs_workflows.on_demand_processing import build_output_lineage
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
     DATA_EDH_DOMAIN,
     build_adfs,
@@ -177,12 +178,12 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
     [
         (
             DprProcessor.S1L0,
-            "/opt/dask-l0/logging_config.yaml",
+            ["/opt/dask-l0/logging_config.yaml"],
             ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"],
         ),
         (
             DprProcessor.S3L0,
-            "/opt/dask-l0/logging_config.yaml",
+            ["/opt/dask-l0/logging_config.yaml"],
             ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"],
         ),
     ],
@@ -421,6 +422,11 @@ def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in
     assert len(payload.io.input_products) > 0
     assert payload.io.input_products[0].id == "S1CADUS"
     assert "S03OLCL0_" in [op.id for op in payload.io.output_products]
+
+    lineage = build_output_lineage(payload)
+    assert lineage == {
+        "S03OLCL0_": {"S1CADUS"},
+    }
 
 
 # ----------------------------------------------------------------------
@@ -670,11 +676,17 @@ def test_build_input_products_success_multiple_inputs_regex(sample_unit, mock_st
     Test successful build of input products when multiple inputs share the same name (regex case).
     """
     # Mock STAC resolution to return different paths
+    item1 = MagicMock(spec=Item)
+    item1.get_self_href.return_value = "https://catalog/item1"
+
+    item2 = MagicMock(spec=Item)
+    item2.get_self_href.return_value = "https://catalog/item2"
+
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
         side_effect=[
-            ("item1", "s3://path/to/item1"),
-            ("item2", "s3://path/to/item2"),
+            (item1, "s3://path/to/item1"),
+            (item2, "s3://path/to/item2"),
         ],
     )
 

@@ -51,8 +51,8 @@ include = [
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.15"
-opentelemetry-distro = "^0.64b0" # then run 'poetry run opentelemetry-bootstrap -a install'
-opentelemetry-exporter-otlp = "^1.43.0"
+opentelemetry-distro = "^0.65b0" # then run 'poetry run opentelemetry-bootstrap -a install'
+opentelemetry-exporter-otlp = "^1.44.0"
 protobuf = ">=5.29.5"
 cachetools = ">=5.5.2"
 pystac = "^1.13.0"
@@ -68,12 +68,14 @@ importlib_metadata = ">=7.0"
 requests = "^2.32.4"
 urllib3 = ">=2.7.0"
 SQLAlchemy = "^2.0.37"
-dask-gateway = "2025.4.0"
+dask-gateway = "2026.3.0"
 uv = ">=0.9.7"
 psycopg2-binary = ">=2.9.10"
 werkzeug = ">=3.1.6"
-cryptography = "^48.0.1"
-aiohttp = "^3.14.1"
+cryptography = "^50.0.0"
+aiohttp = "^3.14.3"
+antimeridian = "^0.4.7"
+pyproj = "^3.7.2"
 
 [tool.poetry.group.dev]
 optional = true

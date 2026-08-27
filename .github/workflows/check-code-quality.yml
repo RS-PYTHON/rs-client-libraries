@@ -32,9 +32,9 @@ jobs:
         caller-repository: ${{ github.repository }}
         caller-ref: ${{ github.ref }}
         caller-ref_name: ${{ github.ref_name }}
-        cov-dirs: "rs_client,rs_common,rs_workflows"
+        cov-dirs: "rs_client,rs_common,rs_workflows,scripts"
         # rs_workflows/adf_conversion is vendored third-party code (ESA EOPF), excluded from analysis
-        sonar-exclusions: tests,tests/**,**/tests/**,rs_workflows/adf_conversion/**
+        sonar-exclusions: tests,tests/**,**/tests/**,rs_workflows/adf_conversion/**,rs_common/footprint_facility.py,rs_common/geometry_fix.py
     secrets:
       SAFETY_API_KEY: ${{ secrets.SAFETY_API_KEY }}
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

@@ -21,7 +21,11 @@ from typing import Any
 
 import pytest
 
-from rs_workflows.payload_builder import TaskTableError, build_unit_list
+from rs_workflows.payload_builder import (
+    TaskTableError,
+    build_unit_list,
+    extract_external_modules,
+)
 
 SCENARIOS: dict[str, dict] = {
     # S3 L0
@@ -568,3 +572,34 @@ def test_case_s1_l0_exact_output_with_regex():
     ]
 
     assert out == expected
+
+
+def test_extract_external_modules():
+    """
+    Unit test for extract_external_modules
+    """
+    test_tasktable_with_external_modules = {
+        "external_modules": ["testmodule.submodule.testclass"],
+        "units": [
+            {
+                "name": "u1",
+                "module": "pkg.u1",
+                "input_products": [],
+                "input_adfs": [],
+                "output_products": [],
+            },
+        ],
+        "io": [],
+        "pipelines": [
+            {
+                "name": "good_pipeline",
+                "steps": [{"unit_name": "u1", "step_id": 1, "input_products": {}, "output_products": {}}],
+            },
+        ],
+    }
+
+    expected_external_modules = [{"name": "testmodule.submodule.testclass", "nested": "true"}]
+
+    extracted_modules = extract_external_modules(test_tasktable_with_external_modules)
+
+    assert extracted_modules == expected_external_modules

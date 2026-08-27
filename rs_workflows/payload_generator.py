@@ -355,7 +355,6 @@ def build_input_products(
 
     # Iterate over each group of products
     for product_name, products in grouped_products.items():
-
         mapping = search_by_name(unit.get("input_products", []), product_name)
         if not mapping:
             raise RuntimeError(f"Couldn't find any input for task table entry '{product_name}'")
@@ -382,11 +381,16 @@ def build_input_products(
         if len(products) == 1:
             # Standard case where each input product has a different name (i.e. single STAC item)
             input_product = products[0]
-            _, stac_item_path = resolve_stac_input_path(
+            stac_item, stac_item_path = resolve_stac_input_path(
                 catalog_client,
                 input_product.collection_name,
                 input_product.item_id,
             )
+
+            # Reuse the resolved STAC item later when derived_from links are built.
+            source_item_href = None
+            if stac_item is not None:
+                source_item_href = stac_item.get_self_href()
 
             opening_mode = None
             if kind in ("shared_disk", "local_disk"):
@@ -408,6 +412,7 @@ def build_input_products(
                     store_type=mapping["store_type"],
                     store_params=store_params,
                     opening_mode=opening_mode,
+                    source_item_hrefs=[source_item_href] if source_item_href else [],
                 ),
             )
         elif isinstance(store_params, StoreParams):
@@ -415,14 +420,22 @@ def build_input_products(
             store_params.multiplicity = str(len(products))
 
             # Retrieve all paths
-            paths = [
+            resolved_products = [
                 resolve_stac_input_path(
                     catalog_client,
                     product.collection_name,
                     product.item_id,
-                )[1]
+                )
                 for product in products
             ]
+            paths = [path for _, path in resolved_products]
+            source_item_hrefs = [
+                href
+                for stac_item, _ in resolved_products
+                if stac_item is not None
+                if (href := stac_item.get_self_href())
+            ]
+
             # Compute longest common prefix
             common_folder, relative_parts = get_common_and_relative_paths(paths)
             store_params.regex = rf"({'|'.join(relative_parts)})"
@@ -435,6 +448,7 @@ def build_input_products(
                     type=mapping.get("type", "regex"),
                     store_type=mapping["store_type"],
                     store_params=store_params,
+                    source_item_hrefs=source_item_hrefs,
                 ),
             )
         else:
@@ -671,6 +685,7 @@ def generate_payload(  # pylint: disable=unused-argument
     unit_list: list[dict],
     adfs: list[tuple[str, str, str]],
     dpr_process_in: DprProcessIn,
+    external_modules: list[dict[str, str]] | None = None,
 ) -> PayloadSchema:
     """
     Assembles and generates a payload schema for a DPR (Data Processing Request) job.
@@ -743,7 +758,7 @@ def generate_payload(  # pylint: disable=unused-argument
     logging = None
     config = None
     if dpr_process_in.processor_name in (DprProcessor.S1L0, DprProcessor.S3L0):
-        logging = "/opt/dask-l0/logging_config.yaml"
+        logging = ["/opt/dask-l0/logging_config.yaml"]
         match dpr_process_in.processor_name:
             case DprProcessor.S1L0:
                 config = ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
@@ -797,6 +812,7 @@ def generate_payload(  # pylint: disable=unused-argument
             temporary__folder=dpr_process_in.temporary_folder,
             temporary__folder_s3_secret=temp_folder_s3_secret,
         ),
+        external_modules=external_modules,
         workflow=workflow_steps,
         io=io_config,  # type: ignore
         # The dask_context section is built in the dpr_service
