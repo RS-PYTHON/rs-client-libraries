@@ -189,6 +189,10 @@ class FlowEnv:
         logging.getLogger("prefect.flow_runs").setLevel(args.logging_level.value)
         logging.getLogger("prefect.task_runs").setLevel(args.logging_level.value)
 
+        # Set logging level for current run
+        run_logger = get_run_logger()  # type: ignore
+        run_logger.setLevel(args.logging_level.value)
+
         # Deserialize the calling span, if any
         if args.calling_span:
             self.calling_span = SpanContext(*args.calling_span)
@@ -204,7 +208,7 @@ class FlowEnv:
             rs_server_href=os.getenv("RSPY_WEBSITE"),
             rs_server_api_key=os.getenv("RSPY_APIKEY"),
             owner_id=self.owner_id,
-            logger=get_run_logger(),  # type: ignore
+            logger=run_logger,  # type: ignore
         )
 
     def serialize(self) -> FlowEnvArgs:
