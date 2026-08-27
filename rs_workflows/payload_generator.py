@@ -804,7 +804,7 @@ def generate_payload(  # pylint: disable=unused-argument
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (stories 800/1050)
         general_configuration=GeneralConfiguration(
-            logging=LoggingConfig(level=dpr_process_in.logging_level.name),
+            logging=LoggingConfig(level=dpr_process_in.env.logging_level.name),
             triggering__temporary_shared=dpr_process_in.temporary_shared,
             triggering__use_datatree=True if is_olci_processor else None,
             triggering__use_default_filename=True if is_olci_processor else None,

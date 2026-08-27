@@ -445,9 +445,6 @@ class DprProcessIn(BaseModel):
         description="Destination Earth / EarthDataHub standard API key used to access Copernicus DEM",
     )
 
-    # Logging level is not an input field, it is set from FlowEnvArgs when DprProcessIn is created
-    logging_level: LoggingLevel
-
     # -----------------------
     # Validators
     # -----------------------

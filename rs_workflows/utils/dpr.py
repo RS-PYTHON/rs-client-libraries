@@ -88,7 +88,6 @@ async def call_dpr_flow(
         input_products=input_products,
         generated_product_to_collection_identifier=generated_product_to_collection_identifier,
         auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
-        logging_level=env.logging_level,
         dask_task_timeout=dask_task_timeout,
         temporary_folder=temporary_folder,
         temporary_shared=temporary_shared,
