@@ -14,7 +14,7 @@
 
 """Unit tests for the on_demand Level-0 flows (common.l0, common.l0_last_steps, sentinel1/3)."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -62,8 +62,8 @@ def _patch_l0(
     item=None,
     station=None,
     staged=True,
-    evicted=(False, None),
-    published=True,
+    unpublished=(False, None),
+    published=(True, datetime.now(timezone.utc)),
 ):
     mocker.patch.object(l0, "get_run_logger", return_value=MagicMock())
     flow_env = MagicMock()
@@ -71,7 +71,7 @@ def _patch_l0(
     mocker.patch.object(l0, "FlowEnv", return_value=flow_env)
     mocker.patch.object(l0, "is_dask_cluster_running", new=AsyncMock(return_value=dask_running))
     mocker.patch.object(l0, "get_single_catalog_item", new=AsyncMock(return_value=item))
-    mocker.patch.object(l0, "is_evicted", return_value=evicted)
+    mocker.patch.object(l0, "is_unpublished", return_value=unpublished)
     mocker.patch.object(l0, "is_published", return_value=published)
     mocker.patch.object(l0, "get_cadip_station", new=AsyncMock(return_value=station))
     stage_mock = mocker.patch.object(l0, "stage_session_common", new=AsyncMock(return_value=staged))
@@ -94,23 +94,23 @@ async def test_process_l0_raises_when_dask_cluster_not_ready(mocker):
         await l0.process_l0.fn("S1A_20230101T000000", _flow_params())
 
 
-async def test_process_l0_raises_when_session_evicted(mocker):
-    """A found but evicted session raises ValueError."""
-    _patch_l0(mocker, item=MagicMock(), evicted=(True, "2020-01-01"))
-    with pytest.raises(ValueError, match="evicted"):
+async def test_process_l0_raises_when_session_unpublished(mocker):
+    """A found but unpublished session raises ValueError."""
+    _patch_l0(mocker, item=MagicMock(), unpublished=(True, "2020-01-01"))
+    with pytest.raises(ValueError, match="unpublished"):
         await l0.process_l0.fn("S1A_20230101T000000", _flow_params())
 
 
 async def test_process_l0_raises_when_session_not_published(mocker):
     """A found session that is not published yet raises ValueError."""
-    _patch_l0(mocker, item=MagicMock(), evicted=(False, None), published=False)
-    with pytest.raises(ValueError, match="not been publised"):
+    _patch_l0(mocker, item=MagicMock(), unpublished=(False, None), published=(False, None))
+    with pytest.raises(ValueError, match="not been published"):
         await l0.process_l0.fn("S1A_20230101T000000", _flow_params())
 
 
 async def test_process_l0_dispatches_s1_when_found_in_catalog(mocker):
     """A published S1 session in the catalog is dispatched to the S1 processor."""
-    mocks = _patch_l0(mocker, item=MagicMock(), published=True)
+    mocks = _patch_l0(mocker, item=MagicMock(), published=(True, datetime.now(timezone.utc)))
     await l0.process_l0.fn("S1A_20230101T000000", _flow_params())
     mocks["s1"].assert_awaited_once()
     mocks["s3"].assert_not_awaited()
@@ -136,7 +136,7 @@ async def test_process_l0_no_dispatch_when_station_not_found(mocker):
 
 async def test_process_l0_uses_default_params_when_none(mocker):
     """When no flow_params is given, a default Level0FlowParams is built and resolved."""
-    mocks = _patch_l0(mocker, item=MagicMock(), published=True)
+    mocks = _patch_l0(mocker, item=MagicMock(), published=(True, datetime.now(timezone.utc)))
     mocker.patch.object(l0, "Level0FlowParams", return_value=_flow_params())
     await l0.process_l0.fn("S1A_20230101T000000", None)
     mocks["s1"].assert_awaited_once()
