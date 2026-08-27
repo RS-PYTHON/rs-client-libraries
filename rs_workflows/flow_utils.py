@@ -186,8 +186,8 @@ class FlowEnv:
         logging.getLogger().setLevel(args.logging_level.value)
 
         # Set logging level for flows and tasks
-        logging.getLogger("prefect.flow_runs").setLevel(args.logging_level.value)
-        logging.getLogger("prefect.task_runs").setLevel(args.logging_level.value)
+        logging.getLogger("prefect.flow_runs").setLevel(args.logging_level)
+        logging.getLogger("prefect.task_runs").setLevel(args.logging_level)
 
         # Deserialize the calling span, if any
         if args.calling_span:
