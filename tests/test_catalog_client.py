@@ -324,6 +324,68 @@ def test_search_item_inside_collection_catalog_client_mock(
     assert count == 1  # count should be 1 for two items
 
 
+# Cover every supported filter representation when no source collection is specified.
+@pytest.mark.parametrize(
+    ("owner_id", "stac_filter", "expected_filter"),
+    [
+        pytest.param(
+            "toto",
+            None,
+            {"op": "=", "args": [{"property": "owner"}, "toto"]},
+            id="without-filter",
+        ),
+        pytest.param(
+            "toto",
+            {"op": "=", "args": [{"property": "width"}, 2500]},
+            {
+                "op": "and",
+                "args": [
+                    {"op": "=", "args": [{"property": "width"}, 2500]},
+                    {"op": "=", "args": [{"property": "owner"}, "toto"]},
+                ],
+            },
+            id="with-json-filter",
+        ),
+        pytest.param(
+            "to'to",
+            "width = 2500",
+            "(width = 2500) AND owner = 'to''to'",
+            id="with-text-filter",
+        ),
+    ],
+)
+def test_search_without_collection_filters_by_owner(
+    mocked_rspy_landing_pages,  # pylint: disable=unused-argument
+    mocker,
+    owner_id,
+    stac_filter,
+    expected_filter,
+):
+    """Catalog searches without a collection are restricted to the requested owner."""
+    catalog: CatalogClient = RsClient(MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
+
+    # Mock the pystac-client boundary so we can inspect the final search arguments without an HTTP request.
+    item_search = mocker.Mock()
+    item_search.item_collection.return_value = None
+    search = mocker.patch.object(catalog.ps_client, "search", return_value=item_search)
+
+    # An explicit None exercises the same owner-only path as an omitted collections argument.
+    catalog.search(
+        owner_id=owner_id,
+        collections=None,
+        max_items=1,
+        stac_filter=stac_filter,
+    )
+
+    # Verify that the owner constraint is preserved in the filter sent to pystac-client.
+    search.assert_called_once_with(
+        collections=None,
+        max_items=1,
+        datetime=None,
+        filter=expected_filter,
+    )
+
+
 def test_get_invalid_item(mocked_stac_catalog_invalid_get_item):
     """Test that a invalid item from a valid collection result in None."""
     catalog: CatalogClient = RsClient(
