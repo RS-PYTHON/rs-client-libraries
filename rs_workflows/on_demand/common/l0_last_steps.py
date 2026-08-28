@@ -96,10 +96,10 @@ async def process_l0_last_steps(
         # Satellite identifier
         satellite_value = f"sentinel-{mission}{session[2].lower()}"
 
-        # Published date
-        published = item_session.properties.get("published")
+        # Session datetime date
+        published = item_session.properties.get("datetime")
         if not isinstance(published, str):
-            raise ValueError("Missing or invalid 'published' property in item_session")
+            raise ValueError("Missing or invalid 'datetime' property in item_session")
 
         end_datetime = datetime.fromisoformat(published)
         start_datetime = end_datetime
