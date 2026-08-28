@@ -164,22 +164,22 @@ async def test_process_l0_last_steps_returns_early_without_item(mocker):
 
 
 async def test_process_l0_last_steps_uses_published_datetime(mocker):
-    """The datetime interval comes from the catalog publication metadata."""
+    """The datetime interval comes from the catalog session metadata."""
     item = MagicMock()
-    item.properties = {"published": "2023-01-01T00:00:00"}
+    item.properties = {"datetime": "2023-01-01T00:00:00"}
     dpr_mock = _patch_last_steps(mocker, item=item)
 
     await l0_last_steps.process_l0_last_steps("1", "S1A_x", _flow_params(), [], verbose=False)
 
-    published = datetime.fromisoformat("2023-01-01T00:00:00")
-    assert dpr_mock.call_args.kwargs["external_variables"]["start_datetime"] == published
-    assert dpr_mock.call_args.kwargs["external_variables"]["end_datetime"] == published
+    session_datetime = datetime.fromisoformat("2023-01-01T00:00:00")
+    assert dpr_mock.call_args.kwargs["external_variables"]["start_datetime"] == session_datetime
+    assert dpr_mock.call_args.kwargs["external_variables"]["end_datetime"] == session_datetime
 
 
 async def test_process_l0_last_steps_calls_dpr_flow(mocker):
-    """A published session triggers call_dpr_flow with the computed satellite and datetimes."""
+    """A catalog session triggers call_dpr_flow with the computed satellite and datetimes."""
     item = MagicMock()
-    item.properties = {"published": "2023-01-01T00:00:00"}
+    item.properties = {"datetime": "2023-01-01T00:00:00"}
     dpr_mock = _patch_last_steps(mocker, item=item)
     products = [FlowInputProduct(name="S1CADUS", item_id="S1A_session", collection_name="coll")]
 
@@ -189,15 +189,15 @@ async def test_process_l0_last_steps_calls_dpr_flow(mocker):
     kwargs = dpr_mock.call_args.kwargs
     assert kwargs["input_products"] == products
     assert kwargs["external_variables"]["satellite"] == "sentinel-1a"
-    published = datetime.fromisoformat("2023-01-01T00:00:00")
-    assert kwargs["external_variables"]["start_datetime"] == published
-    assert kwargs["external_variables"]["end_datetime"] == published
+    session_datetime = datetime.fromisoformat("2023-01-01T00:00:00")
+    assert kwargs["external_variables"]["start_datetime"] == session_datetime
+    assert kwargs["external_variables"]["end_datetime"] == session_datetime
 
 
 async def test_process_s3_l0_last_steps_returns_all_products(mocker):
     """Successful S3 L0 processing returns every product for Prefect persistence."""
     item = MagicMock()
-    item.properties = {"published": "2023-01-01T00:00:00"}
+    item.properties = {"datetime": "2023-01-01T00:00:00"}
     dpr_mock = _patch_last_steps(mocker, item=item)
     dpr_mock.return_value = [
         {
