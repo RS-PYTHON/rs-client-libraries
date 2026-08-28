@@ -391,7 +391,7 @@ def _resolve_specific_input_product_stac_items(
 async def dpr_processing(
     dpr_input: DprProcessIn,
     retry_config: RetryConfig = RetryConfig(),  # type: ignore
-):
+) -> list[dict[str, Any]]:
     """
     Prefect flow for dpr-process.
 
@@ -531,7 +531,7 @@ async def dpr_processing(
         generated_payload_res_with_secrets = generated_payload_res.dump(reveal_secrets=True)
         yaml_str = yaml.dump(generated_payload_res_with_secrets, default_flow_style=False, sort_keys=False)
         # upload the config payload contents straight to S3, without a temporary file
-        logger.debug(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
+        logger.info(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
         await prefect_utils.s3_upload_bytes(yaml_str.encode("utf-8"), dpr_input.s3_payload_file)
 
         # Run the DPR processor
@@ -585,6 +585,5 @@ async def dpr_processing(
 
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
-        published.result()  # type: ignore[unused-coroutine]
-
-        return
+        published_items = published.result()  # type: ignore[unused-coroutine]
+        return published_items

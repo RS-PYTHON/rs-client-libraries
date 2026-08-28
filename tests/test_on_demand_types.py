@@ -14,7 +14,8 @@
 
 """Unit tests for rs_workflows.on_demand.common.types."""
 
-from unittest.mock import AsyncMock
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, call
 
 import pytest
 
@@ -27,19 +28,28 @@ from rs_workflows.flow_utils import (
 from rs_workflows.on_demand.common import types
 from rs_workflows.on_demand.common.types import (
     DEFAULT_PREFECT_CONFIGURATION,
+    PROCESSING_PREFECT_CONFIGURATION,
     Level0FlowParams,
+    Level1FlowParams,
     ProcessingFlowParams,
 )
 
 
-def _patch_variable(mocker, value):
+def _patch_variable(mocker, value, *, unified=False):
     """Patch the Prefect Variable.get used by ProcessingFlowParams._resolve."""
-    mocker.patch.object(types.Variable, "get", new=AsyncMock(return_value=value))
+
+    async def get_variable(name, default=None):
+        if "processing-default-setting" in name:
+            return value if unified else default
+        return value
+
+    mocker.patch.object(types.Variable, "get", new=AsyncMock(side_effect=get_variable))
 
 
 def test_default_prefect_configuration_format():
     """The default configuration template resolves to the sX-lY variable name."""
     assert DEFAULT_PREFECT_CONFIGURATION.format(mission="1", level="0") == "s1-l0-default-setting"
+    assert PROCESSING_PREFECT_CONFIGURATION.format(mission="1") == "s1-processing-default-setting"
 
 
 def test_resolve_specific_base_returns_empty():
@@ -48,11 +58,66 @@ def test_resolve_specific_base_returns_empty():
     assert not ProcessingFlowParams()._resolve_specific({"anything": 1})
 
 
-async def test_resolve_raises_when_variable_missing(mocker):
-    """A missing Prefect variable raises FileExistsError with the variable name."""
+def test_level1_datetime_fields_parse_iso_strings():
+    """Level-1 datetime fields are annotated Pydantic fields accepting ISO input."""
+    params = Level1FlowParams.model_validate(
+        {
+            "start_datetime": "2024-05-27T09:44:09.509000Z",
+            "end_datetime": "2024-05-27T10:44:09.509000Z",
+        },
+    )
+
+    assert isinstance(params.start_datetime, datetime)
+    assert isinstance(params.end_datetime, datetime)
+
+
+async def test_level1_resolve_uses_prefect_datetime_settings(mocker):
+    """Level-1 parameters fall back to the datetime window configured in Prefect."""
+    _patch_variable(
+        mocker,
+        {
+            "common": {"owner_identifier": "settings-owner"},
+            "l1": {
+                "satellite": "sentinel-3a",
+                "start_datetime": "2025-06-12T02:11:13Z",
+                "end_datetime": "2025-06-12T02:13:13Z",
+            },
+        },
+        unified=True,
+    )
+
+    resolved = await Level1FlowParams().resolve("3")
+
+    assert resolved.satellite == "sentinel-3a"
+    assert resolved.owner_identifier == "settings-owner"
+    assert resolved.start_datetime == datetime(2025, 6, 12, 2, 11, 13, tzinfo=timezone.utc)
+    assert resolved.end_datetime == datetime(2025, 6, 12, 2, 13, 13, tzinfo=timezone.utc)
+
+
+async def test_level0_resolve_uses_prefect_datetime_settings(mocker):
+    """Level-0 parameters use the datetime window configured in Prefect."""
+    _patch_variable(
+        mocker,
+        {
+            "l0": {
+                "start_datetime": "2025-06-11T00:00:00Z",
+                "end_datetime": "2025-06-13T00:00:00Z",
+            },
+        },
+        unified=True,
+    )
+
+    resolved = await Level0FlowParams().resolve("3")
+
+    assert resolved.start_datetime == datetime(2025, 6, 11, tzinfo=timezone.utc)
+    assert resolved.end_datetime == datetime(2025, 6, 13, tzinfo=timezone.utc)
+
+
+async def test_resolve_uses_model_defaults_when_variable_missing(mocker):
+    """A missing Prefect variable falls back to the model defaults."""
     _patch_variable(mocker, None)
-    with pytest.raises(FileExistsError, match="s1-l0-default-setting"):
-        await Level0FlowParams().resolve("1")
+    resolved = await Level0FlowParams().resolve("1")
+    assert resolved == Level0FlowParams()
 
 
 async def test_resolve_uses_defaults_when_raw_not_dict(mocker):
@@ -134,8 +199,24 @@ async def test_resolve_merges_settings_and_params(mocker):
 
 
 async def test_resolve_uses_correct_variable_name_per_mission(mocker):
-    """The resolved Prefect variable name embeds the mission and level 0."""
-    get_mock = AsyncMock(return_value={})
+    """Every mission uses its unified processing configuration when available."""
+    get_mock = AsyncMock(return_value={"l0": {}})
     mocker.patch.object(types.Variable, "get", new=get_mock)
-    await Level0FlowParams().resolve("3")
-    get_mock.assert_awaited_once_with("s3-l0-default-setting")
+    await Level0FlowParams().resolve("1")
+    assert get_mock.await_args_list == [
+        call("s1-processing-default-setting", default=None),
+    ]
+
+
+async def test_resolve_falls_back_to_legacy_variable(mocker):
+    """A missing unified processing configuration falls back to the previous level-specific variable."""
+    get_mock = AsyncMock(side_effect=[None, {"owner_identifier": "legacy-owner"}])
+    mocker.patch.object(types.Variable, "get", new=get_mock)
+
+    resolved = await Level0FlowParams().resolve("1")
+
+    assert resolved.owner_identifier == "legacy-owner"
+    assert get_mock.await_args_list == [
+        call("s1-processing-default-setting", default=None),
+        call("s1-l0-default-setting", default={}),
+    ]
