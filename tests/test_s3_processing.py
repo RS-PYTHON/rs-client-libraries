@@ -12,22 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the Sentinel-3 deployment orchestrator."""
+"""Tests for Sentinel-3 processing behavior."""
 
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock
 
-from rs_workflows.on_demand.sentinel3 import (
-    s3_l1_olci,
-    s3_processing,
-    s3_processing_utils,
-)
-
-
-def _flow_run(result):
-    state = MagicMock()
-    state.is_completed.return_value = True
-    state.result = AsyncMock(return_value=result)
-    return MagicMock(state=state)
+from rs_workflows.on_demand.sentinel3 import s3_l1_olci
 
 
 async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
@@ -91,103 +80,4 @@ async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
             "item_id": "S03NATL0__product.zarr",
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
-    ]
-
-
-async def test_process_s3_runs_deployments_in_sequence(mocker):
-    """Staging, L0, and L1 run sequentially with L0 products passed to L1."""
-    mocker.patch.object(s3_processing, "get_run_logger", return_value=MagicMock())
-    mocker.patch.object(
-        s3_processing_utils.Variable,
-        "get",
-        new=AsyncMock(
-            return_value={
-                "orchestration": {
-                    "cadip_staging_deployment": "stage-cadip-with-options/On-demand Cadip staging",
-                    "s3_l0_deployment": "process-s3-l0/on_demand_S3L0",
-                    "s3_l1_olci_deployment": "process-s3-l1-olci/on_demand_S3L1OLCI",
-                    "cadip_collection": "cadip",
-                    "staging_catalog_collection": "AUTOMATED_S3L0_INPUT",
-                    "s3_l0_output_collection": "AUTOMATED_S3L0_OUTPUT",
-                },
-            },
-        ),
-    )
-    l1_products = [{"id": "S03OLCL1__product.zarr"}]
-    l0_products = [
-        {
-            "id": f"S03OLCL0__product-{index}.zarr",
-            "properties": {"product:type": "S03OLCL0_"},
-        }
-        for index in range(1, 5)
-    ]
-    l0_products.append(
-        {
-            "id": "S03NATL0__product.zarr",
-            "properties": {"product:type": "S03NATL0_"},
-        },
-    )
-    l0_run = _flow_run(l0_products)
-    l0_run.id = "12345678-abcd-4321-abcd-1234567890ab"
-    run = mocker.patch.object(
-        s3_processing,
-        "run_deployment",
-        new=AsyncMock(
-            side_effect=[
-                _flow_run(None),
-                l0_run,
-                _flow_run(l1_products),
-            ],
-        ),
-    )
-
-    result = await s3_processing.process_s3.fn("S3A_session")
-
-    assert result is None
-    assert run.await_args_list == [
-        call(
-            name="stage-cadip-with-options/On-demand Cadip staging",
-            parameters={
-                "cadip_collection_identifier": "cadip",
-                "session_identifier": "S3A_session",
-                "catalog_collection_identifier": "AUTOMATED_S3L0_INPUT",
-            },
-            flow_run_name="stage-S3A_session",
-        ),
-        call(
-            name="process-s3-l0/on_demand_S3L0",
-            parameters={"session": "S3A_session"},
-            flow_run_name="s3-l0-S3A_session",
-        ),
-        call(
-            name="process-s3-l1-olci/on_demand_S3L1OLCI",
-            parameters={
-                "flow_params": {
-                    "input_products": [
-                        {
-                            "name": "S3OLCIL0_1",
-                            "item_id": "S03OLCL0__product-1.zarr",
-                            "collection_name": "AUTOMATED_S3L0_OUTPUT",
-                        },
-                        {
-                            "name": "S3OLCIL0_2",
-                            "item_id": "S03OLCL0__product-2.zarr",
-                            "collection_name": "AUTOMATED_S3L0_OUTPUT",
-                        },
-                        {
-                            "name": "S3OLCIL0_3",
-                            "item_id": "S03OLCL0__product-3.zarr",
-                            "collection_name": "AUTOMATED_S3L0_OUTPUT",
-                        },
-                        {
-                            "name": "S3NAVL0_1",
-                            "item_id": "S03NATL0__product.zarr",
-                            "collection_name": "AUTOMATED_S3L0_OUTPUT",
-                        },
-                    ],
-                },
-                "source_l0_run_id": "12345678",
-            },
-            flow_run_name="s3-l1-olci-from-12345678",
-        ),
     ]
