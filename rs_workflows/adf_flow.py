@@ -80,6 +80,11 @@ S03_OL_ADF_TYPE_CONFIG: dict[str, S03OlAdfConfig] = {
     AdfType.S03_ADF_OLPRG: S03OlAdfConfig(required_type="OL_1_PRG_AX", generated_prod_type="ADF_OLPRG"),
     AdfType.S03_ADF_OLRAC: S03OlAdfConfig(required_type="OL_1_RAC_AX", generated_prod_type="ADF_OLRAC"),
     AdfType.S03_ADF_OLSPC: S03OlAdfConfig(required_type="OL_1_SPC_AX", generated_prod_type="ADF_OLSPC"),
+    AdfType.S03_ADF_OLPPP: S03OlAdfConfig(required_type="OL_2_PPP_AX", generated_prod_type="ADF_OLPPP"),
+    AdfType.S03_ADF_OLPCP: S03OlAdfConfig(required_type="OL_2_PCP_AX", generated_prod_type="ADF_OLPCP"),
+    AdfType.S03_ADF_OLCLP: S03OlAdfConfig(required_type="OL_2_CLP_AX", generated_prod_type="ADF_OLCLP"),
+    AdfType.S03_ADF_OLWVP: S03OlAdfConfig(required_type="OL_2_WVP_AX", generated_prod_type="ADF_OLWVP"),
+    AdfType.S03_ADF_OLVGP: S03OlAdfConfig(required_type="OL_2_VGP_AX", generated_prod_type="ADF_OLVGP"),
 }
 
 
