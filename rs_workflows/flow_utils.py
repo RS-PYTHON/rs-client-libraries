@@ -110,11 +110,11 @@ class AdfType(str, Enum):
 class LoggingLevel(int, Enum):
     """Logging level allowed by eopf.logging module"""
 
-    DEBUG = 10
-    INFO = 20
-    WARNING = 30
-    ERROR = 40
-    CRITICAL = 50
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+    CRITICAL = "CRITICAL"
 
 
 class AuxiliarySource(str, Enum):
@@ -178,20 +178,21 @@ class FlowEnv:
 
     def __init__(self, args: FlowEnvArgs):
         """Constructor."""
-        logger = get_run_logger()
-        logger.info("Initializing FlowEnv with args: %r", args)
+        # logger = get_run_logger()
+        # logger.info("Initializing FlowEnv with args: %r", args)
         self.owner_id: str = args.owner_id
         self.calling_span: SpanContext | None = None
         self.this_span: SpanContext | None = None
 
         # Set root logging level to the one selected for this flow
-        logging.disable(args.logging_level.value - 1)
+        logging.getLogger().setLevel(args.logging_level.value)
 
         # Set logging level for flows and tasks
         logging.getLogger("prefect.flow_runs").setLevel(args.logging_level.value)
         logging.getLogger("prefect.task_runs").setLevel(args.logging_level.value)
 
         # Set logging level for current run
+        logger = get_run_logger()
         logger.setLevel(args.logging_level.value)
 
         # Deserialize the calling span, if any
