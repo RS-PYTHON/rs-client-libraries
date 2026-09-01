@@ -41,7 +41,13 @@ def _replace_external_variables(obj, external_variables: dict[str, Any] | None):
             if variable_name not in external_variables:
                 raise TaskTableError(f"Unknown external variable: {variable_name}")
             value = external_variables[variable_name]
-            return strftime_millis(value) if "datetime" in variable_name else str(value)
+            if "datetime" in variable_name:
+                if value is None:
+                    raise TaskTableError(
+                        f"External variable '{variable_name}' is required by the task table but was not provided",
+                    )
+                return strftime_millis(value)
+            return str(value)
 
         return EXTERNAL_VAR_PATTERN.sub(replacer, obj)
     return obj

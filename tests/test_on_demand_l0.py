@@ -14,7 +14,7 @@
 
 """Unit tests for the on_demand Level-0 flows (common.l0, common.l0_last_steps, sentinel1/3)."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -42,6 +42,8 @@ def _resolved_params():
         generated_product_to_collection_identifier=None,
         auxiliary_product_to_collection_identifier=None,
         logging_level="INFO",
+        start_datetime=None,
+        end_datetime=None,
     )
 
 
@@ -62,8 +64,8 @@ def _patch_l0(
     item=None,
     station=None,
     staged=True,
-    evicted=(False, None),
-    published=True,
+    unpublished=(False, None),
+    published=(True, datetime.now(timezone.utc)),
 ):
     mocker.patch.object(l0, "get_run_logger", return_value=MagicMock())
     flow_env = MagicMock()
@@ -71,7 +73,7 @@ def _patch_l0(
     mocker.patch.object(l0, "FlowEnv", return_value=flow_env)
     mocker.patch.object(l0, "is_dask_cluster_running", new=AsyncMock(return_value=dask_running))
     mocker.patch.object(l0, "get_single_catalog_item", new=AsyncMock(return_value=item))
-    mocker.patch.object(l0, "is_evicted", return_value=evicted)
+    mocker.patch.object(l0, "is_unpublished", return_value=unpublished)
     mocker.patch.object(l0, "is_published", return_value=published)
     mocker.patch.object(l0, "get_cadip_station", new=AsyncMock(return_value=station))
     stage_mock = mocker.patch.object(l0, "stage_session_common", new=AsyncMock(return_value=staged))
@@ -94,23 +96,23 @@ async def test_process_l0_raises_when_dask_cluster_not_ready(mocker):
         await l0.process_l0.fn("S1A_20230101T000000", _flow_params())
 
 
-async def test_process_l0_raises_when_session_evicted(mocker):
-    """A found but evicted session raises ValueError."""
-    _patch_l0(mocker, item=MagicMock(), evicted=(True, "2020-01-01"))
-    with pytest.raises(ValueError, match="evicted"):
+async def test_process_l0_raises_when_session_unpublished(mocker):
+    """A found but unpublished session raises ValueError."""
+    _patch_l0(mocker, item=MagicMock(), unpublished=(True, "2020-01-01"))
+    with pytest.raises(ValueError, match="unpublished"):
         await l0.process_l0.fn("S1A_20230101T000000", _flow_params())
 
 
 async def test_process_l0_raises_when_session_not_published(mocker):
     """A found session that is not published yet raises ValueError."""
-    _patch_l0(mocker, item=MagicMock(), evicted=(False, None), published=False)
-    with pytest.raises(ValueError, match="not been publised"):
+    _patch_l0(mocker, item=MagicMock(), unpublished=(False, None), published=(False, None))
+    with pytest.raises(ValueError, match="not been published"):
         await l0.process_l0.fn("S1A_20230101T000000", _flow_params())
 
 
 async def test_process_l0_dispatches_s1_when_found_in_catalog(mocker):
     """A published S1 session in the catalog is dispatched to the S1 processor."""
-    mocks = _patch_l0(mocker, item=MagicMock(), published=True)
+    mocks = _patch_l0(mocker, item=MagicMock(), published=(True, datetime.now(timezone.utc)))
     await l0.process_l0.fn("S1A_20230101T000000", _flow_params())
     mocks["s1"].assert_awaited_once()
     mocks["s3"].assert_not_awaited()
@@ -136,7 +138,7 @@ async def test_process_l0_no_dispatch_when_station_not_found(mocker):
 
 async def test_process_l0_uses_default_params_when_none(mocker):
     """When no flow_params is given, a default Level0FlowParams is built and resolved."""
-    mocks = _patch_l0(mocker, item=MagicMock(), published=True)
+    mocks = _patch_l0(mocker, item=MagicMock(), published=(True, datetime.now(timezone.utc)))
     mocker.patch.object(l0, "Level0FlowParams", return_value=_flow_params())
     await l0.process_l0.fn("S1A_20230101T000000", None)
     mocks["s1"].assert_awaited_once()
@@ -151,7 +153,7 @@ def _patch_last_steps(mocker, item):
     flow_env.start_span.return_value.__enter__.return_value = MagicMock()
     mocker.patch.object(l0_last_steps, "FlowEnv", return_value=flow_env)
     mocker.patch.object(l0_last_steps, "get_single_catalog_item", new=AsyncMock(return_value=item))
-    return mocker.patch.object(l0_last_steps, "call_dpr_flow", new=AsyncMock())
+    return mocker.patch.object(l0_last_steps, "call_dpr_flow", new=AsyncMock(return_value=[]))
 
 
 async def test_process_l0_last_steps_returns_early_without_item(mocker):
@@ -161,19 +163,23 @@ async def test_process_l0_last_steps_returns_early_without_item(mocker):
     dpr_mock.assert_not_awaited()
 
 
-async def test_process_l0_last_steps_raises_on_missing_published(mocker):
-    """A missing/invalid 'published' property raises ValueError."""
+async def test_process_l0_last_steps_uses_published_datetime(mocker):
+    """The datetime interval comes from the catalog session metadata."""
     item = MagicMock()
-    item.properties = {}
-    _patch_last_steps(mocker, item=item)
-    with pytest.raises(ValueError, match="published"):
-        await l0_last_steps.process_l0_last_steps("1", "S1A_x", _flow_params(), [], verbose=False)
+    item.properties = {"datetime": "2023-01-01T00:00:00"}
+    dpr_mock = _patch_last_steps(mocker, item=item)
+
+    await l0_last_steps.process_l0_last_steps("1", "S1A_x", _flow_params(), [], verbose=False)
+
+    session_datetime = datetime.fromisoformat("2023-01-01T00:00:00")
+    assert dpr_mock.call_args.kwargs["external_variables"]["start_datetime"] == session_datetime
+    assert dpr_mock.call_args.kwargs["external_variables"]["end_datetime"] == session_datetime
 
 
 async def test_process_l0_last_steps_calls_dpr_flow(mocker):
-    """A published session triggers call_dpr_flow with the computed satellite and datetimes."""
+    """A catalog session triggers call_dpr_flow with the computed satellite and datetimes."""
     item = MagicMock()
-    item.properties = {"published": "2023-01-01T00:00:00"}
+    item.properties = {"datetime": "2023-01-01T00:00:00"}
     dpr_mock = _patch_last_steps(mocker, item=item)
     products = [FlowInputProduct(name="S1CADUS", item_id="S1A_session", collection_name="coll")]
 
@@ -183,8 +189,36 @@ async def test_process_l0_last_steps_calls_dpr_flow(mocker):
     kwargs = dpr_mock.call_args.kwargs
     assert kwargs["input_products"] == products
     assert kwargs["external_variables"]["satellite"] == "sentinel-1a"
-    assert kwargs["external_variables"]["start_datetime"] == datetime.fromisoformat("2023-01-01T00:00:00")
-    assert kwargs["external_variables"]["end_datetime"] == datetime.fromisoformat("2023-01-01T00:00:00")
+    session_datetime = datetime.fromisoformat("2023-01-01T00:00:00")
+    assert kwargs["external_variables"]["start_datetime"] == session_datetime
+    assert kwargs["external_variables"]["end_datetime"] == session_datetime
+
+
+async def test_process_s3_l0_last_steps_returns_all_products(mocker):
+    """Successful S3 L0 processing returns every product for Prefect persistence."""
+    item = MagicMock()
+    item.properties = {"datetime": "2023-01-01T00:00:00"}
+    dpr_mock = _patch_last_steps(mocker, item=item)
+    dpr_mock.return_value = [
+        {
+            "type": "Feature",
+            "id": "S03OLCL0__product.zarr",
+            "properties": {"product:type": "S03OLCL0_"},
+        },
+        {
+            "type": "Feature",
+            "id": "S03DORDOP_product.zarr",
+            "properties": {"product:type": "S03DORDOP"},
+        },
+        {
+            "type": "Feature",
+            "id": "S03NATL0__product.zarr",
+            "properties": {"product:type": "S03NATL0_"},
+        },
+    ]
+    result = await l0_last_steps.process_l0_last_steps("3", "S3A_session", _flow_params(), [], verbose=False)
+
+    assert result == dpr_mock.return_value
 
 
 # --------------------------------------------------------------------------- #
@@ -209,29 +243,62 @@ async def test_process_s1l0_builds_s1_input_and_delegates(mocker):
 
 
 async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
-    """process_s3l0 builds the S3ACADUS input product and delegates to the common last steps."""
-    last_steps = mocker.patch.object(s3_l0, "process_l0_last_steps", new=AsyncMock())
-    flow_params = MagicMock(session_collection="s03-cadip-session")
+    """process_s3l0 runs the real L0 last steps and emits their products."""
+    products_result = [
+        {
+            "id": "S03OLCL0__product.zarr",
+            "properties": {"product:type": "S03OLCL0_"},
+        },
+    ]
+    last_steps = mocker.patch.object(
+        s3_l0,
+        "process_l0_last_steps",
+        new=AsyncMock(return_value=products_result),
+    )
+    emitted_event = MagicMock(id="event-id")
+    emit_event = mocker.patch.object(s3_l0, "emit_event", return_value=emitted_event)
+    mocker.patch.object(s3_l0, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(s3_l0.runtime.flow_run, "id", "flow-run-id")
+    resolved_params = _resolved_params()
+    resolved_params.session_collection = "s03-cadip-session"
+    flow_params = MagicMock()
+    flow_params.resolve = AsyncMock(return_value=resolved_params)
 
-    await s3_l0.process_s3l0.fn("S3A_session", flow_params, verbose=False)
+    result = await s3_l0.process_s3l0.fn("S3A_session", flow_params, verbose=False)
 
+    flow_params.resolve.assert_awaited_once_with("3")
+    assert result == products_result
     last_steps.assert_awaited_once()
     kwargs = last_steps.call_args.kwargs
     assert kwargs["mission"] == "3"
-    products = kwargs["input_products"]
-    assert products[0].name == "S3ACADUS"
-    assert products[0].collection_name == "s03-cadip-session"
+    assert kwargs["session"] == "S3A_session"
+    assert kwargs["flow_params"] is resolved_params
+    assert kwargs["verbose"] is False
+    assert kwargs["input_products"][0].model_dump() == {
+        "name": "S3ACADUS",
+        "item_id": "S3A_session",
+        "collection_name": "s03-cadip-session",
+    }
+    payload = emit_event.call_args.kwargs["payload"]
+    assert emit_event.call_args.kwargs["event"] == "rs-python.s3-l0.products-ready"
+    assert payload["products"] == [
+        {
+            "S03OLCL0_": "S03OLCL0__product.zarr",
+        },
+    ]
+    assert "mocked" not in payload
+    assert "input_products" not in payload
+
+
+async def test_process_s3l0_task_delegates_to_flow(mocker):
+    """The S3 task wrapper runs the underlying flow function."""
+    process = mocker.patch.object(s3_l0.process_s3l0, "fn", new=AsyncMock())
+    await s3_l0.process_s3l0_task.fn("S3A_session")
+    process.assert_awaited_once_with("S3A_session")
 
 
 async def test_process_s1l0_task_delegates_to_flow(mocker):
     """The S1 task wrapper simply runs the underlying flow function."""
     delegate = mocker.patch.object(s1_l0.process_s1l0, "fn", new=AsyncMock())
     await s1_l0.process_s1l0_task.fn(session="S1A_session", flow_params=MagicMock(), verbose=False)
-    delegate.assert_awaited_once()
-
-
-async def test_process_s3l0_task_delegates_to_flow(mocker):
-    """The S3 task wrapper simply runs the underlying flow function."""
-    delegate = mocker.patch.object(s3_l0.process_s3l0, "fn", new=AsyncMock())
-    await s3_l0.process_s3l0_task.fn(session="S3A_session", flow_params=MagicMock(), verbose=False)
     delegate.assert_awaited_once()

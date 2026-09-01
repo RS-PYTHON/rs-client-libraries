@@ -372,15 +372,30 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
     """
 
     logger = get_run_logger()
+    logger.debug(
+        "Starting record_product_expected: "
+        f"flow_run_id={flow_run_id!r}, dpr_processor_name={dpr_processor_name!r}, "
+        f"payload_type={type(payload).__name__}, eopf_types={eopf_types!r}",
+    )
+
+    logger.debug("Initializing database session and loading product_expected table metadata")
     metadata = MetaData()
     db, engine = get_db_session()
+    logger.debug(f"Database session initialized with engine={engine!r}")
     product_expected = Table("product_expected", metadata, autoload_with=engine)
+    logger.debug(
+        "Loaded product_expected table metadata: " f"columns={[column.name for column in product_expected.columns]}",
+    )
 
     if not eopf_types:
+        logger.debug(
+            "No EOPF types supplied; skipping expected-product recording " f"for flow_run_id={flow_run_id!r}",
+        )
         return
     eopf_type_dict = []
 
     if dpr_processor_name in ["s3_l0"]:
+        logger.debug(f"Building expected EOPF type lookup for processor={dpr_processor_name!r}")
         eopf_type_dict = [
             ("S03DORDOP", 1, 1),
             ("S03DORNAV", 1, 1),
@@ -396,57 +411,115 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
             ("S03HKMRAW", 1, 1),
             ("S03HKM2L0", 1, 1),
             ("S03NATL0_", 2, 2),
+            ("S03ALTL0_", 1, 1),
         ]
     else:
+        logger.debug(
+            f"Unsupported DPR processor={dpr_processor_name!r}; " f"skipping flow_run_id={flow_run_id!r}",
+        )
         return
 
     eopf_type_lookup = {k: (min_c, max_c) for k, min_c, max_c in eopf_type_dict}
+    logger.debug(
+        f"Built EOPF type lookup with {len(eopf_type_lookup)} entries: " f"{sorted(eopf_type_lookup)}",
+    )
 
     list_items = []
+    logger.debug(
+        "Inspecting payload workflow inputs: "
+        f"has_workflow={bool(payload.workflow)}, "
+        f"first_workflow_has_inputs={bool(payload.workflow and payload.workflow[0].inputs)}",
+    )
     if payload.workflow and payload.workflow[0].inputs:
         list_items = list(payload.workflow[0].inputs.values())
+    logger.debug(f"Collected {len(list_items)} workflow input value(s) for datetime extraction")
     min_val = extract_min_datetime(list_items)
+    logger.debug(f"Extracted sensing_start_datetime={min_val!r} from workflow inputs")
 
     try:
+        processed_count = 0
+        logger.debug(f"Beginning processing of expected EOPF types: {eopf_types!r}")
         for eopf_type in eopf_types:
+            processed_count += 1
+            logger.debug(
+                f"Processing expected EOPF type={eopf_type!r} " f"for flow_run_id={flow_run_id!r}",
+            )
 
             try:
                 min_c, max_c = eopf_type_lookup[eopf_type]
+                logger.debug(
+                    f"Resolved count range for eopf_type={eopf_type!r}: " f"min_count={min_c}, max_count={max_c}",
+                )
             except KeyError:
-                logger.error(f"EOPF type '{eopf_type}' not found in eopf_type_lookup.")
+                logger.error(
+                    f"EOPF type {eopf_type!r} not found in eopf_type_lookup; "
+                    f"available_types={sorted(eopf_type_lookup)}",
+                )
                 raise
             except Exception as e:
                 logger.exception(f"Unexpected error accessing eopf_type_lookup with key '{eopf_type}': {e}")
                 raise
 
+            logger.debug(f"Resolving pi_category_id for eopf_type={eopf_type!r}")
+            pi_category_id = get_pi_category_id(eopf_type)
+            logger.debug(
+                f"Resolved pi_category_id={pi_category_id!r} for eopf_type={eopf_type!r}",
+            )
             values = {
                 "flow_run_id": flow_run_id,
-                "pi_category_id": get_pi_category_id(eopf_type),
+                "pi_category_id": pi_category_id,
                 "eopf_type": eopf_type,
                 "sensing_start_datetime": min_val,
                 "min_count": min_c,
                 "max_count": max_c,
             }
+            logger.debug(f"Prepared product_expected values={values!r}")
 
+            logger.debug(
+                "Checking for an existing product_expected row with "
+                f"flow_run_id={flow_run_id!r}, eopf_type={eopf_type!r}",
+            )
             existing = db.execute(
                 select(product_expected.c.id).where(
                     (product_expected.c.flow_run_id == flow_run_id) & (product_expected.c.eopf_type == eopf_type),
                 ),
             ).fetchone()
+            logger.debug(
+                f"Existing-row lookup completed for eopf_type={eopf_type!r}: "
+                f"found={existing is not None}, row={existing!r}",
+            )
 
             if not existing:
+                logger.debug(f"No existing row found; inserting eopf_type={eopf_type!r}")
                 stmt = insert(product_expected).values(**values)  # type: ignore
                 db.execute(stmt)
                 logger.info(f"Inserted product_expected for flow_run_id={flow_run_id} for eopf_type={eopf_type}")
+            else:
+                logger.debug(
+                    f"Skipping insert for eopf_type={eopf_type!r}; " f"existing product_expected id={existing[0]!r}",
+                )
 
+            logger.debug(f"Committing transaction after processing eopf_type={eopf_type!r}")
             db.commit()
+            logger.debug(f"Transaction committed for eopf_type={eopf_type!r}")
+
+        logger.debug(
+            "Finished record_product_expected successfully: "
+            f"flow_run_id={flow_run_id!r}, processed_count={processed_count}",
+        )
 
     except Exception as e:
+        logger.debug(f"Rolling back product_expected transaction after error={e!r}")
         db.rollback()
-        logger.error(f"Error in record_product_expected: {e}")
+        logger.exception(
+            f"Error in record_product_expected for flow_run_id={flow_run_id!r}, "
+            f"dpr_processor_name={dpr_processor_name!r}: {e}",
+        )
         raise
     finally:
+        logger.debug(f"Closing database session for flow_run_id={flow_run_id!r}")
         db.close()
+        logger.debug(f"Database session closed for flow_run_id={flow_run_id!r}")
 
 
 @task(name="Validate Products")
