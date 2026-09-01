@@ -107,7 +107,7 @@ class AdfType(str, Enum):
     S03_ADF_OLSPC = "S03_ADF_OLSPC"
 
 
-class LoggingLevel(int, Enum):
+class LoggingLevel(str, Enum):
     """Logging level allowed by eopf.logging module"""
 
     DEBUG = "DEBUG"
