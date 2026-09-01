@@ -206,7 +206,14 @@ def normalize_stac_properties_datetimes(stac_props: dict) -> dict:
 
 
 @task(name="Run ADF conversion")
-def run_adf_script(script_path: Path | str, data_dir: Path, working_dir: Path, output_dir: Path) -> list[Path]:
+def run_adf_script(
+    script_path: Path | str,
+    data_dir: Path,
+    working_dir: Path,
+    output_dir: Path,
+    legacy_product_type: str | None = None,
+    generated_product_type: str | None = None,
+) -> list[Path]:
     """
     Run an ADF conversion tool with the given input and output directories.
 
@@ -226,7 +233,20 @@ def run_adf_script(script_path: Path | str, data_dir: Path, working_dir: Path, o
 
     # Build command depending on the conversion tool
     if script_path == STB_CONVERT_PRODUCTS:
-        command = ["stb_convert_products", "-i", str(data_dir), "-o", str(output_dir)]
+        # STB_CONVERT_PRODUCTS is only used for S03 types, which have exactly one required type
+        if legacy_product_type and generated_product_type:
+            command = [
+                "stb_convert_products",
+                "-i",
+                str(data_dir),
+                "-o",
+                str(output_dir),
+                "--map",
+                legacy_product_type,
+                generated_product_type,
+            ]
+        else:
+            command = ["stb_convert_products", "-i", str(data_dir), "-o", str(output_dir)]
         env = None  # inherit current environment
     else:
         env = os.environ.copy()
@@ -520,7 +540,18 @@ async def adf_conversion(adf_input: AdfProcessIn):
 
             # 3. Call the conversion tool
             try:
-                zarr_product_paths = run_adf_script(script_path, input_dir, work_dir, output_dir)
+                # STB_CONVERT_PRODUCTS is only used for S03 types, which have exactly one required type.
+                # The other conversion scripts (S00__ADF_*) may have multiple required types, but they
+                # don't use the --map flag, so we only need the first (and only) required type here.
+                legacy_product_type = adf_config.required_types[0] if adf_config.required_types else None
+                zarr_product_paths = run_adf_script(
+                    script_path,
+                    input_dir,
+                    work_dir,
+                    output_dir,
+                    legacy_product_type=legacy_product_type,
+                    generated_product_type=generated_prod_type,
+                )
             finally:
                 logger.info(f"Cleaning up input directory {input_dir}")
                 shutil.rmtree(input_dir, ignore_errors=True)
