@@ -192,8 +192,8 @@ class FlowEnv:
         logging.getLogger("prefect.task_runs").setLevel(args.logging_level.value)
 
         # Set logging level for current run
-        logger = get_run_logger()
-        logger.setLevel(args.logging_level.value)
+        # logger = get_run_logger()
+        # logger.setLevel(args.logging_level.value)
 
         # Deserialize the calling span, if any
         if args.calling_span:
@@ -201,7 +201,7 @@ class FlowEnv:
 
         # Read prefect blocks into env vars
         prefect_utils.read_prefect_blocks(self.owner_id, _sync=True)  # type: ignore
-        logger.info("Prefect blocks read into env vars for owner_id=%r", self.owner_id)
+        # logger.info("Prefect blocks read into env vars for owner_id=%r", self.owner_id)
         # Init opentelemetry traces
         init_opentelemetry.init_traces(args.service_name)
 
@@ -210,7 +210,7 @@ class FlowEnv:
             rs_server_href=os.getenv("RSPY_WEBSITE"),
             rs_server_api_key=os.getenv("RSPY_APIKEY"),
             owner_id=self.owner_id,
-            logger=logger,  # type: ignore
+            logger=get_run_logger(),  # type: ignore
         )
 
     def serialize(self) -> FlowEnvArgs:
