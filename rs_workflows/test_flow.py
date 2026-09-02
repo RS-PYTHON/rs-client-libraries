@@ -20,6 +20,9 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 @flow(name="test-flow")
 async def testflow(env: FlowEnvArgs, some_param: str):
     flow_env = FlowEnv(env)
+    logger = get_run_logger()
+    logger.info("Running main test flow")
+    logger.debug("Parameter is %s", some_param)
     call_client_task.submit(flow_env.serialize(), some_param)
 
 
@@ -29,7 +32,8 @@ async def call_client(env: FlowEnvArgs, some_param: str):
     logger = get_run_logger()
 
     # Function that emits logs
-    logger.info(f"Performing action of param {some_param}")
+    logger.info("Running client call flow")
+    logger.debug("Performing action of param %s", some_param)
     flow_env.rs_client.log_and_raise("This is a test error message", RuntimeError("Original test error message"))
 
 
