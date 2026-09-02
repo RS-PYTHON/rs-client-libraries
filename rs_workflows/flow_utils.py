@@ -227,8 +227,9 @@ class FlowEnv:
             serialized_span = tuple(new_calling_span)[:3]
         else:
             serialized_span = None
+        logging_level = LoggingLevel(self.logging_level) or LoggingLevel.INFO
 
-        return FlowEnvArgs(owner_id=self.owner_id, calling_span=serialized_span)  # type: ignore
+        return FlowEnvArgs(owner_id=self.owner_id, calling_span=serialized_span, logging_level=logging_level)  # type: ignore
 
     @_agnosticcontextmanager
     def start_span(
