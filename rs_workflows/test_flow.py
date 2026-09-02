@@ -23,7 +23,10 @@ async def testflow(env: FlowEnvArgs, some_param: str):
     logger = get_run_logger()
     logger.info("Running main test flow")
     logger.debug("Parameter is %s", some_param)
-    call_client_task.submit(flow_env.serialize(), some_param)
+
+    serialized_env = flow_env.serialize()
+    logger.debug(f"Serialized env:\n{serialized_env}")
+    call_client_task.submit(serialized_env, some_param)
 
 
 @flow(name="client-call")

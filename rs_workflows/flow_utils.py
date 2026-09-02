@@ -196,6 +196,8 @@ class FlowEnv:
         logger = get_run_logger()
         logger.setLevel(self.logging_level.value)
 
+        logger.debug("FlowEnv initialized with owner_id=%r, logging_level=%r", self.owner_id, self.logging_level)
+
         # Deserialize the calling span, if any
         if args.calling_span:
             self.calling_span = SpanContext(*args.calling_span)
