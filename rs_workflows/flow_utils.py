@@ -178,8 +178,6 @@ class FlowEnv:
 
     def __init__(self, args: FlowEnvArgs):
         """Constructor."""
-        # logger = get_run_logger()
-        # logger.info("Initializing FlowEnv with args: %r", args)
         self.owner_id: str = args.owner_id
         self.calling_span: SpanContext | None = None
         self.this_span: SpanContext | None = None
@@ -192,11 +190,8 @@ class FlowEnv:
         logging.getLogger("prefect.flow_runs").setLevel(self.logging_level)
         logging.getLogger("prefect.task_runs").setLevel(self.logging_level)
 
-        # Set logging level for current run
         logger = get_run_logger()
-        # logger.setLevel(self.logging_level)
-
-        logger.info("FlowEnv initialized with owner_id=%r, logging_level=%r", self.owner_id, self.logging_level)
+        logger.info("Initializing FlowEnv with args: %r", args)
 
         # Deserialize the calling span, if any
         if args.calling_span:
@@ -204,7 +199,7 @@ class FlowEnv:
 
         # Read prefect blocks into env vars
         prefect_utils.read_prefect_blocks(self.owner_id, _sync=True)  # type: ignore
-        # logger.info("Prefect blocks read into env vars for owner_id=%r", self.owner_id)
+        logger.info("Prefect blocks read into env vars for owner_id=%r", self.owner_id)
         # Init opentelemetry traces
         init_opentelemetry.init_traces(args.service_name)
 
@@ -229,7 +224,11 @@ class FlowEnv:
             serialized_span = None
         logging_level = LoggingLevel(self.logging_level) or LoggingLevel.INFO
 
-        return FlowEnvArgs(owner_id=self.owner_id, calling_span=serialized_span, logging_level=logging_level)  # type: ignore
+        return FlowEnvArgs(
+            owner_id=self.owner_id,
+            calling_span=serialized_span,
+            logging_level=logging_level,
+        )  # type: ignore
 
     @_agnosticcontextmanager
     def start_span(
