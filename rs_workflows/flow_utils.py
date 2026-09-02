@@ -183,20 +183,20 @@ class FlowEnv:
         self.owner_id: str = args.owner_id
         self.calling_span: SpanContext | None = None
         self.this_span: SpanContext | None = None
-        self.logging_level: LoggingLevel = args.logging_level
+        self.logging_level: str = args.logging_level.value
 
         # Set root logging level to the one selected for this flow
         logging.getLogger().setLevel(self.logging_level.value)
 
         # Set logging level for flows and tasks
-        logging.getLogger("prefect.flow_runs").setLevel(self.logging_level.value)
-        logging.getLogger("prefect.task_runs").setLevel(self.logging_level.value)
+        logging.getLogger("prefect.flow_runs").setLevel(self.logging_level)
+        logging.getLogger("prefect.task_runs").setLevel(self.logging_level)
 
         # Set logging level for current run
         logger = get_run_logger()
-        logger.setLevel(self.logging_level.value)
+        logger.setLevel(self.logging_level)
 
-        logger.debug("FlowEnv initialized with owner_id=%r, logging_level=%r", self.owner_id, self.logging_level)
+        logger.info("FlowEnv initialized with owner_id=%r, logging_level=%r", self.owner_id, self.logging_level)
 
         # Deserialize the calling span, if any
         if args.calling_span:
