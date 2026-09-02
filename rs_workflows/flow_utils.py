@@ -194,7 +194,7 @@ class FlowEnv:
 
         # Set logging level for current run
         logger = get_run_logger()
-        logger.setLevel(self.logging_level)
+        # logger.setLevel(self.logging_level)
 
         logger.info("FlowEnv initialized with owner_id=%r, logging_level=%r", self.owner_id, self.logging_level)
 
