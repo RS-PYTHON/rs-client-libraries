@@ -186,7 +186,7 @@ class FlowEnv:
         self.logging_level: str = args.logging_level.value
 
         # Set root logging level to the one selected for this flow
-        logging.getLogger().setLevel(self.logging_level.value)
+        logging.getLogger().setLevel(self.logging_level)
 
         # Set logging level for flows and tasks
         logging.getLogger("prefect.flow_runs").setLevel(self.logging_level)
