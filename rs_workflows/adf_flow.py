@@ -258,6 +258,7 @@ def run_adf_script(
         command = [sys.executable, str(script_path), str(data_dir), "--working_dir", str(working_dir)]
 
     try:
+        logger.info("Running ADF conversion command: " + " ".join(command))
         result = subprocess.run(  # nosec B603
             # trusted local script / executable with flow-created paths
             command,
@@ -298,7 +299,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     from the filename (minus the .json extension).
     """
     logger = get_run_logger()
-    is_json_product = zarr_path.suffix == ".json"
+    is_json_product = zarr_path.is_file()
 
     if is_json_product:
         logger.info(f"Creating STAC item from JSON file: {zarr_path}")
@@ -363,7 +364,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
         if value_platform not in ("0_", "__", "00"):
             stac_props["platform"] = f"sentinel-{value_platform}"
             logger.info(
-                "'platform' property has been computed from the item name." f"Value is '{stac_props["platform"]}'",
+                "'platform' property has been computed from the item name. " f"Value is '{stac_props["platform"]}'",
             )
         else:
             logger.info("'platform' is not added to properties because ADF is not specific to a platform.")
@@ -588,14 +589,13 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 )
 
                 # 7. Upload product to S3 and update STAC item href
-                if zarr_product_path.suffix == ".json":
+                if zarr_product_path.is_file():  # JSON product instead of ZARR directory
                     s3_dest = f"s3://{bucket_name}/{owner_id}/{target_collection}/{zarr_product_path.name}"
                     logger.info(f"Uploading JSON to {s3_dest}")
                     await s3_upload_file(zarr_product_path, s3_dest)
                     stac_item.assets["data"].href = s3_dest
                 else:
-                    zarr_suffix = ".zarr" if zarr_product_path.suffix == ".zarr" else ""
-                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}{zarr_suffix}/"
+                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}.zarr/"
                     logger.info(f"Uploading ZARR to {s3_dest_prefix}")
                     await s3_upload_dir(zarr_product_path, s3_dest_prefix)
                     stac_item.assets["data"].href = s3_dest_prefix
