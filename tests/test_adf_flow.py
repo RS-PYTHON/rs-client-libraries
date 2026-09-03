@@ -611,6 +611,10 @@ async def test_adf_conversion_flow_logic(
     assert extract_mock.called
     run_script_mock.assert_called_once()
     assert run_script_mock.call_args.args[0] == adf_flow.ADF_ECMWA_SCRIPT_PATH
+    # S00__ADF_* types use a script (not stb_convert_products), so legacy_product_type is set
+    # but the --map flag is not applied to the command
+    assert run_script_mock.call_args.kwargs["legacy_product_type"] == "AX___MA1_AX"
+    assert run_script_mock.call_args.kwargs["generated_product_type"] == "ADF_ECMWA"
     assert upload_mock.called
     assert publish_mock.called
 
@@ -1002,7 +1006,14 @@ def test_run_adf_script_stb_convert_products(monkeypatch, mocker, tmp_path):
     run_mock = MagicMock(return_value=completed_process)
     monkeypatch.setattr(adf_flow.subprocess, "run", run_mock)
 
-    result = adf_flow.run_adf_script.fn(adf_flow.STB_CONVERT_PRODUCTS, input_dir, work_dir, output_dir)
+    result = adf_flow.run_adf_script.fn(
+        adf_flow.STB_CONVERT_PRODUCTS,
+        input_dir,
+        work_dir,
+        output_dir,
+        legacy_product_type="OL_1_CAL_AX",
+        generated_product_type="ADF_OLCAL",
+    )
 
     assert result == [
         output_dir / "product_a.zarr",
@@ -1011,8 +1022,42 @@ def test_run_adf_script_stb_convert_products(monkeypatch, mocker, tmp_path):
     ]
     run_mock.assert_called_once()
     command = run_mock.call_args.args[0]
-    assert command == ["stb_convert_products", "-i", str(input_dir), "-o", str(output_dir)]
+    assert command == [
+        "stb_convert_products",
+        "-i",
+        str(input_dir),
+        "-o",
+        str(output_dir),
+        "--map",
+        "OL_1_CAL_AX",
+        "ADF_OLCAL",
+    ]
     # stb_convert_products mode should not set custom env (env=None)
+    assert run_mock.call_args.kwargs["env"] is None
+
+
+def test_run_adf_script_stb_convert_products_without_map(monkeypatch, mocker, tmp_path):
+    """Test that run_adf_script uses the default command when legacy/generated product types are not provided."""
+    mock_logger = MagicMock()
+    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    input_dir = tmp_path / "INPUT"
+    work_dir = tmp_path / "WORK"
+    output_dir = tmp_path / "OUTPUT"
+    input_dir.mkdir()
+    work_dir.mkdir()
+    output_dir.mkdir()
+    (output_dir / "product.zarr").mkdir()
+
+    completed_process = MagicMock(stdout="done", stderr="")
+    run_mock = MagicMock(return_value=completed_process)
+    monkeypatch.setattr(adf_flow.subprocess, "run", run_mock)
+
+    result = adf_flow.run_adf_script.fn(adf_flow.STB_CONVERT_PRODUCTS, input_dir, work_dir, output_dir)
+
+    assert result == [output_dir / "product.zarr"]
+    run_mock.assert_called_once()
+    command = run_mock.call_args.args[0]
+    assert command == ["stb_convert_products", "-i", str(input_dir), "-o", str(output_dir)]
     assert run_mock.call_args.kwargs["env"] is None
 
 
@@ -1117,6 +1162,9 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
     # Verify stb_convert_products was used (script_path == STB_CONVERT_PRODUCTS)
     run_script_mock.assert_called_once()
     assert run_script_mock.call_args.args[0] == adf_flow.STB_CONVERT_PRODUCTS
+    # Verify the --map flag is passed with the legacy and generated product types
+    assert run_script_mock.call_args.kwargs["legacy_product_type"] == expected_aux_type
+    assert run_script_mock.call_args.kwargs["generated_product_type"] == expected_generated_type
     upload_mock.assert_awaited_once()
 
     # Verify published metadata

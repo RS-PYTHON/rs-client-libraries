@@ -80,6 +80,11 @@ S03_OL_ADF_TYPE_CONFIG: dict[str, S03OlAdfConfig] = {
     AdfType.S03_ADF_OLPRG: S03OlAdfConfig(required_type="OL_1_PRG_AX", generated_prod_type="ADF_OLPRG"),
     AdfType.S03_ADF_OLRAC: S03OlAdfConfig(required_type="OL_1_RAC_AX", generated_prod_type="ADF_OLRAC"),
     AdfType.S03_ADF_OLSPC: S03OlAdfConfig(required_type="OL_1_SPC_AX", generated_prod_type="ADF_OLSPC"),
+    AdfType.S03_ADF_OLPPP: S03OlAdfConfig(required_type="OL_2_PPP_AX", generated_prod_type="ADF_OLPPP"),
+    AdfType.S03_ADF_OLPCP: S03OlAdfConfig(required_type="OL_2_PCP_AX", generated_prod_type="ADF_OLPCP"),
+    AdfType.S03_ADF_OLCLP: S03OlAdfConfig(required_type="OL_2_CLP_AX", generated_prod_type="ADF_OLCLP"),
+    AdfType.S03_ADF_OLWVP: S03OlAdfConfig(required_type="OL_2_WVP_AX", generated_prod_type="ADF_OLWVP"),
+    AdfType.S03_ADF_OLVGP: S03OlAdfConfig(required_type="OL_2_VGP_AX", generated_prod_type="ADF_OLVGP"),
 }
 
 
@@ -201,7 +206,14 @@ def normalize_stac_properties_datetimes(stac_props: dict) -> dict:
 
 
 @task(name="Run ADF conversion")
-def run_adf_script(script_path: Path | str, data_dir: Path, working_dir: Path, output_dir: Path) -> list[Path]:
+def run_adf_script(
+    script_path: Path | str,
+    data_dir: Path,
+    working_dir: Path,
+    output_dir: Path,
+    legacy_product_type: str | None = None,
+    generated_product_type: str | None = None,
+) -> list[Path]:
     """
     Run an ADF conversion tool with the given input and output directories.
 
@@ -221,7 +233,20 @@ def run_adf_script(script_path: Path | str, data_dir: Path, working_dir: Path, o
 
     # Build command depending on the conversion tool
     if script_path == STB_CONVERT_PRODUCTS:
-        command = ["stb_convert_products", "-i", str(data_dir), "-o", str(output_dir)]
+        # STB_CONVERT_PRODUCTS is only used for S03 types, which have exactly one required type
+        if legacy_product_type and generated_product_type:
+            command = [
+                "stb_convert_products",
+                "-i",
+                str(data_dir),
+                "-o",
+                str(output_dir),
+                "--map",
+                legacy_product_type,
+                generated_product_type,
+            ]
+        else:
+            command = ["stb_convert_products", "-i", str(data_dir), "-o", str(output_dir)]
         env = None  # inherit current environment
     else:
         env = os.environ.copy()
@@ -233,6 +258,7 @@ def run_adf_script(script_path: Path | str, data_dir: Path, working_dir: Path, o
         command = [sys.executable, str(script_path), str(data_dir), "--working_dir", str(working_dir)]
 
     try:
+        logger.info("Running ADF conversion command: " + " ".join(command))
         result = subprocess.run(  # nosec B603
             # trusted local script / executable with flow-created paths
             command,
@@ -273,7 +299,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     from the filename (minus the .json extension).
     """
     logger = get_run_logger()
-    is_json_product = zarr_path.suffix == ".json"
+    is_json_product = zarr_path.is_file()
 
     if is_json_product:
         logger.info(f"Creating STAC item from JSON file: {zarr_path}")
@@ -338,7 +364,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
         if value_platform not in ("0_", "__", "00"):
             stac_props["platform"] = f"sentinel-{value_platform}"
             logger.info(
-                "'platform' property has been computed from the item name." f"Value is '{stac_props["platform"]}'",
+                "'platform' property has been computed from the item name. " f"Value is '{stac_props["platform"]}'",
             )
         else:
             logger.info("'platform' is not added to properties because ADF is not specific to a platform.")
@@ -515,7 +541,18 @@ async def adf_conversion(adf_input: AdfProcessIn):
 
             # 3. Call the conversion tool
             try:
-                zarr_product_paths = run_adf_script(script_path, input_dir, work_dir, output_dir)
+                # STB_CONVERT_PRODUCTS is only used for S03 types, which have exactly one required type.
+                # The other conversion scripts (S00__ADF_*) may have multiple required types, but they
+                # don't use the --map flag, so we only need the first (and only) required type here.
+                legacy_product_type = adf_config.required_types[0] if adf_config.required_types else None
+                zarr_product_paths = run_adf_script(
+                    script_path,
+                    input_dir,
+                    work_dir,
+                    output_dir,
+                    legacy_product_type=legacy_product_type,
+                    generated_product_type=generated_prod_type,
+                )
             finally:
                 logger.info(f"Cleaning up input directory {input_dir}")
                 shutil.rmtree(input_dir, ignore_errors=True)
@@ -552,14 +589,13 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 )
 
                 # 7. Upload product to S3 and update STAC item href
-                if zarr_product_path.suffix == ".json":
+                if zarr_product_path.is_file():  # JSON product instead of ZARR directory
                     s3_dest = f"s3://{bucket_name}/{owner_id}/{target_collection}/{zarr_product_path.name}"
                     logger.info(f"Uploading JSON to {s3_dest}")
                     await s3_upload_file(zarr_product_path, s3_dest)
                     stac_item.assets["data"].href = s3_dest
                 else:
-                    zarr_suffix = ".zarr" if zarr_product_path.suffix == ".zarr" else ""
-                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}{zarr_suffix}/"
+                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}.zarr/"
                     logger.info(f"Uploading ZARR to {s3_dest_prefix}")
                     await s3_upload_dir(zarr_product_path, s3_dest_prefix)
                     stac_item.assets["data"].href = s3_dest_prefix
