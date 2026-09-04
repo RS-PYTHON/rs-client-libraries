@@ -326,7 +326,7 @@ def update_eopf_assets(
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
-    # disabled for mockup    
+    # disabled for mockup
     if dpr_processor.lower() in ["mockup"]:
         eopf_origin_datetime = "2026-01-01T00:00:00Z"
     elif input_products and zattrs_list:
