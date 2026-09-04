@@ -14,6 +14,7 @@
 
 """Utility module for the Prefect flows."""
 
+import logging
 import os
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -32,6 +33,7 @@ from rs_client.rs_client import RsClient
 from rs_common import init_opentelemetry, prefect_utils
 
 ARCHIVE_SUFFIXES = (".zip", ".tar", ".tgz", ".tar.gz")
+DEFAULT_ROOT_LOGGING_LEVEL = os.getenv("PREFECT_LOGGING_ROOT_LEVEL", "INFO")
 
 
 class Priority(str, Enum):
@@ -142,6 +144,15 @@ class FlowEnvArgs(BaseModel):
     owner_id: str = Field(
         description="User/owner ID (necessary to retrieve the user info) from the right Prefect block",
     )
+    logging_level: LoggingLevel = Field(
+        default=(
+            LoggingLevel[DEFAULT_ROOT_LOGGING_LEVEL]
+            if DEFAULT_ROOT_LOGGING_LEVEL in LoggingLevel
+            else LoggingLevel.INFO
+        ),
+        title="Overall logging level",
+        description="Level of logs wanted for this flow. Also applied to EOPF logs.",
+    )
     calling_span: tuple[int, int, bool] | None = Field(
         default=None,
         description="Serialized OpenTelemetry span of the calling flow, if any",
@@ -167,11 +178,20 @@ class FlowEnv:
 
     def __init__(self, args: FlowEnvArgs):
         """Constructor."""
-        logger = get_run_logger()
-        logger.info("Initializing FlowEnv with args: %r", args)
         self.owner_id: str = args.owner_id
         self.calling_span: SpanContext | None = None
         self.this_span: SpanContext | None = None
+        self.logging_level: str = args.logging_level.value
+
+        # Set root logging level to the one selected for this flow
+        logging.getLogger().setLevel(self.logging_level)
+
+        # Set logging level for flows and tasks
+        logging.getLogger("prefect.flow_runs").setLevel(self.logging_level)
+        logging.getLogger("prefect.task_runs").setLevel(self.logging_level)
+
+        logger = get_run_logger()
+        logger.info("Initializing FlowEnv with args: %r", args)
 
         # Deserialize the calling span, if any
         if args.calling_span:
@@ -202,8 +222,13 @@ class FlowEnv:
             serialized_span = tuple(new_calling_span)[:3]
         else:
             serialized_span = None
+        logging_level = LoggingLevel(self.logging_level) or LoggingLevel.INFO
 
-        return FlowEnvArgs(owner_id=self.owner_id, calling_span=serialized_span)  # type: ignore
+        return FlowEnvArgs(
+            owner_id=self.owner_id,
+            calling_span=serialized_span,
+            logging_level=logging_level,
+        )  # type: ignore
 
     @_agnosticcontextmanager
     def start_span(
@@ -317,12 +342,6 @@ class DprProcessIn(BaseModel):
         default=None,
         title="Dask task timeout",
         description="Default timeout on a submitted task",
-    )
-
-    logging_level: LoggingLevel = Field(
-        default=LoggingLevel.INFO,
-        title="Overall EOPF logging level",
-        description="Overall EOPF logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
 
     temporary_shared: bool = Field(
