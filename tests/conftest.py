@@ -781,7 +781,7 @@ def _ogcapi_response_sample() -> dict:
     Return auxip FeatureCollection as a dictionary
     """
     return {
-        "process_id": "string",
+        "processID": "string",
         "type": "process",
         "jobID": "e390e31c-b274-49d2-88c2-466cc4fe23c9",
         "status": "accepted",
