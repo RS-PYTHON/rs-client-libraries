@@ -49,7 +49,7 @@ class OgcApiClient(RsClient):
 
     Remark: this class don't inherits from the owslib.ogcapi.processes.Processes class because the latter
     doesn't provide wrapping for all endpoints defined in our services (it only provides the  /processes
-    and /processes/{processId}/execution endpoints + it doesn't allow to manage apikey_header parameter which
+    and /processes/{process_id}/execution endpoints + it doesn't allow to manage apikey_header parameter which
     is passed as an extra argument).
     """
 

@@ -781,7 +781,7 @@ def _ogcapi_response_sample() -> dict:
     Return auxip FeatureCollection as a dictionary
     """
     return {
-        "processID": "string",
+        "process_id": "string",
         "type": "process",
         "jobID": "e390e31c-b274-49d2-88c2-466cc4fe23c9",
         "status": "accepted",
@@ -814,7 +814,7 @@ def mocked_ogcapi_response(ogcapi_response_sample: dict, process: str):
     mocked_job_info = {
         "status": "successful",
         "progress": 100,
-        "processID": process,
+        "process_id": process,
         "type": "process",
         "message": "{}",
         "created": "2019-08-24T14:15:22Z",

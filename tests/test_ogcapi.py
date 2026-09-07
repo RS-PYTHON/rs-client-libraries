@@ -243,7 +243,7 @@ class TestOgcApi:
         json_response = {
             "jobs": [
                 {
-                    "processID": "string",
+                    "process_id": "string",
                     "type": "process",
                     "jobID": "string",
                     "status": "accepted",
@@ -314,7 +314,7 @@ class TestOgcApi:
         """
         job_id = "afbec9b5-7e46-4251-8e71-ec38479dbb11"
         json_response = {
-            "processID": "string",
+            "process_id": "string",
             "type": "process",
             "jobID": "string",
             "status": "accepted",
@@ -377,7 +377,7 @@ class TestOgcApi:
 
         job_id = "0474d453-3306-48e2-ab32-ac00bafb3115"
         json_response = {
-            "processID": "string",
+            "process_id": "string",
             "type": "process",
             "jobID": "string",
             "status": "accepted",
