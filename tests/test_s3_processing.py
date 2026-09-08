@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, LoggingLevel
+from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
 from rs_workflows.on_demand.common.types import Level2FlowParams
 from rs_workflows.on_demand.sentinel3 import s3_l1_olci, s3_l2_olci
 
@@ -111,9 +111,7 @@ async def test_process_s3l2_olci_resolves_settings_and_calls_dpr(mocker, overrid
     mocker.patch.object(s3_l2_olci, "get_run_logger", return_value=MagicMock())
     expected_result = [{"id": "olci-l2-output"}]
     call_dpr = mocker.patch.object(s3_l2_olci, "call_dpr_flow", new=AsyncMock(return_value=expected_result))
-    flow_params = (
-        Level2FlowParams(processor_version="2.0", logging_level=LoggingLevel.DEBUG) if override_params else None
-    )
+    flow_params = Level2FlowParams(processor_version="2.0") if override_params else None
 
     result = await s3_l2_olci.process_s3l2_olci.fn(
         flow_params=flow_params,
@@ -127,7 +125,7 @@ async def test_process_s3l2_olci_resolves_settings_and_calls_dpr(mocker, overrid
     assert kwargs["input_products"] == [explicit_input if override_inputs else settings_input]
     assert kwargs["processor_name"] == "s3_l2olci"
     assert kwargs["processor_version"] == ("2.0" if override_params else "1.0")
-    assert kwargs["logging_level"] == (LoggingLevel.DEBUG if override_params else LoggingLevel.INFO)
+    assert "logging_level" not in kwargs
     assert kwargs["dask_cluster_label"] == "olci-cluster"
     assert kwargs["pipeline"] == "olci-l2-pipeline"
     assert kwargs["external_variables"]["satellite"] == "S3A"

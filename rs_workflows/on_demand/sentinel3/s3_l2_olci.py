@@ -30,7 +30,7 @@ from rs_workflows.utils.dpr import call_dpr_flow
 )
 async def process_s3l2_olci(
     flow_params: Level2FlowParams | None = None,
-    input_products: FlowInputProduct | None = None,
+    input_products: list[FlowInputProduct] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Sentinel-3 OLCI L2 processing.
@@ -41,7 +41,7 @@ async def process_s3l2_olci(
 
     get_run_logger().info(f"Flow params: {flow_parameters}")
     # Call DPR flow
-    return await call_dpr_flow(  # type: ignore[call-arg]  # pylint: disable=unexpected-keyword-arg
+    return await call_dpr_flow(
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),
         input_products=input_products or flow_parameters.input_products,
         external_variables={
@@ -59,7 +59,6 @@ async def process_s3l2_olci(
         workflow=flow_parameters.workflow,
         generated_product_to_collection_identifier=flow_parameters.generated_product_to_collection_identifier or [],
         auxiliary_product_to_collection_identifier=flow_parameters.auxiliary_product_to_collection_identifier or [],
-        logging_level=flow_parameters.logging_level,
     )
 
 
