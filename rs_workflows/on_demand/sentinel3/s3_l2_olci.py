@@ -41,7 +41,7 @@ async def process_s3l2_olci(
 
     get_run_logger().info(f"Flow params: {flow_parameters}")
     # Call DPR flow
-    return await call_dpr_flow(
+    return await call_dpr_flow(  # type: ignore[call-arg]  # pylint: disable=unexpected-keyword-arg
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),
         input_products=input_products or flow_parameters.input_products,
         external_variables={
