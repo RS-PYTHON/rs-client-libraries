@@ -298,3 +298,15 @@ class Level1FlowParams(ProcessingFlowParams):
         Merge data from Prefect variable and parameters called.
         """
         return await super()._resolve(mission, "1")
+
+
+class Level2FlowParams(Level1FlowParams):
+    """
+    Parameters to override default Prefect variable 'sx-l2-default-setting'..
+    """
+
+    async def resolve(self, mission: str) -> Self:
+        """
+        Merge data from Prefect variable and parameters called.
+        """
+        return await super()._resolve(mission, "2")

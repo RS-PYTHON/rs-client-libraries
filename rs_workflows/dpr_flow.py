@@ -188,6 +188,9 @@ def create_stac_item(
                 # "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json",
                 # "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
             ]
+        # tempfix for OL2 with 'datetime': null in the feature_dict, we set it to the 'created' property if available
+        if feature_dict["properties"].get("datetime") is None:
+            feature_dict["properties"]["datetime"] = feature_dict["properties"]["created"]
 
         return Item(
             id=product_name,
@@ -327,7 +330,7 @@ def update_eopf_assets(
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
     # temporarily disabled for olcil1 and mockup
-    if dpr_processor.lower() in ["mockup", "s3_l1olci"]:
+    if dpr_processor.lower() in ["mockup", "s3_l1olci", "s3_l2olci"]:
         eopf_origin_datetime = "2026-01-01T00:00:00Z"
     elif input_products and zattrs_list:
         eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
