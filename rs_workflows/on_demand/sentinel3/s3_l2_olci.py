@@ -14,6 +14,8 @@
 
 """sentinel 3 OLCI Level-2 processing."""
 
+# pylint: disable=duplicate-code
+
 from typing import Any
 
 from prefect import flow, get_run_logger, task
@@ -22,12 +24,13 @@ from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
 from rs_workflows.on_demand.common.types import Level2FlowParams
 from rs_workflows.utils.dpr import call_dpr_flow
 
+
 @flow(
     name="process-s3-l2-olci",
 )
 async def process_s3l2_olci(
     flow_params: Level2FlowParams | None = None,
-    input_products: FlowInputProduct | None = None
+    input_products: FlowInputProduct | None = None,
 ) -> list[dict[str, Any]]:
     """
     Sentinel-3 OLCI L2 processing.

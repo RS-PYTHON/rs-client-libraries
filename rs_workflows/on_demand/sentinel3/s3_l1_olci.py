@@ -14,6 +14,8 @@
 
 """sentinel 3 OLCI Level-1 processing."""
 
+# pylint: disable=duplicate-code
+
 from typing import Any
 
 from prefect import flow, get_run_logger, task
