@@ -16,7 +16,11 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-from rs_workflows.on_demand.sentinel3 import s3_l1_olci
+import pytest
+
+from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, LoggingLevel
+from rs_workflows.on_demand.common.types import Level2FlowParams
+from rs_workflows.on_demand.sentinel3 import s3_l1_olci, s3_l2_olci
 
 
 async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
@@ -81,3 +85,80 @@ async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
             "collection_name": "AUTOMATED_S3L0_OUTPUT_2026",
         },
     ]
+
+
+@pytest.mark.parametrize("override_inputs", [False, True])
+@pytest.mark.parametrize("override_params", [False, True])
+async def test_process_s3l2_olci_resolves_settings_and_calls_dpr(mocker, override_inputs, override_params):
+    """L2 uses mission-3 settings and gives explicit parameters and inputs precedence."""
+    settings_input = FlowInputProduct(name="OLCI_L1", item_id="from-settings", collection_name="olci-l1")
+    explicit_input = FlowInputProduct(name="OLCI_L1", item_id="explicit", collection_name="olci-l1")
+    read_settings = mocker.patch(
+        "rs_workflows.on_demand.common.types._read_prefect_settings",
+        new=AsyncMock(
+            return_value={
+                "owner_identifier": "toto",
+                "processor": {"name": "s3_l2olci", "version": "1.0"},
+                "dask_cluster_name": "olci-cluster",
+                "pipeline": "olci-l2-pipeline",
+                "satellite": "S3A",
+                "start_datetime": "2026-09-01T00:00:00Z",
+                "end_datetime": "2026-09-01T01:00:00Z",
+                "input_products": [settings_input.model_dump()],
+            },
+        ),
+    )
+    mocker.patch.object(s3_l2_olci, "get_run_logger", return_value=MagicMock())
+    expected_result = [{"id": "olci-l2-output"}]
+    call_dpr = mocker.patch.object(s3_l2_olci, "call_dpr_flow", new=AsyncMock(return_value=expected_result))
+    flow_params = (
+        Level2FlowParams(processor_version="2.0", logging_level=LoggingLevel.DEBUG) if override_params else None
+    )
+
+    result = await s3_l2_olci.process_s3l2_olci.fn(
+        flow_params=flow_params,
+        input_products=[explicit_input] if override_inputs else None,
+    )
+
+    read_settings.assert_awaited_once_with("3", "2")
+    call_dpr.assert_awaited_once()
+    assert call_dpr.call_args.args == (FlowEnvArgs(owner_id="toto"),)
+    kwargs = call_dpr.call_args.kwargs
+    assert kwargs["input_products"] == [explicit_input if override_inputs else settings_input]
+    assert kwargs["processor_name"] == "s3_l2olci"
+    assert kwargs["processor_version"] == ("2.0" if override_params else "1.0")
+    assert kwargs["logging_level"] == (LoggingLevel.DEBUG if override_params else LoggingLevel.INFO)
+    assert kwargs["dask_cluster_label"] == "olci-cluster"
+    assert kwargs["pipeline"] == "olci-l2-pipeline"
+    assert kwargs["external_variables"]["satellite"] == "S3A"
+    assert kwargs["external_variables"]["start_datetime"].isoformat() == "2026-09-01T00:00:00+00:00"
+    assert kwargs["external_variables"]["end_datetime"].isoformat() == "2026-09-01T01:00:00+00:00"
+    assert kwargs["generated_product_to_collection_identifier"] == []
+    assert kwargs["auxiliary_product_to_collection_identifier"] == []
+    assert result == expected_result
+
+
+async def test_process_s3l2_olci_stops_when_settings_resolution_fails(mocker):
+    """A settings error is propagated without submitting DPR processing."""
+    mocker.patch(
+        "rs_workflows.on_demand.common.types._read_prefect_settings",
+        new=AsyncMock(side_effect=ValueError("Invalid L2 settings")),
+    )
+    call_dpr = mocker.patch.object(s3_l2_olci, "call_dpr_flow", new=AsyncMock())
+
+    with pytest.raises(ValueError, match="Invalid L2 settings"):
+        await s3_l2_olci.process_s3l2_olci.fn()
+
+    call_dpr.assert_not_awaited()
+
+
+async def test_process_s3l2_olci_task_forwards_arguments_and_result(mocker):
+    """The task wrapper forwards flow arguments and returns the produced items."""
+    flow_params = Level2FlowParams()
+    expected_result = [{"id": "olci-l2-output"}]
+    flow_fn = mocker.patch.object(s3_l2_olci.process_s3l2_olci, "fn", new=AsyncMock(return_value=expected_result))
+
+    result = await s3_l2_olci.process_s3l2_olci_task.fn(flow_params, input_products=None)
+
+    flow_fn.assert_awaited_once_with(flow_params, input_products=None)
+    assert result == expected_result
