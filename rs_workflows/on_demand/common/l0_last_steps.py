@@ -123,7 +123,6 @@ async def process_l0_last_steps(
             "workflow": p.workflow,
             "generated_product_to_collection_identifier": p.generated_product_to_collection_identifier or [],
             "auxiliary_product_to_collection_identifier": p.auxiliary_product_to_collection_identifier or [],
-            "logging_level": p.logging_level,
         }
         logger.info("About to call call_dpr_flow with env=%r (type=%s)", dpr_env, type(dpr_env).__name__)
 
@@ -154,7 +153,6 @@ async def process_l0_last_steps(
                 workflow=p.workflow,
                 generated_product_to_collection_identifier=(p.generated_product_to_collection_identifier or []),
                 auxiliary_product_to_collection_identifier=(p.auxiliary_product_to_collection_identifier or []),
-                logging_level=p.logging_level,
             )
         except Exception:
             logger.exception(
