@@ -41,7 +41,6 @@ def _resolved_params():
         workflow=None,
         generated_product_to_collection_identifier=None,
         auxiliary_product_to_collection_identifier=None,
-        logging_level="INFO",
         start_datetime=None,
         end_datetime=None,
     )
