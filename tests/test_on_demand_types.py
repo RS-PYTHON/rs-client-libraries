@@ -20,7 +20,6 @@ from unittest.mock import AsyncMock, call
 import pytest
 
 from rs_workflows.flow_utils import (
-    LoggingLevel,
     Priority,
     ProcessingMode,
     WorkflowType,
@@ -129,7 +128,6 @@ async def test_resolve_uses_defaults_when_raw_not_dict(mocker):
     assert resolved.pipeline is None
     assert resolved.unit is None
     assert resolved.cadip_collections == []
-    assert resolved.logging_level == LoggingLevel.INFO
 
 
 async def test_resolve_pipeline_and_unit_are_mutually_exclusive(mocker):

@@ -281,7 +281,7 @@ class DprClient(OgcApiClient):
             try:
                 # 86400 seconds (24h) timeout for the long running stream
                 # maybe we should configure this timeout from user's input?
-                logger.info(f"Connecting to log stream from {url}...")
+                logger.info(f"Connecting to log stream from {url}")
                 response = self.http_session.get(url, stream=True, **self.apikey_headers, timeout=86400)
                 if response.status_code == 200:
                     buffer: list[str] = []

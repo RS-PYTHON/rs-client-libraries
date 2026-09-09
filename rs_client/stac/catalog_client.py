@@ -226,10 +226,22 @@ class CatalogClient(StacBase):  # type: ignore # pylint: disable=too-many-ancest
     ) -> ItemCollection | None:
         """Search items inside a specific collection."""
 
+        owner_id = kwargs.get("owner_id")
         if "collections" in kwargs and kwargs["collections"]:
             kwargs["collections"] = [
-                self.full_collection_id(kwargs.get("owner_id"), collection, "_") for collection in kwargs["collections"]
+                self.full_collection_id(owner_id, collection, "_") for collection in kwargs["collections"]
             ]  # type: ignore
+        elif owner_id:
+            # Restrict searches without an explicit collection to the requested catalog owner.
+            owner_filter = {"op": "=", "args": [{"property": "owner"}, owner_id]}
+            stac_filter = kwargs.get("stac_filter")
+            if isinstance(stac_filter, str):
+                escaped_owner_id = str(owner_id).replace("'", "''")
+                kwargs["stac_filter"] = f"({stac_filter}) AND owner = '{escaped_owner_id}'"
+            elif stac_filter:
+                kwargs["stac_filter"] = {"op": "and", "args": [stac_filter, owner_filter]}
+            else:
+                kwargs["stac_filter"] = owner_filter
         return super().search(**kwargs)  # type: ignore
 
     # end of STAC read opperations

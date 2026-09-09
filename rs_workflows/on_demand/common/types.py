@@ -26,7 +26,6 @@ from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
     FlowGeneratedProduct,
     FlowInputProduct,
-    LoggingLevel,
     Priority,
     ProcessingMode,
     WorkflowType,
@@ -114,13 +113,6 @@ class ProcessingFlowParams(BaseModel):
         json_schema_extra={"order": 8},
     )
 
-    logging_level: LoggingLevel = Field(
-        default=LoggingLevel.INFO,
-        title="Overall EOPF logging level",
-        description="Overall EOPF logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
-        json_schema_extra={"order": 9},
-    )
-
     processing_mode: list[ProcessingMode] = Field(
         default_factory=list,
         title="Processing Mode",
@@ -185,7 +177,6 @@ class ProcessingFlowParams(BaseModel):
             "pipeline": pipeline,
             "unit": unit,
             "priority": self.priority or settings.get("priority"),
-            "logging_level": self.logging_level or settings.get("logging_level"),
             "processing_mode": self.processing_mode or settings.get("processing_mode", []),
             "workflow": self.workflow or settings.get("workflow"),
             "generated_product_to_collection_identifier": (
