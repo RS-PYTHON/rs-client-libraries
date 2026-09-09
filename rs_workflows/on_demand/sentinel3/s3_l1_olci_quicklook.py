@@ -12,13 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Generate quicklooks for a catalogued Sentinel-3 OLCI Level-1 product."""
+"""Generate quicklooks for catalogued Sentinel-3 OLCI Level-1 products."""
 
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 
+import numpy as np
+import rasterio
+from PIL import Image
 from prefect import flow, get_run_logger
+from pyproj import CRS, Transformer
+from rasterio.control import GroundControlPoint
+from rasterio.transform import from_bounds
+from rasterio.warp import Resampling, reproject
+from sentineltoolbox.api import S3BucketCredentials, open_datatree
 
 from rs_common import prefect_utils
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
@@ -26,6 +35,8 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 JPEG_MEDIA_TYPE = "image/jpeg"
 COG_MEDIA_TYPE = "image/tiff; application=geotiff; profile=cloud-optimized"
 ZARR_MEDIA_TYPE = "application/vnd+zarr"
+# Downsample the source arrays by this factor to keep quicklook generation fast and lightweight.
+QUICKLOOK_DOWNSAMPLING_STEP = 4
 
 
 def get_zarr_href(item) -> str:
@@ -40,24 +51,30 @@ def get_zarr_href(item) -> str:
     raise ValueError(f"Catalog item {item.id!r} has no Zarr asset")
 
 
-def build_rgb(measurements, step: int):
+def build_rgb(measurements):
     """Build a downsampled uint8 RGB array from the OLCI radiance bands."""
-    import numpy as np  # pylint: disable=import-outside-toplevel
-
-    lon_full = measurements.longitude.values
-    lat_full = measurements.latitude.values
+    longitude = measurements.longitude
+    latitude = measurements.latitude
+    row_dimension, column_dimension = longitude.dims
 
     # Rows corrupted by the S3-OLCI processor have zero longitude and latitude ("Null Island").
-    good_rows = ~((lon_full[:, 0] == 0) & (lat_full[:, 0] == 0))
+    first_longitude = longitude.isel({column_dimension: 0}).values
+    first_latitude = latitude.isel({column_dimension: 0}).values
+    good_rows = ~((first_longitude == 0) & (first_latitude == 0))
     if not good_rows.any():
         raise ValueError("The OLCI product contains no valid geolocation rows")
 
-    # Downsample the valid swath to keep quicklook generation fast and lightweight.
-    lon = lon_full[good_rows][::step, ::step]
-    lat = lat_full[good_rows][::step, ::step]
+    # Select before loading values so full-resolution EFR arrays stay out of memory.
+    selected_rows = np.flatnonzero(good_rows)[::QUICKLOOK_DOWNSAMPLING_STEP]
+    selection = {
+        row_dimension: selected_rows,
+        column_dimension: slice(None, None, QUICKLOOK_DOWNSAMPLING_STEP),
+    }
+    lon = longitude.isel(selection).values
+    lat = latitude.isel(selection).values
 
     def quicklook_band(band):
-        values = band.values[good_rows][::step, ::step].astype("float32")
+        values = band.isel(selection).values.astype("float32")
         # Clip outliers before scaling the radiance values to the display range.
         vmin, vmax = np.nanpercentile(values, [2, 98])
         if not np.isfinite(vmin) or not np.isfinite(vmax) or vmax <= vmin:
@@ -77,17 +94,9 @@ def build_rgb(measurements, step: int):
     return lon, lat, np.nan_to_num(rgb * 255, nan=0.0).astype("uint8")
 
 
-def write_quicklooks(measurements, output_dir: Path, step: int) -> tuple[Path, Path]:
+def write_quicklooks(measurements, output_dir: Path) -> tuple[Path, Path]:
     """Write the unprojected JPEG and projected COG quicklooks."""
-    import numpy as np  # pylint: disable=import-outside-toplevel
-    import rasterio  # pylint: disable=import-outside-toplevel
-    from PIL import Image  # pylint: disable=import-outside-toplevel
-    from pyproj import CRS, Transformer  # pylint: disable=import-outside-toplevel
-    from rasterio.control import GroundControlPoint  # pylint: disable=import-outside-toplevel
-    from rasterio.transform import from_bounds  # pylint: disable=import-outside-toplevel
-    from rasterio.warp import Resampling, reproject  # pylint: disable=import-outside-toplevel
-
-    lon, lat, rgb = build_rgb(measurements, step)
+    lon, lat, rgb = build_rgb(measurements)
     jpeg_path = output_dir / "quicklook.jpg"
     cog_path = output_dir / "quicklook.tif"
     # Keep the source swath grid unchanged for a plain JPEG preview.
@@ -160,67 +169,67 @@ def write_quicklooks(measurements, output_dir: Path, step: int) -> tuple[Path, P
 @flow(name="generate-s3-l1-olci-quicklooks")
 async def generate_s3l1_olci_quicklooks(
     owner_id: str,
-    collection_id: str,
-    item_id: str,
-    step: int = 4,
-    register_assets: bool = True,
-) -> dict[str, str]:
-    """Generate, upload and register quicklooks for an existing S3L1 OLCI item."""
-    if step < 1:
-        raise ValueError("The quicklook downsampling step must be greater than zero")
-
-    # Heavy scientific dependencies are loaded only by the Prefect runner.
-    from sentineltoolbox.api import (  # pylint: disable=import-outside-toplevel
-        S3BucketCredentials,
-        open_datatree,
-    )
+    published_items: list[dict[str, Any]],
+) -> dict[str, dict[str, str]]:
+    """Generate, upload and register quicklooks for S3L1 OLCI items."""
+    if not published_items:
+        raise ValueError("At least one published catalog item is required")
 
     logger = get_run_logger()
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_id))
     with flow_env.start_span(__name__, "generate-s3-l1-olci-quicklooks"):
         catalog_client = flow_env.rs_client.get_catalog_client()
-        # Read the catalog item first because it contains the source Zarr location.
-        item = catalog_client.get_item(collection_id, item_id, owner_id=owner_id)
-        if item is None:
-            raise ValueError(f"Catalog item {item_id!r} was not found in collection {collection_id!r}")
-
-        product_href = get_zarr_href(item)
-        logger.info("Generating quicklooks for %s", product_href)
-        # Open the generated product directly from its Zarr asset in object storage.
-        product = open_datatree(
-            product_href,
-            credentials=S3BucketCredentials(
-                key=os.environ["S3_ACCESSKEY"],
-                secret=os.environ["S3_SECRETKEY"],
-                endpoint_url=os.environ["S3_ENDPOINT"],
-                region_name=os.environ["S3_REGION"],
-            ),
+        s3_credentials = S3BucketCredentials(
+            key=os.environ["S3_ACCESSKEY"],
+            secret=os.environ["S3_SECRETKEY"],
+            endpoint_url=os.environ["S3_ENDPOINT"],
+            region_name=os.environ["S3_REGION"],
         )
+        results: dict[str, dict[str, str]] = {}
 
-        # Local files are temporary and are removed after their upload completes.
-        with tempfile.TemporaryDirectory() as temporary_dir:
-            jpeg_path, cog_path = write_quicklooks(product.measurements, Path(temporary_dir), step)
-            # Store quicklooks next to the source product in object storage.
-            jpeg_href = f"{product_href}/quicklook.jpg"
-            cog_href = f"{product_href}/quicklook.tif"
-            await prefect_utils.s3_upload_file(jpeg_path, jpeg_href)
-            await prefect_utils.s3_upload_file(cog_path, cog_href)
+        # Process items sequentially to keep a single product in memory at a time.
+        for published_item in published_items:
+            # The upstream processing flow returns each published item's ID and target collection.
+            item_id = published_item.get("id")
+            collection_id = published_item.get("collection")
+            if not isinstance(item_id, str) or not isinstance(collection_id, str):
+                raise ValueError("Each published item must contain string 'id' and 'collection' fields")
 
-        # Describe both uploaded files as STAC thumbnail assets.
-        assets = {
-            "quicklook.jpg": {
-                "href": jpeg_href,
-                "roles": ["thumbnail"],
-                "type": JPEG_MEDIA_TYPE,
-            },
-            "quicklook.tif": {
-                "href": cog_href,
-                "roles": ["thumbnail"],
-                "type": COG_MEDIA_TYPE,
-            },
-        }
-        # Generation can be tested independently while production keeps registration enabled.
-        if register_assets:
+            # Read the catalog item first because it contains the source Zarr location.
+            item = catalog_client.get_item(collection_id, item_id, owner_id=owner_id)
+            if item is None:
+                raise ValueError(f"Catalog item {item_id!r} was not found in collection {collection_id!r}")
+
+            product_href = get_zarr_href(item)
+            logger.info("Generating quicklooks for %s", product_href)
+            # Open the generated product directly from its Zarr asset in object storage.
+            product = open_datatree(product_href, credentials=s3_credentials)
+
+            # Local files are temporary and are removed after their upload completes.
+            with tempfile.TemporaryDirectory() as temporary_dir:
+                jpeg_path, cog_path = write_quicklooks(product.measurements, Path(temporary_dir))
+                # Store quicklooks under the source product prefix in object storage.
+                jpeg_href = f"{product_href}/quicklook.jpg"
+                cog_href = f"{product_href}/quicklook.tif"
+                await prefect_utils.s3_upload_file(jpeg_path, jpeg_href)
+                await prefect_utils.s3_upload_file(cog_path, cog_href)
+
+            # Release the current product before opening the next one.
+            del product
+
+            # Describe both uploaded files as STAC thumbnail assets.
+            assets = {
+                "quicklook.jpg": {
+                    "href": jpeg_href,
+                    "roles": ["thumbnail"],
+                    "type": JPEG_MEDIA_TYPE,
+                },
+                "quicklook.tif": {
+                    "href": cog_href,
+                    "roles": ["thumbnail"],
+                    "type": COG_MEDIA_TYPE,
+                },
+            }
             catalog_client.patch_item(
                 collection_id,
                 item_id,
@@ -228,6 +237,6 @@ async def generate_s3l1_olci_quicklooks(
                 owner_id=owner_id,
             )
             logger.info("Quicklooks added to catalog item %s", item_id)
-        else:
-            logger.info("Quicklooks generated without catalog registration for item %s", item_id)
-        return {name: asset["href"] for name, asset in assets.items()}
+            results[item_id] = {name: asset["href"] for name, asset in assets.items()}
+
+        return results
