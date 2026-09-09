@@ -188,6 +188,9 @@ def create_stac_item(
                 # "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json",
                 # "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
             ]
+        # tempfix for OL2 with 'datetime': null in the feature_dict, we set it to the 'created' property if available
+        if feature_dict["properties"].get("datetime") is None:
+            feature_dict["properties"]["datetime"] = feature_dict["properties"]["created"]
 
         return Item(
             id=product_name,

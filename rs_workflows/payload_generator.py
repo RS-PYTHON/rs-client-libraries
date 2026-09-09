@@ -800,7 +800,7 @@ def generate_payload(  # pylint: disable=unused-argument
         if hasattr(dpr_process_in.processor_name, "value")
         else dpr_process_in.processor_name
     )
-    is_olci_processor = processor_name == DprProcessor.S3L1OLCI.value
+    is_olci_processor = processor_name in (DprProcessor.S3L1OLCI.value, DprProcessor.S3L2OLCI.value)
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (stories 800/1050)
         general_configuration=GeneralConfiguration(
