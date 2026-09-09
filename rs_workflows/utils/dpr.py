@@ -43,7 +43,7 @@ def generate_payload_path(owner_id: str) -> str:
     This is a workaroud, waiting for share disk solution.
     """
     # TODO : use a local path on the share disk
-    s3_payload = f"s3://rs-dev-cluster-temp/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}"
+    s3_payload = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}"
     return s3_payload
 
 
