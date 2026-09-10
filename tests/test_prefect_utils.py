@@ -271,6 +271,26 @@ async def test_bucket_functions(monkeypatch, mocker):
     await prefect_utils.s3_download_dir("s3_path", "local_path")
     my_spy.assert_called_once()
 
+    # s3_copy_from_s3 copies all objects found under a prefix
+    s3_bucket = Mock(bucket_name="bucket")
+    s3_client = Mock()
+    s3_client.list_objects_v2.return_value = {"Contents": [{"Key": "source/prefix/file"}]}
+    mocker.patch.object(
+        prefect_utils,
+        "get_s3_bucket",
+        side_effect=lambda s3_path: (
+            s3_bucket,
+            "source/prefix" if s3_path == "s3://bucket/source/prefix" else "destination/prefix",
+        ),
+    )
+    mocker.patch.object(s3_bucket, "_get_s3_client", return_value=s3_client)
+    await prefect_utils.s3_copy_from_s3("s3://bucket/source/prefix", "s3://bucket/destination/prefix")
+    s3_client.copy_object.assert_called_once_with(
+        CopySource={"Bucket": "bucket", "Key": "source/prefix/file"},
+        Bucket="bucket",
+        Key="destination/prefix/file",
+    )
+
     # s3_bucket._get_bucket_resource().objects.filter(...) should return a list of mock objects
     mocker.patch.object(S3Bucket, "_get_bucket_resource", Mock())
     Mock.filter = Mock(return_value=[Mock()])
