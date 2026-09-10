@@ -18,9 +18,11 @@
 
 from typing import Any
 
-from prefect import flow, get_run_logger, task
+from prefect import flow, get_run_logger, runtime, task
+from prefect.events import emit_event
 
 from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
+from rs_workflows.on_demand.common.events import products_ready_event_name
 from rs_workflows.on_demand.common.types import Level1FlowParams
 from rs_workflows.on_demand.sentinel3.s3_processing_utils import (
     build_olci_l1_input_products,
@@ -68,7 +70,7 @@ async def process_s3l1_olci(
         )
     get_run_logger().info(f"Flow params: {flow_parameters}")
     # Call DPR flow
-    return await call_dpr_flow(
+    products = await call_dpr_flow(
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),
         input_products=flow_parameters.input_products,
         external_variables={
@@ -87,6 +89,48 @@ async def process_s3l1_olci(
         generated_product_to_collection_identifier=flow_parameters.generated_product_to_collection_identifier or [],
         auxiliary_product_to_collection_identifier=flow_parameters.auxiliary_product_to_collection_identifier or [],
     )
+
+    input_products = [
+        {
+            "name": "S3OLCIL1",
+            "item_id": product["id"],
+            "collection_name": product["collection"],
+        }
+        for product in products
+        if product.get("properties", {}).get("product:type") == "S03OLCEFR"
+    ]
+    if not input_products:
+        get_run_logger().warning("No published S03OLCEFR products; skipping the S3 L1 products-ready event")
+        return products
+
+    flow_run_id = str(runtime.flow_run.id or "unknown")
+    event_name = products_ready_event_name(mission="3", level="1")
+    emitted_event = emit_event(
+        event=event_name,
+        resource={
+            "prefect.resource.id": f"rs-python.s3-l1-result.{flow_run_id}",
+            "prefect.resource.name": "S3 OLCI L1 products",
+        },
+        related=[
+            {
+                "prefect.resource.id": f"prefect.flow-run.{flow_run_id}",
+                "prefect.resource.role": "flow-run",
+            },
+        ],
+        payload={"flow_run_id": flow_run_id, "input_products": input_products},
+    )
+    if emitted_event is None:
+        get_run_logger().warning(
+            "Products-ready event was not emitted: event=%s, flow_run_id=%s", event_name, flow_run_id
+        )
+    else:
+        get_run_logger().info(
+            "Emitted event=%s, event_id=%s, product_count=%d",
+            event_name,
+            emitted_event.id,
+            len(input_products),
+        )
+    return products
 
 
 @task(name="process-s3-l1-olci")
