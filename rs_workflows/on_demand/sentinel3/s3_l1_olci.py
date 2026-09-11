@@ -121,7 +121,9 @@ async def process_s3l1_olci(
     )
     if emitted_event is None:
         get_run_logger().warning(
-            "Products-ready event was not emitted: event=%s, flow_run_id=%s", event_name, flow_run_id
+            "Products-ready event was not emitted: event=%s, flow_run_id=%s",
+            event_name,
+            flow_run_id,
         )
     else:
         get_run_logger().info(
