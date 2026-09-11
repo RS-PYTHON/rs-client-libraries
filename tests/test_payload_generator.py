@@ -257,12 +257,14 @@ def test_generate_payload_success(
     assert payload.config == expected_config
 
 
+@pytest.mark.parametrize("olci_processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI])
 def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
     mocker,
     sample_unit,
     mock_dpr_process_in,
     flow_env,
     _mock_os_env,
+    olci_processor,
 ):
     """
     OLCI requires these triggering options, but they must not be emitted for other processors.
@@ -295,7 +297,7 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
     assert "triggering__use_datatree" not in general_configuration
     assert "triggering__use_default_filename" not in general_configuration
 
-    mock_dpr_process_in.processor_name = DprProcessor.S3L1OLCI
+    mock_dpr_process_in.processor_name = olci_processor
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[sample_unit],
