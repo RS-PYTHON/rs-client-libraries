@@ -19,15 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-import rasterio
-from PIL import Image
 from prefect import flow, get_run_logger
-from pyproj import CRS, Transformer
-from rasterio.control import GroundControlPoint
-from rasterio.transform import from_bounds
-from rasterio.warp import Resampling, reproject
-from sentineltoolbox.api import S3BucketCredentials, open_datatree
 
 from rs_common import prefect_utils
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
@@ -35,6 +27,9 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 JPEG_MEDIA_TYPE = "image/jpeg"
 COG_MEDIA_TYPE = "image/tiff; application=geotiff; profile=cloud-optimized"
 ZARR_MEDIA_TYPE = "application/vnd+zarr"
+PROJECTION_EXTENSION = "https://stac-extensions.github.io/projection/v2.0.0/schema.json"
+# Use one browser-friendly CRS for every georeferenced quicklook.
+QUICKLOOK_CRS = "EPSG:4326"
 # Downsample the source arrays by this factor to keep quicklook generation fast and lightweight.
 QUICKLOOK_DOWNSAMPLING_STEP = 4
 
@@ -53,6 +48,8 @@ def get_zarr_href(item) -> str:
 
 def build_rgb(measurements):
     """Build a downsampled uint8 RGB array from the OLCI radiance bands."""
+    import numpy as np  # pylint: disable=import-outside-toplevel
+
     longitude = measurements.longitude
     latitude = measurements.latitude
     row_dimension, column_dimension = longitude.dims
@@ -95,51 +92,55 @@ def build_rgb(measurements):
 
 
 def write_quicklooks(measurements, output_dir: Path) -> tuple[Path, Path]:
-    """Write the unprojected JPEG and projected COG quicklooks."""
+    """Write the unprojected JPEG and georeferenced COG quicklooks."""
+    import numpy as np  # pylint: disable=import-outside-toplevel
+    import rasterio  # pylint: disable=import-outside-toplevel
+    from PIL import Image  # pylint: disable=import-outside-toplevel
+    from rasterio.control import (
+        GroundControlPoint,  # pylint: disable=import-outside-toplevel
+    )
+    from rasterio.transform import (
+        from_bounds,  # pylint: disable=import-outside-toplevel
+    )
+    from rasterio.warp import (  # pylint: disable=import-outside-toplevel
+        Resampling,
+        reproject,
+    )
+
     lon, lat, rgb = build_rgb(measurements)
     jpeg_path = output_dir / "quicklook.jpg"
     cog_path = output_dir / "quicklook.tif"
     # Keep the source swath grid unchanged for a plain JPEG preview.
     Image.fromarray(rgb).save(jpeg_path, quality=90)
 
-    # Ignore any remaining invalid coordinates when centring and framing the projection.
+    # Ignore any remaining invalid coordinates when defining the COG bounds.
     valid_geo = np.isfinite(lon) & np.isfinite(lat)
     if not valid_geo.any():
         raise ValueError("The OLCI product contains no valid coordinates")
 
-    central_longitude = float(np.mean(lon[valid_geo]))
-    central_latitude = float(np.mean(lat[valid_geo]))
-    # Use the notebook's stereographic projection, centred on the product footprint.
-    dst_crs = CRS.from_proj4(
-        f"+proj=stere +lat_0={central_latitude} +lon_0={central_longitude} " "+datum=WGS84 +units=m +no_defs",
-    )
-    # Project the pixel coordinates to tightly frame the diagonal satellite swath.
-    transformer = Transformer.from_crs("EPSG:4326", dst_crs, always_xy=True)
-    x, y = transformer.transform(lon, lat)
-    # Exclude projection failures from the output bounds and control points.
-    valid_xy = np.isfinite(x) & np.isfinite(y)
-    xmin, xmax = float(np.min(x[valid_xy])), float(np.max(x[valid_xy]))
-    ymin, ymax = float(np.min(y[valid_xy])), float(np.max(y[valid_xy]))
+    # Georeference the swath directly in longitude/latitude for broad map-client support.
+    x, y = lon, lat
+    xmin, xmax = float(np.min(x[valid_geo])), float(np.max(x[valid_geo]))
+    ymin, ymax = float(np.min(y[valid_geo])), float(np.max(y[valid_geo]))
 
     gcp_rows = np.linspace(0, lon.shape[0] - 1, min(20, lon.shape[0]), dtype=int)
     gcp_cols = np.linspace(0, lon.shape[1] - 1, min(20, lon.shape[1]), dtype=int)
-    # Build sparse control points from the swath grid in projected metric coordinates.
+    # Build sparse control points from the swath grid in geographic coordinates.
     gcps = [
         GroundControlPoint(row=int(row), col=int(col), x=float(x[row, col]), y=float(y[row, col]))
         for row in gcp_rows
         for col in gcp_cols
-        if valid_xy[row, col]
+        if valid_geo[row, col]
     ]
     if not gcps:
         raise ValueError("Could not build ground control points for the OLCI product")
 
-    # Cover the swath bounds with a regular grid at roughly the downsampled source resolution.
-    resolution = max((xmax - xmin) / lon.shape[1], (ymax - ymin) / lon.shape[0])
-    dst_width = max(1, int((xmax - xmin) / resolution))
-    dst_height = max(1, int((ymax - ymin) / resolution))
+    # Keep the downsampled source dimensions on the regular geographic grid.
+    dst_width = lon.shape[1]
+    dst_height = lon.shape[0]
     dst_transform = from_bounds(xmin, ymin, xmax, ymax, dst_width, dst_height)
 
-    # Reproject through the control points and write the projected image directly as a COG.
+    # Warp through the control points and write the georeferenced image directly as a COG.
     with rasterio.open(
         cog_path,
         "w",
@@ -148,7 +149,7 @@ def write_quicklooks(measurements, output_dir: Path) -> tuple[Path, Path]:
         width=dst_width,
         count=3,
         dtype="uint8",
-        crs=dst_crs,
+        crs=QUICKLOOK_CRS,
         transform=dst_transform,
         compress="deflate",
     ) as destination:
@@ -157,9 +158,9 @@ def write_quicklooks(measurements, output_dir: Path) -> tuple[Path, Path]:
             destination=rasterio.band(destination, [1, 2, 3]),
             gcps=gcps,
             # GCP coordinates are already expressed in the destination CRS units.
-            src_crs=dst_crs,
+            src_crs=QUICKLOOK_CRS,
             dst_transform=dst_transform,
-            dst_crs=dst_crs,
+            dst_crs=QUICKLOOK_CRS,
             resampling=Resampling.bilinear,
         )
 
@@ -174,6 +175,12 @@ async def generate_s3l1_olci_quicklooks(
     """Generate, upload and register quicklooks for S3L1 OLCI items."""
     if not published_items:
         raise ValueError("At least one published catalog item is required")
+
+    # Load runner-only scientific dependencies when the Prefect flow starts.
+    from sentineltoolbox.api import (  # pylint: disable=import-outside-toplevel
+        S3BucketCredentials,
+        open_datatree,
+    )
 
     logger = get_run_logger()
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_id))
@@ -228,12 +235,17 @@ async def generate_s3l1_olci_quicklooks(
                     "href": cog_href,
                     "roles": ["thumbnail"],
                     "type": COG_MEDIA_TYPE,
+                    "proj:code": QUICKLOOK_CRS,
                 },
             }
+            # Keep existing extensions and declare the projection metadata added above.
+            stac_extensions = list(item.stac_extensions)
+            if PROJECTION_EXTENSION not in stac_extensions:
+                stac_extensions.append(PROJECTION_EXTENSION)
             catalog_client.patch_item(
                 collection_id,
                 item_id,
-                {"assets": assets, "properties": {}},
+                {"assets": assets, "stac_extensions": stac_extensions},
                 owner_id=owner_id,
             )
             logger.info("Quicklooks added to catalog item %s", item_id)
