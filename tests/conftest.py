@@ -814,7 +814,7 @@ def mocked_ogcapi_response(ogcapi_response_sample: dict, process: str):
     mocked_job_info = {
         "status": "successful",
         "progress": 100,
-        "process_id": process,
+        "processID": process,
         "type": "process",
         "message": "{}",
         "created": "2019-08-24T14:15:22Z",
