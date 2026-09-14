@@ -96,11 +96,11 @@ def write_quicklooks(measurements, output_dir: Path) -> tuple[Path, Path]:
     import numpy as np  # pylint: disable=import-outside-toplevel
     import rasterio  # pylint: disable=import-outside-toplevel
     from PIL import Image  # pylint: disable=import-outside-toplevel
-    from rasterio.control import (
-        GroundControlPoint,  # pylint: disable=import-outside-toplevel
+    from rasterio.control import (  # pylint: disable=import-outside-toplevel
+        GroundControlPoint,
     )
-    from rasterio.transform import (
-        from_bounds,  # pylint: disable=import-outside-toplevel
+    from rasterio.transform import (  # pylint: disable=import-outside-toplevel
+        from_bounds,
     )
     from rasterio.warp import (  # pylint: disable=import-outside-toplevel
         Resampling,
@@ -249,6 +249,9 @@ async def generate_s3l1_olci_quicklooks(
                 owner_id=owner_id,
             )
             logger.info("Quicklooks added to catalog item %s", item_id)
-            results[item_id] = {name: asset["href"] for name, asset in assets.items()}
+            results[item_id] = {
+                "quicklook.jpg": jpeg_href,
+                "quicklook.tif": cog_href,
+            }
 
         return results

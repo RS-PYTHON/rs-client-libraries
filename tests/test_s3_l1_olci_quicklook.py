@@ -16,6 +16,7 @@
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, call
 
 import numpy as np
@@ -216,7 +217,7 @@ async def test_generate_quicklooks_rejects_invalid_items(quicklook_context, case
     """Reject invalid catalog inputs before reading the product or publishing quicklooks."""
     # Introduce the selected input error into an otherwise valid catalog setup.
     ctx = quicklook_context
-    published = PUBLISHED_ITEMS
+    published: list[dict[str, Any]] = PUBLISHED_ITEMS
     if case == "empty":
         published = []
     elif case == "missing_id":
