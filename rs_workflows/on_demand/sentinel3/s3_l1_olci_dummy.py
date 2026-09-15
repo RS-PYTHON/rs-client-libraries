@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Emit a dummy S3 L1 products-ready event without processing products."""
+"""Emit a dummy S3 L1 quicklook-inputs-ready event without processing products."""
 
 from typing import Any
 
 from prefect import flow, get_run_logger, runtime
 from prefect.events import emit_event
-
-from rs_workflows.on_demand.common.events import products_ready_event_name
 
 
 @flow(name="dummy-s3-l1-olci-event")
@@ -36,7 +34,7 @@ def emit_s3l1_olci_dummy_event(
         ],
     }
     flow_run_id = str(runtime.flow_run.id or "unknown")
-    event_name = products_ready_event_name(mission="3", level="1")
+    event_name = "rs-python.s3-l1.quicklook-inputs-ready"
     event = emit_event(
         event=event_name,
         resource={
@@ -52,7 +50,7 @@ def emit_s3l1_olci_dummy_event(
         payload=payload,
     )
     if event is None:
-        raise RuntimeError(f"Products-ready event was not emitted: {event_name}")
+        raise RuntimeError(f"Quicklook-inputs-ready event was not emitted: {event_name}")
     get_run_logger().info("Emitted event=%s, event_id=%s, payload=%s", event_name, event.id, payload)
     return payload
 

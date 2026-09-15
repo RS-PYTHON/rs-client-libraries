@@ -90,6 +90,42 @@ async def process_s3l1_olci(
         auxiliary_product_to_collection_identifier=flow_parameters.auxiliary_product_to_collection_identifier or [],
     )
 
+    flow_run_id = str(runtime.flow_run.id or "unknown")
+    # Trigger quicklooks independently for all published products.
+    if products:
+        quicklook_event_name = "rs-python.s3-l1.quicklook-inputs-ready"
+        quicklook_event = emit_event(
+            event=quicklook_event_name,
+            resource={
+                "prefect.resource.id": f"rs-python.s3-l1-result.{flow_run_id}",
+                "prefect.resource.name": "S3 OLCI L1 products",
+            },
+            related=[
+                {
+                    "prefect.resource.id": f"prefect.flow-run.{flow_run_id}",
+                    "prefect.resource.role": "flow-run",
+                },
+            ],
+            payload={
+                "owner_id": flow_parameters.owner_identifier,
+                # Only send catalog references; the quicklook flow reads the full items itself.
+                "published_items": [{"id": product["id"], "collection": product["collection"]} for product in products],
+            },
+        )
+        if quicklook_event is None:
+            get_run_logger().warning(
+                "Quicklook-inputs-ready event was not emitted: event=%s, flow_run_id=%s",
+                quicklook_event_name,
+                flow_run_id,
+            )
+        else:
+            get_run_logger().info(
+                "Emitted event=%s, event_id=%s, product_count=%d",
+                quicklook_event_name,
+                quicklook_event.id,
+                len(products),
+            )
+
     input_products = [
         {
             "name": "S3OLCIL1",
@@ -103,7 +139,6 @@ async def process_s3l1_olci(
         get_run_logger().warning("No published S03OLCEFR products; skipping the S3 L1 products-ready event")
         return products
 
-    flow_run_id = str(runtime.flow_run.id or "unknown")
     event_name = products_ready_event_name(mission="3", level="1")
     emitted_event = emit_event(
         event=event_name,
