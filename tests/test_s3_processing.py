@@ -160,3 +160,44 @@ async def test_process_s3l2_olci_task_forwards_arguments_and_result(mocker):
 
     flow_fn.assert_awaited_once_with(flow_params, input_products=None)
     assert result == expected_result
+
+
+@pytest.mark.parametrize("efr_count", [0, 1, 2])
+async def test_process_s3l1_emits_published_efr_inputs(mocker, efr_count):
+    """Only published EFR outputs are passed to L2, with their actual collection."""
+    products = [
+        {
+            "id": f"S03OLCEFR_product-{index}.zarr",
+            "collection": f"OUTPUT_{index}",
+            "properties": {"product:type": "S03OLCEFR"},
+        }
+        for index in range(efr_count)
+    ]
+    products.append({"id": "S03OLCERR_other.zarr", "properties": {"product:type": "S03OLCERR"}})
+    flow_params = MagicMock()
+    resolved_params = MagicMock(owner_identifier="toto")
+    flow_params.resolve = AsyncMock(return_value=resolved_params)
+    mocker.patch.object(s3_l1_olci, "call_dpr_flow", new=AsyncMock(return_value=products))
+    mocker.patch.object(s3_l1_olci, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(s3_l1_olci.runtime.flow_run, "id", "l1-run-id")
+    emit_event = mocker.patch.object(s3_l1_olci, "emit_event")
+
+    result = await s3_l1_olci.process_s3l1_olci.fn(flow_params=flow_params)
+
+    assert result is products
+    if not efr_count:
+        emit_event.assert_not_called()
+        return
+    emit_event.assert_called_once()
+    assert emit_event.call_args.kwargs["event"] == "rs-python.s3-l1.products-ready"
+    assert emit_event.call_args.kwargs["payload"] == {
+        "flow_run_id": "l1-run-id",
+        "input_products": [
+            {
+                "name": "S3OLCIL1",
+                "item_id": f"S03OLCEFR_product-{index}.zarr",
+                "collection_name": f"OUTPUT_{index}",
+            }
+            for index in range(efr_count)
+        ],
+    }
