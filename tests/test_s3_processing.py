@@ -164,7 +164,7 @@ async def test_process_s3l2_olci_task_forwards_arguments_and_result(mocker):
 
 @pytest.mark.parametrize("efr_count", [0, 1, 2])
 async def test_process_s3l1_emits_published_efr_inputs(mocker, efr_count):
-    """Only published EFR outputs are passed to L2, with their actual collection."""
+    """Quicklooks receive all published outputs; only EFR outputs are passed to L2."""
     products = [
         {
             "id": f"S03OLCEFR_product-{index}.zarr",
@@ -173,7 +173,13 @@ async def test_process_s3l1_emits_published_efr_inputs(mocker, efr_count):
         }
         for index in range(efr_count)
     ]
-    products.append({"id": "S03OLCERR_other.zarr", "properties": {"product:type": "S03OLCERR"}})
+    products.append(
+        {
+            "id": "S03OLCERR_other.zarr",
+            "collection": "OUTPUT_ERR",
+            "properties": {"product:type": "S03OLCERR"},
+        },
+    )
     flow_params = MagicMock()
     resolved_params = MagicMock(owner_identifier="toto")
     flow_params.resolve = AsyncMock(return_value=resolved_params)
@@ -185,10 +191,17 @@ async def test_process_s3l1_emits_published_efr_inputs(mocker, efr_count):
     result = await s3_l1_olci.process_s3l1_olci.fn(flow_params=flow_params)
 
     assert result is products
+    # Quicklooks are triggered even when the processor publishes only ERR products.
+    assert emit_event.call_count == (2 if efr_count else 1)
+    quicklook_event = emit_event.call_args_list[0].kwargs
+    assert quicklook_event["event"] == "rs-python.s3-l1.quicklook-inputs-ready"
+    assert quicklook_event["payload"] == {
+        "owner_id": "toto",
+        "published_items": [{"id": product["id"], "collection": product["collection"]} for product in products],
+    }
     if not efr_count:
-        emit_event.assert_not_called()
         return
-    emit_event.assert_called_once()
+    # The separate L2 event keeps its existing EFR-only payload.
     assert emit_event.call_args.kwargs["event"] == "rs-python.s3-l1.products-ready"
     assert emit_event.call_args.kwargs["payload"] == {
         "flow_run_id": "l1-run-id",

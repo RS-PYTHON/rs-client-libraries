@@ -17,7 +17,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import numpy as np
 import pytest
@@ -25,7 +25,22 @@ import xarray as xr
 from PIL import Image
 from pystac import Asset, Item
 
-from rs_workflows.on_demand.sentinel3 import s3_l1_olci_quicklook as quicklook
+# Allow collection without runner-only packages; restore the module registry afterwards.
+with patch.dict(
+    "sys.modules",
+    {
+        name: MagicMock()
+        for name in (
+            "sentineltoolbox",
+            "sentineltoolbox.api",
+            "rasterio",
+            "rasterio.control",
+            "rasterio.transform",
+            "rasterio.warp",
+        )
+    },
+):
+    from rs_workflows.on_demand.sentinel3 import s3_l1_olci_quicklook as quicklook
 
 OWNER = "test-owner"
 COLLECTION = "olci-l1"
@@ -72,21 +87,20 @@ def _quicklook_context(mocker, monkeypatch):
     }.items():
         monkeypatch.setenv(name, value)
 
-    # These packages are installed in the Prefect image, not in the test environment.
+    # Patch the imported symbols where they are used, with fresh mocks for each test.
     toolbox = MagicMock()
     toolbox.api.open_datatree.return_value = SimpleNamespace(measurements=measurements)
     rasterio = MagicMock()
-    mocker.patch.dict(
-        "sys.modules",
-        {
-            "sentineltoolbox": toolbox,
-            "sentineltoolbox.api": toolbox.api,
-            "rasterio": rasterio,
-            "rasterio.control": rasterio.control,
-            "rasterio.transform": rasterio.transform,
-            "rasterio.warp": rasterio.warp,
-        },
-    )
+    for name, replacement in {
+        "S3BucketCredentials": toolbox.api.S3BucketCredentials,
+        "open_datatree": toolbox.api.open_datatree,
+        "rasterio": rasterio,
+        "GroundControlPoint": rasterio.control.GroundControlPoint,
+        "from_bounds": rasterio.transform.from_bounds,
+        "Resampling": rasterio.warp.Resampling,
+        "reproject": rasterio.warp.reproject,
+    }.items():
+        mocker.patch.object(quicklook, name, replacement)
     # Capture uploads without contacting S3; expose the setup for each test to customize.
     upload = mocker.patch.object(quicklook.prefect_utils, "s3_upload_file", new_callable=AsyncMock)
     return SimpleNamespace(
