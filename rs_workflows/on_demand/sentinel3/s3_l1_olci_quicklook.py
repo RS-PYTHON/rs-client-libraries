@@ -19,7 +19,14 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import rasterio
+from PIL import Image
 from prefect import flow, get_run_logger
+from rasterio.control import GroundControlPoint
+from rasterio.transform import from_bounds
+from rasterio.warp import Resampling, reproject
+from sentineltoolbox.api import S3BucketCredentials, open_datatree
 
 from rs_common import prefect_utils
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
@@ -48,8 +55,6 @@ def get_zarr_href(item) -> str:
 
 def build_rgb(measurements):
     """Build a downsampled uint8 RGB array from the OLCI radiance bands."""
-    import numpy as np  # pylint: disable=import-outside-toplevel
-
     longitude = measurements.longitude
     latitude = measurements.latitude
     row_dimension, column_dimension = longitude.dims
@@ -93,20 +98,6 @@ def build_rgb(measurements):
 
 def write_quicklooks(measurements, output_dir: Path) -> tuple[Path, Path]:
     """Write the unprojected JPEG and georeferenced COG quicklooks."""
-    import numpy as np  # pylint: disable=import-outside-toplevel
-    import rasterio  # pylint: disable=import-outside-toplevel
-    from PIL import Image  # pylint: disable=import-outside-toplevel
-    from rasterio.control import (  # pylint: disable=import-outside-toplevel
-        GroundControlPoint,
-    )
-    from rasterio.transform import (  # pylint: disable=import-outside-toplevel
-        from_bounds,
-    )
-    from rasterio.warp import (  # pylint: disable=import-outside-toplevel
-        Resampling,
-        reproject,
-    )
-
     lon, lat, rgb = build_rgb(measurements)
     jpeg_path = output_dir / "quicklook.jpg"
     cog_path = output_dir / "quicklook.tif"
@@ -175,12 +166,6 @@ async def generate_s3l1_olci_quicklooks(
     """Generate, upload and register quicklooks for S3L1 OLCI items."""
     if not published_items:
         raise ValueError("At least one published catalog item is required")
-
-    # Load runner-only scientific dependencies when the Prefect flow starts.
-    from sentineltoolbox.api import (  # pylint: disable=import-outside-toplevel
-        S3BucketCredentials,
-        open_datatree,
-    )
 
     logger = get_run_logger()
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_id))
