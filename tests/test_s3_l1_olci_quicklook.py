@@ -40,6 +40,7 @@ with patch.dict(
         )
     },
 ):
+    from rs_workflows.on_demand.sentinel3 import olci_quicklook_common as common
     from rs_workflows.on_demand.sentinel3 import s3_l1_olci_quicklook as quicklook
 
 OWNER = "test-owner"
@@ -72,13 +73,13 @@ def _quicklook_context(mocker, monkeypatch):
     item = Item("product", None, None, datetime(2025, 6, 12, tzinfo=timezone.utc), {})
     item.stac_extensions = [FILE_EXTENSION]
     item.add_asset("metadata", Asset("s3://test-bucket/metadata.json", media_type="application/json"))
-    item.add_asset("product", Asset(PRODUCT_HREF + "/", media_type=quicklook.ZARR_MEDIA_TYPE))
+    item.add_asset("product", Asset(PRODUCT_HREF + "/", media_type=common.ZARR_MEDIA_TYPE))
 
     # Replace Prefect setup and catalog access, and supply harmless S3 credentials.
-    flow_env = mocker.patch.object(quicklook, "FlowEnv").return_value
+    flow_env = mocker.patch.object(common, "FlowEnv").return_value
     catalog = flow_env.rs_client.get_catalog_client.return_value
     catalog.get_item.return_value = item
-    mocker.patch.object(quicklook, "get_run_logger")
+    mocker.patch.object(common, "get_run_logger")
     for name, value in {
         "S3_ACCESSKEY": "testing",
         "S3_SECRETKEY": "testing",
@@ -100,9 +101,9 @@ def _quicklook_context(mocker, monkeypatch):
         "Resampling": rasterio.warp.Resampling,
         "reproject": rasterio.warp.reproject,
     }.items():
-        mocker.patch.object(quicklook, name, replacement)
+        mocker.patch.object(common, name, replacement)
     # Capture uploads without contacting S3; expose the setup for each test to customize.
-    upload = mocker.patch.object(quicklook.prefect_utils, "s3_upload_file", new_callable=AsyncMock)
+    upload = mocker.patch.object(common.prefect_utils, "s3_upload_file", new_callable=AsyncMock)
     return SimpleNamespace(
         item=item,
         measurements=measurements,
@@ -119,7 +120,7 @@ async def test_generate_quicklooks(quicklook_context, projection_present):
     # Prepare an item with or without existing projection metadata.
     ctx = quicklook_context
     if projection_present:
-        ctx.item.stac_extensions.append(quicklook.PROJECTION_EXTENSION)
+        ctx.item.stac_extensions.append(common.PROJECTION_EXTENSION)
         # Also exercise Zarr detection by suffix, without a declared media type.
         ctx.item.assets["product"].media_type = None
 
@@ -210,7 +211,7 @@ async def test_generate_quicklooks(quicklook_context, projection_present):
     ctx.catalog.patch_item.assert_called_once_with(
         COLLECTION,
         "product",
-        {"assets": assets, "stac_extensions": [FILE_EXTENSION, quicklook.PROJECTION_EXTENSION]},
+        {"assets": assets, "stac_extensions": [FILE_EXTENSION, common.PROJECTION_EXTENSION]},
         owner_id=OWNER,
     )
     assert result == {"product": {name: asset["href"] for name, asset in assets.items()}}
