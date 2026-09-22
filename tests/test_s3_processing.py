@@ -109,7 +109,8 @@ async def test_process_s3l2_olci_resolves_settings_and_calls_dpr(mocker, overrid
         ),
     )
     mocker.patch.object(s3_l2_olci, "get_run_logger", return_value=MagicMock())
-    expected_result = [{"id": "olci-l2-output"}]
+    emit_event = mocker.patch.object(s3_l2_olci, "emit_event")
+    expected_result = [{"id": "olci-l2-output", "collection": "olci-l2"}]
     call_dpr = mocker.patch.object(s3_l2_olci, "call_dpr_flow", new=AsyncMock(return_value=expected_result))
     flow_params = Level2FlowParams(processor_version="2.0") if override_params else None
 
@@ -134,6 +135,9 @@ async def test_process_s3l2_olci_resolves_settings_and_calls_dpr(mocker, overrid
     assert kwargs["generated_product_to_collection_identifier"] == []
     assert kwargs["auxiliary_product_to_collection_identifier"] == []
     assert result == expected_result
+    emit_event.assert_called_once()
+    assert emit_event.call_args.kwargs["event"] == "rs-python.s3-l2.quicklook-inputs-ready"
+    assert emit_event.call_args.kwargs["payload"] == {"owner_id": "toto", "published_items": expected_result}
 
 
 async def test_process_s3l2_olci_stops_when_settings_resolution_fails(mocker):

@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image
 from prefect import flow
 
 from rs_workflows.on_demand.sentinel3.olci_quicklook_common import (
     generate_quicklooks,
+    normalize_channel,
+    save_quicklooks,
     select_downsampled_geolocation,
-    write_georeferenced_cog,
 )
 
 
@@ -34,11 +34,7 @@ def build_rgb(measurements):
 
     def quicklook_band(band):
         values = band.isel(selection).values.astype("float32")
-        # Clip outliers before scaling the radiance values to the display range.
-        vmin, vmax = np.nanpercentile(values, [2, 98])
-        if not np.isfinite(vmin) or not np.isfinite(vmax) or vmax <= vmin:
-            raise ValueError(f"Invalid radiance percentile range: {vmin=}, {vmax=}")
-        return np.clip((values - vmin) / (vmax - vmin), 0, 1)
+        return normalize_channel(values)
 
     rgb = np.stack(
         # Map the OLCI red, green and blue radiance bands to RGB channels.
@@ -56,14 +52,7 @@ def build_rgb(measurements):
 def write_quicklooks(measurements, output_dir: Path) -> tuple[Path, Path]:
     """Write the unprojected JPEG and georeferenced COG quicklooks."""
     lon, lat, rgb = build_rgb(measurements)
-    jpeg_path = output_dir / "quicklook.jpg"
-    cog_path = output_dir / "quicklook.tif"
-    # Keep the source swath grid unchanged for a plain JPEG preview.
-    Image.fromarray(rgb).save(jpeg_path, quality=90)
-
-    write_georeferenced_cog(cog_path, lon, lat, rgb)
-
-    return jpeg_path, cog_path
+    return save_quicklooks(output_dir, lon, lat, rgb)
 
 
 @flow(name="generate-s3-l1-olci-quicklooks")

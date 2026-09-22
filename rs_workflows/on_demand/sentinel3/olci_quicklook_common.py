@@ -22,6 +22,7 @@ from typing import Any
 
 import numpy as np
 import rasterio
+from PIL import Image
 from prefect import get_run_logger
 from rasterio.control import GroundControlPoint
 from rasterio.transform import from_bounds
@@ -39,6 +40,13 @@ PROJECTION_EXTENSION = "https://stac-extensions.github.io/projection/v2.0.0/sche
 QUICKLOOK_CRS = "EPSG:4326"
 # Downsample the source arrays by this factor to keep quicklook generation fast and lightweight.
 QUICKLOOK_DOWNSAMPLING_STEP = 4
+
+
+def normalize_channel(values):
+    """Scale and clip a channel to [0, 1] using its 2nd and 98th percentiles."""
+    vmin, vmax = np.nanpercentile(values, [2, 98])
+    # Resulting NaNs are converted to zero intensity when the caller builds the uint8 image.
+    return np.clip((values - vmin) / (vmax - vmin), 0, 1)
 
 
 def get_zarr_href(item) -> str:
@@ -158,6 +166,20 @@ def write_georeferenced_cog(cog_path: Path, lon, lat, rgb, visible=None) -> None
             # Bilinear blending leaves dark non-zero pixels around the data: set them to the nodata value.
             warped[:, warped_visible == 0] = 0
             destination.write(warped)
+
+
+def save_quicklooks(output_dir: Path, lon, lat, rgb, visible=None) -> tuple[Path, Path]:
+    """Save an unprojected JPEG and a georeferenced COG from the same RGB pixels."""
+    jpeg_path = output_dir / "quicklook.jpg"
+    cog_path = output_dir / "quicklook.tif"
+    jpeg = rgb
+    if visible is not None:
+        # JPEG has no transparency; whiten missing pixels without changing the COG input.
+        jpeg = rgb.copy()
+        jpeg[~visible] = 255
+    Image.fromarray(jpeg).save(jpeg_path, quality=90)
+    write_georeferenced_cog(cog_path, lon, lat, rgb, visible)
+    return jpeg_path, cog_path
 
 
 async def generate_quicklooks(

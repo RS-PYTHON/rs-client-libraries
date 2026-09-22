@@ -260,19 +260,16 @@ async def test_generate_quicklooks_rejects_invalid_items(quicklook_context, case
     "case, message",
     [
         ("zero_geolocation", "no valid geolocation rows"),
-        ("constant_radiance", "Invalid radiance percentile range"),
         ("nan_coordinates", "no valid coordinates"),
     ],
 )
 async def test_generate_quicklooks_rejects_invalid_measurements(quicklook_context, case, message):
     """Exercise helper validation through the flow with malformed source arrays."""
-    # Corrupt either geolocation or radiance while keeping catalog discovery valid.
+    # Corrupt geolocation while keeping catalog discovery valid.
     ctx = quicklook_context
     if case == "zero_geolocation":
         ctx.measurements.longitude.values[:] = 0
         ctx.measurements.latitude.values[:] = 0
-    elif case == "constant_radiance":
-        ctx.measurements.oa08_radiance.values[:] = 1
     elif case == "nan_coordinates":
         ctx.measurements.longitude.values[:] = np.nan
         ctx.measurements.latitude.values[:] = np.nan
@@ -286,6 +283,20 @@ async def test_generate_quicklooks_rejects_invalid_measurements(quicklook_contex
     ctx.rasterio.open.assert_not_called()
     ctx.upload.assert_not_awaited()
     ctx.catalog.patch_item.assert_not_called()
+
+
+async def test_generate_quicklooks_accepts_constant_radiance(quicklook_context):
+    """A constant channel becomes zero intensity without preventing publication."""
+    ctx = quicklook_context
+    ctx.measurements.oa08_radiance.values[:] = 1
+    # Equal percentiles produce NaNs during scaling, which are then converted to zero.
+    with np.errstate(invalid="ignore", divide="ignore"):
+        await quicklook.generate_s3l1_olci_quicklooks.fn(OWNER, PUBLISHED_ITEMS)
+
+    rgb = ctx.rasterio.warp.reproject.call_args.kwargs["source"]
+    assert np.all(rgb[0] == 0)
+    assert ctx.upload.await_count == 2
+    ctx.catalog.patch_item.assert_called_once()
 
 
 async def test_generate_quicklooks_does_not_patch_after_upload_failure(quicklook_context):

@@ -18,13 +18,13 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image
 from prefect import flow
 
 from rs_workflows.on_demand.sentinel3.olci_quicklook_common import (
     generate_quicklooks,
+    normalize_channel,
+    save_quicklooks,
     select_downsampled_geolocation,
-    write_georeferenced_cog,
 )
 
 # Map the OLCI L2 variables to the red, green and blue channels.
@@ -34,15 +34,9 @@ L2_CHANNELS = ("otci", "gifapar", "iwv")
 def stretch_channel(values):
     """Scale one channel to uint8 between its 2nd and 98th percentiles; also return its valid pixels."""
     valid = np.isfinite(values)
-    scaled = np.zeros(values.shape, dtype="uint8")
-    if not valid.any():
-        return scaled, valid
     samples = np.where(valid, values, np.nan)
-    vmin, vmax = np.nanpercentile(samples, [2, 98])
-    # A collapsed percentile range has no contrast: keep zero intensity while the pixels stay valid.
-    if np.isfinite(vmin) and np.isfinite(vmax) and vmax > vmin:
-        normalized = np.clip((samples - vmin) / (vmax - vmin), 0, 1)
-        scaled = np.nan_to_num(normalized * 255, nan=0.0).astype("uint8")
+    normalized = normalize_channel(samples)
+    scaled = np.nan_to_num(normalized * 255, nan=0.0).astype("uint8")
     return scaled, valid
 
 
@@ -65,16 +59,7 @@ def build_rgb(measurements):
 def write_quicklooks(measurements, output_dir: Path) -> tuple[Path, Path]:
     """Write the unprojected JPEG and georeferenced COG quicklooks."""
     lon, lat, rgb, visible = build_rgb(measurements)
-    jpeg_path = output_dir / "quicklook.jpg"
-    cog_path = output_dir / "quicklook.tif"
-    # JPEG cannot store transparency: render the pixels without any data as white.
-    jpeg = rgb.copy()
-    jpeg[~visible] = 255
-    Image.fromarray(jpeg).save(jpeg_path, quality=90)
-
-    write_georeferenced_cog(cog_path, lon, lat, rgb, visible)
-
-    return jpeg_path, cog_path
+    return save_quicklooks(output_dir, lon, lat, rgb, visible)
 
 
 @flow(name="generate-s3-l2-olci-quicklooks")
