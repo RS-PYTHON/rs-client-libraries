@@ -20,7 +20,7 @@ import pytest
 
 from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
 from rs_workflows.on_demand.common.types import Level2FlowParams
-from rs_workflows.on_demand.sentinel3 import s3_l1_olci, s3_l2_olci
+from rs_workflows.on_demand.sentinel3 import s3_l1_olci, s3_l2_olci, s3_processing_utils
 
 
 async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
@@ -109,7 +109,10 @@ async def test_process_s3l2_olci_resolves_settings_and_calls_dpr(mocker, overrid
         ),
     )
     mocker.patch.object(s3_l2_olci, "get_run_logger", return_value=MagicMock())
-    expected_result = [{"id": "olci-l2-output"}]
+    mocker.patch.object(s3_processing_utils, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(s3_l2_olci.runtime.flow_run, "id", "l2-run-id")
+    emit_event = mocker.patch.object(s3_processing_utils, "emit_event")
+    expected_result = [{"id": "olci-l2-output", "collection": "olci-l2"}]
     call_dpr = mocker.patch.object(s3_l2_olci, "call_dpr_flow", new=AsyncMock(return_value=expected_result))
     flow_params = Level2FlowParams(processor_version="2.0") if override_params else None
 
@@ -134,6 +137,16 @@ async def test_process_s3l2_olci_resolves_settings_and_calls_dpr(mocker, overrid
     assert kwargs["generated_product_to_collection_identifier"] == []
     assert kwargs["auxiliary_product_to_collection_identifier"] == []
     assert result == expected_result
+    emit_event.assert_called_once()
+    assert emit_event.call_args.kwargs["event"] == "rs-python.s3-l2.quicklook-inputs-ready"
+    assert emit_event.call_args.kwargs["payload"] == {"owner_id": "toto", "published_items": expected_result}
+    assert emit_event.call_args.kwargs["resource"] == {
+        "prefect.resource.id": "rs-python.s3-l2-result.l2-run-id",
+        "prefect.resource.name": "S3 OLCI L2 products",
+    }
+    assert emit_event.call_args.kwargs["related"] == [
+        {"prefect.resource.id": "prefect.flow-run.l2-run-id", "prefect.resource.role": "flow-run"},
+    ]
 
 
 async def test_process_s3l2_olci_stops_when_settings_resolution_fails(mocker):
@@ -185,8 +198,11 @@ async def test_process_s3l1_emits_published_efr_inputs(mocker, efr_count):
     flow_params.resolve = AsyncMock(return_value=resolved_params)
     mocker.patch.object(s3_l1_olci, "call_dpr_flow", new=AsyncMock(return_value=products))
     mocker.patch.object(s3_l1_olci, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(s3_processing_utils, "get_run_logger", return_value=MagicMock())
     mocker.patch.object(s3_l1_olci.runtime.flow_run, "id", "l1-run-id")
     emit_event = mocker.patch.object(s3_l1_olci, "emit_event")
+    # Observe both event emitters together to check quicklooks are requested before L2 processing.
+    mocker.patch.object(s3_processing_utils, "emit_event", new=emit_event)
 
     result = await s3_l1_olci.process_s3l1_olci.fn(flow_params=flow_params)
 
@@ -195,6 +211,13 @@ async def test_process_s3l1_emits_published_efr_inputs(mocker, efr_count):
     assert emit_event.call_count == (2 if efr_count else 1)
     quicklook_event = emit_event.call_args_list[0].kwargs
     assert quicklook_event["event"] == "rs-python.s3-l1.quicklook-inputs-ready"
+    assert quicklook_event["resource"] == {
+        "prefect.resource.id": "rs-python.s3-l1-result.l1-run-id",
+        "prefect.resource.name": "S3 OLCI L1 products",
+    }
+    assert quicklook_event["related"] == [
+        {"prefect.resource.id": "prefect.flow-run.l1-run-id", "prefect.resource.role": "flow-run"},
+    ]
     assert quicklook_event["payload"] == {
         "owner_id": "toto",
         "published_items": [{"id": product["id"], "collection": product["collection"]} for product in products],

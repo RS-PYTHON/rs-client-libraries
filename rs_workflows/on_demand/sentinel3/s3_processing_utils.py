@@ -12,15 +12,62 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared configuration and product-mapping helpers for Sentinel-3 processing."""
+"""Shared configuration, product mapping and event helpers for Sentinel-3 processing."""
 
 from collections.abc import Awaitable
-from typing import Any, cast
+from typing import Any, Literal, cast
 
+from prefect import get_run_logger
+from prefect.events import emit_event
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
 
 from rs_workflows.on_demand.common.types import S3_PROCESSING_CONFIGURATION
+
+
+def emit_olci_quicklook_event(
+    level: Literal["l1", "l2"],
+    owner_id: str,
+    products: list[dict[str, Any]],
+    flow_run_id: str,
+) -> None:
+    """Request quicklooks for published OLCI products, linked to their processing flow run."""
+    if not products:
+        return
+
+    event_name = f"rs-python.s3-{level}.quicklook-inputs-ready"
+    event = emit_event(
+        event=event_name,
+        resource={
+            "prefect.resource.id": f"rs-python.s3-{level}-result.{flow_run_id}",
+            "prefect.resource.name": f"S3 OLCI {level.upper()} products",
+        },
+        related=[
+            {
+                "prefect.resource.id": f"prefect.flow-run.{flow_run_id}",
+                "prefect.resource.role": "flow-run",
+            },
+        ],
+        payload={
+            "owner_id": owner_id,
+            # Only send catalog references; the quicklook flow reads the full items itself.
+            "published_items": [{"id": product["id"], "collection": product["collection"]} for product in products],
+        },
+    )
+    if event is None:
+        # Missing quicklook events do not prevent returning the published processing results.
+        get_run_logger().warning(
+            "Quicklook-inputs-ready event was not emitted: event=%s, flow_run_id=%s",
+            event_name,
+            flow_run_id,
+        )
+    else:
+        get_run_logger().info(
+            "Emitted event=%s, event_id=%s, product_count=%d",
+            event_name,
+            event.id,
+            len(products),
+        )
 
 
 class S3ProcessingOrchestrationSettings(BaseModel):

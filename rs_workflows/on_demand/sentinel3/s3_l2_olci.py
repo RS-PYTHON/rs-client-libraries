@@ -18,10 +18,13 @@
 
 from typing import Any
 
-from prefect import flow, get_run_logger, task
+from prefect import flow, get_run_logger, runtime, task
 
 from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
 from rs_workflows.on_demand.common.types import Level2FlowParams
+from rs_workflows.on_demand.sentinel3.s3_processing_utils import (
+    emit_olci_quicklook_event,
+)
 from rs_workflows.utils.dpr import call_dpr_flow
 
 
@@ -41,7 +44,7 @@ async def process_s3l2_olci(
 
     get_run_logger().info(f"Flow params: {flow_parameters}")
     # Call DPR flow
-    return await call_dpr_flow(
+    products = await call_dpr_flow(
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),
         input_products=input_products or flow_parameters.input_products,
         external_variables={
@@ -60,6 +63,16 @@ async def process_s3l2_olci(
         generated_product_to_collection_identifier=flow_parameters.generated_product_to_collection_identifier or [],
         auxiliary_product_to_collection_identifier=flow_parameters.auxiliary_product_to_collection_identifier or [],
     )
+
+    flow_run_id = str(runtime.flow_run.id or "unknown")
+    # Trigger quicklooks independently for all published products.
+    emit_olci_quicklook_event(
+        level="l2",
+        owner_id=flow_parameters.owner_identifier,
+        products=products,
+        flow_run_id=flow_run_id,
+    )
+    return products
 
 
 @task(name="process-s3-l2-olci")

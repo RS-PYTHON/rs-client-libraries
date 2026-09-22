@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Exercise Sentinel-3 OLCI Level-1 quicklooks with the shared flow scenarios."""
+"""Exercise Sentinel-3 OLCI Level-2 quicklooks with the shared flow scenarios."""
 
 from tests.olci_quicklook_cases import OlciQuicklookTests
 
 
-class TestS3L1OlciQuicklook(OlciQuicklookTests):
-    """Apply the common quicklook scenarios to the Level-1 flow."""
+class TestS3L2OlciQuicklook(OlciQuicklookTests):
+    """Apply the common quicklook scenarios to the Level-2 flow."""
 
-    level = 1
+    level = 2
