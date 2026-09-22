@@ -19,10 +19,12 @@
 from typing import Any
 
 from prefect import flow, get_run_logger, runtime, task
-from prefect.events import emit_event
 
 from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
 from rs_workflows.on_demand.common.types import Level2FlowParams
+from rs_workflows.on_demand.sentinel3.s3_processing_utils import (
+    emit_olci_quicklook_event,
+)
 from rs_workflows.utils.dpr import call_dpr_flow
 
 
@@ -64,39 +66,12 @@ async def process_s3l2_olci(
 
     flow_run_id = str(runtime.flow_run.id or "unknown")
     # Trigger quicklooks independently for all published products.
-    if products:
-        quicklook_event_name = "rs-python.s3-l2.quicklook-inputs-ready"
-        quicklook_event = emit_event(
-            event=quicklook_event_name,
-            resource={
-                "prefect.resource.id": f"rs-python.s3-l2-result.{flow_run_id}",
-                "prefect.resource.name": "S3 OLCI L2 products",
-            },
-            related=[
-                {
-                    "prefect.resource.id": f"prefect.flow-run.{flow_run_id}",
-                    "prefect.resource.role": "flow-run",
-                },
-            ],
-            payload={
-                "owner_id": flow_parameters.owner_identifier,
-                # Only send catalog references; the quicklook flow reads the full items itself.
-                "published_items": [{"id": product["id"], "collection": product["collection"]} for product in products],
-            },
-        )
-        if quicklook_event is None:
-            get_run_logger().warning(
-                "Quicklook-inputs-ready event was not emitted: event=%s, flow_run_id=%s",
-                quicklook_event_name,
-                flow_run_id,
-            )
-        else:
-            get_run_logger().info(
-                "Emitted event=%s, event_id=%s, product_count=%d",
-                quicklook_event_name,
-                quicklook_event.id,
-                len(products),
-            )
+    emit_olci_quicklook_event(
+        level="l2",
+        owner_id=flow_parameters.owner_identifier,
+        products=products,
+        flow_run_id=flow_run_id,
+    )
     return products
 
 
