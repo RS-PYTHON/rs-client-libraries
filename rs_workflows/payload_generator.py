@@ -806,6 +806,9 @@ def generate_payload(  # pylint: disable=unused-argument
         general_configuration=GeneralConfiguration(
             logging=LoggingConfig(level=dpr_process_in.env.logging_level.value),
             triggering__temporary_shared=dpr_process_in.temporary_shared,
+            triggering__stage_s3_outputs=dpr_process_in.triggering__stage_s3_outputs,
+            triggering__stage_s3_temporary_prefix=dpr_process_in.triggering__stage_s3_temporary_prefix,
+            triggering__stage_s3_outputs_min_size=dpr_process_in.triggering__stage_s3_outputs_min_size,
             triggering__use_datatree=True if is_olci_processor else None,
             triggering__use_default_filename=True if is_olci_processor else None,
             dask_utils__timeout=dpr_process_in.dask_task_timeout,
