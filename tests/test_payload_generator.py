@@ -23,6 +23,7 @@ from pystac import Asset, Item
 
 from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_workflows.flow_utils import (
+    DprProcessIn,
     FlowGeneratedProduct,
     FlowInputProduct,
 )
@@ -174,6 +175,18 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
 
 
 @pytest.mark.parametrize(
+    "staging_options",
+    [
+        {},
+        {"triggering__stage_s3_outputs": False},
+        {
+            "triggering__stage_s3_outputs": True,
+            "triggering__stage_s3_temporary_prefix": True,
+            "triggering__stage_s3_outputs_min_size": 1048576,
+        },
+    ],
+)
+@pytest.mark.parametrize(
     "processor_name, expected_logging, expected_config",
     [
         (
@@ -197,6 +210,7 @@ def test_generate_payload_success(
     expected_logging,
     expected_config,
     _mock_os_env,
+    staging_options,
 ):
     """
     Test successful end-to-end payload generation for a normal processor.
@@ -206,6 +220,17 @@ def test_generate_payload_success(
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
     mock_storage_config.default_adfs_storage = "s3"
+
+    # Use the input model's actual defaults, as when Prefect omits these options.
+    staging_input = DprProcessIn.model_construct(**staging_options)
+    staging_keys = (
+        "triggering__stage_s3_outputs",
+        "triggering__stage_s3_temporary_prefix",
+        "triggering__stage_s3_outputs_min_size",
+    )
+    expected_staging = dict(zip(staging_keys, (True, False, 0))) | staging_options
+    for key in staging_keys:
+        setattr(mock_dpr_process_in, key, getattr(staging_input, key))
 
     mocker.patch(
         "rs_workflows.payload_generator.StorageConfig",
@@ -237,6 +262,8 @@ def test_generate_payload_success(
     assert isinstance(payload, PayloadSchema)
     assert isinstance(payload.io, IOConfig)
     assert isinstance(payload.general_configuration, GeneralConfiguration)
+    configuration = payload.general_configuration.dump()
+    assert {key: configuration[key] for key in staging_keys} == expected_staging
     assert len(payload.workflow or []) == 1
     assert payload.io.adfs[0].id == "ADF1"
     assert payload.logging is None

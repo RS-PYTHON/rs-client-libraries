@@ -925,6 +925,9 @@ def _mock_dpr_process_in():
     mock.processor_name = msg
 
     mock.temporary_folder = None
+    mock.triggering__stage_s3_outputs = True
+    mock.triggering__stage_s3_temporary_prefix = False
+    mock.triggering__stage_s3_outputs_min_size = 0
 
     return mock
 
