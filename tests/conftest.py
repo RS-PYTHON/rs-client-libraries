@@ -928,6 +928,7 @@ def _mock_dpr_process_in():
     mock.triggering__stage_s3_outputs = True
     mock.triggering__stage_s3_temporary_prefix = False
     mock.triggering__stage_s3_outputs_min_size = 0
+    mock.triggering__stage_s3_memory_fit_safety_ratio = 0.25
 
     return mock
 

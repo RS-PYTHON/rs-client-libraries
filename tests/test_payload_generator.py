@@ -183,6 +183,7 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
             "triggering__stage_s3_outputs": True,
             "triggering__stage_s3_temporary_prefix": True,
             "triggering__stage_s3_outputs_min_size": 1048576,
+            "triggering__stage_s3_memory_fit_safety_ratio": 0.1,
         },
     ],
 )
@@ -227,8 +228,9 @@ def test_generate_payload_success(
         "triggering__stage_s3_outputs",
         "triggering__stage_s3_temporary_prefix",
         "triggering__stage_s3_outputs_min_size",
+        "triggering__stage_s3_memory_fit_safety_ratio",
     )
-    expected_staging = dict(zip(staging_keys, (True, False, 0))) | staging_options
+    expected_staging = dict(zip(staging_keys, (True, False, 0, 0.25))) | staging_options
     for key in staging_keys:
         setattr(mock_dpr_process_in, key, getattr(staging_input, key))
 
