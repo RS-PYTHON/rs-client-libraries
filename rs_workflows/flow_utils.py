@@ -356,6 +356,45 @@ class DprProcessIn(BaseModel):
         description="Temporary folder path",
     )
 
+    triggering__stage_s3_outputs: bool = Field(
+        default=True,
+        title="Stage S3 Outputs",
+        description=(
+            "Experimental CPM feature: save S3 workflow outputs to a local temporary product, "
+            "then upload it to S3. Disable to use direct S3 writes."
+        ),
+    )
+
+    triggering__stage_s3_temporary_prefix: bool = Field(
+        default=False,
+        title="Stage S3 Temporary Prefix",
+        description=(
+            "Experimental CPM feature: when S3 output staging is enabled, upload to a temporary S3 prefix, "
+            "copy to the final prefix, then remove the temporary prefix. Adds an S3 copy; promotion is not atomic."
+        ),
+    )
+
+    triggering__stage_s3_memory_fit_safety_ratio: float = Field(
+        default=0.25,
+        title="Stage S3 Memory Fit Safety Ratio",
+        description=(
+            "Fraction of available runner (client) memory used as the threshold for staged S3 Zarr outputs "
+            "with a remote Dask scheduler. Products estimated to exceed this threshold use the experimental "
+            "Sub-DataTree writer. Lower values select this mode for smaller products. "
+            "The threshold uses runner memory, not scheduler memory."
+        ),
+    )
+
+    triggering__stage_s3_outputs_min_size: int = Field(
+        default=0,
+        ge=0,
+        title="Stage S3 Outputs Minimum Size",
+        description=(
+            "Minimum logical product size in bytes for experimental CPM S3 output staging. "
+            "0 stages every S3 output; smaller products use direct writes."
+        ),
+    )
+
     s3_payload_file: str = Field(
         title="S3 Payload File",
         description="S3 path where the processor payload (JSON) will be written for execution.",
