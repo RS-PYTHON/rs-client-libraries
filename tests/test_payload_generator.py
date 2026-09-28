@@ -230,7 +230,7 @@ def test_generate_payload_success(
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[sample_unit],
-        adfs=[("ADF1", "filename", "s3://bucket/adf1")],
+        adfs=[("ADF1", "file", "s3://bucket/adf1")],
         dpr_process_in=mock_dpr_process_in,
     )
 
@@ -250,7 +250,7 @@ def test_generate_payload_success(
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[sample_unit],
-        adfs=[("ADF1", "filename", "s3://bucket/adf1")],
+        adfs=[("ADF1", "file", "s3://bucket/adf1")],
         dpr_process_in=mock_dpr_process_in,
     )
     assert payload.logging == expected_logging
@@ -848,13 +848,13 @@ def test_build_adfs_single_folder(mock_store_params):
 
 
 def test_build_adfs_single_filename(mock_store_params):
-    """Test ADFS of type 'filename' with a single file"""
+    """Test ADFS of type 'file' with a single file"""
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
     mock_storage_config.default_adfs_storage = "s3"
 
     adfs = [
-        ("adf1", "filename", "/data/file1.txt"),
+        ("adf1", "file", "/data/file1.txt"),
     ]
 
     result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in())
@@ -871,8 +871,8 @@ def test_build_adfs_multiple_entries(mock_store_params):
     mock_storage_config.default_adfs_storage = "s3"
 
     adfs = [
-        ("adf1", "filename", "/data/folder/file1.txt"),
-        ("adf1", "filename", "/data/folder/file2.txt"),
+        ("adf1", "file", "/data/folder/file1.txt"),
+        ("adf1", "file", "/data/folder/file2.txt"),
     ]
 
     result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in())
@@ -894,7 +894,7 @@ def test_build_adfs_edh_url_replaced_with_api_key(mock_store_params):
     mock_storage_config.default_adfs_storage = "s3"
 
     edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
-    adfs = [("DEM", "filename", edh_url)]
+    adfs = [("DEM", "file", edh_url)]
 
     result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
 
@@ -914,7 +914,7 @@ def test_build_adfs_edh_url_secret_hides_token(mock_store_params):
     mock_storage_config.default_adfs_storage = "s3"
 
     edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
-    adfs = [("DEM", "filename", edh_url)]
+    adfs = [("DEM", "file", edh_url)]
 
     result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
 
@@ -931,7 +931,7 @@ def test_build_adfs_no_edh_key_url_unchanged(mock_store_params):
     mock_storage_config.default_adfs_storage = "s3"
 
     edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
-    adfs = [("DEM", "filename", edh_url)]
+    adfs = [("DEM", "file", edh_url)]
 
     result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key=None))
 
@@ -947,7 +947,7 @@ def test_build_adfs_non_edh_url_not_replaced(mock_store_params):
     mock_storage_config.default_adfs_storage = "s3"
 
     other_url = "https://some-other-service.example.com/data/file.tif"
-    adfs = [("ADF1", "filename", other_url)]
+    adfs = [("ADF1", "file", other_url)]
 
     result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
 
@@ -1182,7 +1182,7 @@ def test_build_output_products_ignores_extra_generated_products(mock_dpr_process
             {
                 "name": "S01SARRAW",
                 "store_type": "s3",
-                "type": "filename",
+                "type": "file",
                 "opening_mode": "CREATE",
                 "final_product": True,
             },

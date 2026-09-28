@@ -323,7 +323,7 @@ def test_case_8_exact_output():
                 },
             ],
             "input_adfs": [
-                {"name": "CONFIG", "mandatory": False, "type": "filename"},
+                {"name": "CONFIG", "mandatory": False, "type": "file"},
                 {"name": "ETAD", "mandatory": False, "type": "folder"},
             ],
             "output_products": [
@@ -352,7 +352,7 @@ def test_case_8_exact_output():
                 },
             ],
             "input_adfs": [
-                {"name": "CONFIG", "mandatory": False, "type": "filename"},
+                {"name": "CONFIG", "mandatory": False, "type": "file"},
                 {"name": "DEM", "mandatory": False, "type": "folder"},
             ],
             "output_products": [
@@ -378,7 +378,7 @@ def test_case_8_exact_output():
                     "type": "folder",
                 },
             ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
+            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "file"}],
             "output_products": [
                 {"name": "simulation_ref", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
             ],
@@ -408,13 +408,13 @@ def test_case_8_exact_output():
                     "type": "folder",
                 },
             ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
+            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "file"}],
             "output_products": [
                 {
                     "name": "cslcs",
                     "origin": "pipeline_internal",
                     "mandatory": True,
-                    "type": "filename",
+                    "type": "file",
                     "store_type": "zarr",
                     "store_params": {"consolidate": True},
                 },
@@ -428,7 +428,7 @@ def test_case_8_exact_output():
                     "name": "cslcs",
                     "origin": "coregistration.4.cslcs",
                     "mandatory": False,
-                    "type": "filename",
+                    "type": "file",
                     "store_type": "zarr",
                     "store_params": {"consolidate": True},
                 },
@@ -439,13 +439,13 @@ def test_case_8_exact_output():
                     "type": "folder",
                 },
             ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
+            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "file"}],
             "output_products": [
                 {
                     "name": "gslcs",
                     "origin": "pipeline_internal",
                     "mandatory": True,
-                    "type": "filename",
+                    "type": "file",
                     "store_type": "zarr",
                     "store_params": {"consolidate": True},
                 },
@@ -459,18 +459,18 @@ def test_case_8_exact_output():
                     "name": "gslcs",
                     "origin": "geocoding.5.gslcs",
                     "mandatory": False,
-                    "type": "filename",
+                    "type": "file",
                     "store_type": "zarr",
                     "store_params": {"consolidate": True},
                 },
             ],
-            "input_adfs": [{"name": "S2_TILES", "mandatory": False, "type": "filename"}],
+            "input_adfs": [{"name": "S2_TILES", "mandatory": False, "type": "file"}],
             "output_products": [
                 {
                     "name": "nrb",
                     "origin": "pipeline_output",
                     "mandatory": True,
-                    "type": "filename",
+                    "type": "file",
                     "store_type": "zarr",
                     "store_params": {"consolidate": True},
                 },
@@ -515,7 +515,7 @@ def test_case_s1_l0_exact_output_with_regex():
                 {
                     "name": "osf",
                     "mandatory": False,
-                    "type": "filename",
+                    "type": "file",
                     "store_type": "safe",
                     "alternatives": [
                         {
@@ -537,7 +537,7 @@ def test_case_s1_l0_exact_output_with_regex():
                 {
                     "name": "fro",
                     "mandatory": False,
-                    "type": "filename",
+                    "type": "file",
                     "store_type": "safe",
                     "alternatives": [
                         {

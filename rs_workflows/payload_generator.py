@@ -40,7 +40,6 @@ from rs_workflows.payload_template import (
     GeneralConfiguration,
     InputProduct,
     IOConfig,
-    LoggingConfig,
     OutputProduct,
     PayloadSchema,
     StoreParams,
@@ -404,11 +403,11 @@ def build_input_products(
                     id=mapping["name"],
                     path=stac_item_path,
                     # TODO: The value for this field in the tasktable (from where the unit is built) should be
-                    # set to 'filename' for the s1 l0 processor, otherwise the processor fails to start.
+                    # set to 'file' for the s1 l0 processor, otherwise the processor fails to start.
                     # Verify in the rs-dpr-service tasktable (config/TaskTable_S1_L0_generated_by_rs_python_v1.json)
-                    # that in the io section, the type field for input_products (S1ACADUS) is set to 'filename'.
+                    # that in the io section, the type field for input_products (S1ACADUS) is set to 'file'.
                     # To be fixed in future iterations !
-                    type=mapping.get("type", "filename"),
+                    type=mapping.get("type", "file"),
                     store_type=mapping["store_type"],
                     store_params=store_params,
                     opening_mode=opening_mode,
@@ -557,7 +556,7 @@ def build_output_products(
                 path=output_path,
                 store_type=mapping["store_type"],
                 store_params=store_params,
-                type=mapping.get("type", "filename"),
+                type=mapping.get("type", "file"),
                 opening_mode=opening_mode,
                 final_product=mapping.get("final_product", True),
                 autoclean=autoclean,
@@ -804,7 +803,7 @@ def generate_payload(  # pylint: disable=unused-argument
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (stories 800/1050)
         general_configuration=GeneralConfiguration(
-            logging=LoggingConfig(level=dpr_process_in.env.logging_level.value),
+            logging__progress_level=dpr_process_in.env.logging_level.value,
             triggering__temporary_shared=dpr_process_in.temporary_shared,
             triggering__use_datatree=True if is_olci_processor else None,
             triggering__use_default_filename=True if is_olci_processor else None,

@@ -534,6 +534,11 @@ async def dpr_processing(
         logger.info(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
         await prefect_utils.s3_upload_bytes(yaml_str.encode("utf-8"), dpr_input.s3_payload_file)
 
+        ########### TEMP !!!!!!!!!!!!!!!!!!!!!!!!!!
+        with open("/home/jgaucher/projects/rspy/working/eopf-cpm/payload-v3.yml", "w") as opened:
+            opened.write(yaml_str)
+        raise RuntimeError("test !")
+
         # Run the DPR processor
         processed_items = run_processor.submit(
             flow_env.serialize(),

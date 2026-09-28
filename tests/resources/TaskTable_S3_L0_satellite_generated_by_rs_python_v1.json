@@ -70,7 +70,7 @@
     },
     {
       "name": "osf",
-      "type": "filename",
+      "type": "file",
       "store_type": "safe",
       "alternatives": [
         {
@@ -92,7 +92,7 @@
     },
     {
       "name": "fro",
-      "type": "filename",
+      "type": "file",
       "store_type": "safe",
       "alternatives": [
         {

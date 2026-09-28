@@ -270,7 +270,7 @@
     },
     {
       "name": "CONFIG",
-      "type": "filename"
+      "type": "file"
     },
     {
       "name": "ETAD",
@@ -302,7 +302,7 @@
     },
     {
       "name": "cslcs",
-      "type": "filename",
+      "type": "file",
       "store_type": "zarr",
       "store_params": {
         "consolidate": true
@@ -310,7 +310,7 @@
     },
     {
       "name": "gslcs",
-      "type": "filename",
+      "type": "file",
       "store_type": "zarr",
       "store_params": {
         "consolidate": true
@@ -318,11 +318,11 @@
     },
     {
       "name": "S2_TILES",
-      "type": "filename"
+      "type": "file"
     },
     {
       "name": "nrb",
-      "type": "filename",
+      "type": "file",
       "store_type": "zarr",
       "store_params": {
         "consolidate": true

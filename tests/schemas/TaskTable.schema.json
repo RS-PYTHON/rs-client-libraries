@@ -79,7 +79,7 @@
                     "type": "string",
                     "enum": [
                         "folder",
-                        "filename",
+                        "file",
                         "regex"
                     ]
                 },

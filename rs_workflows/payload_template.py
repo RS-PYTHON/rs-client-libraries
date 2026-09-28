@@ -168,20 +168,18 @@ class StoreParams(BasePayloadModel):
         return v
 
 
-class LoggingConfig(BasePayloadModel):
-    """Logging configuration used in the general_configuration section"""
-
-    level: str | None = Field(default="INFO", description="Logging level")
-
-
 # Main sections
 
 
 class GeneralConfiguration(BasePayloadModel):
     """General configuration options for EOConfiguration behavior"""
 
-    logging: LoggingConfig | None = LoggingConfig(level="DEBUG")
-    triggering__use_basic_logging: bool | None = True
+    triggering__id: str | None = None
+    triggering__load_default_logging: bool | None = None
+    triggering__use_basic_logging: bool | None = None
+    triggering__progress_logging: bool | None = None
+    logging__progress_level: str | None = "DEBUG"
+    logging__progress_format: str | None = None
     triggering__wait_before_exit: int | None = 10
     triggering__use_datatree: bool | None = None
     triggering__use_default_filename: bool | None = None
@@ -190,7 +188,13 @@ class GeneralConfiguration(BasePayloadModel):
     breakpoints__folder: str | None = None
     triggering__create_temporary: bool | None = None
     triggering__temporary_shared: bool | None = None
+    triggering__stage_s3_outputs: bool | None = None
+    triggering__stage_s3_outputs_min_size: int | None = None
+    triggering__stage_s3_memory_fit_safety_ratio: float | None = None
+    triggering__stage_s3_temporary_prefix: bool | None = None
     triggering__validate_run: bool | None = None
+    triggering__dry_run: bool | None = None
+    triggering__output_generator_consumption: str | None = None
     triggering__validate_mode: str | None = None
     triggering__error_policy: str | None = None
     temporary__folder: str | None = None
@@ -244,7 +248,7 @@ class InputProduct(BasePayloadModel):
 
     id: str
     path: str
-    type: str | None = Field(default="filename")
+    type: str | None = Field(default="file")
     store_type: str
     store_params: StoreParams | None = None
     opening_mode: str | None = Field(default=None)
@@ -259,7 +263,7 @@ class OutputProduct(BasePayloadModel):
     path: str
     store_type: str
     store_params: StoreParams | None = None
-    type: str | None = Field(default="filename")
+    type: str | None = Field(default="file")
     opening_mode: str | None = Field(default="CREATE")
     apply_eoqc: bool | None = Field(default=False)
     autoclean: bool | None = Field(default=False, exclude=True)
