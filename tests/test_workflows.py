@@ -394,33 +394,37 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
 
     # --- Task table ---
     task_table = {
-        "io": [
-            {
-                "name": "ADFS_INPUT",
-                "multiplicity": "one_per_input",
-                "alternatives": [
-                    {
-                        "order": 1,
-                        "timeout_seconds": 0,
-                        "query": {
-                            "name": "LatestValCover",
-                            "parameters": {
-                                "product_type": "SOMETHING",
-                                "start_datetime": "{S1CADUS.start_datetime}",
-                                "end_datetime": "{S1CADUS.end_datetime}",
-                                "satellite": "{S1CADUS.platform}",
-                                "dTa": 0,
-                                "dTb": 0,
+        "io": {
+            "adfs": [
+                {
+                    "name": "ADFS_INPUT",
+                    "multiplicity": "one_per_input",
+                    "alternatives": [
+                        {
+                            "order": 1,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCover",
+                                "parameters": {
+                                    "product_type": "SOMETHING",
+                                    "start_datetime": "{S1CADUS.start_datetime}",
+                                    "end_datetime": "{S1CADUS.end_datetime}",
+                                    "satellite": "{S1CADUS.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
                             },
                         },
-                    },
-                ],
-            },
-            {
-                "name": "S1CADUS",
-                "store_params": {"regex": r".*item\d"},
-            },
-        ],
+                    ],
+                },
+            ],
+            "input": [
+                {
+                    "name": "S1CADUS",
+                    "reader_params": {"regex": r".*item\d"},
+                },
+            ],
+        },
     }
 
     # --- Unit config ---

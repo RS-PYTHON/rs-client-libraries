@@ -876,15 +876,15 @@ def _sample_unit():
         "name": "unit1.1",
         "module": "module1",
         "input_products": [
-            {"name": "S1CADUS", "origin": "pipeline_input_1", "store_type": "S3"},
-            {"name": "S3CADUS", "origin": "external_proc", "store_type": "S3"},
+            {"name": "S1CADUS", "origin": "pipeline_input_1", "engine": "s3_cache"},
+            {"name": "S3CADUS", "origin": "external_proc", "engine": "s3_cache"},
         ],
         "input_adfs": [
             {"name": "ADF1"},
         ],
         "output_products": [
-            {"name": "output1", "regex": "*.tif", "store_type": "S3"},
-            {"name": "output2", "store_type": "S3"},
+            {"name": "output1", "regex": "*.tif", "engine": "s3_cache"},
+            {"name": "output2", "engine": "s3_cache"},
         ],
         "parameters": {
             "testparam": "testvalue",

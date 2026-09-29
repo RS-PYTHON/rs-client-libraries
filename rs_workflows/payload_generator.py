@@ -408,8 +408,8 @@ def build_input_products(
                     # that in the io section, the type field for input_products (S1ACADUS) is set to 'file'.
                     # To be fixed in future iterations !
                     type=mapping.get("type", "file"),
-                    store_type=mapping["store_type"],
-                    store_params=store_params,
+                    engine=mapping["engine"],
+                    reader_params=store_params,
                     opening_mode=opening_mode,
                     source_item_hrefs=[source_item_href] if source_item_href else [],
                 ),
@@ -445,8 +445,8 @@ def build_input_products(
                     id=mapping["name"],
                     path=common_folder,
                     type=mapping.get("type", "regex"),
-                    store_type=mapping["store_type"],
-                    store_params=store_params,
+                    engine=mapping["engine"],
+                    reader_params=store_params,
                     source_item_hrefs=source_item_hrefs,
                 ),
             )
@@ -554,8 +554,8 @@ def build_output_products(
             OutputProduct(
                 id=mapping["name"],
                 path=output_path,
-                store_type=mapping["store_type"],
-                store_params=store_params,
+                engine=mapping["engine"],
+                writer_params=store_params,
                 type=mapping.get("type", "file"),
                 opening_mode=opening_mode,
                 final_product=mapping.get("final_product", True),
@@ -590,10 +590,9 @@ def get_io(
     Args:
         unit (dict): Workflow unit definition containing I/O product configurations.
         dpr_process_in (DprProcessIn): DPR input configuration containing product mappings.
-        store_params (StoreParams): S3 storage configuration and credentials. TODO ! as
-        written in the comment from story 800, point 3: About the storage_configuration : for the time being,
-        just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
         flow_env (FlowEnv): Environment context holding execution metadata.
+        storage_configuration: storage configuration info.
+        bucket_configuration: list[list[str]]: Parsed S3 bucket configuration entries.
 
     Returns:
         tuple[list[InputProduct], list[OutputProduct]]:
@@ -655,7 +654,7 @@ def build_adfs(
                 path = SecretStr(
                     path.replace(DATA_EDH_DOMAIN, f"edh:{dpr_process_in.edh_api_key}@api.earthdatahub.destine.eu"),
                 )
-            result.append(AdfConfig(id=adfs_id, path=path, store_params=store_params))
+            result.append(AdfConfig(id=adfs_id, path=path, adf_params=store_params))
         elif isinstance(store_params, StoreParams):
             # Advanced case where several adfs share the same id (i.e. several files)
             adfs_paths = [p for p, _ in adfs_entries]
@@ -669,7 +668,7 @@ def build_adfs(
                     id=adfs_id,
                     path=common_folder,
                     # type="regex", # Unsupported by CPM but it feels needed here for S1ARD
-                    store_params=store_params,
+                    adf_params=store_params,
                 ),
             )
         else:
@@ -814,8 +813,8 @@ def generate_payload(  # pylint: disable=unused-argument
         external_modules=external_modules,
         workflow=workflow_steps,
         io=io_config,  # type: ignore
-        # The dask_context section is built in the dpr_service
-        # dask_context=dask_context,
+        # The dask context_managers section is built in the dpr_service
+        # context_managers=context_managers,
         logging=logging,
         config=config,
         secret=["secrets.json"] if temp_folder_s3_secret else None,

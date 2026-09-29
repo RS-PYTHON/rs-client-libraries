@@ -356,7 +356,7 @@ def _resolve_specific_input_product_stac_items(
         referenced_input_product_name = next(iter(referenced_input_product_names))
         logger.info(f"ADFS multiplicity 'one_per_input' refers to input '{referenced_input_product_name}'")
         input_product_io: dict[str, Any] = search_by_name(task_table["io"], referenced_input_product_name)
-        input_product_regex: str = input_product_io.get("store_params", {}).get("regex", None)
+        input_product_regex: str = input_product_io.get("reader_params", {}).get("regex", None)
         if not input_product_regex:
             logger.warning(
                 f"⚠️ Input product '{referenced_input_product_name}' should define a regex "
@@ -490,16 +490,13 @@ async def dpr_processing(
                 else:
                     raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
 
-        # Get optional list of external_modules
-        external_modules = extract_external_modules(task_table)
-
         # generate the dpr payload file
         task_future = generate_payload.submit(
             flow_env,
             unit_list,
             list(adfs),
             dpr_input,
-            external_modules=external_modules,
+            external_modules=task_table.get("external_modules"),
         )
         # get the payload generation result
         generated_payload_res = task_future.result()
@@ -533,11 +530,6 @@ async def dpr_processing(
         # upload the config payload contents straight to S3, without a temporary file
         logger.info(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
         await prefect_utils.s3_upload_bytes(yaml_str.encode("utf-8"), dpr_input.s3_payload_file)
-
-        ########### TEMP !!!!!!!!!!!!!!!!!!!!!!!!!!
-        with open("/home/jgaucher/projects/rspy/working/eopf-cpm/payload-v3.yml", "w") as opened:
-            opened.write(yaml_str)
-        raise RuntimeError("test !")
 
         # Run the DPR processor
         processed_items = run_processor.submit(

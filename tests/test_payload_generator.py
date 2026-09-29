@@ -158,7 +158,7 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
         return_value=[],
     )
     bad_unit = {
-        "input_products": [{"store_type": "S3"}],  # missing name/origin
+        "input_products": [{"engine": "s3_cache"}],  # missing name/origin
         "output_products": [],
     }
     mock_storage_config = MagicMock()
@@ -276,8 +276,8 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
     mocker.patch(
         "rs_workflows.payload_generator.get_io",
         return_value=(
-            [InputProduct(id="input", path="s3://mocked/input", store_type="s3")],
-            [OutputProduct(id="output", path="s3://mocked/output", store_type="s3")],
+            [InputProduct(id="input", path="s3://mocked/input", engine="s3_cache")],
+            [OutputProduct(id="output", path="s3://mocked/output", engine="s3_cache")],
         ),
     )
     mocker.patch("rs_workflows.payload_generator.fetch_csv_from_endpoint", return_value=[])
@@ -346,8 +346,8 @@ def test_generate_payload_deduplicates_io(mocker, sample_unit, mock_dpr_process_
     include each id only once in the payload (regression test for the duplicate
     input_products bug).
     """
-    shared_input = InputProduct(id="slcs", path="s3://bucket/slcs", store_type="s3")
-    shared_output = OutputProduct(id="out1", path="s3://bucket/out1", store_type="s3")
+    shared_input = InputProduct(id="slcs", path="s3://bucket/slcs", engine="s3_cache")
+    shared_output = OutputProduct(id="out1", path="s3://bucket/out1", engine="s3_cache")
 
     mocker.patch(
         "rs_workflows.payload_generator.StorageConfig",
@@ -389,9 +389,9 @@ def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in
     mockup_unit = {
         "name": "single_unit",
         "module": "l0.s1.mockup_processor",
-        "input_products": [{"name": "S1CADUS", "origin": "pipeline_input", "store_type": "cadu"}],
+        "input_products": [{"name": "S1CADUS", "origin": "pipeline_input", "engine": "cadu"}],
         "input_adfs": [],
-        "output_products": [{"name": "S03OLCL0_", "store_type": "zarr"}],
+        "output_products": [{"name": "S03OLCL0_", "engine": "cpm_zarr"}],
     }
     mocker.patch(
         "rs_workflows.payload_generator.StorageConfig",
@@ -400,8 +400,8 @@ def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in
     mocker.patch(
         "rs_workflows.payload_generator.get_io",
         return_value=(
-            [InputProduct(id="S1CADUS", path="s3://mocked/input", store_type="cadu")],
-            [OutputProduct(id="S03OLCL0_", path="s3://mocked/output", store_type="zarr")],
+            [InputProduct(id="S1CADUS", path="s3://mocked/input", engine="cadu")],
+            [OutputProduct(id="S03OLCL0_", path="s3://mocked/output", engine="cpm_zarr")],
         ),
     )
     mocker.patch("rs_workflows.payload_generator.fetch_csv_from_endpoint", return_value=[])
@@ -668,9 +668,9 @@ def test_build_input_products_success(sample_unit, mock_store_params, mocker):
 
     assert len(inputs) == 1
     assert inputs[0].id == "S1CADUS"
-    assert inputs[0].store_type == "S3"
+    assert inputs[0].engine == "s3_cache"
     assert inputs[0].path == "s3://path/to/item"
-    assert inputs[0].store_params == mock_store_params
+    assert inputs[0].reader_params == mock_store_params
 
 
 def test_build_input_products_success_multiple_inputs_regex(sample_unit, mock_store_params, mocker):
@@ -714,14 +714,14 @@ def test_build_input_products_success_multiple_inputs_regex(sample_unit, mock_st
 
     input_product = inputs[0]
     assert input_product.id == "S1CADUS"
-    assert input_product.store_type == "S3"
+    assert input_product.engine == "s3_cache"
     assert input_product.path == "s3://path/to/"
     assert input_product.type == "regex"
 
     # Checks generated regex
-    assert isinstance(input_product.store_params, StoreParams)
-    assert input_product.store_params.regex == r"(item1|item2)"
-    assert input_product.store_params.multiplicity == "2"
+    assert isinstance(input_product.reader_params, StoreParams)
+    assert input_product.reader_params.regex == r"(item1|item2)"
+    assert input_product.reader_params.multiplicity == "2"
 
 
 def test_build_input_products_missing_mapping(sample_unit):
@@ -882,9 +882,9 @@ def test_build_adfs_multiple_entries(mock_store_params):
 
     assert adf.id == "adf1"
     assert adf.path == "/data/folder/"
-    assert isinstance(adf.store_params, StoreParams)
-    assert adf.store_params.multiplicity == "2"
-    assert adf.store_params.regex == r"(file1\.txt|file2\.txt)"
+    assert isinstance(adf.adf_params, StoreParams)
+    assert adf.adf_params.multiplicity == "2"
+    assert adf.adf_params.regex == r"(file1\.txt|file2\.txt)"
 
 
 def test_build_adfs_edh_url_replaced_with_api_key(mock_store_params):
@@ -991,11 +991,11 @@ def test_build_output_products_specific_storage(
 
     assert len(outputs) == 2
     assert outputs[0].id == "output1"
-    assert outputs[0].store_type == "S3"
+    assert outputs[0].engine == "s3_cache"
     assert outputs[0].path == "s3://out-bucket/test-owner/OUT_COLL/00000000-0000-0000-0000-000000000000"
 
     assert outputs[1].id == "output2"
-    assert outputs[1].store_type == "S3"
+    assert outputs[1].engine == "s3_cache"
     assert outputs[1].path == "s3://out-bucket/test-owner/OUT_COLL/00000000-0000-0000-0000-000000000000"
 
     mock_storage.get_storage_for_specific_product.assert_called_with("output2")  # last call
@@ -1028,8 +1028,8 @@ def test_build_output_products_fallback_unit(
     outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
     assert len(outputs) == 2
-    assert outputs[0].store_type == "S3"
-    assert outputs[1].store_type == "S3"
+    assert outputs[0].engine == "s3_cache"
+    assert outputs[1].engine == "s3_cache"
 
 
 def test_build_output_products_fallback_pipeline(
@@ -1059,8 +1059,8 @@ def test_build_output_products_fallback_pipeline(
     outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
     assert len(outputs) == 2
-    assert outputs[0].store_type == "S3"
-    assert outputs[1].store_type == "S3"
+    assert outputs[0].engine == "s3_cache"
+    assert outputs[1].engine == "s3_cache"
 
 
 def test_build_output_products_error_no_storage(
@@ -1181,7 +1181,7 @@ def test_build_output_products_ignores_extra_generated_products(mock_dpr_process
         "output_products": [
             {
                 "name": "S01SARRAW",
-                "store_type": "s3",
+                "engine": "s3_cache",
                 "type": "file",
                 "opening_mode": "CREATE",
                 "final_product": True,
@@ -1223,7 +1223,7 @@ def test_build_output_products_ignores_extra_generated_products(mock_dpr_process
 @pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
 def test_build_input_products_disk_store_params_cleared(sample_unit, kind, mocker):
     """
-    For shared_disk and local_disk input products the store_params must be None (disk
+    For shared_disk and local_disk input products the reader_params must be None (disk
     storages don't use S3 credentials)
     """
     mocker.patch(
@@ -1250,7 +1250,7 @@ def test_build_input_products_disk_store_params_cleared(sample_unit, kind, mocke
     inp = inputs[0]
     assert inp.id == "S1CADUS"
     assert inp.path == "/mnt/shared/path/to/item"  # path comes from STAC, not from disk_config
-    assert inp.store_params is None  # cleared for disk storages
+    assert inp.reader_params is None  # cleared for disk storages
     assert inp.opening_mode == "READ_ONLY"
 
 
@@ -1258,7 +1258,7 @@ def test_build_input_products_disk_store_params_cleared(sample_unit, kind, mocke
 def test_build_input_products_disk_no_disk_config(sample_unit, kind, mocker):
     """
     When get_disk_storage returns None for a disk kind storage, the opening_mode
-    should remain None and store_params should still be None.
+    should remain None and reader_params should still be None.
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
@@ -1278,7 +1278,7 @@ def test_build_input_products_disk_no_disk_config(sample_unit, kind, mocker):
 
     assert len(inputs) == 1
     inp = inputs[0]
-    assert inp.store_params is None
+    assert inp.reader_params is None
     assert inp.opening_mode is None  # no disk_config → opening_mode stays None
 
 
@@ -1291,7 +1291,7 @@ def test_build_output_products_disk_uses_disk_path(
 ):
     """
     For shared_disk and local_disk output products path must come from disk_config["path"],
-    not from a bucket lookup and store_params must be None
+    not from a bucket lookup and writer_params must be None
     """
     disk_path = "/mnt/shared/job-uuid"
     mock_storage = MagicMock()
@@ -1318,7 +1318,7 @@ def test_build_output_products_disk_uses_disk_path(
     assert len(outputs) == 2
     for out in outputs:
         assert out.path == disk_path
-        assert out.store_params is None
+        assert out.writer_params is None
         assert out.opening_mode == "CREATE_OVERWRITE"
         assert out.autoclean is True
 

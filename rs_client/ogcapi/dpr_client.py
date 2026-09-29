@@ -430,13 +430,14 @@ class DprClient(OgcApiClient):
                 await prefect_utils.s3_upload_empty_file(s3_empty_file)
 
             # Change the dask authentication for local mode (used in old demos, could be removed)
-            try:
-                cluster_config = payload["dask_context"]["cluster_config"]
-                if self.local_mode:
-                    cluster_config["auth"] = cluster_config["auth_local_mode"]
-                del cluster_config["auth_local_mode"]
-            except KeyError:
-                pass
+            for manager in payload["context_managers"]:
+                try:
+                    cluster_config = manager["parameters"]["cluster_config"]
+                    if self.local_mode:
+                        cluster_config["auth"] = cluster_config["auth_local_mode"]
+                    del cluster_config["auth_local_mode"]
+                except KeyError:
+                    pass
 
             # yaml to str conversion
             contents = yaml.dump(payload, default_flow_style=False, sort_keys=False)

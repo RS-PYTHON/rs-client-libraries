@@ -254,10 +254,10 @@ def test_build_entries_filters_by_mode():
         ],
         # Provide minimal IO entries so build_unit_list can resolve types
         "io": [
-            {"name": "always_p", "type": "folder", "store_type": "safe"},
-            {"name": "none_p", "type": "folder", "store_type": "safe"},
-            {"name": "nrt_p", "type": "folder", "store_type": "safe"},
-            {"name": "ntc_p", "type": "folder", "store_type": "safe"},
+            {"name": "always_p", "type": "folder", "engine": "cpm_safe"},
+            {"name": "none_p", "type": "folder", "engine": "cpm_safe"},
+            {"name": "nrt_p", "type": "folder", "engine": "cpm_safe"},
+            {"name": "ntc_p", "type": "folder", "engine": "cpm_safe"},
         ],
         "pipelines": [
             {
@@ -319,7 +319,7 @@ def test_case_8_exact_output():
                     "origin": "pipeline_input",
                     "mandatory": False,
                     "type": "folder",
-                    "store_type": "safe",
+                    "engine": "cpm_safe",
                 },
             ],
             "input_adfs": [
@@ -332,7 +332,7 @@ def test_case_8_exact_output():
                     "origin": "pipeline_internal",
                     "mandatory": True,
                     "type": "folder",
-                    "store_type": "safe",
+                    "engine": "cpm_safe",
                     "opening_mode": "CREATE_OVERWRITE",
                 },
             ],
@@ -347,7 +347,7 @@ def test_case_8_exact_output():
                     "origin": "calibration.1.CAL_SLCS",
                     "mandatory": False,
                     "type": "folder",
-                    "store_type": "safe",
+                    "engine": "cpm_safe",
                     "opening_mode": "CREATE_OVERWRITE",
                 },
             ],
@@ -368,7 +368,7 @@ def test_case_8_exact_output():
                     "origin": "calibration.1.CAL_SLCS",
                     "mandatory": False,
                     "type": "folder",
-                    "store_type": "safe",
+                    "engine": "cpm_safe",
                     "opening_mode": "CREATE_OVERWRITE",
                 },
                 {
@@ -392,7 +392,7 @@ def test_case_8_exact_output():
                     "origin": "calibration.1.CAL_SLCS",
                     "mandatory": False,
                     "type": "folder",
-                    "store_type": "safe",
+                    "engine": "cpm_safe",
                     "opening_mode": "CREATE_OVERWRITE",
                 },
                 {
@@ -415,8 +415,8 @@ def test_case_8_exact_output():
                     "origin": "pipeline_internal",
                     "mandatory": True,
                     "type": "file",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "engine": "cpm_zarr",
+                    "writer_params": {"consolidate": True},
                 },
             ],
         },
@@ -429,8 +429,8 @@ def test_case_8_exact_output():
                     "origin": "coregistration.4.cslcs",
                     "mandatory": False,
                     "type": "file",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "engine": "cpm_zarr",
+                    "reader_params": {"consolidate": True},
                 },
                 {
                     "name": "simulation_ref",
@@ -446,8 +446,8 @@ def test_case_8_exact_output():
                     "origin": "pipeline_internal",
                     "mandatory": True,
                     "type": "file",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "engine": "cpm_zarr",
+                    "writer_params": {"consolidate": True},
                 },
             ],
         },
@@ -460,8 +460,8 @@ def test_case_8_exact_output():
                     "origin": "geocoding.5.gslcs",
                     "mandatory": False,
                     "type": "file",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "engine": "cpm_zarr",
+                    "reader_params": {"consolidate": True},
                 },
             ],
             "input_adfs": [{"name": "S2_TILES", "mandatory": False, "type": "file"}],
@@ -471,8 +471,8 @@ def test_case_8_exact_output():
                     "origin": "pipeline_output",
                     "mandatory": True,
                     "type": "file",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "engine": "cpm_zarr",
+                    "writer_params": {"consolidate": True},
                 },
             ],
         },
@@ -508,7 +508,7 @@ def test_case_s1_l0_exact_output_with_regex():
                     "origin": "pipeline_input",
                     "mandatory": True,
                     "type": "folder",
-                    "store_type": "cadu",
+                    "engine": "cadu",
                 },
             ],
             "input_adfs": [
@@ -516,7 +516,7 @@ def test_case_s1_l0_exact_output_with_regex():
                     "name": "osf",
                     "mandatory": False,
                     "type": "file",
-                    "store_type": "safe",
+                    "engine": "cpm_safe",
                     "alternatives": [
                         {
                             "order": 1,
@@ -538,7 +538,7 @@ def test_case_s1_l0_exact_output_with_regex():
                     "name": "fro",
                     "mandatory": False,
                     "type": "file",
-                    "store_type": "safe",
+                    "engine": "cpm_safe",
                     "alternatives": [
                         {
                             "order": 1,
@@ -564,7 +564,7 @@ def test_case_s1_l0_exact_output_with_regex():
                     "mandatory": True,
                     "regex": ".*",
                     "type": "folder",
-                    "store_type": "zarr",
+                    "engine": "cpm_zarr",
                     "opening_mode": "CREATE_OVERWRITE",
                 },
             ],
@@ -603,7 +603,12 @@ def test_extract_external_modules():
     Unit test for extract_external_modules
     """
     test_tasktable_with_external_modules = {
-        "external_modules": ["testmodule.submodule.testclass"],
+        "external_modules": [
+            {
+                "name": "testmodule.submodule.testclass",
+                "star_import": True,
+            },
+        ],
         "units": [
             {
                 "name": "u1",
@@ -622,7 +627,7 @@ def test_extract_external_modules():
         ],
     }
 
-    expected_external_modules = [{"name": "testmodule.submodule.testclass", "nested": "true"}]
+    expected_external_modules = [{"name": "testmodule.submodule.testclass", "star_import": "true"}]
 
     extracted_modules = extract_external_modules(test_tasktable_with_external_modules)
 
