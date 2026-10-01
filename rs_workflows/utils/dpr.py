@@ -20,7 +20,6 @@ from typing import Any
 
 from prefect import task
 from prefect.variables import Variable
-from pystac import ItemCollection
 
 from rs_client.ogcapi.dpr_client import (
     DprPipeline,
