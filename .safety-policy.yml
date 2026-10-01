@@ -33,7 +33,7 @@ report:
       vulnerabilities:
         SFTY-20260902-58666:
           reason: "No known fix for nltk (transitive dep of safety dev tool)"
-          expires: "never"
+          expires: "2099-12-31"
 
 fail-scan-with-exit-code:
   dependency-vulnerabilities:
