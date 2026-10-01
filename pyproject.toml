@@ -107,7 +107,6 @@ numpy = ">=1.26"
 pandas = ">=2.2"
 xarray = ">=2024.9.0"
 matplotlib = ">=3.9.0"
-nltk = "3.10.3"
 
 [tool.poetry.group.demo.dependencies] # for hybrid mode
 jupyterlab = "^4.5.0"
