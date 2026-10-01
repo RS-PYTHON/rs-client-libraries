@@ -158,7 +158,7 @@ def _extract_io_origin_from_pipeline(
 
 def _build_entry(
     io_product: dict,
-    io_index: dict[str, dict[str, Any]],
+    io_index_type: dict[str, dict[str, Any]],
     processing_modes: Iterable[str] | None,
     external_variables: dict[str, Any] | None,
     origin: str = "",
@@ -171,7 +171,7 @@ def _build_entry(
 
     Args:
         io_product: content of the field "input_products" (or output, or adfs) from the unit's description
-        io_index: dictionary of the I/O descriptions from the "io" section of the tasktable
+        io_index_type: dictionary of the I/O descriptions from the "io" section of the tasktable
         processing_modes: list of processing modes used for this flow
         origin: origin of the I/O. Needs to be computed beforehand for pipelines. Optional.
     """
@@ -196,11 +196,11 @@ def _build_entry(
         return None
 
     # Retrieve product details from "io" section
-    io_details = io_index.get(io_product["name"], {})
+    io_details = io_index_type.get(io_product["name"], {})
     if not io_details:
         raise TaskTableError(
             f'Could not find details for product "{io_product["name"]}" in "io" section, " \
-                "available products are: {io_index.keys()}.',
+                "available products are: {io_index_type.keys()}.',
         )
 
     # Merge info from both to create the final product details
@@ -225,7 +225,7 @@ def _build_entry(
 def _build_single_unit_details(
     unit_name: str,
     units_index: dict[str, dict[str, Any]],
-    io_index: dict[str, dict[str, Any]],
+    io_index: dict[str : dict[str, dict[str, Any]]],
     processing_modes: Iterable[str] | None,
     external_variables: dict[str, Any] | None,
     full_pipeline: dict[str, Any] | None = None,
@@ -277,7 +277,7 @@ def _build_single_unit_details(
 
         input_entry = _build_entry(
             input_product,
-            io_index,
+            io_index.get("input", {}),
             processing_modes,
             external_variables,
             origin=input_product_origin,
@@ -288,7 +288,7 @@ def _build_single_unit_details(
     # Build input ADFS, only defined by the unit details, does not depend on the mode
     input_adfs: list[dict[str, Any]] = []
     for adfs_product in unit_details.get("input_adfs", {}):
-        adfs_entry = _build_entry(adfs_product, io_index, processing_modes, external_variables)
+        adfs_entry = _build_entry(adfs_product, io_index.get("adfs", {}), processing_modes, external_variables)
         if adfs_entry:
             input_adfs.append(adfs_entry)
 
@@ -308,7 +308,7 @@ def _build_single_unit_details(
 
         output_entry = _build_entry(
             output_product,
-            io_index,
+            io_index.get("output", {}),
             processing_modes,
             external_variables,
             origin=output_product_origin,
@@ -363,8 +363,8 @@ def build_unit_list(
         raise TaskTableError(f"Missing or invalid 'pipelines' list in task table: {tasktable}")
     if "units" not in tasktable or not isinstance(tasktable["units"], list):
         raise TaskTableError(f"Missing or invalid 'units' list in task table: {tasktable}")
-    if "io" not in tasktable or not isinstance(tasktable["io"], list):
-        raise TaskTableError(f"Missing or invalid 'io' list in task table: {tasktable}")
+    if "io" not in tasktable or not isinstance(tasktable["io"], dict):
+        raise TaskTableError(f"Missing or invalid 'io' dict in task table: {tasktable}")
 
     if pipeline and unit:
         raise TaskTableError("Provide either 'pipeline' or 'unit', not both.")
@@ -379,11 +379,13 @@ def build_unit_list(
     if not units_index:
         raise TaskTableError('No valid unit entries found in "units".')
 
-    # Retrieve details of inputs/outputs from "io" field
-    io_index: dict[str, dict[str, Any]] = {}
-    for io in tasktable["io"]:
-        if isinstance(io, dict) and isinstance(io.get("name"), str):
-            io_index[io["name"]] = io
+    # Retrieve details of inputs/adfs/outputs from "io" field
+    io_index: dict[str : dict[str, dict[str, Any]]] = {}
+    for io_type, io_values in tasktable["io"].items():
+        io_index[io_type] = {}
+        for io in io_values:
+            if isinstance(io, dict) and isinstance(io.get("name"), str):
+                io_index[io_type][io["name"]] = io
 
     out_units: list[dict[str, Any]] = []
 

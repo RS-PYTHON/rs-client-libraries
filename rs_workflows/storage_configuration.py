@@ -128,7 +128,6 @@ class StorageConfig:  # pylint: disable=too-many-instance-attributes
                 autoclean = True if kind == "local_disk" else conf.get("autoclean", False)
                 self._disk_storages[name] = {
                     "path": full_path,
-                    "opening_mode": conf.get("opening_mode", "CREATE_OVERWRITE"),
                     "autoclean": autoclean,
                 }
 

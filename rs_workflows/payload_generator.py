@@ -391,11 +391,7 @@ def build_input_products(
             if stac_item is not None:
                 source_item_href = stac_item.get_self_href()
 
-            opening_mode = None
             if kind in ("shared_disk", "local_disk"):
-                disk_config = storage_configuration.get_disk_storage(store_name)
-                if disk_config:
-                    opening_mode = disk_config.get("opening_mode")
                 store_params = None
 
             inputs.append(
@@ -410,7 +406,6 @@ def build_input_products(
                     type=mapping.get("type", "file"),
                     engine=mapping["engine"],
                     reader_params=store_params,
-                    opening_mode=opening_mode,
                     source_item_hrefs=[source_item_href] if source_item_href else [],
                 ),
             )
@@ -529,7 +524,6 @@ def build_output_products(
         # Determine the output path based on the storage kind
         kind = storage_configuration.get_storage_kind(store_name)
         store_params = deepcopy(storage_configuration.get_store_params(store_name))
-        opening_mode = mapping.get("opening_mode", "CREATE")
         autoclean = None
 
         if kind == "obs":
@@ -539,7 +533,6 @@ def build_output_products(
             disk_config = storage_configuration.get_disk_storage(store_name)
             if disk_config and disk_config.get("path"):
                 output_path = disk_config["path"]
-                opening_mode = disk_config.get("opening_mode", opening_mode)
                 autoclean = disk_config.get("autoclean", False)
             else:
                 raise RuntimeError(
@@ -557,7 +550,6 @@ def build_output_products(
                 engine=mapping["engine"],
                 writer_params=store_params,
                 type=mapping.get("type", "file"),
-                opening_mode=opening_mode,
                 final_product=mapping.get("final_product", True),
                 autoclean=autoclean,
             ),

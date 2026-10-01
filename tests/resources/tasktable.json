@@ -111,14 +111,12 @@
             {
                 "name": "S03ISPS",
                 "type": "folder",
-                "engine": "cpm_zarr",
-                "opening_mode": "CREATE_OVERWRITE"
+                "engine": "cpm_zarr"
             },
             {
                 "name": "S03OLCL0_",
                 "type": "folder",
-                "engine": "cpm_zarr",
-                "opening_mode": "CREATE_OVERWRITE"
+                "engine": "cpm_zarr"
             }
         ]
     },

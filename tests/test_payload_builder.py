@@ -24,7 +24,6 @@ import pytest
 from rs_workflows.payload_builder import (
     TaskTableError,
     build_unit_list,
-    extract_external_modules,
 )
 
 SCENARIOS: dict[str, dict] = {
@@ -133,7 +132,7 @@ def _valid_tasktable():
                 "output_products": [],
             },
         ],
-        "io": [],
+        "io": {},
     }
 
 
@@ -160,7 +159,7 @@ def test_build_unit_list_invalid_tasktable_root_type():
 def test_build_unit_list_missing_or_invalid_pipelines_list():
     """Test that a missing or non-list 'pipelines' field in the task table raises
     TaskTableError with the expected message."""
-    tt: dict[str, Any] = {"units": [], "io": []}
+    tt: dict[str, Any] = {"units": [], "io": {}}
     with pytest.raises(TaskTableError, match=r"Missing or invalid 'pipelines' list in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
@@ -168,7 +167,7 @@ def test_build_unit_list_missing_or_invalid_pipelines_list():
 def test_build_unit_list_missing_or_invalid_units_list():
     """Test that a missing or non-list 'units' field in the task table raises
     TaskTableError with the expected message."""
-    tt: dict[str, Any] = {"pipelines": [], "io": []}
+    tt: dict[str, Any] = {"pipelines": [], "io": {}}
     with pytest.raises(TaskTableError, match=r"Missing or invalid 'units' list in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
@@ -195,7 +194,7 @@ def test_select_unit_names_reports_available_pipelines():
                 "output_products": [],
             },
         ],
-        "io": [],
+        "io": {},
         "pipelines": [
             {
                 "name": "good_pipeline",
@@ -221,7 +220,7 @@ def test_build_unit_list_reports_available_units():
             {"name": "u1", "module": "pkg.u1", "input_products": [], "input_adfs": [], "output_products": []},
             {"name": "u2", "module": "pkg.u2", "input_products": [], "input_adfs": [], "output_products": []},
         ],
-        "io": [],
+        "io": {},
         "pipelines": [],  # not needed for this case
     }
 
@@ -253,12 +252,16 @@ def test_build_entries_filters_by_mode():
             },
         ],
         # Provide minimal IO entries so build_unit_list can resolve types
-        "io": [
-            {"name": "always_p", "type": "folder", "engine": "cpm_safe"},
-            {"name": "none_p", "type": "folder", "engine": "cpm_safe"},
-            {"name": "nrt_p", "type": "folder", "engine": "cpm_safe"},
-            {"name": "ntc_p", "type": "folder", "engine": "cpm_safe"},
-        ],
+        "io": {
+            "input": {
+                [
+                    {"name": "always_p", "type": "folder", "engine": "cpm_safe"},
+                    {"name": "none_p", "type": "folder", "engine": "cpm_safe"},
+                    {"name": "nrt_p", "type": "folder", "engine": "cpm_safe"},
+                    {"name": "ntc_p", "type": "folder", "engine": "cpm_safe"},
+                ],
+            },
+        },
         "pipelines": [
             {
                 "name": "p_full",
@@ -333,7 +336,6 @@ def test_case_8_exact_output():
                     "mandatory": True,
                     "type": "folder",
                     "engine": "cpm_safe",
-                    "opening_mode": "CREATE_OVERWRITE",
                 },
             ],
             "parameters": {"reference_date": "somevalue"},
@@ -348,7 +350,6 @@ def test_case_8_exact_output():
                     "mandatory": False,
                     "type": "folder",
                     "engine": "cpm_safe",
-                    "opening_mode": "CREATE_OVERWRITE",
                 },
             ],
             "input_adfs": [
@@ -369,7 +370,6 @@ def test_case_8_exact_output():
                     "mandatory": False,
                     "type": "folder",
                     "engine": "cpm_safe",
-                    "opening_mode": "CREATE_OVERWRITE",
                 },
                 {
                     "name": "reference_dem",
@@ -393,7 +393,6 @@ def test_case_8_exact_output():
                     "mandatory": False,
                     "type": "folder",
                     "engine": "cpm_safe",
-                    "opening_mode": "CREATE_OVERWRITE",
                 },
                 {
                     "name": "reference_dem",
@@ -565,7 +564,6 @@ def test_case_s1_l0_exact_output_with_regex():
                     "regex": ".*",
                     "type": "folder",
                     "engine": "cpm_zarr",
-                    "opening_mode": "CREATE_OVERWRITE",
                 },
             ],
         },
@@ -596,39 +594,3 @@ def test_build_unit_list_none_datetime_raises_task_table_error():
                 "end_datetime": None,
             },
         )
-
-
-def test_extract_external_modules():
-    """
-    Unit test for extract_external_modules
-    """
-    test_tasktable_with_external_modules = {
-        "external_modules": [
-            {
-                "name": "testmodule.submodule.testclass",
-                "star_import": True,
-            },
-        ],
-        "units": [
-            {
-                "name": "u1",
-                "module": "pkg.u1",
-                "input_products": [],
-                "input_adfs": [],
-                "output_products": [],
-            },
-        ],
-        "io": [],
-        "pipelines": [
-            {
-                "name": "good_pipeline",
-                "steps": [{"unit_name": "u1", "step_id": 1, "input_products": {}, "output_products": {}}],
-            },
-        ],
-    }
-
-    expected_external_modules = [{"name": "testmodule.submodule.testclass", "star_import": "true"}]
-
-    extracted_modules = extract_external_modules(test_tasktable_with_external_modules)
-
-    assert extracted_modules == expected_external_modules

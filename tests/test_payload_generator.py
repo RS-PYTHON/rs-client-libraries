@@ -1183,7 +1183,6 @@ def test_build_output_products_ignores_extra_generated_products(mock_dpr_process
                 "name": "S01SARRAW",
                 "engine": "s3_cache",
                 "type": "file",
-                "opening_mode": "CREATE",
                 "final_product": True,
             },
         ],
@@ -1240,7 +1239,6 @@ def test_build_input_products_disk_store_params_cleared(sample_unit, kind, mocke
     mock_storage.get_store_params.return_value = None  # disk storages have no StoreParams
     mock_storage.get_disk_storage.return_value = {
         "path": "/mnt/shared/job-uuid",
-        "opening_mode": "READ_ONLY",
         "autoclean": False,
     }
 
@@ -1251,14 +1249,12 @@ def test_build_input_products_disk_store_params_cleared(sample_unit, kind, mocke
     assert inp.id == "S1CADUS"
     assert inp.path == "/mnt/shared/path/to/item"  # path comes from STAC, not from disk_config
     assert inp.reader_params is None  # cleared for disk storages
-    assert inp.opening_mode == "READ_ONLY"
 
 
 @pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
 def test_build_input_products_disk_no_disk_config(sample_unit, kind, mocker):
     """
-    When get_disk_storage returns None for a disk kind storage, the opening_mode
-    should remain None and reader_params should still be None.
+    When get_disk_storage returns None for a disk kind storage, reader_params should still be None.
     """
     mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
@@ -1279,7 +1275,6 @@ def test_build_input_products_disk_no_disk_config(sample_unit, kind, mocker):
     assert len(inputs) == 1
     inp = inputs[0]
     assert inp.reader_params is None
-    assert inp.opening_mode is None  # no disk_config → opening_mode stays None
 
 
 @pytest.mark.parametrize("kind", ["shared_disk", "local_disk"])
@@ -1300,7 +1295,6 @@ def test_build_output_products_disk_uses_disk_path(
     mock_storage.get_store_params.return_value = None
     mock_storage.get_disk_storage.return_value = {
         "path": disk_path,
-        "opening_mode": "CREATE_OVERWRITE",
         "autoclean": True,
     }
 
@@ -1319,7 +1313,6 @@ def test_build_output_products_disk_uses_disk_path(
     for out in outputs:
         assert out.path == disk_path
         assert out.writer_params is None
-        assert out.opening_mode == "CREATE_OVERWRITE"
         assert out.autoclean is True
 
 
@@ -1341,7 +1334,6 @@ def test_build_output_products_disk_autoclean_false(
     mock_storage.get_store_params.return_value = None
     mock_storage.get_disk_storage.return_value = {
         "path": "/mnt/shared/job-uuid",
-        "opening_mode": "CREATE",
         "autoclean": False,
     }
 
@@ -1375,7 +1367,6 @@ def test_build_output_products_disk_missing_path_raises(
     mock_storage.get_store_params.return_value = None
     mock_storage.get_disk_storage.return_value = {
         # 'path' key is intentionally absent
-        "opening_mode": "CREATE_OVERWRITE",
         "autoclean": False,
     }
 

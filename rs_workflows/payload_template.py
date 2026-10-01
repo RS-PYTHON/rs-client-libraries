@@ -254,7 +254,6 @@ class InputProduct(BasePayloadModel):
     type: str | None = Field(default="file")
     engine: str
     reader_params: StoreParams | None = None
-    opening_mode: str | None = Field(default=None)
     # STAC self links used for lineage only; never serialized to the EOPF payload.
     source_item_hrefs: list[str] = Field(default_factory=list, exclude=True)
 
@@ -267,7 +266,6 @@ class OutputProduct(BasePayloadModel):
     engine: str
     writer_params: StoreParams | None = None
     type: str | None = Field(default="file")
-    opening_mode: str | None = Field(default="CREATE")
     apply_eoqc: bool | None = Field(default=False)
     autoclean: bool | None = Field(default=False, exclude=True)
     # Excluded from serialization by default

@@ -44,7 +44,6 @@ from rs_workflows.flow_utils import (
 from rs_workflows.payload_builder import (
     build_cql2_json,
     build_unit_list,
-    extract_external_modules,
 )
 from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
 from rs_workflows.utils.utils import (
@@ -336,7 +335,7 @@ def _resolve_specific_input_product_stac_items(
     provided_input_products: list[FlowInputProduct],
     rs_client: RsClient,
 ) -> tuple[str, list[Item]] | tuple[None, list[None]]:
-    input_adfs_io = search_by_name(task_table["io"], input_adfs["name"])
+    input_adfs_io = search_by_name(task_table["io"].get("adfs", {}), input_adfs["name"])
     if input_adfs_io.get("multiplicity", None) == "one_per_input":
         logger = get_run_logger()
         input_product_names: set[str] = {product["name"] for product in unit["input_products"]}
@@ -355,7 +354,9 @@ def _resolve_specific_input_product_stac_items(
             )
         referenced_input_product_name = next(iter(referenced_input_product_names))
         logger.info(f"ADFS multiplicity 'one_per_input' refers to input '{referenced_input_product_name}'")
-        input_product_io: dict[str, Any] = search_by_name(task_table["io"], referenced_input_product_name)
+        input_product_io: dict[str, Any] = search_by_name(
+            task_table["io"].get("input", {}), referenced_input_product_name
+        )
         input_product_regex: str = input_product_io.get("reader_params", {}).get("regex", None)
         if not input_product_regex:
             logger.warning(
