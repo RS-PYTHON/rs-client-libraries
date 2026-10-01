@@ -585,6 +585,24 @@ async def s3_download_dir(
     await s3_bucket.aget_directory(from_path, local_path)
 
 
+@sync_compatible
+async def s3_copy_from_s3(from_s3_path: str, to_s3_path: str) -> None:
+    """Copy all objects found from one s3 path to another s3 path."""
+    from_bucket, from_prefix = get_s3_bucket(from_s3_path)
+    _, to_prefix = get_s3_bucket(to_s3_path)
+    s3_client = from_bucket._get_s3_client()  # pylint: disable=protected-access
+    bucket_name = from_bucket.bucket_name
+    objects = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=from_prefix)
+    logger.info(f"Starting the copy from {from_s3_path} to {to_s3_path}")
+    if "Contents" in objects:
+        for obj in objects["Contents"]:
+            src_key = obj["Key"]
+            dst_key = src_key.replace(from_prefix, to_prefix, 1)
+            copy_source = {"Bucket": bucket_name, "Key": src_key}
+            s3_client.copy_object(CopySource=copy_source, Bucket=bucket_name, Key=dst_key)
+    logger.info(f"Copied files from {from_s3_path} to {to_s3_path}")
+
+
 def s3_delete(s3_prefix: str, log: bool = False):
     """Remove all files from S3 bucket with the given prefix, using low-level client."""
     s3_bucket, prefix = get_s3_bucket(s3_prefix)

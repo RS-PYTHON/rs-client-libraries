@@ -800,11 +800,11 @@ def generate_payload(  # pylint: disable=unused-argument
         if hasattr(dpr_process_in.processor_name, "value")
         else dpr_process_in.processor_name
     )
-    is_olci_processor = processor_name == DprProcessor.S3L1OLCI.value
+    is_olci_processor = processor_name in (DprProcessor.S3L1OLCI.value, DprProcessor.S3L2OLCI.value)
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (stories 800/1050)
         general_configuration=GeneralConfiguration(
-            logging=LoggingConfig(level=dpr_process_in.logging_level.name),
+            logging=LoggingConfig(level=dpr_process_in.env.logging_level.value),
             triggering__temporary_shared=dpr_process_in.temporary_shared,
             triggering__use_datatree=True if is_olci_processor else None,
             triggering__use_default_filename=True if is_olci_processor else None,

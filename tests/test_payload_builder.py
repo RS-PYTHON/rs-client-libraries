@@ -574,6 +574,30 @@ def test_case_s1_l0_exact_output_with_regex():
     assert out == expected
 
 
+def test_build_unit_list_none_datetime_raises_task_table_error():
+    """Regression test: a task table referencing a '{external_variable.*datetime}' placeholder
+    must raise a clear TaskTableError -- not an AttributeError -- when the corresponding
+    external variable value is None (e.g. start_datetime/end_datetime not provided by the flow).
+
+    This reproduces the production crash seen in on-demand S1 L0 processing where
+    'start_datetime'/'end_datetime' external variables were None:
+    AttributeError: 'NoneType' object has no attribute 'strftime'
+    """
+    tt_path = Path(__file__).parent / "resources" / "TaskTable_S1_L0_generated_by_rs_python_v1.json"
+    tt = json.loads(tt_path.read_text(encoding="utf-8"))
+
+    with pytest.raises(TaskTableError, match="External variable 'start_datetime' is required"):
+        build_unit_list(
+            tasktable=tt,
+            pipeline="s1_l0_full",
+            processing_mode=None,
+            external_variables={
+                "start_datetime": None,
+                "end_datetime": None,
+            },
+        )
+
+
 def test_extract_external_modules():
     """
     Unit test for extract_external_modules

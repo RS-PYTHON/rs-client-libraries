@@ -899,6 +899,8 @@ def _mock_dpr_process_in():
     """
     mock = MagicMock()
 
+    mock.env = FlowEnvArgs(owner_id="test-owner", logging_level=LoggingLevel.INFO)
+
     # input_products: list[dict[product_id, (stac_item_name, collection_id)]]
     # After UI update, input_products = list(InputProduct(name=..., item_id=..., collection_name=...))
     mock.input_products = [
@@ -922,7 +924,6 @@ def _mock_dpr_process_in():
     msg.value = "TEST_PROCESSOR"
     mock.processor_name = msg
 
-    mock.logging_level = LoggingLevel.DEBUG
     mock.temporary_folder = None
 
     return mock
@@ -1063,7 +1064,7 @@ def _flow_env(monkeypatch, generic_rs_client: RsClient) -> FlowEnv:
         "rs_common.prefect_utils.read_prefect_blocks",
         lambda *args, **kwargs: None,
     )
-    args = FlowEnvArgs(owner_id="test-owner")
+    args = FlowEnvArgs(owner_id="test-owner", logging_level=LoggingLevel.INFO)
     env = FlowEnv(args)
     # replace the rs_client that FlowEnv created with the mocked one
     env.rs_client = generic_rs_client
