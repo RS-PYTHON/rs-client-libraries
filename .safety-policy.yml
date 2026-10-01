@@ -31,6 +31,7 @@ report:
         unpinned-requirements: true
       cvss-severity: []
       vulnerabilities:
+        - SFTY-20260902-58666
 
 fail-scan-with-exit-code:
   dependency-vulnerabilities:
