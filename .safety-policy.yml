@@ -31,11 +31,96 @@ report:
         unpinned-requirements: true
       cvss-severity: []
       vulnerabilities:
-        # Ignore all nltk vulnerabilities - they are transitive deps of safety dev tool
-        # and the package has multiple critical vulnerabilities with no known fixes.
-        # Since nltk is not used at runtime by this project, these can be safely ignored.
-        # See: https://platform.safetycli.com/codebases/rs-client-libraries/findings?branch=HEAD
-        nltk: {}
+        # All nltk vulnerabilities - transitive dep of safety dev tool only,
+        # not used at runtime by this project. No known fix for any nltk version.
+        # https://platform.safetycli.com/codebases/rs-client-libraries/findings?branch=HEAD
+        SFTY-20260616-58930:
+          reason: "HIGH - Path traversal in data.load(), not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260731-71411:
+          reason: "MEDIUM - SSRF via DNS rebinding, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260731-74449:
+          reason: "LOW - Path traversal in NKJP corpus reader, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260731-78787:
+          reason: "LOW - Path traversal in FramenetCorpusReader, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260731-83123:
+          reason: "LOW - DoS via regex in ReviewsCorpusReader, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260813-62140:
+          reason: "LOW - Path traversal in data.find/load, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260821-99503:
+          reason: "HIGH - ReDoS in TweetTokenizer, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260822-34486:
+          reason: "LOW - Path traversal in CrubadanCorpusReader, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260901-05934:
+          reason: "HIGH - Code execution via Graphviz, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260901-40389:
+          reason: "CRITICAL - Command Injection via Stanford wrappers, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260902-10897:
+          reason: "HIGH - Filesystem bypass via hardlinks, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260902-26023:
+          reason: "MEDIUM - DoS via uncontrolled recursion, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260902-32727:
+          reason: "LOW - DoS via RecursiveDescentParser, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260902-43043:
+          reason: "MEDIUM - SSRF via DNS fail-open, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260902-50166:
+          reason: "LOW - DoS via quadratic CPU, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260902-58666:
+          reason: "HIGH - Path traversal in TransitionParser.train, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260902-62888:
+          reason: "HIGH - DoS via PorterStemmer, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260902-94610:
+          reason: "HIGH - Pathsec ENFORCE=False default, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260908-33687:
+          reason: "HIGH - DoS via XXE in ElementTree parsing, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260908-36021:
+          reason: "HIGH - ReDoS in Text.findall, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260908-61270:
+          reason: "LOW - ReDoS in TEI parsing, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260908-67392:
+          reason: "HIGH - SSRF via urlopen proxy handling, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260908-69359:
+          reason: "MEDIUM - Path traversal via symlinks, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260908-76797:
+          reason: "CRITICAL - RCE via unsafe deserialization, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260908-82787:
+          reason: "HIGH - Path traversal in corpus reader root, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260908-90243:
+          reason: "HIGH - Path traversal in FramenetC parser paths, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260908-91145:
+          reason: "HIGH - Path traversal in StreamBackedCorpusView, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260908-92033:
+          reason: "MEDIUM - ReDoS in tgrep module, not used in this project"
+          expires: "2099-12-31"
+        SFTY-20260908-96400:
+          reason: "CRITICAL - Deserialization via pickle_load, not used in this project"
+          expires: "2099-12-31"
 
 fail-scan-with-exit-code:
   dependency-vulnerabilities:
