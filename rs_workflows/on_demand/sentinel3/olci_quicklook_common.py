@@ -34,6 +34,8 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 
 JPEG_MEDIA_TYPE = "image/jpeg"
 COG_MEDIA_TYPE = "image/tiff; application=geotiff; profile=cloud-optimized"
+QUICKLOOK_JPEG_FILENAME = "quicklook.jpg"
+QUICKLOOK_COG_FILENAME = "quicklook.tif"
 ZARR_MEDIA_TYPE = "application/vnd+zarr"
 PROJECTION_EXTENSION = "https://stac-extensions.github.io/projection/v2.0.0/schema.json"
 # Use one browser-friendly CRS for every georeferenced quicklook.
@@ -170,8 +172,8 @@ def write_georeferenced_cog(cog_path: Path, lon, lat, rgb, visible=None) -> None
 
 def save_quicklooks(output_dir: Path, lon, lat, rgb, visible=None) -> tuple[Path, Path]:
     """Save an unprojected JPEG and a georeferenced COG from the same RGB pixels."""
-    jpeg_path = output_dir / "quicklook.jpg"
-    cog_path = output_dir / "quicklook.tif"
+    jpeg_path = output_dir / QUICKLOOK_JPEG_FILENAME
+    cog_path = output_dir / QUICKLOOK_COG_FILENAME
     jpeg = rgb
     if visible is not None:
         # JPEG has no transparency; whiten missing pixels without changing the COG input.
@@ -227,8 +229,8 @@ async def generate_quicklooks(
             with tempfile.TemporaryDirectory() as temporary_dir:
                 jpeg_path, cog_path = write_quicklooks(product.measurements, Path(temporary_dir))
                 # Store quicklooks under the source product prefix in object storage.
-                jpeg_href = f"{product_href}/quicklook.jpg"
-                cog_href = f"{product_href}/quicklook.tif"
+                jpeg_href = f"{product_href}/{QUICKLOOK_JPEG_FILENAME}"
+                cog_href = f"{product_href}/{QUICKLOOK_COG_FILENAME}"
                 await prefect_utils.s3_upload_file(jpeg_path, jpeg_href)
                 await prefect_utils.s3_upload_file(cog_path, cog_href)
 
@@ -237,12 +239,12 @@ async def generate_quicklooks(
 
             # Describe both uploaded files as STAC thumbnail assets.
             assets = {
-                "quicklook.jpg": {
+                QUICKLOOK_JPEG_FILENAME: {
                     "href": jpeg_href,
                     "roles": ["thumbnail"],
                     "type": JPEG_MEDIA_TYPE,
                 },
-                "quicklook.tif": {
+                QUICKLOOK_COG_FILENAME: {
                     "href": cog_href,
                     "roles": ["thumbnail"],
                     "type": COG_MEDIA_TYPE,
@@ -261,8 +263,8 @@ async def generate_quicklooks(
             )
             logger.info("Quicklooks added to catalog item %s", item_id)
             results[item_id] = {
-                "quicklook.jpg": jpeg_href,
-                "quicklook.tif": cog_href,
+                QUICKLOOK_JPEG_FILENAME: jpeg_href,
+                QUICKLOOK_COG_FILENAME: cog_href,
             }
 
         return results
