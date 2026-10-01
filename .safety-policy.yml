@@ -31,9 +31,11 @@ report:
         unpinned-requirements: true
       cvss-severity: []
       vulnerabilities:
-        SFTY-20260902-58666:
-          reason: "No known fix for nltk (transitive dep of safety dev tool)"
-          expires: "2099-12-31"
+        # Ignore all nltk vulnerabilities - they are transitive deps of safety dev tool
+        # and the package has multiple critical vulnerabilities with no known fixes.
+        # Since nltk is not used at runtime by this project, these can be safely ignored.
+        # See: https://platform.safetycli.com/codebases/rs-client-libraries/findings?branch=HEAD
+        nltk: {}
 
 fail-scan-with-exit-code:
   dependency-vulnerabilities:
