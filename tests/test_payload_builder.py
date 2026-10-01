@@ -178,7 +178,7 @@ def test_build_unit_list_missing_or_invalid_io_list():
         "pipelines": [{"name": "p1", "steps": [{"step_id": 1, "unit_name": "u1"}]}],
         "units": [{"name": "u1", "module": "m", "input_products": [], "input_adfs": [], "output_products": []}],
     }
-    with pytest.raises(TaskTableError, match=r"Missing or invalid 'io' list in task table:.+"):
+    with pytest.raises(TaskTableError, match=r"Missing or invalid 'io' dict in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
 
@@ -253,14 +253,12 @@ def test_build_entries_filters_by_mode():
         ],
         # Provide minimal IO entries so build_unit_list can resolve types
         "io": {
-            "input": {
-                [
-                    {"name": "always_p", "type": "folder", "engine": "cpm_safe"},
-                    {"name": "none_p", "type": "folder", "engine": "cpm_safe"},
-                    {"name": "nrt_p", "type": "folder", "engine": "cpm_safe"},
-                    {"name": "ntc_p", "type": "folder", "engine": "cpm_safe"},
-                ],
-            },
+            "input": [
+                {"name": "always_p", "type": "folder", "engine": "cpm_safe"},
+                {"name": "none_p", "type": "folder", "engine": "cpm_safe"},
+                {"name": "nrt_p", "type": "folder", "engine": "cpm_safe"},
+                {"name": "ntc_p", "type": "folder", "engine": "cpm_safe"},
+            ],
         },
         "pipelines": [
             {
@@ -335,7 +333,7 @@ def test_case_8_exact_output():
                     "origin": "pipeline_internal",
                     "mandatory": True,
                     "type": "folder",
-                    "engine": "cpm_safe",
+                    "engine": "cpm_zarr",
                 },
             ],
             "parameters": {"reference_date": "somevalue"},
@@ -357,7 +355,13 @@ def test_case_8_exact_output():
                 {"name": "DEM", "mandatory": False, "type": "folder"},
             ],
             "output_products": [
-                {"name": "reference_dem", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
+                {
+                    "name": "reference_dem",
+                    "origin": "pipeline_internal",
+                    "mandatory": True,
+                    "type": "folder",
+                    "engine": "cpm_zarr",
+                },
             ],
         },
         {
@@ -380,7 +384,13 @@ def test_case_8_exact_output():
             ],
             "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "file"}],
             "output_products": [
-                {"name": "simulation_ref", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
+                {
+                    "name": "simulation_ref",
+                    "origin": "pipeline_internal",
+                    "mandatory": True,
+                    "type": "folder",
+                    "engine": "cpm_zarr",
+                },
             ],
         },
         {

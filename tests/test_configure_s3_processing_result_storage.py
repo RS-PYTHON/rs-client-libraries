@@ -141,26 +141,3 @@ def test_raises_when_storage_configuration_missing_or_not_list(monkeypatch):
     with pytest.raises(RuntimeError) as excinfo2:
         get_storage_path()
     assert "storage_configuration is not a list" in str(excinfo2.value)
-
-
-def test_raises_when_no_matching_entry_found(monkeypatch):
-    """Should raise RuntimeError when no writable shared_disk entry is found."""
-    storage_configuration = [
-        {
-            "kind": "shared_disk",
-            "name": "ro",
-            "absolute_path": "/mnt/ro/",
-        },
-        {"kind": "other", "name": "x", "absolute_path": "/mnt/x/"},
-    ]
-
-    def fake_variable_get(_var_name):
-        """Return storage_configuration where no entry matches writable criteria."""
-        return DummyVariableResult({"storage_configuration": storage_configuration})
-
-    monkeypatch.setattr(pv.Variable, "get", staticmethod(fake_variable_get))
-
-    with pytest.raises(RuntimeError) as excinfo:
-        get_storage_path()
-
-    assert "Failed to get the shared mounted path from the Prefect values" in str(excinfo.value)

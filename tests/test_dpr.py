@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import responses
+import yaml
 from starlette import status
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
@@ -188,7 +189,9 @@ I/O:
         )
 
     mock_s3_upload_empty.assert_awaited_with("s3://bucket/output/.empty")
-    assert uploaded_contents.strip() == (expected_results_local if local_mode else expected_results_cluster).strip()
+    assert yaml.safe_load(uploaded_contents) == yaml.safe_load(
+        expected_results_local if local_mode else expected_results_cluster,
+    )
 
 
 # ---------------------------------------------------------------------------

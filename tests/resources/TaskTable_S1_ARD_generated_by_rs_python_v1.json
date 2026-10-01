@@ -272,8 +272,7 @@
             {
                 "name": "cal_slcs",
                 "type": "folder",
-                "engine": "cpm_safe",
-                "opening_mode": "CREATE_OVERWRITE"
+                "engine": "cpm_safe"
             },
             {
                 "name": "reference_dem",
@@ -320,12 +319,38 @@
         ],
         "output": [
             {
+                "name": "reference_dem",
+                "type": "folder",
+                "engine": "cpm_zarr"
+            },
+            {
+                "name": "simulation_ref",
+                "type": "folder",
+                "engine": "cpm_zarr"
+            },
+            {
                 "name": "CAL_SLCS",
                 "type": "folder",
-                "engine": "cpm_zarr",
+                "engine": "cpm_zarr"
             },
             {
                 "name": "nrb",
+                "type": "file",
+                "engine": "cpm_zarr",
+                "writer_params": {
+                    "consolidate": true
+                }
+            },
+            {
+                "name": "cslcs",
+                "type": "file",
+                "engine": "cpm_zarr",
+                "writer_params": {
+                    "consolidate": true
+                }
+            },
+            {
+                "name": "gslcs",
                 "type": "file",
                 "engine": "cpm_zarr",
                 "writer_params": {
