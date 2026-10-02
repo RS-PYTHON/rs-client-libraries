@@ -117,7 +117,7 @@ async def read_zarr_attributes(zarr_path: str) -> dict[str, Any]:
             else:
                 content = Path(metadata_path).read_bytes()
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            logger.info(f"No zarr metadata found at {metadata_path}: {exc}")
+            logger.debug(f"No zarr metadata found at {metadata_path}: {exc}")
             continue
         metadata = json.loads(content)
         return (metadata.get(attrs_key) or {}) if attrs_key else metadata
