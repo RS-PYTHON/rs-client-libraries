@@ -1,0 +1,53 @@
+{
+    "pipeline": "s1_l0_full",
+    "priority": "low",
+    "workflow": "on-demand",
+    "processor": {
+        "name": "s1_l0",
+        "version": "XXXX"
+    },
+    "processing_mode": [
+        "always"
+    ],
+    "owner_identifier": "copernicus",
+    "dask_cluster_name": "whatever-no-impact-on-payload",
+    "input_products": [
+        {
+            "name": "S1CADUS",
+            "item_id": "S1A_20260911093058043642",
+            "collection_name": "s01-cadip-session"
+        }
+    ],
+    "auxiliary_product_to_collection_identifier": [
+        {
+            "product_type": "AX___OSF_AX",
+            "collection_name": "ax___osf_ax"
+        },
+        {
+            "product_type": "AX___FRO_AX",
+            "collection_name": "ax___fro_ax"
+        }
+    ],
+    "generated_product_to_collection_identifier": [
+        {
+            "name": "S01SARRAW",
+            "product_type": "*",
+            "collection_name": "s01sarraw"
+        },
+        {
+            "name": "S01GPSRAW",
+            "product_type": "*",
+            "collection_name": "s01gpsraw"
+        },
+        {
+            "name": "S01HKMRAW",
+            "product_type": "*",
+            "collection_name": "s01hkmraw"
+        },
+        {
+            "name": "S01AISRAW",
+            "product_type": "*",
+            "collection_name": "s01aisraw"
+        }
+    ]
+}

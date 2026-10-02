@@ -26,6 +26,7 @@ from urllib.parse import urlsplit, urlunsplit
 import yaml
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
+from prefect.futures import PrefectFuture
 from pystac import Item, ItemCollection
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
@@ -46,6 +47,7 @@ from rs_workflows.payload_builder import (
     build_unit_list,
 )
 from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
+from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.utils.utils import (
     build_output_lineage,
     get_archived_item_indexes,
@@ -420,9 +422,6 @@ async def dpr_processing(
             cluster_info,
         )
 
-        # A lineage source is either a staged ADF item or an input STAC self link.
-        source_items: dict[str, list[Item | str]] = {}
-
         # Persist the full task table as a Prefect artifact for later investigation.
         md = "# Task table\n\n```json\n" + json.dumps(task_table, indent=2) + "\n```"
         artifact_key_name: str = "dpr-task-table"
@@ -431,76 +430,12 @@ async def dpr_processing(
         # Log the public Dask dashboard URL when the flow input provides the cluster instance.
         logger.info(build_dask_dashboard_url_message(cluster_info.cluster_instance))
 
-        processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
-        unit_list = build_unit_list(
-            tasktable=task_table,
-            pipeline=dpr_input.pipeline,
-            unit=dpr_input.unit,
-            processing_mode=processing_mode,
-            external_variables={
-                "start_datetime": dpr_input.start_datetime,
-                "end_datetime": dpr_input.end_datetime,
-                "reference_date": dpr_input.reference_date,
-                "instrument_mode": dpr_input.instrument_mode,
-                "satellite": dpr_input.satellite,
-            },
+        # Build and generate the payload file
+        payload_task, source_items = await build_and_generate_payload(
+            logger, flow_env, task_table, dpr_input, retry_config
         )
+        generated_payload_res = payload_task.result()
 
-        tasks = []
-        for unit in unit_list:
-            # For each input_adfs element computed on STEP 1
-            for input_adfs in unit["input_adfs"]:
-                # For each specific input in case of multiplicity=one_per_input
-                specific_input_name, product_stac_items = _resolve_specific_input_product_stac_items(
-                    input_adfs,
-                    task_table,
-                    unit,
-                    dpr_input.input_products,
-                    flow_env.rs_client,
-                )
-                for specific_input_product_stac_item in product_stac_items:
-                    if specific_input_product_stac_item:
-                        logger.info(
-                            f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product_stac_item}",
-                        )
-                    tasks.append(
-                        process_input_adfs.submit(
-                            input_adfs,
-                            dpr_input,
-                            task_table,
-                            (specific_input_name, specific_input_product_stac_item),
-                            retry_config.staging_retries,
-                            retry_config.staging_retry_delay,
-                        ),
-                    )
-
-        try:
-            aux_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [t.result() for t in tasks]
-        except (RuntimeError, KeyError) as err:
-            raise err
-        # Set of ADFS. Each tuple includes the adfs name, type and the s3/https storage path
-        adfs: set[tuple[str, str, str]] = set()
-        for name, adf_type, (status, item_collection) in aux_items:
-            for item in item_collection.items:
-                source_items.setdefault(name, []).append(item)
-
-                if status:
-                    asset = next(iter(item.assets.values()))
-                    logger.info(f"ADFS '{name}' of type '{adf_type}': {asset.href}")
-                    adfs.add((name, adf_type, asset.href))
-                else:
-                    raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
-
-        # generate the dpr payload file
-        task_future = generate_payload.submit(
-            flow_env,
-            unit_list,
-            list(adfs),
-            dpr_input,
-            external_modules=task_table.get("external_modules"),
-        )
-        # get the payload generation result
-        generated_payload_res = task_future.result()
         # Build lineage from the exact workflow that will be executed.
         lineage = build_output_lineage(generated_payload_res)
         # Reuse links resolved during payload generation; do not query the catalog again.
@@ -540,7 +475,7 @@ async def dpr_processing(
             cluster_info,
             dpr_input.s3_payload_file,
             dpr_input.input_products,
-            wait_for=[task_future],
+            wait_for=[payload_task],
         )
         try:
             processed_items.result()
@@ -585,3 +520,89 @@ async def dpr_processing(
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
         published_items = published.result()  # type: ignore[unused-coroutine]
         return published_items
+
+
+async def build_and_generate_payload(
+    logger,
+    flow_env: FlowEnv,
+    task_table: dict[str, Any],
+    dpr_input: DprProcessIn,
+    retry_config: RetryConfig,
+) -> tuple[PrefectFuture[PayloadSchema], dict[str, list[Item | str]]]:  # (payload, source_items)
+    """Build and generate the payload file and the lineage source items"""
+
+    processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
+    unit_list = build_unit_list(
+        tasktable=task_table,
+        pipeline=dpr_input.pipeline,
+        unit=dpr_input.unit,
+        processing_mode=processing_mode,
+        external_variables={
+            "start_datetime": dpr_input.start_datetime,
+            "end_datetime": dpr_input.end_datetime,
+            "reference_date": dpr_input.reference_date,
+            "instrument_mode": dpr_input.instrument_mode,
+            "satellite": dpr_input.satellite,
+        },
+    )
+
+    tasks = []
+    for unit in unit_list:
+        # For each input_adfs element computed on STEP 1
+        for input_adfs in unit["input_adfs"]:
+            # For each specific input in case of multiplicity=one_per_input
+            specific_input_name, product_stac_items = _resolve_specific_input_product_stac_items(
+                input_adfs,
+                task_table,
+                unit,
+                dpr_input.input_products,
+                flow_env.rs_client,
+            )
+            for specific_input_product_stac_item in product_stac_items:
+                if specific_input_product_stac_item:
+                    logger.info(
+                        f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product_stac_item}",
+                    )
+                tasks.append(
+                    process_input_adfs.submit(
+                        input_adfs,
+                        dpr_input,
+                        task_table,
+                        (specific_input_name, specific_input_product_stac_item),
+                        retry_config.staging_retries,
+                        retry_config.staging_retry_delay,
+                    ),
+                )
+
+    try:
+        aux_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [t.result() for t in tasks]
+    except (RuntimeError, KeyError) as err:
+        raise err
+
+    # A lineage source is either a staged ADF item or an input STAC self link.
+    source_items: dict[str, list[Item | str]] = {}
+
+    # Set of ADFS. Each tuple includes the adfs name, type and the s3/https storage path
+    adfs: set[tuple[str, str, str]] = set()
+    for name, adf_type, (status, item_collection) in aux_items:
+        for item in item_collection.items:
+            source_items.setdefault(name, []).append(item)
+
+            if status:
+                asset = next(iter(item.assets.values()))
+                logger.info(f"ADFS '{name}' of type '{adf_type}': {asset.href}")
+                adfs.add((name, adf_type, asset.href))
+            else:
+                raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
+
+    # generate the dpr payload file
+    return (
+        generate_payload.submit(
+            flow_env,
+            unit_list,
+            list(adfs),
+            dpr_input,
+            external_modules=task_table.get("external_modules"),
+        ),
+        source_items,
+    )

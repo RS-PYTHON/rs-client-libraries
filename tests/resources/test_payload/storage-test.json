@@ -1,0 +1,67 @@
+{
+    "$schema": "../../../config/StorageConfiguration.schema.json",
+    "product": {
+        "default": {
+            "adfs": {
+                "storage": "s3"
+            },
+            "unit": [
+                {
+                    "section": "input_products",
+                    "storage": "s3"
+                },
+                {
+                    "section": "output_products",
+                    "storage": "s3"
+                }
+            ],
+            "pipeline": [
+                {
+                    "section": "pipeline_input",
+                    "storage": "s3"
+                },
+                {
+                    "section": "pipeline_output",
+                    "storage": "s3"
+                },
+                {
+                    "section": "other",
+                    "storage": "my_shared_disk_1"
+                }
+            ]
+        },
+        "specific": [
+            {
+                "product_name": "sample_not_used",
+                "storage": "local_disk"
+            },
+            {
+                "product_name": "sample2_not_used",
+                "storage": "shared_disk"
+            }
+        ]
+    },
+    "storage_configuration": [
+        {
+            "name": "s3",
+            "kind": "obs",
+            "storage_options": {
+                "key": "XXX",
+                "secret": "XXX",
+                "endpoint_url": "https://s3.gra.io.cloud.ovh.net/",
+                "region_name": "gra"
+            }
+        },
+        {
+            "name": "my_shared_disk_1",
+            "kind": "shared_disk",
+            "absolute_path": "/my_share_directory/here/${JOB_IDENTIFIER}",
+            "autoclean": true
+        },
+        {
+            "name": "local_disk_not_used",
+            "kind": "local_disk",
+            "absolute_path": "/my_local_path/here/${JOB_IDENTIFIER}"
+        }
+    ]
+}

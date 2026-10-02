@@ -1,0 +1,286 @@
+{
+    "$schema": "./../../2. Task table/2. schema/TaskTable.schema.json",
+    "tasktable": {
+        "name": "s1-l0",
+        "version": "1.0.1",
+        "specification_version": "2.0_draftA",
+        "update_datetime": "2026-11-09T15:00:00Z",
+        "configuration_path": {}
+    },
+    "external_variables": [
+        "start_datetime",
+        "end_datetime",
+        "satellite"
+    ],
+    "external_modules": [
+        {
+            "name": "l0.cadu_processing.cadu_reader",
+            "star_import": true
+        }
+    ],
+    "units": [
+        {
+            "name": "S1L0Processor",
+            "module": "l0.s1.s1_l0_processor",
+            "resources_min": {
+                "dask": {
+                    "worker_cpu": 4,
+                    "worker_ram": "58GB",
+                    "worker_thread_count": 1,
+                    "worker_count": 1
+                },
+                "disk": {
+                    "size_per_worker": "50GB"
+                }
+            },
+            "input_products": [
+                {
+                    "name": "S1CADUS",
+                    "mode": "always",
+                    "mandatory": true
+                }
+            ],
+            "input_adfs": [
+                {
+                    "name": "osf",
+                    "mode": "always",
+                    "mandatory": false
+                },
+                {
+                    "name": "fro",
+                    "mode": "always",
+                    "mandatory": false
+                }
+            ],
+            "output_products": [
+                {
+                    "name": "S01SARRAW",
+                    "mode": "always",
+                    "mandatory": false,
+                    "regex": "^datatakeid_.*"
+                },
+                {
+                    "name": "S01GPSRAW",
+                    "mode": "always",
+                    "mandatory": false,
+                    "regex": "^gps$"
+                },
+                {
+                    "name": "S01HKMRAW",
+                    "mode": "always",
+                    "mandatory": false,
+                    "regex": "^hktm$"
+                },
+                {
+                    "name": "S01AISRAW",
+                    "mode": "always",
+                    "mandatory": false,
+                    "regex": "^ais_.*"
+                }
+            ]
+        }
+    ],
+    "io": {
+        "input": [
+            {
+                "name": "S1CADUS",
+                "type": "folder",
+                "engine": "cadu"
+            }
+        ],
+        "adfs": [
+            {
+                "name": "osf",
+                "type": "file",
+                "engine": "cpm_safe",
+                "alternatives": [
+                    {
+                        "order": 1,
+                        "timeout_seconds": 0,
+                        "query": {
+                            "name": "LatestValCover",
+                            "parameters": {
+                                "product_type": "AX___OSF_AX",
+                                "start_datetime": "{external_variable.start_datetime}",
+                                "end_datetime": "{external_variable.end_datetime}",
+                                "satellite": "{external_variable.satellite}",
+                                "dTa": 0,
+                                "dTb": 0
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "fro",
+                "type": "file",
+                "engine": "cpm_safe",
+                "alternatives": [
+                    {
+                        "order": 1,
+                        "timeout_seconds": 0,
+                        "query": {
+                            "name": "LatestValCover",
+                            "parameters": {
+                                "product_type": "AX___FRO_AX",
+                                "start_datetime": "{external_variable.start_datetime}",
+                                "end_datetime": "{external_variable.end_datetime}",
+                                "satellite": "{external_variable.satellite}",
+                                "dTa": 345600,
+                                "dTb": 0
+                            }
+                        }
+                    }
+                ]
+            }
+        ],
+        "output": [
+            {
+                "name": "S01SARRAW",
+                "type": "folder",
+                "engine": "cpm_zarr",
+                "writer_params": {
+                    "mode": "w",
+                    "default_codec": "None",
+                    "encoding": {
+                        "/measurement/radiance/Oa01": "None",
+                        "/measurement/radiance/Oa02": "!ZarrCompressor",
+                        "cname": "zstd",
+                        "clevel": 3,
+                        "shuffle": 2,
+                        "blocksize": 0
+                    }
+                }
+            },
+            {
+                "name": "S01GPSRAW",
+                "type": "folder",
+                "engine": "cpm_zarr",
+                "writer_params": {
+                    "mode": "w"
+                }
+            },
+            {
+                "name": "S01HKMRAW",
+                "type": "folder",
+                "engine": "cpm_zarr",
+                "writer_params": {
+                    "mode": "w"
+                }
+            },
+            {
+                "name": "S01AISRAW",
+                "type": "folder",
+                "engine": "cpm_zarr",
+                "writer_params": {
+                    "mode": "w"
+                }
+            }
+        ]
+    },
+    "queries": [
+        {
+            "name": "LatestValCover",
+            "parameters": [
+                "product_type",
+                "start_datetime",
+                "end_datetime",
+                "satellite",
+                "dTa",
+                "dTb"
+            ],
+            "stac": {
+                "filter": {
+                    "op": "and",
+                    "args": [
+                        {
+                            "op": "=",
+                            "args": [
+                                {
+                                    "property": "product:type"
+                                },
+                                "{product_type}"
+                            ]
+                        },
+                        {
+                            "op": "=",
+                            "args": [
+                                {
+                                    "property": "platform"
+                                },
+                                "{satellite}"
+                            ]
+                        },
+                        {
+                            "op": "t_contains",
+                            "args": [
+                                {
+                                    "interval": [
+                                        {
+                                            "property": "start_datetime"
+                                        },
+                                        {
+                                            "property": "end_datetime"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "interval": [
+                                        {
+                                            "op": "-",
+                                            "args": [
+                                                "{start_datetime}",
+                                                "{dTa}"
+                                            ]
+                                        },
+                                        {
+                                            "op": "+",
+                                            "args": [
+                                                "{end_datetime}",
+                                                "{dTb}"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "sortby": [
+                    {
+                        "field": "created",
+                        "direction": "desc"
+                    }
+                ],
+                "limit": 1
+            }
+        }
+    ],
+    "pipelines": [
+        {
+            "name": "s1_l0_full",
+            "description": "Full pipeline for S1 L0",
+            "steps": [
+                {
+                    "unit_name": "S1L0Processor",
+                    "step_id": 1,
+                    "input_products": {
+                        "S1CADUS": "pipeline_input"
+                    },
+                    "output_products": {
+                        "S01SARRAW": "pipeline_output",
+                        "S01GPSRAW": "pipeline_output",
+                        "S01HKMRAW": "pipeline_output",
+                        "S01AISRAW": "pipeline_output"
+                    },
+                    "parameters": {
+                        "streaming_mode": false,
+                        "temporary_path": "./tmp",
+                        "isp_extraction_batch_size": 5,
+                        "acquisition_report_output_path": "./acq_report"
+                    }
+                }
+            ]
+        }
+    ]
+}

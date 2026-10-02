@@ -31,14 +31,19 @@ added (an UUID generated once per StorageConfig instance).
 - `local_disk`  - local filesystem on the processing node
 """
 
+import json
 import os
+from os import path as osp
 from uuid import uuid4
 
+import jsonschema
 from prefect.variables import Variable
 
 from rs_workflows.payload_template import StorageOptions, StoreParams
 
 VALID_STORAGE_KINDS = ("obs", "shared_disk", "local_disk")
+
+SCHEMA = osp.realpath(osp.join(osp.dirname(__file__), "../config/StorageConfiguration.schema.json"))
 
 
 class StorageConfig:  # pylint: disable=too-many-instance-attributes
@@ -53,6 +58,11 @@ class StorageConfig:  # pylint: disable=too-many-instance-attributes
         self.data = Variable.get(var_name)
         if self.data is None:
             raise RuntimeError(f"Prefect variable {var_name!r} is missing")
+
+        # Validate contents against json schema
+        with open(SCHEMA, encoding="utf-8") as opened:
+            schema = json.load(opened)
+        jsonschema.validate(instance=self.data, schema=schema)
 
         # a single UUID shared across all shared-disk products in one processing run
         self._job_identifier = str(uuid4())

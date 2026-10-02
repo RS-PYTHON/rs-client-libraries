@@ -1,0 +1,87 @@
+{
+    "pipeline": "SLC__1_NRB__1",
+    "priority": "low",
+    "workflow": "on-demand",
+    "processor": {
+        "name": "s1_ard",
+        "version": "XX"
+    },
+    "processing_mode": [
+        "always"
+    ],
+    "owner_identifier": "copernicus",
+    "dask_cluster_name": "dask-s1ard.vprivat.latest",
+    "input_products": [
+        {
+            "name": "slcs",
+            "item_id": "S1C_IW_SLC__1SDV_20250918T095951_20250918T100018_004177_0084BC_6895",
+            "collection_name": "s01siwslc"
+        }
+    ],
+    "auxiliary_product_to_collection_identifier": [
+        {
+            "product_type": "AUX_MOEORB",
+            "collection_name": "aux_moeorb"
+        },
+        {
+            "product_type": "AUX_POEORB",
+            "collection_name": "aux_poeorb"
+        },
+        {
+            "product_type": "EW_ETA__AX",
+            "collection_name": "ew_eta__ax"
+        },
+        {
+            "product_type": "IW_ETA__AX",
+            "collection_name": "iw_eta__ax"
+        },
+        {
+            "product_type": "SM_ETA__AX",
+            "collection_name": "sm_eta__ax"
+        },
+        {
+            "product_type": "MPL_ORBPRE",
+            "collection_name": "oper_mpl_orbpre"
+        },
+        {
+            "product_type": "MPL_ORBRES",
+            "collection_name": "oper_mpl_orbres"
+        },
+        {
+            "product_type": "MPL_ORBSCT",
+            "collection_name": "oper_mpl_orbsct"
+        }
+    ],
+    "generated_product_to_collection_identifier": [
+        {
+            "name": "slcs",
+            "product_type": "S01SIWSLC",
+            "collection_name": "s01siwslc"
+        },
+        {
+            "name": "cslcs",
+            "product_type": "S01SIWCLC",
+            "collection_name": "s01siwclc"
+        },
+        {
+            "name": "gslcs",
+            "product_type": "S01SIWGLC",
+            "collection_name": "s01siwglc"
+        },
+        {
+            "name": "nrb",
+            "product_type": "S01SIWNRB",
+            "collection_name": "s01siwnrb"
+        },
+        {
+            "name": "DEM",
+            "product_type": "S01DEMARD",
+            "collection_name": "s01demard"
+        },
+        {
+            "name": "simulation_ref",
+            "product_type": "S01SIMREF",
+            "collection_name": "s01simref"
+        }
+    ]
+}
