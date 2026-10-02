@@ -437,14 +437,12 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
     ]
 
     # --- Call ---
-    ref_name, items = (
-        on_demand_processing._resolve_specific_input_product_stac_items(  # pylint:disable=protected-access
-            input_adfs,
-            task_table,
-            unit,
-            provided_input_products,
-            mock_rs_client,
-        )
+    ref_name, items = on_demand_processing.resolve_specific_input_product_stac_items(
+        input_adfs,
+        task_table,
+        unit,
+        provided_input_products,
+        mock_rs_client,
     )
 
     # --- Assertions ---

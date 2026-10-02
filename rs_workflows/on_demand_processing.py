@@ -17,6 +17,7 @@
 # pylint: disable=W0101  # ignore 'unreachable code' (temporar)
 
 import json
+import logging
 import os
 import re
 from copy import deepcopy
@@ -26,6 +27,7 @@ from urllib.parse import urlsplit, urlunsplit
 import yaml
 from prefect import flow, get_run_logger, task
 from prefect.artifacts import acreate_markdown_artifact
+from prefect.exceptions import MissingContextError
 from pystac import Item, ItemCollection
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
@@ -56,6 +58,14 @@ from rs_workflows.utils.utils import (
 SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 
+def _get_logger():
+    """Return the Prefect run logger when available, otherwise a module logger (standalone mode)."""
+    try:
+        return get_run_logger()
+    except MissingContextError:
+        return logging.getLogger(__name__)
+
+
 def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
     """Build the Dask dashboard log message from the configured public gateway endpoint."""
     public_base = os.getenv("DASK_GATEWAY_PUBLIC", "")
@@ -67,7 +77,7 @@ def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
     return f"Dask cluster dashboard URL: {dashboard_url}"
 
 
-def _select_aux_collection_and_source(
+def select_aux_collection_and_source(
     dpr_input: DprProcessIn,
     product_type: str,
 ) -> tuple[str, AuxiliarySource, list[str] | None]:
@@ -106,6 +116,37 @@ def _select_aux_collection_and_source(
     )
 
 
+def render_aux_cql2(
+    alternative: dict[str, Any],
+    task_table: dict[str, Any],
+    specific_input_product: tuple[str | None, Item | None] = (None, None),
+) -> tuple[dict, dict[str, Any]]:
+    """
+    Render the STAC/CQL2 request of one ADFS alternative from the task table queries.
+
+    Placeholders such as ``{input_name.property}`` are resolved from the properties of the
+    STAC item of the specific input product (ADFS multiplicity 'one_per_input').
+
+    Returns:
+        tuple[dict, dict]: the rendered STAC/CQL2 request and the resolved query parameters.
+    """
+    name = alternative["query"]["name"]
+    specific_input_name, stac_item = specific_input_product
+    parameters = {
+        k: (
+            stac_item.properties.get(m.group(2), v)
+            if stac_item
+            and isinstance(v, str)
+            and (m := SPECIFIC_INPUT_PATTERN.match(v))
+            and m.group(1) == specific_input_name
+            else v
+        )
+        for k, v in deepcopy(alternative["query"]["parameters"]).items()
+    }
+    query = next(q for q in task_table["queries"] if q["name"] == name)
+    return build_cql2_json(query, parameters), parameters
+
+
 async def _build_aux_request(
     alternative,
     input_adfs,
@@ -127,21 +168,7 @@ async def _build_aux_request(
     """
     logger = get_run_logger()
     timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
-    name = alternative["query"]["name"]
-    specific_input_name, stac_item = specific_input_product
-    parameters = {
-        k: (
-            stac_item.properties.get(m.group(2), v)
-            if stac_item
-            and isinstance(v, str)
-            and (m := SPECIFIC_INPUT_PATTERN.match(v))
-            and m.group(1) == specific_input_name
-            else v
-        )
-        for k, v in deepcopy(alternative["query"]["parameters"]).items()
-    }
-    query = next(q for q in task_table["queries"] if q["name"] == name)
-    aux_cql2 = build_cql2_json(query, parameters)
+    aux_cql2, parameters = render_aux_cql2(alternative, task_table, specific_input_product)
 
     md = "# AUX CQL2 filter \n\n```json\n" + json.dumps(aux_cql2, indent=2) + "\n```"
     artifact_key_name: str = "aux-cql2-filter"
@@ -149,7 +176,7 @@ async def _build_aux_request(
     logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
     product_type = parameters.get("product_type", "*")
-    collection, source, selected_assets = _select_aux_collection_and_source(dpr_input, product_type)
+    collection, source, selected_assets = select_aux_collection_and_source(dpr_input, product_type)
     get_run_logger().info(
         f"🚧 Prepared AUX request for input {input_adfs['name']} "
         f"using source {source} and collection {collection}:🧹 {aux_cql2}",
@@ -329,16 +356,24 @@ async def process_input_adfs(
         ) from kerr
 
 
-def _resolve_specific_input_product_stac_items(
+def resolve_specific_input_product_stac_items(
     input_adfs: dict[str, Any],
     task_table: dict[str, Any],
     unit: dict[str, Any],
     provided_input_products: list[FlowInputProduct],
     rs_client: RsClient,
 ) -> tuple[str, list[Item]] | tuple[None, list[None]]:
+    """
+    Resolve the STAC items of the input products an ADFS depends on, for the ADFS multiplicity 'one_per_input'.
+
+    Returns:
+        The name of the referenced input product and the STAC items of the provided input products matching
+        its regex. If the ADFS multiplicity is not 'one_per_input', (None, [None]) is returned so the ADFS
+        is staged once.
+    """
     input_adfs_io = search_by_name(task_table["io"], input_adfs["name"])
     if input_adfs_io.get("multiplicity", None) == "one_per_input":
-        logger = get_run_logger()
+        logger = _get_logger()
         input_product_names: set[str] = {product["name"] for product in unit["input_products"]}
         referenced_input_product_names = {
             match.group(1)
@@ -450,7 +485,7 @@ async def dpr_processing(
             # For each input_adfs element computed on STEP 1
             for input_adfs in unit["input_adfs"]:
                 # For each specific input in case of multiplicity=one_per_input
-                specific_input_name, product_stac_items = _resolve_specific_input_product_stac_items(
+                specific_input_name, product_stac_items = resolve_specific_input_product_stac_items(
                     input_adfs,
                     task_table,
                     unit,
