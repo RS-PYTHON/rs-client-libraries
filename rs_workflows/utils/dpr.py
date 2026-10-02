@@ -40,7 +40,7 @@ from rs_workflows.on_demand_processing import dpr_processing
 PREFECT_VAR_NAME = "processing-storage-configuration"
 # TODO: Once the namespace issue is resolved, we can remove this hard coded path and
 # use the shared disk path instead implemented in generate_payload_path().
-KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT = False
+KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT = True
 
 
 def generate_payload_path(owner_id: str) -> str:
