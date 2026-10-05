@@ -96,7 +96,10 @@ class AdfType(str, Enum):
 
     S00__ADF_ECMWA = "S00__ADF_ECMWA"
     S00__ADF_ECMWF = "S00__ADF_ECMWF"
+    S00__ADF_FPOAX = "S00__ADF_FPOAX"
+    S00__ADF_FROAX = "S00__ADF_FROAX"
     S00__ADF_GETAS = "S00__ADF_GETAS"
+    S00__ADF_OSFAX = "S00__ADF_OSFAX"
     S00__ADF_WATER = "S00__ADF_WATER"
     S03_ADF_OLCAL = "S03_ADF_OLCAL"
     S03_ADF_OLEOP = "S03_ADF_OLEOP"
@@ -529,7 +532,8 @@ class AdfProcessIn(BaseModel):
     satellite: str | SentinelSatellite | None = Field(
         default=None,
         title="Satellite",
-        description="Satellite identifier used in certain queries. Can be a string or SentinelSatellite enum.",
+        description="Satellite identifier used in certain queries. Can be a string or SentinelSatellite enum. "
+        "Mandatory for the mission-dependent ADF types (orbit files).",
     )
     cql2_filter: dict | None = Field(
         default=None,

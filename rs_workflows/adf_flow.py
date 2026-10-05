@@ -61,7 +61,9 @@ STB_CONVERT_PRODUCTS = "stb_convert_products"
 class AdfConversionConfig(NamedTuple):
     """Configuration needed to run one ADF conversion type."""
 
-    required_types: list[str]
+    # Legacy auxiliary product types to convert. For the mission-dependent ADF types,
+    # the legacy auxiliary product types per mission (e.g. 'sentinel-1').
+    required_types: list[str] | dict[str, list[str]]
     generated_prod_type: str
     script_path: Path | str
 
@@ -173,7 +175,40 @@ ADF_TYPE_CONFIG: dict[str, AdfConversionConfig] = {
         )
         for adf_type, s03_config in S03_STB_ADF_TYPE_CONFIG.items()
     },
+    # Orbit files: the legacy auxiliary product type depends on the mission
+    AdfType.S00__ADF_FROAX: AdfConversionConfig(
+        required_types={"sentinel-1": ["MPL_ORBRES"], "sentinel-2": ["MPL_ORBRES"], "sentinel-3": ["AX___FRO_AX"]},
+        generated_prod_type="ADF_FROAX",
+        script_path=STB_CONVERT_PRODUCTS,
+    ),
+    AdfType.S00__ADF_FPOAX: AdfConversionConfig(
+        required_types={"sentinel-1": ["MPL_ORBPRE"], "sentinel-2": ["MPL_ORBPRE"], "sentinel-3": ["AX___FPO_AX"]},
+        generated_prod_type="ADF_FPOAX",
+        script_path=STB_CONVERT_PRODUCTS,
+    ),
+    AdfType.S00__ADF_OSFAX: AdfConversionConfig(
+        required_types={"sentinel-1": ["MPL_ORBSCT"], "sentinel-2": ["MPL_ORBSCT"], "sentinel-3": ["AX___OSF_AX"]},
+        generated_prod_type="ADF_OSFAX",
+        script_path=STB_CONVERT_PRODUCTS,
+    ),
 }
+
+
+def resolve_required_types(adf_config: AdfConversionConfig, satellite: str | None) -> list[str]:
+    """
+    Return the legacy auxiliary product types to convert. For the mission-dependent ADF types,
+    they depend on the mission of the satellite (e.g. 'sentinel-1' for 'sentinel-1a').
+    """
+    if isinstance(adf_config.required_types, list):
+        return adf_config.required_types
+    mission = re.sub(r"[a-z]$", "", satellite.lower()) if satellite else None
+    if mission not in adf_config.required_types:
+        raise ValueError(
+            f"A satellite of the missions {list(adf_config.required_types)} is required to generate "
+            f"{adf_config.generated_prod_type!r}, got: {satellite!r}",
+        )
+    return adf_config.required_types[mission]
+
 
 STAC_DATETIME_PROPERTY_NAMES = {
     "created",
@@ -491,7 +526,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
             logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
             return
 
-        required_types = adf_config.required_types
+        required_types = resolve_required_types(adf_config, adf_input.satellite)
         generated_prod_type = adf_config.generated_prod_type
         script_path = adf_config.script_path
 
@@ -541,6 +576,11 @@ async def adf_conversion(adf_input: AdfProcessIn):
                         ],
                     },
                 }
+                if isinstance(adf_config.required_types, dict):
+                    # The legacy files of the mission-dependent ADF types are specific to each satellite
+                    cql2_filter["filter"]["args"].append(
+                        {"op": "=", "args": [{"property": "platform"}, adf_input.satellite]},
+                    )
 
             # When the source is the catalog, no staging occurs: collection_name is both the source
             # and destination collection, so the search must be restricted to it, otherwise the STAC

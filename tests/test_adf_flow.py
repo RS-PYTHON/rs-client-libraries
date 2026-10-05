@@ -16,6 +16,7 @@
 
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -1016,6 +1017,85 @@ def test_run_adf_script_stb_convert_products(monkeypatch, mocker, tmp_path):
     assert run_mock.call_args.kwargs["env"] is None
 
 
+async def _run_stb_adf_conversion(monkeypatch, mocker, tmp_path, adf_input, expected_generated_type):
+    """Run the ADF conversion flow with mocked staging, conversion, upload and publication."""
+    mock_logger = MagicMock()
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
+
+    source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
+    mocks = SimpleNamespace(
+        staging=AsyncMock(return_value=(True, ItemCollection([source_item]))),
+        extract=AsyncMock(),
+        upload=AsyncMock(),
+        publish=AsyncMock(),
+    )
+    monkeypatch.setattr(adf_flow, "aux_staging_task", mocks.staging)
+    monkeypatch.setattr(adf_flow, "download_and_extract_assets_task", mocks.extract)
+    monkeypatch.setattr(adf_flow, "s3_upload_dir", mocks.upload)
+    monkeypatch.setattr(adf_flow.shutil, "rmtree", MagicMock())
+
+    zarr_path = tmp_path / "mock-adf.zarr"
+    zarr_path.mkdir()
+    (zarr_path / ".zattrs").write_text(
+        json.dumps(
+            {
+                "id": f"mock-{adf_input.adf_type}-adf",
+                "properties": {
+                    "product:type": expected_generated_type,
+                    "start_datetime": "2021-10-27T00:00:00Z",
+                    "end_datetime": "2021-10-27T12:00:00Z",
+                },
+            },
+        ),
+    )
+    mocks.run_script = MagicMock(return_value=[zarr_path])
+    monkeypatch.setattr(adf_flow, "run_adf_script", mocks.run_script)
+
+    monkeypatch.setattr(
+        adf_flow,
+        "fetch_csv_from_endpoint",
+        MagicMock(return_value=[["*", "*", "*", "*", "test-bucket"]]),
+    )
+    monkeypatch.setattr(adf_flow, "find_s3_output_bucket", MagicMock(return_value="test-bucket"))
+    monkeypatch.setattr(adf_flow, "publish", mocks.publish)
+
+    flow_env_mock = mocker.MagicMock()
+    flow_env_mock.start_span.return_value = MagicMock()
+    flow_env_mock.start_span.return_value.__enter__.return_value = MagicMock()
+    flow_env_mock.owner_id = "test-user"
+    flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id="test-user")
+    monkeypatch.setattr(adf_flow, "FlowEnv", lambda env: flow_env_mock)
+
+    await adf_flow.adf_conversion.fn(adf_input)
+    return mocks
+
+
+def _assert_stb_adf_conversion(mocks, expected_aux_types, expected_generated_type, input_collection):
+    """Check the staged auxiliary types, the use of stb_convert_products and the published metadata."""
+    assert mocks.staging.call_count == len(expected_aux_types)
+    staged_product_types = [
+        call.kwargs["cql2_filter"]["filter"]["args"][1]["args"][1] for call in mocks.staging.call_args_list
+    ]
+    assert staged_product_types == expected_aux_types
+    assert [call.kwargs["catalog_collection_identifier"] for call in mocks.staging.call_args_list] == [
+        input_collection,
+    ] * len(expected_aux_types)
+    mocks.extract.assert_awaited_once()
+
+    # Verify stb_convert_products was used (script_path == STB_CONVERT_PRODUCTS)
+    mocks.run_script.assert_called_once()
+    assert mocks.run_script.call_args.args[0] == adf_flow.STB_CONVERT_PRODUCTS
+    mocks.upload.assert_awaited_once()
+
+    # Verify published metadata
+    published_metadata = mocks.publish.call_args[0][2]
+    publish_mapping_arg = mocks.publish.call_args[0][1]
+    assert published_metadata[0].product_type == expected_generated_type
+    assert published_metadata[0].stac_item.properties["product:type"] == expected_generated_type
+    assert publish_mapping_arg[0].collection_name == "ADF_PUBLISH"
+
+
 @pytest.mark.parametrize(
     "adf_type, expected_aux_types, expected_generated_type",
     [
@@ -1089,9 +1169,6 @@ async def test_adf_conversion_flow_logic_for_s03_stb(
     expected_generated_type,
 ):  # pylint: disable=redefined-outer-name,unused-argument
     """Test that S03_ADF_OL*/SL* types stage the correct auxiliary files and use stb_convert_products."""
-    mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
-
     adf_input = AdfProcessIn(
         env=FlowEnvArgs(owner_id="test-user"),
         adf_type=adf_type,
@@ -1100,83 +1177,85 @@ async def test_adf_conversion_flow_logic_for_s03_stb(
                 AuxiliaryProductMapping(product_type=aux_type, collection_name="AUX_S03_INPUT")
                 for aux_type in expected_aux_types
             ),
-            AuxiliaryProductMapping(product_type=expected_generated_type, collection_name="ADF_S03_PUBLISH"),
+            AuxiliaryProductMapping(product_type=expected_generated_type, collection_name="ADF_PUBLISH"),
             AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
         ],
         start_datetime=datetime(2021, 10, 27, 0, 0, 0, tzinfo=timezone.utc),
         end_datetime=datetime(2021, 10, 27, 12, 0, 0, tzinfo=timezone.utc),
     )
+    mocks = await _run_stb_adf_conversion(monkeypatch, mocker, tmp_path, adf_input, expected_generated_type)
+    _assert_stb_adf_conversion(mocks, expected_aux_types, expected_generated_type, "AUX_S03_INPUT")
+    # The default CQL2 filter is not restricted to a platform
+    for call in mocks.staging.call_args_list:
+        assert "platform" not in json.dumps(call.kwargs["cql2_filter"])
 
-    source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
-    source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
-    staging_mock = AsyncMock(return_value=(True, ItemCollection([source_item])))
-    monkeypatch.setattr(adf_flow, "aux_staging_task", staging_mock)
 
-    extract_mock = AsyncMock()
-    monkeypatch.setattr(adf_flow, "download_and_extract_assets_task", extract_mock)
-
-    upload_mock = AsyncMock()
-    monkeypatch.setattr(adf_flow, "s3_upload_dir", upload_mock)
-    monkeypatch.setattr(adf_flow.shutil, "rmtree", MagicMock())
-
-    zarr_path = tmp_path / "mock-s03.zarr"
-    zarr_path.mkdir()
-    (zarr_path / ".zattrs").write_text(
-        json.dumps(
-            {
-                "id": f"mock-{adf_type}-adf",
-                "properties": {
-                    "product:type": expected_generated_type,
-                    "start_datetime": "2021-10-27T00:00:00Z",
-                    "end_datetime": "2021-10-27T12:00:00Z",
-                },
-            },
-        ),
+@pytest.mark.parametrize(
+    "adf_type, satellite, expected_aux_type, expected_generated_type",
+    [
+        (AdfType.S00__ADF_FROAX, "sentinel-1a", "MPL_ORBRES", "ADF_FROAX"),
+        (AdfType.S00__ADF_FROAX, "sentinel-2b", "MPL_ORBRES", "ADF_FROAX"),
+        (AdfType.S00__ADF_FROAX, "sentinel-3a", "AX___FRO_AX", "ADF_FROAX"),
+        (AdfType.S00__ADF_FPOAX, "sentinel-1c", "MPL_ORBPRE", "ADF_FPOAX"),
+        (AdfType.S00__ADF_FPOAX, "sentinel-2a", "MPL_ORBPRE", "ADF_FPOAX"),
+        (AdfType.S00__ADF_FPOAX, "sentinel-3b", "AX___FPO_AX", "ADF_FPOAX"),
+        (AdfType.S00__ADF_OSFAX, "sentinel-1d", "MPL_ORBSCT", "ADF_OSFAX"),
+        (AdfType.S00__ADF_OSFAX, "sentinel-2c", "MPL_ORBSCT", "ADF_OSFAX"),
+        (AdfType.S00__ADF_OSFAX, "sentinel-3a", "AX___OSF_AX", "ADF_OSFAX"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_adf_conversion_flow_logic_for_orbit_files(
+    monkeypatch,
+    mocker,
+    tmp_path,
+    _mock_os_env,
+    create_stac_item_mock,
+    adf_type,
+    satellite,
+    expected_aux_type,
+    expected_generated_type,
+):  # pylint: disable=redefined-outer-name,unused-argument,too-many-arguments
+    """Test that the orbit file types stage the legacy auxiliary file of the satellite mission."""
+    adf_input = AdfProcessIn(
+        env=FlowEnvArgs(owner_id="test-user"),
+        adf_type=adf_type,
+        auxiliary_product_to_collection_identifier=[
+            AuxiliaryProductMapping(product_type=expected_aux_type, collection_name="AUX_ORBIT_INPUT"),
+            AuxiliaryProductMapping(product_type=expected_generated_type, collection_name="ADF_PUBLISH"),
+            AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
+        ],
+        start_datetime=datetime(2021, 10, 27, 0, 0, 0, tzinfo=timezone.utc),
+        end_datetime=datetime(2021, 10, 27, 12, 0, 0, tzinfo=timezone.utc),
+        satellite=satellite,
     )
-    run_script_mock = MagicMock(return_value=[zarr_path])
-    monkeypatch.setattr(adf_flow, "run_adf_script", run_script_mock)
+    mocks = await _run_stb_adf_conversion(monkeypatch, mocker, tmp_path, adf_input, expected_generated_type)
+    _assert_stb_adf_conversion(mocks, [expected_aux_type], expected_generated_type, "AUX_ORBIT_INPUT")
+    # The default CQL2 filter is restricted to the satellite
+    assert mocks.staging.call_args.kwargs["cql2_filter"]["filter"]["args"][-1] == {
+        "op": "=",
+        "args": [{"property": "platform"}, satellite],
+    }
 
-    monkeypatch.setattr(
-        adf_flow,
-        "fetch_csv_from_endpoint",
-        MagicMock(return_value=[["*", "*", "*", "*", "test-bucket"]]),
+
+@pytest.mark.parametrize("satellite", [None, "all", "sentinel-5p"])
+@pytest.mark.asyncio
+async def test_adf_conversion_for_orbit_files_requires_satellite(
+    monkeypatch,
+    mocker,
+    tmp_path,
+    _mock_os_env,
+    satellite,
+):  # pylint: disable=redefined-outer-name,unused-argument
+    """Test that the orbit file types require a satellite of a supported mission."""
+    adf_input = AdfProcessIn(
+        env=FlowEnvArgs(owner_id="test-user"),
+        adf_type=AdfType.S00__ADF_OSFAX,
+        auxiliary_product_to_collection_identifier=[AuxiliaryProductMapping(product_type="*", collection_name="AUX")],
+        satellite=satellite,
     )
-    monkeypatch.setattr(adf_flow, "find_s3_output_bucket", MagicMock(return_value="test-bucket"))
-
-    publish_mock = AsyncMock()
-    monkeypatch.setattr(adf_flow, "publish", publish_mock)
-
-    flow_env_mock = mocker.MagicMock()
-    flow_env_mock.start_span.return_value = MagicMock()
-    flow_env_mock.start_span.return_value.__enter__.return_value = MagicMock()
-    flow_env_mock.owner_id = "test-user"
-    flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id="test-user")
-    monkeypatch.setattr(adf_flow, "FlowEnv", lambda env: flow_env_mock)
-
-    await adf_flow.adf_conversion.fn(adf_input)
-
-    # Verify the correct auxiliary types were staged
-    assert staging_mock.call_count == len(expected_aux_types)
-    staged_product_types = [
-        call.kwargs["cql2_filter"]["filter"]["args"][1]["args"][1] for call in staging_mock.call_args_list
-    ]
-    assert staged_product_types == expected_aux_types
-    assert [call.kwargs["catalog_collection_identifier"] for call in staging_mock.call_args_list] == [
-        "AUX_S03_INPUT",
-    ] * len(expected_aux_types)
-    extract_mock.assert_awaited_once()
-
-    # Verify stb_convert_products was used (script_path == STB_CONVERT_PRODUCTS)
-    run_script_mock.assert_called_once()
-    assert run_script_mock.call_args.args[0] == adf_flow.STB_CONVERT_PRODUCTS
-    upload_mock.assert_awaited_once()
-
-    # Verify published metadata
-    published_metadata = publish_mock.call_args[0][2]
-    publish_mapping_arg = publish_mock.call_args[0][1]
-    assert published_metadata[0].product_type == expected_generated_type
-    assert published_metadata[0].stac_item.properties["product:type"] == expected_generated_type
-    assert publish_mapping_arg[0].collection_name == "ADF_S03_PUBLISH"
+    with pytest.raises(ValueError, match="A satellite of the missions"):
+        await _run_stb_adf_conversion(monkeypatch, mocker, tmp_path, adf_input, "ADF_OSFAX")
 
 
 @pytest.mark.asyncio
