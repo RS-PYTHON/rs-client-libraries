@@ -16,7 +16,6 @@
 
 from datetime import datetime
 
-from prefect import get_run_logger
 from pystac import Item
 
 from rs_workflows.flow_utils import (
@@ -27,6 +26,7 @@ from rs_workflows.flow_utils import (
 from rs_workflows.on_demand.common.types import Level0FlowParams
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dpr import call_dpr_flow
+from rs_workflows.utils.prefect import get_logger
 
 
 async def process_l0_last_steps(
@@ -41,7 +41,7 @@ async def process_l0_last_steps(
     Raises:
         ValueError: _description_
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(
         "Starting L0 last steps: mission=%r, session=%r, verbose=%r, input_products_count=%d",
         mission,

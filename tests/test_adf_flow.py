@@ -100,7 +100,7 @@ def create_stac_item_mock(monkeypatch):
 
 def test_create_stac_item_from_zarr(mocker, tmp_path):
     """Test STAC item creation from ZARR metadata."""
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
     zarr_dir = tmp_path / "test.zarr"
     zarr_dir.mkdir()
     zattrs_file = zarr_dir / ".zattrs"
@@ -126,7 +126,7 @@ def test_create_stac_item_from_zarr(mocker, tmp_path):
 
 def test_create_stac_item_from_json_uses_stac_discovery(mocker, tmp_path):
     """Test STAC item creation from JSON metadata with stac_discovery."""
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
     json_file = tmp_path / "fallback-id.json"
     json_file.write_text(
         json.dumps(
@@ -159,7 +159,7 @@ def test_create_stac_item_from_json_uses_stac_discovery(mocker, tmp_path):
 
 def test_create_stac_item_from_json_falls_back_to_filename(mocker, tmp_path):
     """Test JSON STAC item creation falls back to the file stem without stac_discovery.id."""
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
     json_file = tmp_path / "fallback-id.json"
     json_file.write_text(
         json.dumps(
@@ -207,7 +207,7 @@ def test_extract_datetimes_from_item_id_valid(item_id, expected_start, expected_
 
 def test_create_stac_item_uses_stac_props_over_item_id(mocker, tmp_path):
     """Test that create_stac_item_from_zarr prefers stac_props datetimes over item_id ones."""
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
     zarr_dir = tmp_path / "test.zarr"
     zarr_dir.mkdir()
     zattrs_content = {
@@ -238,7 +238,7 @@ def test_create_stac_item_uses_stac_props_over_item_id(mocker, tmp_path):
 
 def test_create_stac_item_uses_item_id_when_stac_props_missing(mocker, tmp_path):
     """Test that item_id datetimes are used when stac_props don't have start/end datetime."""
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
     zarr_dir = tmp_path / "test.zarr"
     zarr_dir.mkdir()
     zattrs_content = {
@@ -267,7 +267,7 @@ def test_create_stac_item_uses_item_id_when_stac_props_missing(mocker, tmp_path)
 
 def test_create_stac_item_falls_back_to_metadata_when_item_id_has_no_dates(mocker, tmp_path):
     """Test that metadata properties are used when item_id doesn't match the datetime pattern."""
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
     zarr_dir = tmp_path / "test.zarr"
     zarr_dir.mkdir()
     zattrs_content = {
@@ -301,7 +301,7 @@ def test_extract_datetimes_from_item_id_no_match():
 
 def test_create_stac_item_raises_error_when_datetimes_missing(mocker, tmp_path):
     """Test that a RuntimeError is raised if neither stac_props nor item_id have datetimes."""
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
     zarr_dir = tmp_path / "test.zarr"
     zarr_dir.mkdir()
     zattrs_content = {
@@ -324,7 +324,7 @@ def test_create_stac_item_raises_error_when_datetimes_missing(mocker, tmp_path):
 def test_run_adf_script_returns_generated_zarr(monkeypatch, mocker, tmp_path):
     """Test the conversion script wrapper returns the generated ZARR path."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
     input_dir = tmp_path / "INPUT"
     work_dir = tmp_path / "WORK"
     output_dir = tmp_path / "OUTPUT"
@@ -359,7 +359,7 @@ def test_run_adf_script_returns_generated_zarr(monkeypatch, mocker, tmp_path):
 def test_run_adf_script_logs_and_raises_on_subprocess_error(monkeypatch, mocker, tmp_path):
     """Test subprocess failures are logged before being re-raised."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
     input_dir = tmp_path / "INPUT"
     work_dir = tmp_path / "WORK"
     output_dir = tmp_path / "OUTPUT"
@@ -388,7 +388,7 @@ def test_run_adf_script_logs_and_raises_on_subprocess_error(monkeypatch, mocker,
 def test_run_adf_script_raises_when_no_product_is_generated(monkeypatch, mocker, tmp_path):
     """Test the wrapper raises when the conversion script produces no ZARR or JSON output."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
     input_dir = tmp_path / "INPUT"
     work_dir = tmp_path / "WORK"
     output_dir = tmp_path / "OUTPUT"
@@ -406,7 +406,7 @@ def test_run_adf_script_raises_when_no_product_is_generated(monkeypatch, mocker,
 async def test_download_and_extract_assets_task_extracts_zip(monkeypatch, mocker, tmp_path):
     """Test ZIP assets are downloaded and extracted to the destination directory."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.utils.utils.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.utils.utils.get_logger", return_value=mock_logger)
     item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
 
@@ -439,7 +439,7 @@ async def test_download_and_extract_assets_task_copies_plain_file_and_skips_non_
 ):
     """Test non-archive S3 assets are copied and non-S3 assets are skipped."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.utils.utils.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.utils.utils.get_logger", return_value=mock_logger)
     item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     item.add_asset("plain", Asset(href="s3://bucket/aux-item.txt"))
     item.add_asset("skip", Asset(href="https://example.com/aux-item.txt"))
@@ -469,7 +469,7 @@ async def test_download_and_extract_assets_task_downloads_only_selected_asset(
 ):
     """Test only named assets are downloaded when the optional asset filter is provided."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.utils.utils.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.utils.utils.get_logger", return_value=mock_logger)
     item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     item.add_asset("product", Asset(href="s3://bucket/product.txt"))
     item.add_asset("metadata", Asset(href="s3://bucket/metadata.txt"))
@@ -494,7 +494,7 @@ async def test_download_and_extract_assets_task_accepts_feature_collection_dict(
     tmp_path,
 ):
     """Test inline STAC FeatureCollection dictionaries are normalized before download."""
-    mocker.patch("rs_workflows.utils.utils.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.utils.utils.get_logger", return_value=MagicMock())
 
     async def fake_download(href, destination):
         destination.write_text(f"payload from {href}")
@@ -536,7 +536,7 @@ async def test_adf_conversion_flow_logic(
 ):  # pylint: disable=redefined-outer-name,unused-argument
     """Test the full adf_conversion flow logic with mocks."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
     # 1. Mock auxip_staging_task
     source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
@@ -639,7 +639,7 @@ async def test_adf_conversion_flow_logic_for_ecmwf(
 ):  # pylint: disable=redefined-outer-name,unused-argument
     """Test that S00__ADF_ECMWF stages MF inputs and uses the ECMWF conversion script."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
 
     source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
@@ -729,7 +729,7 @@ async def test_adf_conversion_flow_logic_for_water(
 ):  # pylint: disable=redefined-outer-name,unused-argument
     """Test that S00__ADF_WATER stages WATER inputs and uses the WATER conversion script."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
 
     source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
@@ -824,7 +824,7 @@ async def test_adf_conversion_raises_when_publish_collection_not_found(
 ):  # pylint: disable=redefined-outer-name,unused-argument
     """Test the flow raises when no publish collection mapping is available."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
     sample_adf_process_in.auxiliary_product_to_collection_identifier = [
         AuxiliaryProductMapping(product_type="AX___MA1_AX", collection_name="AUX_INPUT"),
     ]
@@ -909,7 +909,7 @@ async def test_adf_conversion_flow_logic_for_getas(
 ):  # pylint: disable=redefined-outer-name,unused-argument
     """Test that S00__ADF_GETAS stages AX___DEM_AX inputs and uses the GETAS conversion script."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
 
     source_item = Item(id="aux-item", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
     source_item.add_asset("data", Asset(href="s3://bucket/aux-item.zip"))
@@ -986,7 +986,7 @@ async def test_adf_conversion_flow_logic_for_getas(
 def test_run_adf_script_stb_convert_products(monkeypatch, mocker, tmp_path):
     """Test that run_adf_script dispatches to stb_convert_products when given the sentinel value."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
     input_dir = tmp_path / "INPUT"
     work_dir = tmp_path / "WORK"
     output_dir = tmp_path / "OUTPUT"
@@ -1090,7 +1090,7 @@ async def test_adf_conversion_flow_logic_for_s03_stb(
 ):  # pylint: disable=redefined-outer-name,unused-argument
     """Test that S03_ADF_OL*/SL* types stage the correct auxiliary files and use stb_convert_products."""
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
 
     adf_input = AdfProcessIn(
         env=FlowEnvArgs(owner_id="test-user"),
@@ -1207,7 +1207,7 @@ async def test_adf_conversion_uses_custom_cql2_filter(
 
     # Mock logger & FlowEnv
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
 
     flow_env_mock = MagicMock()
     flow_env_mock.start_span.return_value = MagicMock()
@@ -1306,7 +1306,7 @@ async def test_adf_conversion_restricts_search_to_collection_for_catalog_source(
 
     # Mock logger & FlowEnv
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
 
     flow_env_mock = mocker.MagicMock()
     flow_env_mock.start_span.return_value = MagicMock()
@@ -1345,7 +1345,7 @@ async def test_adf_conversion_default_cql2_filter_has_no_collections_for_non_cat
     against the external source, otherwise valid items would be silently discarded."""
     # sample_adf_process_in's mapping uses the default AuxiliarySource.AUXIP source.
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
 
     flow_env_mock = mocker.MagicMock()
     flow_env_mock.start_span.return_value = MagicMock()
@@ -1390,7 +1390,7 @@ async def test_adf_conversion_honors_collection_name_with_custom_cql2_filter(
     }
 
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
 
     flow_env_mock = mocker.MagicMock()
     flow_env_mock.start_span.return_value = MagicMock()

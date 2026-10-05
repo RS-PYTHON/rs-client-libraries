@@ -124,7 +124,7 @@ async def test_on_demand_conversion_helpers_cover_mapping_zarr_and_safe_task(tmp
     flow_env_mock.start_span.return_value = nullcontext()
     flow_env_mock.rs_client.get_dpr_client.return_value = dpr_client_mock
     monkeypatch.setattr(on_demand_conversion_flow, "FlowEnv", lambda env: flow_env_mock)
-    mocker.patch.object(on_demand_conversion_flow, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(on_demand_conversion_flow, "get_logger", return_value=MagicMock())
 
     payload = {
         "input_safe_path": "s3://input-bucket/S1A_SAFE",
@@ -223,7 +223,7 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
     )
     converted_item.add_asset("converted-product", Asset(href="s3://output-bucket/zarr/converted-product.zarr"))
 
-    mocker.patch.object(on_demand_conversion_flow, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(on_demand_conversion_flow, "get_logger", return_value=MagicMock())
     monkeypatch.setenv("JUPYTERHUB_API_TOKEN", "")
     monkeypatch.setenv("DASK_GATEWAY_ADDRESS", "")
     monkeypatch.setenv("RSPY_HOST_OSAM", "https://osam.test")
@@ -362,7 +362,7 @@ async def test_on_demand_conversion_raises_when_staging_produces_no_item(monkeyp
         dask_cluster_instance="dask-instance-1",
     )
 
-    mocker.patch.object(on_demand_conversion_flow, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(on_demand_conversion_flow, "get_logger", return_value=MagicMock())
 
     flow_env_mock = MagicMock()
     flow_env_mock.serialize.return_value = FlowEnvArgs(owner_id=owner_id)

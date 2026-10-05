@@ -18,12 +18,13 @@ import asyncio
 import json
 import os
 
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
 from prefect.runtime import flow_run
 from prefect.variables import Variable
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.utils.prefect import get_logger
 
 
 @flow(name="benchmark-processor")
@@ -59,7 +60,7 @@ async def benchmark_processor_task(
     scenario_name: str,
 ):
     """Task called by the flow of the same name."""
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)

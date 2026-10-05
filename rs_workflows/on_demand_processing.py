@@ -24,7 +24,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import yaml
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
 from pystac import Item, ItemCollection
 
@@ -47,6 +47,7 @@ from rs_workflows.payload_builder import (
     extract_external_modules,
 )
 from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
+from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import (
     build_output_lineage,
     get_archived_item_indexes,
@@ -125,7 +126,7 @@ async def _build_aux_request(
     The returned tuple contains everything needed by the staging call:
     ``(aux_cql2, collection, timeout, source, selected_assets)``.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
     name = alternative["query"]["name"]
     specific_input_name, stac_item = specific_input_product
@@ -150,7 +151,7 @@ async def _build_aux_request(
 
     product_type = parameters.get("product_type", "*")
     collection, source, selected_assets = _select_aux_collection_and_source(dpr_input, product_type)
-    get_run_logger().info(
+    get_logger().info(
         f"🚧 Prepared AUX request for input {input_adfs['name']} "
         f"using source {source} and collection {collection}:🧹 {aux_cql2}",
     )
@@ -171,7 +172,7 @@ async def _normalize_archived_aux_items(item_collection: ItemCollection, dpr_inp
     If no archived assets are present, the original collection is returned
     unchanged.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     archived_indexes = get_archived_item_indexes(item_collection)
 
     if not archived_indexes:
@@ -227,7 +228,7 @@ async def _stage_input_adfs_alternative(
     no item collection for the current alternative, allowing the caller to try
     the next alternative in order.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     aux_cql2, collection, timeout, source, selected_assets = await _build_aux_request(
         alternative,
         input_adfs,
@@ -304,7 +305,7 @@ async def process_input_adfs(
             If no alternative returns staged data, or if the task table content
             cannot be read as expected.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"🚧 Starting processing input ADFS for {input_adfs}")
     try:
         # For each "alternative" ( get it following the "order" )
@@ -338,7 +339,7 @@ def _resolve_specific_input_product_stac_items(
 ) -> tuple[str, list[Item]] | tuple[None, list[None]]:
     input_adfs_io = search_by_name(task_table["io"], input_adfs["name"])
     if input_adfs_io.get("multiplicity", None) == "one_per_input":
-        logger = get_run_logger()
+        logger = get_logger()
         input_product_names: set[str] = {product["name"] for product in unit["input_products"]}
         referenced_input_product_names = {
             match.group(1)
@@ -399,7 +400,7 @@ async def dpr_processing(
         dpr_input: Input parameters for executing this flow
         retry_config: Staging retry config
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"Starting the DPR processing flow with processor: {dpr_input.processor_name}")
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(dpr_input.env)

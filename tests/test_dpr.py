@@ -202,7 +202,7 @@ def _setup_run_processor_mocks(mocker):
     Patch all run_processor dependencies unrelated to paths_to_delete so that
     the function can complete without real S3/DPR infrastructure.
     """
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch("rs_workflows.dpr_flow.record_performance_indicators")
     mocker.patch("rs_workflows.dpr_flow.update_eopf_assets", return_value=[])
 

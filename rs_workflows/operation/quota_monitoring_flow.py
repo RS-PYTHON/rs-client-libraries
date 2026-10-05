@@ -23,10 +23,11 @@ import botocore
 import psycopg2
 import psycopg2.extras
 from botocore.client import Config
-from prefect import flow, get_run_logger
+from prefect import flow
 from psycopg2 import DatabaseError, IntegrityError
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.utils.prefect import get_logger
 
 LOG_BUCKET_SUFFIX = "-access-logs"
 LOG_PREFIX = ""  # we will read everything
@@ -71,7 +72,7 @@ def read_object(s3, platform, key):
     """
     Stream-read an S3 object line by line.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     try:
         response = s3.get_object(Bucket=platform + LOG_BUCKET_SUFFIX, Key=key)
         for line in response["Body"].iter_lines():
@@ -194,7 +195,7 @@ async def collect_obs_logs(
         - S3_QUOTA_REGION: S3 region name to access the bucket with logs
     """
 
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
@@ -280,7 +281,7 @@ async def consolidate_obs_logs(
         psycopg2.Error: If database connection or SQL operations fail.
     """
 
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
