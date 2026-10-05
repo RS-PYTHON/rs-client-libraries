@@ -16,7 +16,7 @@
 
 import re
 
-from prefect import flow, get_run_logger
+from prefect import flow
 from pystac import Item
 
 from rs_workflows.flow_utils import (
@@ -34,6 +34,7 @@ from rs_workflows.utils.catalog import (
     is_unpublished,
 )
 from rs_workflows.utils.dask import is_dask_cluster_running
+from rs_workflows.utils.prefect import get_logger
 
 
 @flow(name="process-l0")
@@ -51,7 +52,7 @@ async def process_l0(
     All other parameters get their default values from Prefect variable but can be overriden on demand.
 
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"Mode verbose is set to {verbose}")
 
     # Check session name format

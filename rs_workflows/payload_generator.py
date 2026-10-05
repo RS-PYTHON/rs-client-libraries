@@ -23,7 +23,7 @@ from urllib.parse import urlparse, urlunparse
 from uuid import uuid4
 
 import requests
-from prefect import get_run_logger, task
+from prefect import task
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
 from pystac import Item
@@ -47,6 +47,7 @@ from rs_workflows.payload_template import (
     WorkflowStep,
 )
 from rs_workflows.storage_configuration import StorageConfig
+from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import get_common_and_relative_paths, search_by_name
 
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
@@ -241,7 +242,7 @@ def find_s3_output_bucket(
     """
     fallback_bucket = None
     fallback_bucket_owner_only = None
-    logger = get_run_logger()
+    logger = get_logger()
 
     for row in config_rows:
         # the expiration_delay (the fourth field) is not used
@@ -487,7 +488,7 @@ def build_output_products(
 
     outputs = []
     processed_products = set()
-    logger = get_run_logger()
+    logger = get_logger()
 
     mapping_lookup = {p.name: p for p in dpr_process_in.generated_product_to_collection_identifier}
 
@@ -713,7 +714,7 @@ def generate_payload(  # pylint: disable=unused-argument
     """
 
     # TODO: should be moved to dpr_client.py and it should call dpr_client.py::update_configuration
-    logger = get_run_logger()
+    logger = get_logger()
     # Init flow environment and opentelemetry span
     # flow_env = FlowEnv(dpr_process_in.env)
     # with flow_env.start_span(__name__, "generate-payload"):

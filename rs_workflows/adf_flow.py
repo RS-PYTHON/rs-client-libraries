@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from dateutil.parser import parse as parse_date
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from pystac import Asset, Item
 
 from rs_common.prefect_utils import s3_upload_dir, s3_upload_file
@@ -45,6 +45,7 @@ from rs_workflows.payload_generator import (
     fetch_csv_from_endpoint,
     find_s3_output_bucket,
 )
+from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import download_and_extract_assets_task
 
 # Path to the conversion scripts
@@ -260,7 +261,7 @@ def run_adf_script(script_path: Path | str, data_dir: Path, working_dir: Path, o
 
     Returns the list of generated ZARR product directories and JSON files.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"Running ADF conversion: {script_path}")
 
     def log_subprocess_output(output: str):
@@ -321,7 +322,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     taken from stac_discovery.id when present, otherwise it is derived
     from the filename (minus the .json extension).
     """
-    logger = get_run_logger()
+    logger = get_logger()
     is_json_product = zarr_path.suffix == ".json"
 
     if is_json_product:
@@ -461,7 +462,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
     """
     Prefect flow for ADF conversion.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"Starting adf_conversion flow for adf_type: {adf_input.adf_type}")
 
     flow_env = FlowEnv(adf_input.env)

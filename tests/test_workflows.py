@@ -369,7 +369,7 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
     # --- Mock logger ---
     mock_logger = MagicMock()
     mocker.patch(
-        "rs_workflows.on_demand_processing.get_run_logger",
+        "rs_workflows.on_demand_processing.get_logger",
         return_value=mock_logger,
     )
 

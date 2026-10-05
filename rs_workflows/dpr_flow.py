@@ -26,7 +26,7 @@ from os import path as osp
 from pathlib import Path
 
 import anyio
-from prefect import get_run_logger, task
+from prefect import task
 from pystac import Asset, Item
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
@@ -35,6 +35,7 @@ from rs_workflows import catalog_flow
 from rs_workflows.flow_utils import DprProcessedItemMetadata, FlowEnv, FlowEnvArgs
 from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
+from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import parse_logs
 
 
@@ -299,7 +300,7 @@ def update_eopf_assets(
         - Each .zattrs file must contain stac_discovery.properties.product:type
         - Uses S3 storage backend (via s3_list and read_zattrs_sync functions)
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info("Starting EOPF asset update.")
     logger.info(f"Payload received: {payload}")
     logger.info(f"Input products: {input_products}")
@@ -402,7 +403,7 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
         found among all retrieved items. If no valid items are found,
         returns the fallback value ``"2023-01-01T00:00:00Z"``.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     items = []
     if not input_products:
         logger.error("No valid input products found to compute eopf:origin_datetime. Exit")
@@ -465,7 +466,7 @@ async def run_processor(
         processor: DPR processor name
         s3_payload_run: S3 bucket location of the output final DPR payload file.
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)

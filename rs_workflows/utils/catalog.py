@@ -16,7 +16,7 @@
 
 from datetime import datetime, timezone
 
-from prefect import get_run_logger, task
+from prefect import task
 from pystac import Item, ItemCollection
 
 from rs_workflows.catalog_flow import publish
@@ -25,6 +25,7 @@ from rs_workflows.flow_utils import (
     FlowEnv,
     FlowGeneratedProduct,
 )
+from rs_workflows.utils.prefect import get_logger
 
 
 @task(name="Retrieve rs-catalog item from collection")
@@ -32,7 +33,7 @@ async def get_single_catalog_item(flow_env: FlowEnv, item_id: str, collections: 
     """
     Get an item from a set of rs-catalog collections
     """
-    logger = get_run_logger()
+    logger = get_logger()
     result: Item | None = None
 
     # Try to retrieve the item in the collections
@@ -61,7 +62,7 @@ async def get_catalog_items(flow_env: FlowEnv, item_ids: list[str], collections:
     """
     Get items from a set of rs-catalog collections
     """
-    get_run_logger().info(
+    get_logger().info(
         f"Search items {', '.join(item_ids)} in the collections {', '.join(collections)} from the rs-catalog.",
     )
     size = len(item_ids)
@@ -101,7 +102,7 @@ async def published_stac_item(flow_env: FlowEnv, item: Item, collection_name: st
     """ "
     Push a STAC item into the rs-catalog.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"The STAC item 🧊 '{item.id}' will be published on the collection '{collection_name}'.")
     items_metadata: list[DprProcessedItemMetadata] = []
     publish_mapping: list[FlowGeneratedProduct] = []

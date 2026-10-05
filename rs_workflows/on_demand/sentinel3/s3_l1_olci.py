@@ -18,7 +18,7 @@
 
 from typing import Any
 
-from prefect import flow, get_run_logger, runtime, task
+from prefect import flow, runtime, task
 from prefect.events import emit_event
 
 from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
@@ -30,6 +30,7 @@ from rs_workflows.on_demand.sentinel3.s3_processing_utils import (
     read_s3_orchestration_settings,
 )
 from rs_workflows.utils.dpr import call_dpr_flow
+from rs_workflows.utils.prefect import get_logger
 
 OLCI_L0_PRODUCT_TYPE = "S03OLCL0_"
 NAV_L0_PRODUCT_TYPE = "S03NATL0_"
@@ -64,12 +65,12 @@ async def process_s3l1_olci(
             orchestration_settings.s3_l0_output_collection,
         )
         flow_parameters.input_products = [FlowInputProduct.model_validate(product) for product in prepared_inputs]
-        get_run_logger().info(
+        get_logger().info(
             "Built %d S3 L1 input product(s) from %d raw L0 product(s) received from Automation",
             len(flow_parameters.input_products),
             len(l0_products),
         )
-    get_run_logger().info(f"Flow params: {flow_parameters}")
+    get_logger().info(f"Flow params: {flow_parameters}")
     # Call DPR flow
     products = await call_dpr_flow(
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),
@@ -110,7 +111,7 @@ async def process_s3l1_olci(
         if product.get("properties", {}).get("product:type") == "S03OLCEFR"
     ]
     if not input_products:
-        get_run_logger().warning("No published S03OLCEFR products; skipping the S3 L1 products-ready event")
+        get_logger().warning("No published S03OLCEFR products; skipping the S3 L1 products-ready event")
         return products
 
     event_name = products_ready_event_name(mission="3", level="1")
@@ -129,13 +130,13 @@ async def process_s3l1_olci(
         payload={"flow_run_id": flow_run_id, "input_products": input_products},
     )
     if emitted_event is None:
-        get_run_logger().warning(
+        get_logger().warning(
             "Products-ready event was not emitted: event=%s, flow_run_id=%s",
             event_name,
             flow_run_id,
         )
     else:
-        get_run_logger().info(
+        get_logger().info(
             "Emitted event=%s, event_id=%s, product_count=%d",
             event_name,
             emitted_event.id,

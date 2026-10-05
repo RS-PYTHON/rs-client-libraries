@@ -317,7 +317,7 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
     - Returns the STAC items and the list of product types
     """
     env = mocker.Mock()
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
 
     s3_path, expected_items = mocked_processor_output
 
@@ -351,7 +351,7 @@ def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
     cannot be read (e.g., read_zattrs_sync returns None).
     """
     env = mocker.Mock()
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
 
     # Mock extract_products_and_zattrs to return one product
     mocker.patch(
@@ -401,7 +401,7 @@ def test_update_eopf_assets_skips_non_final_products(mocker):
     payload.io.output_products = [mock_prod_final]  # Only final products
 
     # Mock s3_list and extract to return something for the final product
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mock_s3_list = mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://out/final/prod/.zattrs"])
 
     mocker.patch(
@@ -469,7 +469,7 @@ async def test_run_processor_filters_non_final_products(
 
     # Mock Prefect logger
     mock_logger = mocker.Mock()
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mock_logger)
 
     # Spy DPR client
     spy_run_process = mocker.spy(dpr_client.DprClient, "run_process")
@@ -547,7 +547,7 @@ async def test_run_processor_raises_on_missing_io_config(mocker):
     payload.io = None
 
     # Mock Prefect logger
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger")
+    mocker.patch("rs_workflows.dpr_flow.get_logger")
 
     # Mock FlowEnv
     mock_flow_env = mocker.Mock()
@@ -599,7 +599,7 @@ def test_compute_eopf_origin_datetime_single_item(mocker):
     mock_future = mocker.Mock()
     mock_future.result.return_value = mock_item
 
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch(
         "rs_workflows.dpr_flow.catalog_flow.get_item.submit",
         return_value=mock_future,
@@ -636,7 +636,7 @@ def test_compute_eopf_origin_datetime_multiple_items_returns_max(mocker):
     future_2 = mocker.Mock()
     future_2.result.return_value = item_2
 
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch(
         "rs_workflows.dpr_flow.catalog_flow.get_item.submit",
         side_effect=[future_1, future_2],
@@ -652,7 +652,7 @@ def test_compute_eopf_origin_datetime_raises_on_missing_item(mocker):
     input item cannot be found in the catalog.
     """
     env = mocker.Mock()
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
 
     # Mock catalog_flow.get_item.submit to return a future whose result() is None
     mock_future = mocker.Mock()
@@ -674,7 +674,7 @@ def test_compute_eopf_origin_datetime_raises_on_empty_input(mocker):
     input_products is empty.
     """
     env = mocker.Mock()
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
 
     with pytest.raises(RuntimeError, match="No valid input products found to compute eopf:origin_datetime"):
         compute_eopf_origin_datetime(env, [])
@@ -691,7 +691,7 @@ def test_compute_eopf_origin_datetime_raises_on_catalog_error(mocker):
     input_products = [FlowInputProduct(name="input", item_id="CADU_FAIL", collection_name="COLLECTION_FAIL")]
 
     mocker.patch(
-        "rs_workflows.dpr_flow.get_run_logger",
+        "rs_workflows.dpr_flow.get_logger",
         return_value=mocker.Mock(),
     )
 
@@ -726,7 +726,7 @@ def test_no_eopf_origin_datetime(mocker):
     mock_future = mocker.Mock()
     mock_future.result.return_value = mock_item
 
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch(
         "rs_workflows.dpr_flow.catalog_flow.get_item.submit",
         return_value=mock_future,

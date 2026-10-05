@@ -24,13 +24,13 @@ from enum import Enum
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanContext
 from opentelemetry.util._decorator import _agnosticcontextmanager
-from prefect import get_run_logger
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pystac import Item
 
 from rs_client.ogcapi.dpr_client import DprPipeline, DprProcessor
 from rs_client.rs_client import RsClient
 from rs_common import init_opentelemetry, prefect_utils
+from rs_workflows.utils.prefect import get_logger
 
 ARCHIVE_SUFFIXES = (".zip", ".tar", ".tgz", ".tar.gz")
 DEFAULT_ROOT_LOGGING_LEVEL = os.getenv("PREFECT_LOGGING_ROOT_LEVEL", "INFO")
@@ -201,7 +201,7 @@ class FlowEnv:
         logging.getLogger("prefect.flow_runs").setLevel(self.logging_level)
         logging.getLogger("prefect.task_runs").setLevel(self.logging_level)
 
-        logger = get_run_logger()
+        logger = get_logger()
         logger.info("Initializing FlowEnv with args: %r", args)
 
         # Deserialize the calling span, if any
@@ -219,7 +219,7 @@ class FlowEnv:
             rs_server_href=os.getenv("RSPY_WEBSITE"),
             rs_server_api_key=os.getenv("RSPY_APIKEY"),
             owner_id=self.owner_id,
-            logger=get_run_logger(),  # type: ignore
+            logger=get_logger(),  # type: ignore
         )
 
     def serialize(self) -> FlowEnvArgs:

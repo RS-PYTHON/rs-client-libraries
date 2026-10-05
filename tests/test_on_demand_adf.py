@@ -28,7 +28,7 @@ AUX_MAPPING = [AuxiliaryProductMapping(product_type="AX", collection_name="AUX")
 
 
 def _logger(mocker):
-    mocker.patch.object(cas, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(cas, "get_logger", return_value=MagicMock())
 
 
 def test_config_package_exposes_version():
