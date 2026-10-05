@@ -1017,29 +1017,78 @@ def test_run_adf_script_stb_convert_products(monkeypatch, mocker, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "adf_type, expected_aux_type, expected_generated_type",
+    "adf_type, expected_aux_types, expected_generated_type",
     [
-        (AdfType.S03_ADF_OLCAL, "OL_1_CAL_AX", "ADF_OLCAL"),
-        (AdfType.S03_ADF_OLEOP, "OL_1_EO__AX", "ADF_OLEOP"),
-        (AdfType.S03_ADF_OLINS, "OL_1_INS_AX", "ADF_OLINS"),
-        (AdfType.S03_ADF_OLLUT, "OL_1_CLUTAX", "ADF_OLLUT"),
-        (AdfType.S03_ADF_OLPRG, "OL_1_PRG_AX", "ADF_OLPRG"),
-        (AdfType.S03_ADF_OLRAC, "OL_1_RAC_AX", "ADF_OLRAC"),
-        (AdfType.S03_ADF_OLSPC, "OL_1_SPC_AX", "ADF_OLSPC"),
+        (AdfType.S03_ADF_OLCAL, ["OL_1_CAL_AX"], "ADF_OLCAL"),
+        (AdfType.S03_ADF_OLEOP, ["OL_1_EO__AX"], "ADF_OLEOP"),
+        (AdfType.S03_ADF_OLINS, ["OL_1_INS_AX"], "ADF_OLINS"),
+        (AdfType.S03_ADF_OLLUT, ["OL_1_CLUTAX"], "ADF_OLLUT"),
+        (AdfType.S03_ADF_OLPRG, ["OL_1_PRG_AX"], "ADF_OLPRG"),
+        (AdfType.S03_ADF_OLRAC, ["OL_1_RAC_AX"], "ADF_OLRAC"),
+        (AdfType.S03_ADF_OLSPC, ["OL_1_SPC_AX"], "ADF_OLSPC"),
+        (AdfType.S03_ADF_SL1PP, ["SL_1_PCP_AX"], "ADF_SL1PP"),
+        (AdfType.S03_ADF_SLADJ, ["SL_1_ADJ_AX"], "ADF_SLADJ"),
+        (AdfType.S03_ADF_SLANC, ["SL_1_ANC_AX"], "ADF_SLANC"),
+        (AdfType.S03_ADF_SLCDP, ["SL_1_CDP_AX"], "ADF_SLCDP"),
+        (AdfType.S03_ADF_SLCLO, ["SL_1_CLO_AX"], "ADF_SLCLO"),
+        (AdfType.S03_ADF_SLCLP, ["SL_1_CLP_AX"], "ADF_SLCLP"),
+        (AdfType.S03_ADF_SLGEC, ["SL_1_GEC_AX"], "ADF_SLGEC"),
+        (AdfType.S03_ADF_SLGEO, ["SL_1_GEO_AX"], "ADF_SLGEO"),
+        (AdfType.S03_ADF_SLVIC, ["SL_1_VIC_AX"], "ADF_SLVIC"),
+        (
+            AdfType.S03_ADF_TIRCD,
+            [
+                "SL_1_N_F1AX",
+                "SL_1_N_F2AX",
+                "SL_1_N_S7AX",
+                "SL_1_N_S8AX",
+                "SL_1_N_S9AX",
+                "SL_1_O_F1AX",
+                "SL_1_O_F2AX",
+                "SL_1_O_S7AX",
+                "SL_1_O_S8AX",
+                "SL_1_O_S9AX",
+            ],
+            "ADF_TIRCD",
+        ),
+        (
+            AdfType.S03_ADF_VSWCD,
+            [
+                "SL_1_NAS4AX",
+                "SL_1_NAS5AX",
+                "SL_1_NAS6AX",
+                "SL_1_NBS4AX",
+                "SL_1_NBS5AX",
+                "SL_1_NBS6AX",
+                "SL_1_N_S1AX",
+                "SL_1_N_S2AX",
+                "SL_1_N_S3AX",
+                "SL_1_OAS4AX",
+                "SL_1_OAS5AX",
+                "SL_1_OAS6AX",
+                "SL_1_OBS4AX",
+                "SL_1_OBS5AX",
+                "SL_1_OBS6AX",
+                "SL_1_O_S1AX",
+                "SL_1_O_S2AX",
+                "SL_1_O_S3AX",
+            ],
+            "ADF_VSWCD",
+        ),
     ],
 )
 @pytest.mark.asyncio
-async def test_adf_conversion_flow_logic_for_s03_ol(
+async def test_adf_conversion_flow_logic_for_s03_stb(
     monkeypatch,
     mocker,
     tmp_path,
     _mock_os_env,
     create_stac_item_mock,
     adf_type,
-    expected_aux_type,
+    expected_aux_types,
     expected_generated_type,
 ):  # pylint: disable=redefined-outer-name,unused-argument
-    """Test that S03_ADF_OL* types stage the correct auxiliary file and use stb_convert_products."""
+    """Test that S03_ADF_OL*/SL* types stage the correct auxiliary files and use stb_convert_products."""
     mock_logger = MagicMock()
     mocker.patch("rs_workflows.adf_flow.get_run_logger", return_value=mock_logger)
 
@@ -1047,8 +1096,11 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
         env=FlowEnvArgs(owner_id="test-user"),
         adf_type=adf_type,
         auxiliary_product_to_collection_identifier=[
-            AuxiliaryProductMapping(product_type=expected_aux_type, collection_name="AUX_OL_INPUT"),
-            AuxiliaryProductMapping(product_type=expected_generated_type, collection_name="ADF_OL_PUBLISH"),
+            *(
+                AuxiliaryProductMapping(product_type=aux_type, collection_name="AUX_S03_INPUT")
+                for aux_type in expected_aux_types
+            ),
+            AuxiliaryProductMapping(product_type=expected_generated_type, collection_name="ADF_S03_PUBLISH"),
             AuxiliaryProductMapping(product_type="*", collection_name="AUX"),
         ],
         start_datetime=datetime(2021, 10, 27, 0, 0, 0, tzinfo=timezone.utc),
@@ -1067,7 +1119,7 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
     monkeypatch.setattr(adf_flow, "s3_upload_dir", upload_mock)
     monkeypatch.setattr(adf_flow.shutil, "rmtree", MagicMock())
 
-    zarr_path = tmp_path / "mock-ol.zarr"
+    zarr_path = tmp_path / "mock-s03.zarr"
     zarr_path.mkdir()
     (zarr_path / ".zattrs").write_text(
         json.dumps(
@@ -1103,15 +1155,15 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
 
     await adf_flow.adf_conversion.fn(adf_input)
 
-    # Verify the correct auxiliary type was staged
-    assert staging_mock.call_count == 1
+    # Verify the correct auxiliary types were staged
+    assert staging_mock.call_count == len(expected_aux_types)
     staged_product_types = [
         call.kwargs["cql2_filter"]["filter"]["args"][1]["args"][1] for call in staging_mock.call_args_list
     ]
-    assert staged_product_types == [expected_aux_type]
+    assert staged_product_types == expected_aux_types
     assert [call.kwargs["catalog_collection_identifier"] for call in staging_mock.call_args_list] == [
-        "AUX_OL_INPUT",
-    ]
+        "AUX_S03_INPUT",
+    ] * len(expected_aux_types)
     extract_mock.assert_awaited_once()
 
     # Verify stb_convert_products was used (script_path == STB_CONVERT_PRODUCTS)
@@ -1124,7 +1176,7 @@ async def test_adf_conversion_flow_logic_for_s03_ol(
     publish_mapping_arg = publish_mock.call_args[0][1]
     assert published_metadata[0].product_type == expected_generated_type
     assert published_metadata[0].stac_item.properties["product:type"] == expected_generated_type
-    assert publish_mapping_arg[0].collection_name == "ADF_OL_PUBLISH"
+    assert publish_mapping_arg[0].collection_name == "ADF_S03_PUBLISH"
 
 
 @pytest.mark.asyncio

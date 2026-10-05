@@ -65,21 +65,70 @@ class AdfConversionConfig(NamedTuple):
     script_path: Path | str
 
 
-class S03OlAdfConfig(NamedTuple):
-    """Configuration specific to one S03 OL ADF type."""
+class S03StbAdfConfig(NamedTuple):
+    """Configuration specific to one S03 ADF type converted with stb_convert_products."""
 
-    required_type: str
+    required_types: list[str]
     generated_prod_type: str
 
 
-S03_OL_ADF_TYPE_CONFIG: dict[str, S03OlAdfConfig] = {
-    AdfType.S03_ADF_OLCAL: S03OlAdfConfig(required_type="OL_1_CAL_AX", generated_prod_type="ADF_OLCAL"),
-    AdfType.S03_ADF_OLEOP: S03OlAdfConfig(required_type="OL_1_EO__AX", generated_prod_type="ADF_OLEOP"),
-    AdfType.S03_ADF_OLINS: S03OlAdfConfig(required_type="OL_1_INS_AX", generated_prod_type="ADF_OLINS"),
-    AdfType.S03_ADF_OLLUT: S03OlAdfConfig(required_type="OL_1_CLUTAX", generated_prod_type="ADF_OLLUT"),
-    AdfType.S03_ADF_OLPRG: S03OlAdfConfig(required_type="OL_1_PRG_AX", generated_prod_type="ADF_OLPRG"),
-    AdfType.S03_ADF_OLRAC: S03OlAdfConfig(required_type="OL_1_RAC_AX", generated_prod_type="ADF_OLRAC"),
-    AdfType.S03_ADF_OLSPC: S03OlAdfConfig(required_type="OL_1_SPC_AX", generated_prod_type="ADF_OLSPC"),
+S03_STB_ADF_TYPE_CONFIG: dict[str, S03StbAdfConfig] = {
+    # OLCI L1
+    AdfType.S03_ADF_OLCAL: S03StbAdfConfig(required_types=["OL_1_CAL_AX"], generated_prod_type="ADF_OLCAL"),
+    AdfType.S03_ADF_OLEOP: S03StbAdfConfig(required_types=["OL_1_EO__AX"], generated_prod_type="ADF_OLEOP"),
+    AdfType.S03_ADF_OLINS: S03StbAdfConfig(required_types=["OL_1_INS_AX"], generated_prod_type="ADF_OLINS"),
+    AdfType.S03_ADF_OLLUT: S03StbAdfConfig(required_types=["OL_1_CLUTAX"], generated_prod_type="ADF_OLLUT"),
+    AdfType.S03_ADF_OLPRG: S03StbAdfConfig(required_types=["OL_1_PRG_AX"], generated_prod_type="ADF_OLPRG"),
+    AdfType.S03_ADF_OLRAC: S03StbAdfConfig(required_types=["OL_1_RAC_AX"], generated_prod_type="ADF_OLRAC"),
+    AdfType.S03_ADF_OLSPC: S03StbAdfConfig(required_types=["OL_1_SPC_AX"], generated_prod_type="ADF_OLSPC"),
+    # SLSTR L1. ADF_SLVSC (SL_1_VSC_AX) is not supported on purpose: this aux file is not available at ADGS.
+    AdfType.S03_ADF_SL1PP: S03StbAdfConfig(required_types=["SL_1_PCP_AX"], generated_prod_type="ADF_SL1PP"),
+    AdfType.S03_ADF_SLADJ: S03StbAdfConfig(required_types=["SL_1_ADJ_AX"], generated_prod_type="ADF_SLADJ"),
+    AdfType.S03_ADF_SLANC: S03StbAdfConfig(required_types=["SL_1_ANC_AX"], generated_prod_type="ADF_SLANC"),
+    AdfType.S03_ADF_SLCDP: S03StbAdfConfig(required_types=["SL_1_CDP_AX"], generated_prod_type="ADF_SLCDP"),
+    AdfType.S03_ADF_SLCLO: S03StbAdfConfig(required_types=["SL_1_CLO_AX"], generated_prod_type="ADF_SLCLO"),
+    AdfType.S03_ADF_SLCLP: S03StbAdfConfig(required_types=["SL_1_CLP_AX"], generated_prod_type="ADF_SLCLP"),
+    AdfType.S03_ADF_SLGEC: S03StbAdfConfig(required_types=["SL_1_GEC_AX"], generated_prod_type="ADF_SLGEC"),
+    AdfType.S03_ADF_SLGEO: S03StbAdfConfig(required_types=["SL_1_GEO_AX"], generated_prod_type="ADF_SLGEO"),
+    AdfType.S03_ADF_SLVIC: S03StbAdfConfig(required_types=["SL_1_VIC_AX"], generated_prod_type="ADF_SLVIC"),
+    AdfType.S03_ADF_TIRCD: S03StbAdfConfig(
+        required_types=[
+            "SL_1_N_F1AX",
+            "SL_1_N_F2AX",
+            "SL_1_N_S7AX",
+            "SL_1_N_S8AX",
+            "SL_1_N_S9AX",
+            "SL_1_O_F1AX",
+            "SL_1_O_F2AX",
+            "SL_1_O_S7AX",
+            "SL_1_O_S8AX",
+            "SL_1_O_S9AX",
+        ],
+        generated_prod_type="ADF_TIRCD",
+    ),
+    AdfType.S03_ADF_VSWCD: S03StbAdfConfig(
+        required_types=[
+            "SL_1_NAS4AX",
+            "SL_1_NAS5AX",
+            "SL_1_NAS6AX",
+            "SL_1_NBS4AX",
+            "SL_1_NBS5AX",
+            "SL_1_NBS6AX",
+            "SL_1_N_S1AX",
+            "SL_1_N_S2AX",
+            "SL_1_N_S3AX",
+            "SL_1_OAS4AX",
+            "SL_1_OAS5AX",
+            "SL_1_OAS6AX",
+            "SL_1_OBS4AX",
+            "SL_1_OBS5AX",
+            "SL_1_OBS6AX",
+            "SL_1_O_S1AX",
+            "SL_1_O_S2AX",
+            "SL_1_O_S3AX",
+        ],
+        generated_prod_type="ADF_VSWCD",
+    ),
 }
 
 
@@ -117,11 +166,11 @@ ADF_TYPE_CONFIG: dict[str, AdfConversionConfig] = {
     ),
     **{
         adf_type: AdfConversionConfig(
-            required_types=[s03_config.required_type],
+            required_types=s03_config.required_types,
             generated_prod_type=s03_config.generated_prod_type,
             script_path=STB_CONVERT_PRODUCTS,
         )
-        for adf_type, s03_config in S03_OL_ADF_TYPE_CONFIG.items()
+        for adf_type, s03_config in S03_STB_ADF_TYPE_CONFIG.items()
     },
 }
 
