@@ -433,6 +433,24 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     return item
 
 
+async def upload_adf_product(product_path: Path, stac_item: Item, s3_dir: str):
+    """
+    Upload a generated ADF product (ZARR directory or JSON file) under the given S3 directory,
+    and update the href of the STAC item 'data' asset.
+    """
+    logger = get_logger()
+    if product_path.suffix == ".json":
+        s3_dest = f"{s3_dir}/{product_path.name}"
+        logger.info(f"Uploading JSON to {s3_dest}")
+        await s3_upload_file(product_path, s3_dest)
+    else:
+        zarr_suffix = ".zarr" if product_path.suffix == ".zarr" else ""
+        s3_dest = f"{s3_dir}/{stac_item.id}{zarr_suffix}/"
+        logger.info(f"Uploading ZARR to {s3_dest}")
+        await s3_upload_dir(product_path, s3_dest)
+    stac_item.assets["data"].href = s3_dest
+
+
 class SafeDict(dict):
     """Dict subclass that returns {key} if key is missing or its value is None."""
 
@@ -602,17 +620,11 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 )
 
                 # 7. Upload product to S3 and update STAC item href
-                if zarr_product_path.suffix == ".json":
-                    s3_dest = f"s3://{bucket_name}/{owner_id}/{target_collection}/{zarr_product_path.name}"
-                    logger.info(f"Uploading JSON to {s3_dest}")
-                    await s3_upload_file(zarr_product_path, s3_dest)
-                    stac_item.assets["data"].href = s3_dest
-                else:
-                    zarr_suffix = ".zarr" if zarr_product_path.suffix == ".zarr" else ""
-                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}{zarr_suffix}/"
-                    logger.info(f"Uploading ZARR to {s3_dest_prefix}")
-                    await s3_upload_dir(zarr_product_path, s3_dest_prefix)
-                    stac_item.assets["data"].href = s3_dest_prefix
+                await upload_adf_product(
+                    zarr_product_path,
+                    stac_item,
+                    f"s3://{bucket_name}/{owner_id}/{target_collection}",
+                )
 
                 items_metadata.append(
                     DprProcessedItemMetadata(

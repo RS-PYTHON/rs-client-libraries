@@ -730,6 +730,46 @@ def generate_payload(  # pylint: disable=unused-argument
     logger.info("Loading bucket configuration from rs-osam endpoint")
     bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
 
+    return build_payload(
+        flow_env,
+        unit_list,
+        adfs,
+        dpr_process_in,
+        storage_configuration,
+        bucket_configuration,
+        external_modules=external_modules,
+    )
+
+
+def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
+    flow_env: FlowEnv,
+    unit_list: list[dict],
+    adfs: list[tuple[str, str, str]],
+    dpr_process_in: DprProcessIn,
+    storage_configuration: StorageConfig,
+    bucket_configuration: list[list[str]],
+    external_modules: list[dict[str, str]] | None = None,
+) -> PayloadSchema:
+    """
+    Builds the payload schema from already loaded storage and bucket configurations.
+
+    This function does not depend on a Prefect run context, so it can be called outside
+    of Prefect (see scripts/generate_payload_standalone.py).
+
+    Args:
+        flow_env (FlowEnv): any object providing the 'owner_id' and 'rs_client' attributes
+            (the rs_client is only used to retrieve the input products STAC items from the catalog).
+        unit_list (list[dict]): List of workflow unit definitions.
+        adfs (list[tuple[str, str, str]]): List of (adfs name, adfs type, storage path) tuples.
+        dpr_process_in (DprProcessIn): DPR input process definition.
+        storage_configuration (StorageConfig): Storage configuration.
+        bucket_configuration (list[list[str]]): Output bucket configuration rows.
+        external_modules: Optional list of external modules.
+
+    Returns:
+        PayloadSchema: the generated payload.
+    """
+    logger = get_logger()
     logger.info("Building workflow and I/O sections")
     workflow_steps = []
     io_config = IOConfig()
