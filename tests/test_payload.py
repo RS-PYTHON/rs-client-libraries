@@ -60,7 +60,7 @@ logger = Logging.default(__name__)
             "ax___fro_ax",
             "ax___osf_ax",
             "s01-cadip-session",
-            # test case 2
+            # test case 2 and 3
             "oper_mpl_orbsct",
             "S1A-aux-GIP_TILPAR",
             "S1A-aux-None_ETA__AX",
@@ -81,7 +81,7 @@ logger = Logging.default(__name__)
                     "ax___fro_ax",
                     "ax___osf_ax",
                     "s01-cadip-session",
-                    # test case 2
+                    # test case 2 and 3
                     "oper_mpl_orbsct",
                     "S1A-aux-GIP_TILPAR",
                     "S1A-aux-None_ETA__AX",
@@ -104,8 +104,9 @@ logger = Logging.default(__name__)
     [
         ["parameter-call-test1.json", "tasktable-test1.json", "case1"],
         ["parameter-call-test2.json", "tasktable-test2.json", "case2"],
+        ["parameter-call-test2.json", "tasktable-test3.json", "case3"],
     ],
-    ids=["case1", "case2"],
+    ids=["case1", "case2", "case3"],
 )
 async def test_whole_payload(
     request,

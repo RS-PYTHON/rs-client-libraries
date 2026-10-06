@@ -144,12 +144,13 @@ def _extract_io_origin_from_pipeline(
                 f"'{unit_name}' in pipeline. Available steps are: {pipeline_full.get('steps', [])}.",
             )
 
-        # Check that the referenced product exists in the outputs of the unit we found
-        if origin_product_name not in origin_unit.get("output_products", {}):
-            raise TaskTableError(
-                f"Unit '{unit_name}' needs product '{origin_product_name}' from unit '{origin_unit_name}' "
-                f"but available outputs are: {origin_unit.get("output_products", {})}.",
-            )
+        # NOTE: we don't check that the referenced product exists in the outputs of the unit we found.
+        # A product exists in the outputs only if we want to write it on disk or s3.
+        # if origin_product_name not in origin_unit.get("output_products", {}):
+        #     raise TaskTableError(
+        #         f"Unit '{unit_name}' needs product '{origin_product_name}' from unit '{origin_unit_name}' "
+        #         f"but available outputs are: {origin_unit.get("output_products", {})}.",
+        #     )
 
         product_origin = f"{origin_unit_name}.{origin_step_id}.{origin_product_name}"
 
