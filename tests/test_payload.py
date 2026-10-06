@@ -17,7 +17,6 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock
 from uuid import UUID
 
 import pytest
@@ -120,7 +119,7 @@ async def test_whole_payload(
     mocked_staging_response,  # /processes/staging/execution, /jobs/{job_id}
     storage_configuration,
     _mock_os_env,
-):
+):  # pylint: disable=unused-argument
     """Test whole payload generation"""
 
     # Mocks
@@ -177,10 +176,10 @@ async def test_whole_payload(
             pass
 
     # Write result
-    with open(CONFIG_DIR / f"generated-payload-{payload_filename}.yml", "w") as opened:
+    with open(CONFIG_DIR / f"generated-payload-{payload_filename}.yml", "w", encoding="utf-8") as opened:
         opened.write(yaml.dump(payload_dict, default_flow_style=False, sort_keys=False))
 
     # Compare with reference
-    with open(CONFIG_DIR / f"reference-payload-{payload_filename}.yml") as opened:
+    with open(CONFIG_DIR / f"reference-payload-{payload_filename}.yml", encoding="utf-8") as opened:
         reference = yaml.safe_load(opened)
     assert payload_dict == reference

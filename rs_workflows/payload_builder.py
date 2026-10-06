@@ -226,7 +226,7 @@ def _build_entry(
 def _build_single_unit_details(
     unit_name: str,
     units_index: dict[str, dict[str, Any]],
-    io_index: dict[str : dict[str, dict[str, Any]]],
+    io_index: dict[str, dict[str, dict[str, Any]]],
     processing_modes: Iterable[str] | None,
     external_variables: dict[str, Any] | None,
     full_pipeline: dict[str, Any] | None = None,
@@ -381,7 +381,7 @@ def build_unit_list(
         raise TaskTableError('No valid unit entries found in "units".')
 
     # Retrieve details of inputs/adfs/outputs from "io" field
-    io_index: dict[str : dict[str, dict[str, Any]]] = {}
+    io_index: dict[str, dict[str, dict[str, Any]]] = {}
     for io_type, io_values in tasktable["io"].items():
         io_index[io_type] = {}
         for io in io_values:

@@ -792,8 +792,8 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     io_config.adfs = build_adfs(storage_configuration, adfs, dpr_process_in)
 
     # Sort lists by ids
-    for type in "input_products", "output_products", "adfs":
-        getattr(io_config, type).sort(key=lambda product: product.id)
+    for _type in "input_products", "output_products", "adfs":
+        getattr(io_config, _type).sort(key=lambda product: product.id)
 
     # Add the logging config for l0 and s1 / s3 configurations. These configurations
     # are hardcoded in the l0 eopf dask worker image. The path where these files are stored is given

@@ -383,7 +383,8 @@ def resolve_specific_input_product_stac_items(
         referenced_input_product_name = next(iter(referenced_input_product_names))
         logger.info(f"ADFS multiplicity 'one_per_input' refers to input '{referenced_input_product_name}'")
         input_product_io: dict[str, Any] = search_by_name(
-            task_table["io"].get("input", {}), referenced_input_product_name
+            task_table["io"].get("input", {}),
+            referenced_input_product_name,
         )
         input_product_regex: str = input_product_io.get("reader_params", {}).get("regex", None)
         if not input_product_regex:
@@ -458,7 +459,11 @@ async def dpr_processing(
 
         # Build and generate the payload file
         payload_task, source_items = await build_and_generate_payload(
-            logger, flow_env, task_table, dpr_input, retry_config
+            logger,
+            flow_env,
+            task_table,
+            dpr_input,
+            retry_config,
         )
         generated_payload_res = payload_task.result()
 

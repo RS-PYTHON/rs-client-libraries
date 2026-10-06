@@ -88,6 +88,7 @@ MOCKED_RSPY_WEBSITE = "https://mocked_rspy_website"
 
 
 def collection_response(collection_id=COLLECTION_ID):
+    """Mock an http response that returns a collection"""
     return {
         "id": collection_id,
         "type": "Collection",
@@ -477,7 +478,8 @@ def mocked_stac_catalog_get_collection(request):
             status=status.HTTP_200_OK,
         )
         responses.get(
-            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}/items?collections={collection_id}",
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}"
+            f"/items?collections={collection_id}",
             json=collection_id_response,
             status=status.HTTP_200_OK,
         )

@@ -12,7 +12,10 @@
         "end_datetime"
     ],
     "external_modules": [
-        "testmodule.submodule.testclass"
+        {
+            "name": "testmodule.submodule.testclass",
+            "star_import": true
+        }
     ],
     "units": [
         {
