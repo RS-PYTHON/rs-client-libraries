@@ -20,7 +20,7 @@ from typing import Any, cast
 from urllib.parse import urlparse
 
 import fsspec
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from pystac import Item, ItemCollection, Link
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient
@@ -41,6 +41,7 @@ from rs_workflows.payload_generator import (
 )
 from rs_workflows.product_type_mapping import find_product_type
 from rs_workflows.staging_flow import staging_task
+from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import (
     asset_unzip_decompress_task,
     get_archived_item_indexes,
@@ -129,7 +130,7 @@ async def safe_conversion_task(
     cluster_info: ClusterInfo,
 ) -> dict[str, Any]:
     """Submit and monitor the SAFE-to-Zarr DPR conversion job."""
-    logger = get_run_logger()
+    logger = get_logger()
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "safe-conversion"):
         # Use the DPR service client to submit and monitor the SAFE-to-Zarr conversion job.
@@ -149,7 +150,7 @@ async def cleanup_staged_safe_item_task(
     item_id: str,
 ) -> None:
     """Remove the staged SAFE item from the catalog after conversion."""
-    logger = get_run_logger()
+    logger = get_logger()
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "cleanup-staged-safe-item"):
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
@@ -176,7 +177,7 @@ async def on_demand_conversion(
             collection mapping and optional selected assets).
         retry_config: Retry policy applied to the staging task.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"Starting on-demand conversion flow with input: {conversion_input}")
     flow_env = FlowEnv(conversion_input.env)
     staging_collection = conversion_input.generated_product_to_collection_identifier.collection_name

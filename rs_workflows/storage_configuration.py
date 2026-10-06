@@ -51,13 +51,21 @@ class StorageConfig:  # pylint: disable=too-many-instance-attributes
     A class to load and query the storage configuration info.
     """
 
-    def __init__(self, secrets: dict, logger=None):
-
-        # Read data from the prefect variable
-        var_name = "processing-storage-configuration"
-        self.data = Variable.get(var_name)
-        if self.data is None:
-            raise RuntimeError(f"Prefect variable {var_name!r} is missing")
+    def __init__(self, secrets: dict, logger=None, data: dict | None = None):
+        """
+        Args:
+            secrets: values of the ${VAR} placeholders used by the obs storage options
+            logger: optional logger
+            data: storage configuration content. If not provided, it is read from the prefect variable.
+        """
+        if data is not None:
+            self.data = data
+        else:
+            # Read data from the prefect variable
+            var_name = "processing-storage-configuration"
+            self.data = Variable.get(var_name)
+            if self.data is None:
+                raise RuntimeError(f"Prefect variable {var_name!r} is missing")
 
         # Validate contents against json schema
         with open(SCHEMA, encoding="utf-8") as opened:

@@ -23,7 +23,7 @@ from urllib.parse import urlparse, urlunparse
 from uuid import uuid4
 
 import requests
-from prefect import get_run_logger, task
+from prefect import task
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
 from pystac import Item
@@ -46,6 +46,7 @@ from rs_workflows.payload_template import (
     WorkflowStep,
 )
 from rs_workflows.storage_configuration import StorageConfig
+from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import get_common_and_relative_paths, search_by_name
 
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
@@ -240,7 +241,7 @@ def find_s3_output_bucket(
     """
     fallback_bucket = None
     fallback_bucket_owner_only = None
-    logger = get_run_logger()
+    logger = get_logger()
 
     for row in config_rows:
         # the expiration_delay (the fourth field) is not used
@@ -481,7 +482,7 @@ def build_output_products(
 
     outputs = []
     processed_products = set()
-    logger = get_run_logger()
+    logger = get_logger()
 
     mapping_lookup = {p.name: p for p in dpr_process_in.generated_product_to_collection_identifier}
 
@@ -703,7 +704,7 @@ def generate_payload(  # pylint: disable=unused-argument
     """
 
     # TODO: should be moved to dpr_client.py and it should call dpr_client.py::update_configuration
-    logger = get_run_logger()
+    logger = get_logger()
     # Init flow environment and opentelemetry span
     # flow_env = FlowEnv(dpr_process_in.env)
     # with flow_env.start_span(__name__, "generate-payload"):
@@ -719,6 +720,46 @@ def generate_payload(  # pylint: disable=unused-argument
     logger.info("Loading bucket configuration from rs-osam endpoint")
     bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
 
+    return build_payload(
+        flow_env,
+        unit_list,
+        adfs,
+        dpr_process_in,
+        storage_configuration,
+        bucket_configuration,
+        external_modules=external_modules,
+    )
+
+
+def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
+    flow_env: FlowEnv,
+    unit_list: list[dict],
+    adfs: list[tuple[str, str, str]],
+    dpr_process_in: DprProcessIn,
+    storage_configuration: StorageConfig,
+    bucket_configuration: list[list[str]],
+    external_modules: list[dict[str, str]] | None = None,
+) -> PayloadSchema:
+    """
+    Builds the payload schema from already loaded storage and bucket configurations.
+
+    This function does not depend on a Prefect run context, so it can be called outside
+    of Prefect (see scripts/generate_payload_standalone.py).
+
+    Args:
+        flow_env (FlowEnv): any object providing the 'owner_id' and 'rs_client' attributes
+            (the rs_client is only used to retrieve the input products STAC items from the catalog).
+        unit_list (list[dict]): List of workflow unit definitions.
+        adfs (list[tuple[str, str, str]]): List of (adfs name, adfs type, storage path) tuples.
+        dpr_process_in (DprProcessIn): DPR input process definition.
+        storage_configuration (StorageConfig): Storage configuration.
+        bucket_configuration (list[list[str]]): Output bucket configuration rows.
+        external_modules: Optional list of external modules.
+
+    Returns:
+        PayloadSchema: the generated payload.
+    """
+    logger = get_logger()
     logger.info("Building workflow and I/O sections")
     workflow_steps = []
     io_config = IOConfig()

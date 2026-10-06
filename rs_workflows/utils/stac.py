@@ -18,11 +18,11 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from prefect import get_run_logger
 from pystac import ItemCollection
 
 from rs_client.stac.stac_base import StacBase
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.utils.prefect import get_logger
 
 # Selects the STAC client to use and any source-specific search arguments.
 StacClientSelector = Callable[[FlowEnv], tuple[StacBase, dict[str, Any]]]
@@ -48,7 +48,7 @@ async def search(
         error_if_empty: Raise a ValueError if the results are empty.
         start_log_message: Optional search start log message.
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)

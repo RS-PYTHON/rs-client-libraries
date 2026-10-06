@@ -34,7 +34,7 @@ async def test_search_returns_found_items(monkeypatch, mocker):
     flow_env = mocker.Mock()
     flow_env.start_span.return_value = nullcontext()
     flow_env.rs_client.get_earthdatahub_client.return_value = earthdatahub_client
-    monkeypatch.setattr(earthdatahub_flow.stac, "get_run_logger", mocker.Mock(return_value=mocker.Mock()))
+    monkeypatch.setattr(earthdatahub_flow.stac, "get_logger", mocker.Mock(return_value=mocker.Mock()))
     monkeypatch.setattr(earthdatahub_flow.stac, "FlowEnv", lambda env: flow_env)
 
     result = await earthdatahub_flow.search.fn(env, {"filter": {"foo": "bar"}, "limit": 3, "sortby": []})

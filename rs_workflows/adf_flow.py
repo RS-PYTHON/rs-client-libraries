@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from dateutil.parser import parse as parse_date
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from pystac import Asset, Item
 
 from rs_common.prefect_utils import s3_upload_dir, s3_upload_file
@@ -45,6 +45,7 @@ from rs_workflows.payload_generator import (
     fetch_csv_from_endpoint,
     find_s3_output_bucket,
 )
+from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import download_and_extract_assets_task
 
 # Path to the conversion scripts
@@ -60,26 +61,77 @@ STB_CONVERT_PRODUCTS = "stb_convert_products"
 class AdfConversionConfig(NamedTuple):
     """Configuration needed to run one ADF conversion type."""
 
-    required_types: list[str]
+    # Legacy auxiliary product types to convert. For the mission-dependent ADF types,
+    # the legacy auxiliary product types per mission (e.g. 'sentinel-1').
+    required_types: list[str] | dict[str, list[str]]
     generated_prod_type: str
     script_path: Path | str
 
 
-class S03OlAdfConfig(NamedTuple):
-    """Configuration specific to one S03 OL ADF type."""
+class S03StbAdfConfig(NamedTuple):
+    """Configuration specific to one S03 ADF type converted with stb_convert_products."""
 
-    required_type: str
+    required_types: list[str]
     generated_prod_type: str
 
 
-S03_OL_ADF_TYPE_CONFIG: dict[str, S03OlAdfConfig] = {
-    AdfType.S03_ADF_OLCAL: S03OlAdfConfig(required_type="OL_1_CAL_AX", generated_prod_type="ADF_OLCAL"),
-    AdfType.S03_ADF_OLEOP: S03OlAdfConfig(required_type="OL_1_EO__AX", generated_prod_type="ADF_OLEOP"),
-    AdfType.S03_ADF_OLINS: S03OlAdfConfig(required_type="OL_1_INS_AX", generated_prod_type="ADF_OLINS"),
-    AdfType.S03_ADF_OLLUT: S03OlAdfConfig(required_type="OL_1_CLUTAX", generated_prod_type="ADF_OLLUT"),
-    AdfType.S03_ADF_OLPRG: S03OlAdfConfig(required_type="OL_1_PRG_AX", generated_prod_type="ADF_OLPRG"),
-    AdfType.S03_ADF_OLRAC: S03OlAdfConfig(required_type="OL_1_RAC_AX", generated_prod_type="ADF_OLRAC"),
-    AdfType.S03_ADF_OLSPC: S03OlAdfConfig(required_type="OL_1_SPC_AX", generated_prod_type="ADF_OLSPC"),
+S03_STB_ADF_TYPE_CONFIG: dict[str, S03StbAdfConfig] = {
+    # OLCI L1
+    AdfType.S03_ADF_OLCAL: S03StbAdfConfig(required_types=["OL_1_CAL_AX"], generated_prod_type="ADF_OLCAL"),
+    AdfType.S03_ADF_OLEOP: S03StbAdfConfig(required_types=["OL_1_EO__AX"], generated_prod_type="ADF_OLEOP"),
+    AdfType.S03_ADF_OLINS: S03StbAdfConfig(required_types=["OL_1_INS_AX"], generated_prod_type="ADF_OLINS"),
+    AdfType.S03_ADF_OLLUT: S03StbAdfConfig(required_types=["OL_1_CLUTAX"], generated_prod_type="ADF_OLLUT"),
+    AdfType.S03_ADF_OLPRG: S03StbAdfConfig(required_types=["OL_1_PRG_AX"], generated_prod_type="ADF_OLPRG"),
+    AdfType.S03_ADF_OLRAC: S03StbAdfConfig(required_types=["OL_1_RAC_AX"], generated_prod_type="ADF_OLRAC"),
+    AdfType.S03_ADF_OLSPC: S03StbAdfConfig(required_types=["OL_1_SPC_AX"], generated_prod_type="ADF_OLSPC"),
+    # SLSTR L1. ADF_SLVSC (SL_1_VSC_AX) is not supported on purpose: this aux file is not available at ADGS.
+    AdfType.S03_ADF_SL1PP: S03StbAdfConfig(required_types=["SL_1_PCP_AX"], generated_prod_type="ADF_SL1PP"),
+    AdfType.S03_ADF_SLADJ: S03StbAdfConfig(required_types=["SL_1_ADJ_AX"], generated_prod_type="ADF_SLADJ"),
+    AdfType.S03_ADF_SLANC: S03StbAdfConfig(required_types=["SL_1_ANC_AX"], generated_prod_type="ADF_SLANC"),
+    AdfType.S03_ADF_SLCDP: S03StbAdfConfig(required_types=["SL_1_CDP_AX"], generated_prod_type="ADF_SLCDP"),
+    AdfType.S03_ADF_SLCLO: S03StbAdfConfig(required_types=["SL_1_CLO_AX"], generated_prod_type="ADF_SLCLO"),
+    AdfType.S03_ADF_SLCLP: S03StbAdfConfig(required_types=["SL_1_CLP_AX"], generated_prod_type="ADF_SLCLP"),
+    AdfType.S03_ADF_SLGEC: S03StbAdfConfig(required_types=["SL_1_GEC_AX"], generated_prod_type="ADF_SLGEC"),
+    AdfType.S03_ADF_SLGEO: S03StbAdfConfig(required_types=["SL_1_GEO_AX"], generated_prod_type="ADF_SLGEO"),
+    AdfType.S03_ADF_SLVIC: S03StbAdfConfig(required_types=["SL_1_VIC_AX"], generated_prod_type="ADF_SLVIC"),
+    AdfType.S03_ADF_TIRCD: S03StbAdfConfig(
+        required_types=[
+            "SL_1_N_F1AX",
+            "SL_1_N_F2AX",
+            "SL_1_N_S7AX",
+            "SL_1_N_S8AX",
+            "SL_1_N_S9AX",
+            "SL_1_O_F1AX",
+            "SL_1_O_F2AX",
+            "SL_1_O_S7AX",
+            "SL_1_O_S8AX",
+            "SL_1_O_S9AX",
+        ],
+        generated_prod_type="ADF_TIRCD",
+    ),
+    AdfType.S03_ADF_VSWCD: S03StbAdfConfig(
+        required_types=[
+            "SL_1_NAS4AX",
+            "SL_1_NAS5AX",
+            "SL_1_NAS6AX",
+            "SL_1_NBS4AX",
+            "SL_1_NBS5AX",
+            "SL_1_NBS6AX",
+            "SL_1_N_S1AX",
+            "SL_1_N_S2AX",
+            "SL_1_N_S3AX",
+            "SL_1_OAS4AX",
+            "SL_1_OAS5AX",
+            "SL_1_OAS6AX",
+            "SL_1_OBS4AX",
+            "SL_1_OBS5AX",
+            "SL_1_OBS6AX",
+            "SL_1_O_S1AX",
+            "SL_1_O_S2AX",
+            "SL_1_O_S3AX",
+        ],
+        generated_prod_type="ADF_VSWCD",
+    ),
 }
 
 
@@ -117,13 +169,46 @@ ADF_TYPE_CONFIG: dict[str, AdfConversionConfig] = {
     ),
     **{
         adf_type: AdfConversionConfig(
-            required_types=[s03_config.required_type],
+            required_types=s03_config.required_types,
             generated_prod_type=s03_config.generated_prod_type,
             script_path=STB_CONVERT_PRODUCTS,
         )
-        for adf_type, s03_config in S03_OL_ADF_TYPE_CONFIG.items()
+        for adf_type, s03_config in S03_STB_ADF_TYPE_CONFIG.items()
     },
+    # Orbit files: the legacy auxiliary product type depends on the mission
+    AdfType.S00__ADF_FROAX: AdfConversionConfig(
+        required_types={"sentinel-1": ["MPL_ORBRES"], "sentinel-2": ["MPL_ORBRES"], "sentinel-3": ["AX___FRO_AX"]},
+        generated_prod_type="ADF_FROAX",
+        script_path=STB_CONVERT_PRODUCTS,
+    ),
+    AdfType.S00__ADF_FPOAX: AdfConversionConfig(
+        required_types={"sentinel-1": ["MPL_ORBPRE"], "sentinel-2": ["MPL_ORBPRE"], "sentinel-3": ["AX___FPO_AX"]},
+        generated_prod_type="ADF_FPOAX",
+        script_path=STB_CONVERT_PRODUCTS,
+    ),
+    AdfType.S00__ADF_OSFAX: AdfConversionConfig(
+        required_types={"sentinel-1": ["MPL_ORBSCT"], "sentinel-2": ["MPL_ORBSCT"], "sentinel-3": ["AX___OSF_AX"]},
+        generated_prod_type="ADF_OSFAX",
+        script_path=STB_CONVERT_PRODUCTS,
+    ),
 }
+
+
+def resolve_required_types(adf_config: AdfConversionConfig, satellite: str | None) -> list[str]:
+    """
+    Return the legacy auxiliary product types to convert. For the mission-dependent ADF types,
+    they depend on the mission of the satellite (e.g. 'sentinel-1' for 'sentinel-1a').
+    """
+    if isinstance(adf_config.required_types, list):
+        return adf_config.required_types
+    mission = re.sub(r"[a-z]$", "", satellite.lower()) if satellite else None
+    if mission not in adf_config.required_types:
+        raise ValueError(
+            f"A satellite of the missions {list(adf_config.required_types)} is required to generate "
+            f"{adf_config.generated_prod_type!r}, got: {satellite!r}",
+        )
+    return adf_config.required_types[mission]
+
 
 STAC_DATETIME_PROPERTY_NAMES = {
     "created",
@@ -211,7 +296,7 @@ def run_adf_script(script_path: Path | str, data_dir: Path, working_dir: Path, o
 
     Returns the list of generated ZARR product directories and JSON files.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"Running ADF conversion: {script_path}")
 
     def log_subprocess_output(output: str):
@@ -272,7 +357,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     taken from stac_discovery.id when present, otherwise it is derived
     from the filename (minus the .json extension).
     """
-    logger = get_run_logger()
+    logger = get_logger()
     is_json_product = zarr_path.suffix == ".json"
 
     if is_json_product:
@@ -383,6 +468,24 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     return item
 
 
+async def upload_adf_product(product_path: Path, stac_item: Item, s3_dir: str):
+    """
+    Upload a generated ADF product (ZARR directory or JSON file) under the given S3 directory,
+    and update the href of the STAC item 'data' asset.
+    """
+    logger = get_logger()
+    if product_path.suffix == ".json":
+        s3_dest = f"{s3_dir}/{product_path.name}"
+        logger.info(f"Uploading JSON to {s3_dest}")
+        await s3_upload_file(product_path, s3_dest)
+    else:
+        zarr_suffix = ".zarr" if product_path.suffix == ".zarr" else ""
+        s3_dest = f"{s3_dir}/{stac_item.id}{zarr_suffix}/"
+        logger.info(f"Uploading ZARR to {s3_dest}")
+        await s3_upload_dir(product_path, s3_dest)
+    stac_item.assets["data"].href = s3_dest
+
+
 class SafeDict(dict):
     """Dict subclass that returns {key} if key is missing or its value is None."""
 
@@ -412,7 +515,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
     """
     Prefect flow for ADF conversion.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"Starting adf_conversion flow for adf_type: {adf_input.adf_type}")
 
     flow_env = FlowEnv(adf_input.env)
@@ -423,7 +526,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
             logger.error(f"Unsupported adf_type: {adf_input.adf_type}")
             return
 
-        required_types = adf_config.required_types
+        required_types = resolve_required_types(adf_config, adf_input.satellite)
         generated_prod_type = adf_config.generated_prod_type
         script_path = adf_config.script_path
 
@@ -473,6 +576,11 @@ async def adf_conversion(adf_input: AdfProcessIn):
                         ],
                     },
                 }
+                if isinstance(adf_config.required_types, dict):
+                    # The legacy files of the mission-dependent ADF types are specific to each satellite
+                    cql2_filter["filter"]["args"].append(
+                        {"op": "=", "args": [{"property": "platform"}, adf_input.satellite]},
+                    )
 
             # When the source is the catalog, no staging occurs: collection_name is both the source
             # and destination collection, so the search must be restricted to it, otherwise the STAC
@@ -552,17 +660,11 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 )
 
                 # 7. Upload product to S3 and update STAC item href
-                if zarr_product_path.suffix == ".json":
-                    s3_dest = f"s3://{bucket_name}/{owner_id}/{target_collection}/{zarr_product_path.name}"
-                    logger.info(f"Uploading JSON to {s3_dest}")
-                    await s3_upload_file(zarr_product_path, s3_dest)
-                    stac_item.assets["data"].href = s3_dest
-                else:
-                    zarr_suffix = ".zarr" if zarr_product_path.suffix == ".zarr" else ""
-                    s3_dest_prefix = f"s3://{bucket_name}/{owner_id}/{target_collection}/{stac_item.id}{zarr_suffix}/"
-                    logger.info(f"Uploading ZARR to {s3_dest_prefix}")
-                    await s3_upload_dir(zarr_product_path, s3_dest_prefix)
-                    stac_item.assets["data"].href = s3_dest_prefix
+                await upload_adf_product(
+                    zarr_product_path,
+                    stac_item,
+                    f"s3://{bucket_name}/{owner_id}/{target_collection}",
+                )
 
                 items_metadata.append(
                     DprProcessedItemMetadata(

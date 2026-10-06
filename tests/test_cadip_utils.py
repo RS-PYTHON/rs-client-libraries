@@ -69,7 +69,7 @@ def _patch_get_cadip_station(
     evicted=(False, None),
     published=(True, datetime.now(timezone.utc)),
 ):
-    mocker.patch.object(cadip, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(cadip, "get_logger", return_value=MagicMock())
     item_col = MagicMock()
     item_col.__len__.return_value = item_count
     item_col.__getitem__.return_value = item
