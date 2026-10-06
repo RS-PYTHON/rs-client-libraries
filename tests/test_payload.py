@@ -18,10 +18,10 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock
+from uuid import UUID
 
 import pytest
 import pytest_responses  # pylint: disable=unused-import # noqa: F401 # used to avoid adding @responses.activate
-import responses
 import yaml
 from prefect import flow
 
@@ -100,8 +100,11 @@ logger = Logging.default(__name__)
     ids=[""],
 )
 @pytest.mark.parametrize(
-    "dpr_params_filename,tasktable_filename",
-    [["parameter-call-test1.json", "tasktable-test1.json"], ["parameter-call-test2.json", "tasktable-test2.json"]],
+    "dpr_params_filename,tasktable_filename,payload_filename",
+    [
+        ["parameter-call-test1.json", "tasktable-test1.json", "case1"],
+        ["parameter-call-test2.json", "tasktable-test2.json", "case2"],
+    ],
     ids=["case1", "case2"],
 )
 async def test_whole_payload(
@@ -109,6 +112,7 @@ async def test_whole_payload(
     mocker,
     dpr_params_filename: str,  # file that contains input parameters for executing the 'dpr-process' flow
     tasktable_filename: str,  # file that contains the tasktable
+    payload_filename: str,  # file that contains the generated payload
     mocked_rspy_landing_pages,  # /auxip, /cadip, /catalog, /...
     mocked_stac_catalog_get_collection,  # /catalog/collections[/...]
     mocked_stac_catalog_search_inside_collection,  # /auxip/search[/...], /catalog/search[/...]
@@ -159,12 +163,23 @@ async def test_whole_payload(
         )
         return payload_task.result(), source_items
 
-    payload, source_items = await from_a_flow()
+    payload, _source_items = await from_a_flow()
     payload_dict = payload.dump(reveal_secrets=True)
 
-    ########### TEMP !!!!!!!!!!!!!!!!!!!!!!!!!!
-    with open(f"/home/jgaucher/projects/rspy/working/eopf-cpm/payload-{request.node.callspec.id}.yml", "w") as opened:
-        opened.write(yaml.dump(payload_dict, default_flow_style=False, sort_keys=False))
-    raise RuntimeError("test !")
+    # Remove random uuids from output paths
+    for product in payload_dict["I/O"]["output_products"]:
+        path = product["path"]
+        try:
+            UUID(Path(path).stem)
+            product["path"] = str(Path(path).parent / "00000000-0000-0000-0000-000000000001")
+        except ValueError:  # not an uuid
+            pass
 
-    bp = 0
+    # Write result
+    with open(CONFIG_DIR / f"generated-payload-{payload_filename}.yml", "w") as opened:
+        opened.write(yaml.dump(payload_dict, default_flow_style=False, sort_keys=False))
+
+    # Compare with reference
+    with open(CONFIG_DIR / f"reference-payload-{payload_filename}.yml") as opened:
+        reference = yaml.safe_load(opened)
+    assert payload_dict == reference

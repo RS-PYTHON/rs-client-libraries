@@ -150,13 +150,16 @@ class StoreParams(BasePayloadModel):
     representation for payloads
     """
 
-    # Either a simple S3 secret alias
+    # Storage is either a simple S3 secret alias
     s3_secret_alias: str | None = None
     # Or a storage options used for s3
     storage_options: StorageOptions | None = None
     # Or a regex + multiplicity
     regex: str | None = None
     multiplicity: str | int | None = None
+
+    # Allow extra fields, copy/pasted from the tasktable
+    model_config = ConfigDict(extra="allow")
 
     @field_validator("multiplicity")
     @classmethod

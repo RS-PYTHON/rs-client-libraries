@@ -544,6 +544,14 @@ def build_output_products(
         else:
             raise RuntimeError(f"Unknown storage kind '{kind}' for output product '{product_name}'")
 
+        # Add extra writer_params fields
+        if extra_fields := mapping.get("writer_params"):
+            if not store_params:
+                store_params = StoreParams(**extra_fields)
+            else:
+                for key, value in extra_fields.items():
+                    setattr(store_params, key, value)
+
         outputs.append(
             OutputProduct(
                 id=mapping["name"],
@@ -782,6 +790,10 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
 
     logger.info("Building ADFs section")
     io_config.adfs = build_adfs(storage_configuration, adfs, dpr_process_in)
+
+    # Sort lists by ids
+    for type in "input_products", "output_products", "adfs":
+        getattr(io_config, type).sort(key=lambda product: product.id)
 
     # Add the logging config for l0 and s1 / s3 configurations. These configurations
     # are hardcoded in the l0 eopf dask worker image. The path where these files are stored is given
