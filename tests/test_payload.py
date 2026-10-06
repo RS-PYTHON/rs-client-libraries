@@ -54,13 +54,42 @@ logger = Logging.default(__name__)
 
 @pytest.mark.parametrize(
     "mocked_stac_catalog_get_collection",
-    [["ax___osf_ax", "ax___fro_ax", "s01-cadip-session"]],
+    [
+        [
+            # test case 1
+            "ax___fro_ax",
+            "ax___osf_ax",
+            "s01-cadip-session",
+            # test case 2
+            "oper_mpl_orbsct",
+            "S1A-aux-GIP_TILPAR",
+            "S1A-aux-None_ETA__AX",
+        ],
+    ],
     indirect=True,
     ids=[""],
 )
 @pytest.mark.parametrize(
     "mocked_stac_catalog_search_inside_collection",
-    [["auxip", ["catalog", ["ax___osf_ax", "ax___fro_ax"]]]],
+    [
+        [
+            "auxip",
+            [
+                "catalog",
+                [
+                    # test case 1
+                    "ax___fro_ax",
+                    "ax___osf_ax",
+                    "s01-cadip-session",
+                    # test case 2
+                    "oper_mpl_orbsct",
+                    "S1A-aux-GIP_TILPAR",
+                    "S1A-aux-None_ETA__AX",
+                ],
+            ],
+            "edh",
+        ],
+    ],
     indirect=True,
     ids=[""],
 )
@@ -76,6 +105,7 @@ logger = Logging.default(__name__)
     ids=["case1", "case2"],
 )
 async def test_whole_payload(
+    request,
     mocker,
     dpr_params_filename: str,  # file that contains input parameters for executing the 'dpr-process' flow
     tasktable_filename: str,  # file that contains the tasktable
@@ -84,6 +114,7 @@ async def test_whole_payload(
     mocked_stac_catalog_search_inside_collection,  # /auxip/search[/...], /catalog/search[/...]
     mocked_staging_response,  # /processes/staging/execution, /jobs/{job_id}
     storage_configuration,
+    _mock_os_env,
 ):
     """Test whole payload generation"""
 
@@ -131,6 +162,9 @@ async def test_whole_payload(
     payload, source_items = await from_a_flow()
     payload_dict = payload.dump(reveal_secrets=True)
 
-    print(yaml.dump(payload_dict))
+    ########### TEMP !!!!!!!!!!!!!!!!!!!!!!!!!!
+    with open(f"/home/jgaucher/projects/rspy/working/eopf-cpm/payload-{request.node.callspec.id}.yml", "w") as opened:
+        opened.write(yaml.dump(payload_dict, default_flow_style=False, sort_keys=False))
+    raise RuntimeError("test !")
 
     bp = 0

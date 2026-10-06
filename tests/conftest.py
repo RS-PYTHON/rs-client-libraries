@@ -47,6 +47,7 @@ from starlette import status
 
 from rs_client.rs_client import RsClient
 from rs_client.stac.cdse_client import CDSE_STAC_HREF
+from rs_client.stac.earthdatahub_client import EDH_STAC_HREF
 from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from rs_common.utils import env_bool
@@ -508,14 +509,23 @@ def mocked_stac_catalog_search_inside_collection(request):
             service = _service[0]
             collection_ids = _service[1]
 
+        # Special case for edh (earthdatahub)
+        if service == "edh":
+            website = "https://earthdatahub.destine.eu"
+            service = "api/stac/v1"
+
+        # General case
+        else:
+            website = MOCKED_RSPY_WEBSITE
+
         for collection_id in collection_ids:
             json_landing_page = common.json_landing_page(
-                MOCKED_RSPY_WEBSITE,
+                website,
                 f"{OWNER_ID}:{collection_id}",
                 service=service,
                 conforms_to=True,
             )
-            responses.get(url=f"{MOCKED_RSPY_WEBSITE}/{service}/", json=json_landing_page, status=status.HTTP_200_OK)
+            responses.get(url=f"{website}/{service}/", json=json_landing_page, status=status.HTTP_200_OK)
             json_response = {
                 "type": "FeatureCollection",
                 "context": {"limit": 10, "returned": 2},
@@ -528,23 +538,23 @@ def mocked_stac_catalog_search_inside_collection(request):
                             {
                                 "rel": "collection",
                                 "type": "application/json",
-                                "href": (f"{MOCKED_RSPY_WEBSITE}/{service}/collections/toto:{collection_id}"),
+                                "href": (f"{website}/{service}/collections/toto:{collection_id}"),
                             },
                             {
                                 "rel": "parent",
                                 "type": "application/json",
-                                "href": (f"{MOCKED_RSPY_WEBSITE}/{service}/collections/toto:{collection_id}"),
+                                "href": (f"{website}/{service}/collections/toto:{collection_id}"),
                             },
                             {
                                 "rel": "root",
                                 "type": "application/json",
-                                "href": f"{MOCKED_RSPY_WEBSITE}/{service}/catalogs/toto",
+                                "href": f"{website}/{service}/catalogs/toto",
                             },
                             {
                                 "rel": "self",
                                 "type": "application/geo+json",
                                 "href": (
-                                    f"{MOCKED_RSPY_WEBSITE}/{service}/collections/"
+                                    f"{website}/{service}/collections/"
                                     f"toto:{collection_id}/items/"
                                     "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw"
                                 ),
@@ -582,23 +592,23 @@ def mocked_stac_catalog_search_inside_collection(request):
                             {
                                 "rel": "collection",
                                 "type": "application/json",
-                                "href": (f"{MOCKED_RSPY_WEBSITE}/{service}/collections/toto:{collection_id}"),
+                                "href": (f"{website}/{service}/collections/toto:{collection_id}"),
                             },
                             {
                                 "rel": "parent",
                                 "type": "application/json",
-                                "href": (f"{MOCKED_RSPY_WEBSITE}/{service}/collections/toto:{collection_id}"),
+                                "href": (f"{website}/{service}/collections/toto:{collection_id}"),
                             },
                             {
                                 "rel": "root",
                                 "type": "application/json",
-                                "href": f"{MOCKED_RSPY_WEBSITE}/{service}/catalogs/toto",
+                                "href": f"{website}/{service}/catalogs/toto",
                             },
                             {
                                 "rel": "self",
                                 "type": "application/geo+json",
                                 "href": (
-                                    f"{MOCKED_RSPY_WEBSITE}/{service}/collections/"
+                                    f"{website}/{service}/collections/"
                                     f"toto:{collection_id}/items/"
                                     "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ"
                                 ),
@@ -638,26 +648,26 @@ def mocked_stac_catalog_search_inside_collection(request):
                     {
                         "rel": "collection",
                         "type": "application/json",
-                        "href": f"{MOCKED_RSPY_WEBSITE}/{service}/collections/toto:{collection_id}",
+                        "href": f"{website}/{service}/collections/toto:{collection_id}",
                     },
                     {
                         "rel": "parent",
                         "type": "application/json",
-                        "href": f"{MOCKED_RSPY_WEBSITE}/{service}/collections/toto:{collection_id}",
+                        "href": f"{website}/{service}/collections/toto:{collection_id}",
                     },
                     {
                         "rel": "root",
                         "type": "application/json",
-                        "href": f"{MOCKED_RSPY_WEBSITE}/{service}/catalogs/toto",
+                        "href": f"{website}/{service}/catalogs/toto",
                     },
                     {
                         "rel": "self",
                         "type": "application/geo+json",
-                        "href": (f"{MOCKED_RSPY_WEBSITE}/{service}/collections/toto:{collection_id}/items"),
+                        "href": (f"{website}/{service}/collections/toto:{collection_id}/items"),
                     },
                 ],
             }
-            responses.post(url=f"{MOCKED_RSPY_WEBSITE}/{service}/search", json=json_response, status=status.HTTP_200_OK)
+            responses.post(url=f"{website}/{service}/search", json=json_response, status=status.HTTP_200_OK)
 
             # Mock the search by individual feature with a GET request
             ids = []
@@ -673,14 +683,14 @@ def mocked_stac_catalog_search_inside_collection(request):
                 json_response_feature = copy.deepcopy(json_response)
                 json_response_feature["features"] = [feature]
                 responses.get(
-                    url=f"{MOCKED_RSPY_WEBSITE}/{service}/search?ids={_id}&collections={collection}",
+                    url=f"{website}/{service}/search?ids={_id}&collections={collection}",
                     json=json_response_feature,
                     status=status.HTTP_200_OK,
                 )
 
             # Mock the search on all features with a GET request
             responses.get(
-                url=f"{MOCKED_RSPY_WEBSITE}/{service}/search?ids={','.join(ids)}&collections={','.join(collections)}",
+                url=f"{website}/{service}/search?ids={','.join(ids)}&collections={','.join(collections)}",
                 json=json_response_feature,
                 status=status.HTTP_200_OK,
             )
@@ -704,6 +714,15 @@ def mocked_rspy_landing_pages_():
             "https://stac.dataspace.copernicus.eu",
             f"{OWNER_ID}:{COLLECTION_ID}",
             service="v1",
+        ),
+        status=status.HTTP_200_OK,
+    )
+    responses.get(
+        url=EDH_STAC_HREF,
+        json=common.json_landing_page(
+            "https://earthdatahub.destine.eu",
+            f"{OWNER_ID}:{COLLECTION_ID}",
+            service="api/stac/v1",
         ),
         status=status.HTTP_200_OK,
     )

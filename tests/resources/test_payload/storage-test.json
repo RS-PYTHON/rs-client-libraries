@@ -46,10 +46,10 @@
             "name": "s3",
             "kind": "obs",
             "storage_options": {
-                "key": "XXX",
-                "secret": "XXX",
-                "endpoint_url": "https://s3.gra.io.cloud.ovh.net/",
-                "region_name": "gra"
+                "key": "${S3_ACCESSKEY}",
+                "secret": "${S3_SECRETKEY}",
+                "endpoint_url": "${S3_ENDPOINT}",
+                "region_name": "${S3_REGION}"
             }
         },
         {

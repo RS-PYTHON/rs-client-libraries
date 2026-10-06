@@ -44,11 +44,6 @@
                     "name": "ORBIT",
                     "mode": "always",
                     "mandatory": false
-                },
-                {
-                    "name": "REFERENCE_DB",
-                    "mode": "always",
-                    "mandatory": false
                 }
             ],
             "output_products": [
@@ -83,11 +78,6 @@
             "input_adfs": [
                 {
                     "name": "DEM",
-                    "mode": "always",
-                    "mandatory": false
-                },
-                {
-                    "name": "REFERENCE_DB",
                     "mode": "always",
                     "mandatory": false
                 }
@@ -126,13 +116,7 @@
                     "mandatory": true
                 }
             ],
-            "input_adfs": [
-                {
-                    "name": "REFERENCE_DB",
-                    "mode": "always",
-                    "mandatory": true
-                }
-            ],
+            "input_adfs": [],
             "output_products": [
                 {
                     "name": "simulation_ref",
@@ -290,11 +274,6 @@
             }
         ],
         "adfs": [
-            {
-                "name": "REFERENCE_DB",
-                "type": "folder",
-                "engine": "cpm_zarr"
-            },
             {
                 "name": "ETAD",
                 "type": "folder",
@@ -628,7 +607,7 @@
                     "unit_name": "ReferenceDEM",
                     "step_id": 2,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs"
+                        "slcs": "Calibration.1.slcs"
                     },
                     "output_products": {
                         "DEM": "pipeline_internal"
@@ -641,8 +620,8 @@
                     "unit_name": "ReferenceGeometry",
                     "step_id": 3,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs",
-                        "dem": "ReferenceDEM_2.DEM"
+                        "slcs": "Calibration.1.slcs",
+                        "dem": "ReferenceDEM.2.DEM"
                     },
                     "output_products": {
                         "simulation_ref": "pipeline_output"
@@ -674,7 +653,7 @@
                     "unit_name": "ReferenceDEM",
                     "step_id": 2,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs"
+                        "slcs": "Calibration.1.slcs"
                     },
                     "output_products": {
                         "DEM": "pipeline_internal"
@@ -687,8 +666,8 @@
                     "unit_name": "ReferenceGeometry",
                     "step_id": 3,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs",
-                        "dem": "ReferenceDEM_2.DEM"
+                        "slcs": "Calibration.1.slcs",
+                        "dem": "ReferenceDEM.2.DEM"
                     },
                     "output_products": {
                         "simulation_ref": "pipeline_output"
@@ -700,7 +679,7 @@
             ]
         },
         {
-            "name": "SLC__1_CSL__1",
+            "name": "SLC_.1_CSL__1",
             "description": "S1 ARD CSL - Co-registered SLC",
             "steps": [
                 {
@@ -720,7 +699,7 @@
                     "unit_name": "ReferenceDEM",
                     "step_id": 2,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs"
+                        "slcs": "Calibration.1.slcs"
                     },
                     "output_products": {
                         "DEM": "pipeline_internal"
@@ -730,8 +709,8 @@
                     "unit_name": "ReferenceGeometry",
                     "step_id": 3,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs",
-                        "dem": "ReferenceDEM_2.DEM"
+                        "slcs": "Calibration.1.slcs",
+                        "dem": "ReferenceDEM.2.DEM"
                     },
                     "output_products": {
                         "simulation_ref": "pipeline_internal"
@@ -741,9 +720,9 @@
                     "unit_name": "coregistration",
                     "step_id": 4,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs",
-                        "dem": "ReferenceDEM_2.DEM",
-                        "simulation_ref": "ReferenceGeometry_3.simulation_ref"
+                        "slcs": "Calibration.1.slcs",
+                        "dem": "ReferenceDEM.2.DEM",
+                        "simulation_ref": "ReferenceGeometry.3.simulation_ref"
                     },
                     "output_products": {
                         "cslcs": "pipeline_output",
@@ -770,7 +749,7 @@
                     "unit_name": "ReferenceDEM",
                     "step_id": 2,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs"
+                        "slcs": "Calibration.1.slcs"
                     },
                     "output_products": {
                         "DEM": "pipeline_internal"
@@ -780,8 +759,8 @@
                     "unit_name": "ReferenceGeometry",
                     "step_id": 3,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs",
-                        "dem": "ReferenceDEM_2.DEM"
+                        "slcs": "Calibration.1.slcs",
+                        "dem": "ReferenceDEM.2.DEM"
                     },
                     "output_products": {
                         "simulation_ref": "pipeline_internal"
@@ -791,9 +770,9 @@
                     "unit_name": "coregistration",
                     "step_id": 4,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs",
-                        "dem": "ReferenceDEM_2.DEM",
-                        "simulation_ref": "ReferenceGeometry_3.simulation_ref"
+                        "slcs": "Calibration.1.slcs",
+                        "dem": "ReferenceDEM.2.DEM",
+                        "simulation_ref": "ReferenceGeometry.3.simulation_ref"
                     },
                     "output_products": {
                         "cslcs": "pipeline_internal",
@@ -804,8 +783,8 @@
                     "unit_name": "geocoding",
                     "step_id": 5,
                     "input_products": {
-                        "slcs": "coregistration_4.slcs",
-                        "simulation_ref": "ReferenceGeometry_3.simulation_ref"
+                        "slcs": "coregistration.4.slcs",
+                        "simulation_ref": "ReferenceGeometry.3.simulation_ref"
                     },
                     "output_products": {
                         "gslcs": "pipeline_output"
@@ -831,7 +810,7 @@
                     "unit_name": "ReferenceDEM",
                     "step_id": 2,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs"
+                        "slcs": "Calibration.1.slcs"
                     },
                     "output_products": {
                         "DEM": "pipeline_internal"
@@ -841,8 +820,8 @@
                     "unit_name": "ReferenceGeometry",
                     "step_id": 3,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs",
-                        "dem": "ReferenceDEM_2.DEM"
+                        "slcs": "Calibration.1.slcs",
+                        "dem": "ReferenceDEM.2.DEM"
                     },
                     "output_products": {
                         "simulation_ref": "pipeline_internal"
@@ -852,9 +831,9 @@
                     "unit_name": "coregistration",
                     "step_id": 4,
                     "input_products": {
-                        "slcs": "Calibration_1.slcs",
-                        "dem": "ReferenceDEM_2.DEM",
-                        "simulation_ref": "ReferenceGeometry_3.simulation_ref"
+                        "slcs": "Calibration.1.slcs",
+                        "dem": "ReferenceDEM.2.DEM",
+                        "simulation_ref": "ReferenceGeometry.3.simulation_ref"
                     },
                     "output_products": {
                         "cslcs": "pipeline_internal",
@@ -865,8 +844,8 @@
                     "unit_name": "geocoding",
                     "step_id": 5,
                     "input_products": {
-                        "slcs": "coregistration_4.slcs",
-                        "simulation_ref": "ReferenceGeometry_3.simulation_ref"
+                        "slcs": "coregistration.4.slcs",
+                        "simulation_ref": "ReferenceGeometry.3.simulation_ref"
                     },
                     "output_products": {
                         "gslcs": "pipeline_internal"
@@ -876,8 +855,8 @@
                     "unit_name": "mosaicking",
                     "step_id": 6,
                     "input_products": {
-                        "gslcs": "geocoding_5.gslcs",
-                        "slcs": "coregistration_4.slcs"
+                        "gslcs": "geocoding.5.gslcs",
+                        "slcs": "coregistration.4.slcs"
                     },
                     "output_products": {
                         "nrb": "pipeline_output"
