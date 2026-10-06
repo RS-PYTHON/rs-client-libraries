@@ -43,7 +43,7 @@ PREFECT_VAR_NAME = "processing-storage-configuration"
 KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT = True
 
 
-def generate_payload_path(owner_id: str) -> str:
+async def generate_payload_path(owner_id: str) -> str:
     """
     Generates the shared disk path used to store a processing payload for a processor
 
@@ -71,7 +71,7 @@ def generate_payload_path(owner_id: str) -> str:
     """
     if KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT:
         try:
-            prefect_variable_result = Variable.get(PREFECT_VAR_NAME)
+            prefect_variable_result = await Variable.get(PREFECT_VAR_NAME)
         except Exception as exc:
             raise RuntimeError(
                 f"Unable to load Prefect variable {PREFECT_VAR_NAME!r}",
@@ -134,7 +134,7 @@ async def call_dpr_flow(
     In case an optional parameter is not set, its value is get from Prefect Variable named 'prefect_settings'
     The payload is stored on a S3 bucket.
     """
-    s3_payload: str = generate_payload_path(env.owner_id)
+    s3_payload: str = await generate_payload_path(env.owner_id)
 
     a_process: DprProcessIn = DprProcessIn(
         env=env,

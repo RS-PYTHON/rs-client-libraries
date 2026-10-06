@@ -504,14 +504,14 @@ def test_stream_logs_stops_when_job_status_check_fails(mocker, dpr_client: DprCl
 # ---------------------------------------------------------------------------
 
 
-def test_generate_payload_path_hardcoded(monkeypatch):
+async def test_generate_payload_path_hardcoded(monkeypatch):
     """Test generate_payload_path returns the hardcoded S3 path when k8s namespace flag is False."""
 
     # Ensure the flag is False (default)
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", False)
 
     owner_id = "test_user"
-    path = dpr_module.generate_payload_path(owner_id)
+    path = await dpr_module.generate_payload_path(owner_id)
 
     # Check format: s3://prip-rs-playground/{owner_id}/YYYY-MM-DD--HH-MM-SS
     assert path.startswith("s3://prip-rs-playground/test_user/")
@@ -520,14 +520,14 @@ def test_generate_payload_path_hardcoded(monkeypatch):
     assert re.search(timestamp_pattern, path)
 
 
-def test_generate_payload_path_shared_disk_success(monkeypatch, mocker):
+async def test_generate_payload_path_shared_disk_success(monkeypatch, mocker):
     """Test generate_payload_path returns shared disk path when config is valid."""
 
     # Enable the shared disk path branch
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
     # Mock Prefect Variable.get to return a valid storage configuration
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get")
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
     mock_variable_get.return_value = {
         "storage_configuration": [
             {"kind": "other", "name": "test", "absolute_path": "/mnt/test", "opening_mode": "CREATE_OVERWRITE"},
@@ -542,7 +542,7 @@ def test_generate_payload_path_shared_disk_success(monkeypatch, mocker):
     }
 
     owner_id = "test_user"
-    path = dpr_module.generate_payload_path(owner_id)
+    path = await dpr_module.generate_payload_path(owner_id)
 
     # Should use the first valid shared_disk with CREATE_OVERWRITE
     assert path.startswith("/mnt/shared/test_user/")
@@ -551,7 +551,7 @@ def test_generate_payload_path_shared_disk_success(monkeypatch, mocker):
     assert re.search(timestamp_pattern, path)
 
 
-def test_generate_payload_path_shared_disk_variable_error(monkeypatch, mocker):
+async def test_generate_payload_path_shared_disk_variable_error(monkeypatch, mocker):
     """Test generate_payload_path raises RuntimeError when Prefect variable cannot be retrieved."""
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
@@ -562,16 +562,16 @@ def test_generate_payload_path_shared_disk_variable_error(monkeypatch, mocker):
     owner_id = "test_user"
 
     with pytest.raises(RuntimeError, match=r"Unable to load Prefect variable 'processing-storage-configuration'"):
-        dpr_module.generate_payload_path(owner_id)
+        await dpr_module.generate_payload_path(owner_id)
 
 
-def test_generate_payload_path_shared_disk_no_valid_config(monkeypatch, mocker):
+async def test_generate_payload_path_shared_disk_no_valid_config(monkeypatch, mocker):
     """Test generate_payload_path raises RuntimeError when no valid shared_disk config found."""
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
     # Mock Variable.get to return config without valid shared_disk entries
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get")
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
     mock_variable_get.return_value = {
         "storage_configuration": [
             {
@@ -607,15 +607,15 @@ def test_generate_payload_path_shared_disk_no_valid_config(monkeypatch, mocker):
         RuntimeError,
         match=r"Unable to find a shared disk path in Prefect variable 'processing-storage-configuration'",
     ):
-        dpr_module.generate_payload_path(owner_id)
+        await dpr_module.generate_payload_path(owner_id)
 
 
-def test_generate_payload_path_shared_disk_empty_config(monkeypatch, mocker):
+async def test_generate_payload_path_shared_disk_empty_config(monkeypatch, mocker):
     """Test generate_payload_path raises RuntimeError when storage_configuration is empty."""
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get")
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
     mock_variable_get.return_value = {"storage_configuration": []}
 
     owner_id = "test_user"
@@ -624,15 +624,15 @@ def test_generate_payload_path_shared_disk_empty_config(monkeypatch, mocker):
         RuntimeError,
         match=r"Unable to find a shared disk path in Prefect variable 'processing-storage-configuration'",
     ):
-        dpr_module.generate_payload_path(owner_id)
+        await dpr_module.generate_payload_path(owner_id)
 
 
-def test_generate_payload_path_shared_disk_missing_storage_configuration_key(monkeypatch, mocker):
+async def test_generate_payload_path_shared_disk_missing_storage_configuration_key(monkeypatch, mocker):
     """Test generate_payload_path raises RuntimeError when storage_configuration key is missing."""
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get")
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
     mock_variable_get.return_value = {}  # missing storage_configuration key
 
     owner_id = "test_user"
@@ -641,15 +641,15 @@ def test_generate_payload_path_shared_disk_missing_storage_configuration_key(mon
         RuntimeError,
         match=r"Unable to find a shared disk path in Prefect variable 'processing-storage-configuration'",
     ):
-        dpr_module.generate_payload_path(owner_id)
+        await dpr_module.generate_payload_path(owner_id)
 
 
-def test_generate_payload_path_shared_disk_case_insensitive_opening_mode(monkeypatch, mocker):
+async def test_generate_payload_path_shared_disk_case_insensitive_opening_mode(monkeypatch, mocker):
     """Test generate_payload_path accepts CREATE_OVERWRITE in any case."""
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get")
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
     mock_variable_get.return_value = {
         "storage_configuration": [
             {
@@ -662,7 +662,7 @@ def test_generate_payload_path_shared_disk_case_insensitive_opening_mode(monkeyp
     }
 
     owner_id = "test_user"
-    path = dpr_module.generate_payload_path(owner_id)
+    path = await dpr_module.generate_payload_path(owner_id)
 
     assert path.startswith("/mnt/shared/test_user/")
 
@@ -670,12 +670,12 @@ def test_generate_payload_path_shared_disk_case_insensitive_opening_mode(monkeyp
     assert re.search(timestamp_pattern, path)
 
 
-def test_generate_payload_path_shared_disk_none_opening_mode(monkeypatch, mocker):
+async def test_generate_payload_path_shared_disk_none_opening_mode(monkeypatch, mocker):
     """Test generate_payload_path skips entry when opening_mode is None."""
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get")
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
     mock_variable_get.return_value = {
         "storage_configuration": [
             {"kind": "shared_disk", "name": "shared1", "absolute_path": "/mnt/shared", "opening_mode": None},
@@ -689,7 +689,7 @@ def test_generate_payload_path_shared_disk_none_opening_mode(monkeypatch, mocker
     }
 
     owner_id = "test_user"
-    path = dpr_module.generate_payload_path(owner_id)
+    path = await dpr_module.generate_payload_path(owner_id)
 
     # Should skip the first entry (None opening_mode) and use the second
     assert path.startswith("/mnt/shared2/test_user/")
