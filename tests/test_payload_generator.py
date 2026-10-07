@@ -241,7 +241,7 @@ def test_generate_payload_success(
     assert payload.io.adfs[0].id == "ADF1"
     assert payload.logging is None
     assert payload.config is None
-    mock_logger.info.assert_any_call("Building workflow and io sections")
+    mock_logger.info.assert_any_call("Building workflow and I/O sections")
     mock_logger.info.assert_any_call("Building the payload")
 
     # test the s1 l0 specific logging and config paths

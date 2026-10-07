@@ -458,7 +458,7 @@ async def dpr_processing(
         logger.info(build_dask_dashboard_url_message(cluster_info.cluster_instance))
 
         # Build and generate the payload file
-        payload_task, source_items = await build_and_generate_payload(
+        payload_task, source_items = build_and_generate_payload(
             logger,
             flow_env,
             task_table,
@@ -553,7 +553,7 @@ async def dpr_processing(
         return published_items
 
 
-async def build_and_generate_payload(
+def build_and_generate_payload(
     logger,
     flow_env: FlowEnv,
     task_table: dict[str, Any],

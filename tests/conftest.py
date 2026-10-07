@@ -1137,7 +1137,7 @@ def _catalog_client(generic_rs_client):
     return generic_rs_client.get_catalog_client()
 
 
-@pytest.fixture(name="storage_configuration", scope="function")
+@pytest.fixture(name="storage_configuration")
 def _storage_configuration(request):
     """Set prefect variable that contains the storage configuration"""
     if hasattr(request, "param"):

@@ -154,7 +154,7 @@ async def test_whole_payload(
     @flow(name="process-generic")
     async def from_a_flow():
         """Build and generate the payload file from a prefect flow"""
-        payload_task, source_items = await on_demand_processing.build_and_generate_payload(
+        payload_task, source_items = on_demand_processing.build_and_generate_payload(
             logger,
             flow_env=FlowEnv(dpr_input.env),
             task_table=task_table,
