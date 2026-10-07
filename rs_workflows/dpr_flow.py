@@ -33,7 +33,12 @@ from pystac import Asset, Item
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_common import prefect_utils
 from rs_workflows import catalog_flow
-from rs_workflows.flow_utils import DprProcessedItemMetadata, FlowEnv, FlowEnvArgs, FlowInputProduct
+from rs_workflows.flow_utils import (
+    DprProcessedItemMetadata,
+    FlowEnv,
+    FlowEnvArgs,
+    FlowInputProduct,
+)
 from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
 from rs_workflows.utils.prefect import get_logger

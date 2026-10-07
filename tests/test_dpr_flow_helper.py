@@ -853,7 +853,7 @@ def test_update_eopf_assets_propagates_acquisition_station(mocker, processor, st
         id="source",
         geometry=None,
         bbox=None,
-        datetime=datetime.datetime(2024, 1, 10, tzinfo=datetime.timezone.utc),
+        datetime=datetime.datetime(2024, 1, 10, tzinfo=datetime.UTC),
         properties={"eopf:origin_datetime": "2024-01-10T12:00:00Z", **station_properties},
     )
     future = mocker.Mock()
