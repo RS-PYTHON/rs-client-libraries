@@ -637,3 +637,49 @@ def s3_delete(s3_prefix: str, log: bool = False):
             Bucket=s3_bucket.bucket_name,
             Delete={"Objects": objects_to_delete[i : i + chunk_size], "Quiet": True},  # noqa: E203
         )
+
+
+async def upload_payload_bytes(data: bytes, payload_path: str, **upload_kwargs: dict[str, Any]) -> str:
+    """Upload in-memory bytes to either S3 bucket or local file.
+
+    Args:
+        data: The data to upload as bytes
+        payload_path: Destination path (S3 path starting with s3:// or local file path)
+        upload_kwargs: Additional keyword arguments for S3 upload
+
+    Returns:
+        The payload_path that was written to
+    """
+    if payload_path.startswith(("s3://", "S3://")):
+        # Handle S3 path
+        await s3_upload_bytes(data, payload_path, **upload_kwargs)
+    else:
+        # Handle local file path
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname(payload_path), exist_ok=True)
+        # Write the data to the local file using async file I/O
+        async with await anyio.open_file(payload_path, "wb") as f:
+            await f.write(data)
+
+
+def delete_payload_file(payload_path: str, log: bool = False) -> None:
+    """Delete either an S3 object or a local file.
+
+    Args:
+        payload_path: Path to delete (S3 path starting with s3:// or local file path)
+        log: Whether to log the deletion (for S3 paths only)
+    """
+    if payload_path.startswith(("s3://", "S3://")):
+        # Handle S3 path
+        s3_delete(payload_path, log=log)
+    else:
+        # Handle local file path
+        try:
+            if log:
+                logger.info(f"Deleting local file: {payload_path}")
+            os.remove(payload_path)
+            if log:
+                logger.info(f"Deleted local file: {payload_path}")
+        except FileNotFoundError:
+            # File already deleted, ignore
+            pass

@@ -530,9 +530,9 @@ async def dpr_processing(
         # the payload file to upload to S3. here, the secrets are revealed
         generated_payload_res_with_secrets = generated_payload_res.dump(reveal_secrets=True)
         yaml_str = yaml.dump(generated_payload_res_with_secrets, default_flow_style=False, sort_keys=False)
-        # upload the config payload contents straight to S3, without a temporary file
+        # upload the config payload contents to S3 or local file, without a temporary file
         logger.info(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
-        await prefect_utils.s3_upload_bytes(yaml_str.encode("utf-8"), dpr_input.s3_payload_file)
+        await prefect_utils.upload_payload_bytes(yaml_str.encode("utf-8"), dpr_input.s3_payload_file)
 
         # Run the DPR processor
         processed_items = run_processor.submit(
@@ -547,7 +547,7 @@ async def dpr_processing(
         try:
             processed_items.result()
         finally:
-            prefect_utils.s3_delete(dpr_input.s3_payload_file)
+            prefect_utils.delete_payload_file(dpr_input.s3_payload_file)
 
         processed = processed_items.result()
 

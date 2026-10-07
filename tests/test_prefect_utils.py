@@ -17,9 +17,11 @@
 import getpass
 import os
 import socket
+import tempfile
 from contextlib import suppress
 from importlib import reload
 from unittest.mock import AsyncMock, Mock, mock_open, patch
+import anyio
 
 import pytest
 import requests
@@ -333,3 +335,68 @@ async def test_s3_read_bytes_reads_in_memory(mocker):
 
     assert result == b"file contents"
     mock_bucket.aread_path.assert_awaited_once_with("key")
+
+
+async def test_upload_payload_bytes_local_path():
+    """Test upload_payload_bytes writes to local file path."""
+    # Create a temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".yaml") as tmp:
+        tmp_path = tmp.name
+
+    try:
+        test_data = b"test yaml content\n"
+        await prefect_utils.upload_payload_bytes(test_data, tmp_path)
+        assert os.path.exists(tmp_path)
+        async with await anyio.open_file(tmp_path, "rb") as f:
+            assert await f.read() == test_data
+    finally:
+        # Cleanup
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+async def test_upload_payload_bytes_s3_path():
+    """Test upload_payload_bytes routes to s3_upload_bytes for S3 paths."""
+
+    # Mock s3_upload_bytes    
+    with patch("rs_common.prefect_utils.s3_upload_bytes", new=AsyncMock(return_value="s3://bucket/key")) as mock_s3:
+        test_data = b"test data"
+        await prefect_utils.upload_payload_bytes(test_data, "s3://bucket/key")
+        mock_s3.assert_awaited_once_with(test_data, "s3://bucket/key")
+
+
+async def test_delete_payload_file_local_path():
+    """Test delete_payload_file removes local file."""
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".yaml") as tmp:
+        tmp_path = tmp.name
+
+    try:
+        # Create the file first
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write("test content")
+        assert os.path.exists(tmp_path)
+
+        # Delete the file
+        prefect_utils.delete_payload_file(tmp_path)
+        assert not os.path.exists(tmp_path)
+    finally:
+        # Note: file already deleted, but we try to clean up anyway
+        pass
+
+
+async def test_delete_payload_file_missing_local_path():
+    """Test delete_payload_file handles missing local file gracefully."""
+
+    # Should not raise FileNotFoundError
+    prefect_utils.delete_payload_file("/nonexistent/path.yaml")
+    # If we get here without exception, the test passes
+
+
+async def test_delete_payload_file_s3_path():
+    """Test delete_payload_file routes to s3_delete for S3 paths."""
+
+    # Mock s3_delete
+    with patch("rs_common.prefect_utils.s3_delete") as mock_s3:
+        prefect_utils.delete_payload_file("s3://bucket/key")
+        mock_s3.assert_called_once_with("s3://bucket/key", log=False)
