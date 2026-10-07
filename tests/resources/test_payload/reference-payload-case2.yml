@@ -24,8 +24,6 @@ workflow:
   processing_unit: Calibration
   inputs:
     slcs: slcs
-  outputs:
-    slcs: slcs
   adfs:
     ETAD: ETAD
     ORBIT: ORBIT
@@ -61,7 +59,6 @@ workflow:
     simulation_ref: ReferenceGeometry.3.simulation_ref
   outputs:
     cslcs: cslcs
-    slcs: slcs
 - name: geocoding.5
   active: true
   validate: false
@@ -129,13 +126,6 @@ io:
     path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
     type: folder
-    apply_eoqc: false
-  - id: slcs
-    path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
-    engine: cpm_zarr
-    writer_params:
-      mode: w
-    type: file
     apply_eoqc: false
   adfs:
   - id: DEM

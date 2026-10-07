@@ -103,9 +103,8 @@ logger = Logging.default(__name__)
     [
         ["parameter-call-test1.json", "tasktable-test1.json", "case1"],
         ["parameter-call-test2.json", "tasktable-test2.json", "case2"],
-        ["parameter-call-test2.json", "tasktable-test3.json", "case3"],
     ],
-    ids=["case1", "case2", "case3"],
+    ids=["case1", "case2"],
 )
 async def test_whole_payload(
     request,

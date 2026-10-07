@@ -45,13 +45,6 @@
                     "mode": "always",
                     "mandatory": false
                 }
-            ],
-            "output_products": [
-                {
-                    "name": "slcs",
-                    "mode": "always",
-                    "mandatory": true
-                }
             ]
         },
         {
@@ -160,11 +153,6 @@
             "output_products": [
                 {
                     "name": "cslcs",
-                    "mode": "always",
-                    "mandatory": true
-                },
-                {
-                    "name": "slcs",
                     "mode": "always",
                     "mandatory": true
                 }
@@ -416,14 +404,6 @@
         ],
         "output": [
             {
-                "name": "slcs",
-                "type": "file",
-                "engine": "cpm_zarr",
-                "writer_params": {
-                    "mode": "w"
-                }
-            },
-            {
                 "name": "simulation_ref",
                 "type": "folder",
                 "engine": "cpm_zarr"
@@ -597,7 +577,6 @@
                         "slcs": "pipeline_input"
                     },
                     "output_products": {
-                        "slcs": "pipeline_internal"
                     },
                     "parameters": {
                         "recompute": "False"
@@ -643,7 +622,6 @@
                         "slcs": "pipeline_input"
                     },
                     "output_products": {
-                        "slcs": "pipeline_internal"
                     },
                     "parameters": {
                         "recompute": "True"
@@ -689,7 +667,6 @@
                         "slcs": "pipeline_input"
                     },
                     "output_products": {
-                        "slcs": "pipeline_internal"
                     },
                     "parameters": {
                         "reference_date": "{external_variable.reference_date}"
@@ -725,8 +702,7 @@
                         "simulation_ref": "ReferenceGeometry.3.simulation_ref"
                     },
                     "output_products": {
-                        "cslcs": "pipeline_output",
-                        "slcs": "pipeline_output"
+                        "cslcs": "pipeline_output"
                     }
                 }
             ]
@@ -742,7 +718,6 @@
                         "slcs": "pipeline_input"
                     },
                     "output_products": {
-                        "slcs": "pipeline_internal"
                     }
                 },
                 {
@@ -775,8 +750,7 @@
                         "simulation_ref": "ReferenceGeometry.3.simulation_ref"
                     },
                     "output_products": {
-                        "cslcs": "pipeline_internal",
-                        "slcs": "pipeline_internal"
+                        "cslcs": "pipeline_internal"
                     }
                 },
                 {
@@ -803,7 +777,6 @@
                         "slcs": "pipeline_input"
                     },
                     "output_products": {
-                        "slcs": "pipeline_internal"
                     }
                 },
                 {
@@ -836,8 +809,7 @@
                         "simulation_ref": "ReferenceGeometry.3.simulation_ref"
                     },
                     "output_products": {
-                        "cslcs": "pipeline_internal",
-                        "slcs": "pipeline_internal"
+                        "cslcs": "pipeline_internal"
                     }
                 },
                 {
