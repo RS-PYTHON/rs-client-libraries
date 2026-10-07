@@ -105,7 +105,7 @@ context_managers:
           username: ${LOCAL_DASK_USERNAME}
           password: ${LOCAL_DASK_PASSWORD}
 
-I/O:
+io:
   output_products:
   - path: s3://bucket/output
 """
@@ -130,7 +130,7 @@ context_managers:
           type: basic
           username: ${LOCAL_DASK_USERNAME}
           password: ${LOCAL_DASK_PASSWORD}
-I/O:
+io:
   output_products:
   - path: s3://bucket/output
 """
@@ -154,7 +154,7 @@ context_managers:
         auth:
           type: jupyterhub
           api_token: ${JUPYTERHUB_API_TOKEN}
-I/O:
+io:
   output_products:
   - path: s3://bucket/output
 """

@@ -34,7 +34,7 @@ workflow:
   parameters:
     product_types:
     - S1SEWRAW
-I/O:
+io:
   inputs_products:
   - id: CADU1
     path: s3://test-bucket/CADU.raw

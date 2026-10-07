@@ -423,7 +423,7 @@ class DprClient(OgcApiClient):
             payload = yaml.safe_load(contents)
 
             # We need to create the output S3 folder with a dummy file before running DPR
-            for output_product in payload["I/O"]["output_products"]:
+            for output_product in payload["io"]["output_products"]:
                 s3_output_dir = output_product["path"]
                 s3_empty_file = f"{s3_output_dir}/.empty"
                 self.logger.info(f"Write empty file: {self.logger.level} {s3_empty_file!r}")

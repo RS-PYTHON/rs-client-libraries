@@ -335,7 +335,7 @@ class PayloadSchema(BasePayloadModel):
     external_modules: list[ExternalModule] | None = None
     breakpoints: Breakpoints | None = None
     workflow: list[WorkflowStep] | None = None
-    io: IOConfig | None = Field(None, alias="I/O")
+    io: IOConfig | None = None
     context_managers: list[ContextManager] = []
     dask_config: dict[str, str | int | bool] | None = DEFAULT_DASK_CONFIG
     logging: list[str] | None = None

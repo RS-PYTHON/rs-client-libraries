@@ -167,7 +167,7 @@ async def test_whole_payload(
     payload_dict = payload.dump(reveal_secrets=True)
 
     # Remove random uuids from output paths
-    for product in payload_dict["I/O"]["output_products"]:
+    for product in payload_dict["io"]["output_products"]:
         path = product["path"]
         try:
             UUID(Path(path).stem)

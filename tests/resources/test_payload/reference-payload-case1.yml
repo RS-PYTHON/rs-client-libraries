@@ -40,7 +40,7 @@ workflow:
     temporary_path: ./tmp
     isp_extraction_batch_size: 5
     acquisition_report_output_path: ./acq_report
-I/O:
+io:
   input_products:
   - id: S1CADUS
     path: s3://test-bucket/S1CADUS

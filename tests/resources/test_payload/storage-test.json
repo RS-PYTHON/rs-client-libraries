@@ -55,13 +55,13 @@
         {
             "name": "my_shared_disk_1",
             "kind": "shared_disk",
-            "absolute_path": "/my_share_directory/here/${JOB_IDENTIFIER}",
+            "absolute_path": "/my_share_directory/here",
             "autoclean": true
         },
         {
             "name": "local_disk_not_used",
             "kind": "local_disk",
-            "absolute_path": "/my_local_path/here/${JOB_IDENTIFIER}"
+            "absolute_path": "/my_local_path/here"
         }
     ]
 }

@@ -81,7 +81,7 @@ workflow:
     nrb: nrb
   adfs:
     S2_TILES: S2_TILES
-I/O:
+io:
   input_products:
   - id: slcs
     path: s3://test-bucket/S1CADUS
@@ -96,17 +96,17 @@ I/O:
           region_name: us-east-1
   output_products:
   - id: DEM
-    path: /my_share_directory/here/${JOB_IDENTIFIER}/00000000-0000-0000-0000-000000000001
+    path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
     type: file
     apply_eoqc: false
   - id: cslcs
-    path: /my_share_directory/here/${JOB_IDENTIFIER}/00000000-0000-0000-0000-000000000001
+    path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
     type: file
     apply_eoqc: false
   - id: gslcs
-    path: /my_share_directory/here/${JOB_IDENTIFIER}/00000000-0000-0000-0000-000000000001
+    path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
     type: file
     apply_eoqc: false
@@ -123,7 +123,7 @@ I/O:
     type: file
     apply_eoqc: false
   - id: simulation_ref
-    path: /my_share_directory/here/${JOB_IDENTIFIER}/00000000-0000-0000-0000-000000000001
+    path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
     type: folder
     apply_eoqc: false
