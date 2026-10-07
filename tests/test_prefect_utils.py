@@ -21,8 +21,8 @@ import tempfile
 from contextlib import suppress
 from importlib import reload
 from unittest.mock import AsyncMock, Mock, mock_open, patch
-import anyio
 
+import anyio
 import pytest
 import requests
 import responses
@@ -358,7 +358,7 @@ async def test_upload_payload_bytes_local_path():
 async def test_upload_payload_bytes_s3_path():
     """Test upload_payload_bytes routes to s3_upload_bytes for S3 paths."""
 
-    # Mock s3_upload_bytes    
+    # Mock s3_upload_bytes
     with patch("rs_common.prefect_utils.s3_upload_bytes", new=AsyncMock(return_value="s3://bucket/key")) as mock_s3:
         test_data = b"test data"
         await prefect_utils.upload_payload_bytes(test_data, "s3://bucket/key")
