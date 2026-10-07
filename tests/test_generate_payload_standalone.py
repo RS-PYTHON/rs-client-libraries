@@ -102,6 +102,15 @@ def test_build_input_item():
     assert standalone.build_input_item("s3://bucket/other.zarr", {}).id == "other"
 
 
+def test_build_input_item_from_eopf_name():
+    """Without metadata, the platform and the datetimes are deduced from the EOPF product name."""
+    item = standalone.build_input_item("s3://bucket/S03SLSL0__20260911T080345_0299_B2340_TCCE.zarr/", {})
+    assert item.properties["platform"] == "sentinel-3b"
+    assert item.common_metadata.start_datetime == datetime(2026, 9, 11, 8, 3, 45, tzinfo=timezone.utc)
+    assert item.common_metadata.end_datetime == datetime(2026, 9, 11, 8, 8, 44, tzinfo=timezone.utc)
+    assert item.datetime == item.common_metadata.start_datetime
+
+
 def test_derive_external_variables():
     """External variables are deduced from the input product properties."""
     item = standalone.build_input_item("s3://bucket/product.zarr", {"stac_discovery": STAC_DISCOVERY})
@@ -365,6 +374,9 @@ def test_find_platform():
         "sentinel-3b"
     )
     assert standalone.AdfsStager.find_platform({"filter": product_type}) is None
+    # A missing satellite external variable is rendered as 'None'
+    none_platform = {"op": "=", "args": [{"property": "platform"}, "None"]}
+    assert standalone.AdfsStager.find_platform({"filter": none_platform}) is None
 
 
 @pytest.mark.asyncio

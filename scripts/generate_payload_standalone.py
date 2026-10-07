@@ -62,7 +62,7 @@ import tempfile
 import time
 from collections.abc import Callable
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -121,6 +121,10 @@ logger = logging.getLogger("generate_payload_standalone")
 INPUT_COLLECTION = "standalone-inputs"
 ZARR_MEDIA_TYPE = "application/vnd+zarr"
 
+# EOPF product name: MMMSSSSSS_YYYYMMDDTHHMMSS_UUUU_P..., e.g. S03SLSL0__20260911T080345_0299_B2340_TCCE
+# (mission, product type, start datetime, duration in seconds, platform unit)
+EOPF_NAME_REGEX = re.compile(r"^S(?P<mission>\d{2})\w{6}_(?P<start>\d{8}T\d{6})_(?P<duration>\d{4})_(?P<unit>[A-Z])")
+
 # ADF conversion configurations, indexed by the generated ADF product type (e.g. ADF_OLEOP)
 ADF_CONVERSIONS: dict[str, AdfConversionConfig] = {
     config.generated_prod_type: config for config in ADF_TYPE_CONFIG.values()
@@ -149,12 +153,31 @@ async def read_zarr_attributes(zarr_path: str) -> dict[str, Any]:
             else:
                 content = Path(metadata_path).read_bytes()
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            logger.debug(f"No zarr metadata found at {metadata_path}: {exc}")
+            logger.warning(f"No zarr metadata found at {metadata_path}: {exc!r}")
             continue
         metadata = json.loads(content)
         return (metadata.get(attrs_key) or {}) if attrs_key else metadata
-    logger.warning(f"⚠️ Unable to read zarr metadata from '{zarr_path}', its STAC properties will be empty")
+    logger.warning(
+        f"⚠️ Unable to read zarr metadata from '{zarr_path}', its STAC properties will be deduced from its name",
+    )
     return {}
+
+
+def properties_from_eopf_name(product_name: str) -> dict[str, Any]:
+    """
+    Deduce the platform and the start/end datetimes of a product from its EOPF name.
+    Used when the zarr metadata cannot be read.
+    """
+    match = EOPF_NAME_REGEX.match(product_name)
+    if not match:
+        return {}
+    start = datetime.strptime(match["start"], "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
+    end = start + timedelta(seconds=int(match["duration"]))
+    return {
+        "platform": f"sentinel-{int(match['mission'])}{match['unit'].lower()}",
+        "start_datetime": start.isoformat(),
+        "end_datetime": end.isoformat(),
+    }
 
 
 def build_input_item(zarr_path: str, attributes: dict[str, Any]) -> Item:
@@ -164,9 +187,11 @@ def build_input_item(zarr_path: str, attributes: dict[str, Any]) -> Item:
     """
     stac_discovery = attributes.get("stac_discovery") or {}
     properties = dict(stac_discovery.get("properties") or {})
+    item_id = stac_discovery.get("id") or Path(zarr_path.rstrip("/")).name.removesuffix(".zarr")
+    for key, value in properties_from_eopf_name(item_id).items():
+        properties.setdefault(key, value)
     if not properties.get("datetime"):
         properties["datetime"] = properties.get("start_datetime") or datetime.now(timezone.utc).isoformat()
-    item_id = stac_discovery.get("id") or Path(zarr_path.rstrip("/")).name.removesuffix(".zarr")
     return Item.from_dict(
         {
             "type": "Feature",
@@ -443,7 +468,8 @@ class AdfsStager:  # pylint: disable=too-many-instance-attributes
         if isinstance(cql2, dict):
             args = cql2.get("args")
             if cql2.get("op") == "=" and isinstance(args, list) and args and args[0] == {"property": "platform"}:
-                return args[1]
+                # A missing external variable is rendered as 'None' in the task table query
+                return args[1] if args[1] not in (None, "None", "") else None
             return next((p for v in cql2.values() if (p := AdfsStager.find_platform(v))), None)
         if isinstance(cql2, list):
             return next((p for v in cql2 if (p := AdfsStager.find_platform(v))), None)
