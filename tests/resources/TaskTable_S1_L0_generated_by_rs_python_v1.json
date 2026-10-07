@@ -1,5 +1,5 @@
 {
-    "$schema": "./../schemas/TaskTable.schema.json",
+    "$schema": "./../../config/TaskTable.schema.json",
     "tasktable": {
         "name": "s1-l0",
         "version": "1.0.1",

@@ -39,6 +39,7 @@ from tests.conftest import (
     MOCKED_BUCKET,
     OWNER_ID,
 )
+from tests.test_utils import setup_worklow_test_env
 
 CONFIG_DIR = Path(__file__).parent / "resources/test_payload"
 DASK_CLUSTER_LABEL = "DASK_CLUSTER_LABEL"
@@ -130,6 +131,7 @@ async def test_whole_payload(
         "rs_workflows.payload_generator.resolve_stac_input_path",
         return_value=(None, f"s3://{MOCKED_BUCKET}/S1CADUS"),
     )
+    await setup_worklow_test_env()
 
     # Read input parameters
     with open(CONFIG_DIR / dpr_params_filename, encoding="utf-8") as opened:

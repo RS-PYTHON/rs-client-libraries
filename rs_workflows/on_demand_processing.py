@@ -20,9 +20,11 @@ import json
 import os
 import re
 from copy import deepcopy
+from os import path as osp
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+import jsonschema
 import yaml
 from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
@@ -56,6 +58,8 @@ from rs_workflows.utils.utils import (
 )
 
 SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
+
+TASK_TABLE_SCHEMA = osp.realpath(osp.join(osp.dirname(__file__), "../config/TaskTable.schema.json"))
 
 
 def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
@@ -561,6 +565,11 @@ def build_and_generate_payload(
     retry_config: RetryConfig,
 ) -> tuple[PrefectFuture[PayloadSchema], dict[str, list[Item | str]]]:  # (payload, source_items)
     """Build and generate the payload file and the lineage source items"""
+
+    # Validate tasktable contents against json schema
+    with open(TASK_TABLE_SCHEMA, encoding="utf-8") as opened:
+        schema = json.load(opened)
+    jsonschema.validate(instance=task_table, schema=schema)
 
     processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
     unit_list = build_unit_list(

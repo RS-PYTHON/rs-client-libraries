@@ -43,7 +43,7 @@ from rs_workflows.payload_template import StorageOptions, StoreParams
 
 VALID_STORAGE_KINDS = ("obs", "shared_disk", "local_disk")
 
-SCHEMA = osp.realpath(osp.join(osp.dirname(__file__), "../config/StorageConfiguration.schema.json"))
+STORAGE_CONFIG_SCHEMA = osp.realpath(osp.join(osp.dirname(__file__), "../config/StorageConfiguration.schema.json"))
 
 
 class StorageConfig:  # pylint: disable=too-many-instance-attributes
@@ -68,7 +68,7 @@ class StorageConfig:  # pylint: disable=too-many-instance-attributes
                 raise RuntimeError(f"Prefect variable {var_name!r} is missing")
 
         # Validate contents against json schema
-        with open(SCHEMA, encoding="utf-8") as opened:
+        with open(STORAGE_CONFIG_SCHEMA, encoding="utf-8") as opened:
             schema = json.load(opened)
         jsonschema.validate(instance=self.data, schema=schema)
 
