@@ -506,7 +506,7 @@ async def run_processor(
         s3_payload_filename = osp.basename(s3_payload_run)
         logger.info(
             f'Triggering DPR processor {processor!r} with payload file "'
-            "{s3_payload_filename!r} in S3 dir {s3_payload_dir!r} from s3_payload_run {s3_payload_run!r}",
+            f"{s3_payload_filename!r} in S3 dir {s3_payload_dir!r} from s3_payload_run {s3_payload_run!r}",
         )
         logger.info(f"Triggering DPR processor {processor!r}")
         job_status = dpr_client.run_process(
