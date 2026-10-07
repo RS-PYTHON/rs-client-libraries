@@ -19,7 +19,7 @@
 # ghcr.io/rs-python/prefect/rs-client-libraries/k8s
 #
 
-ARG PYTHON_VERSION=3.13.12
+ARG PYTHON_VERSION=3.13.15
 ARG PREFECT_TAG=3.8.7
 
 # K8S image suffix: -k8s or empty

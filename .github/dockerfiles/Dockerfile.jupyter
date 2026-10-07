@@ -22,7 +22,7 @@
 # ghcr.io/rs-python/jupyter/rs-client-libraries/local
 #
 
-ARG PYTHON_VERSION=3.13.12
+ARG PYTHON_VERSION=3.13.15
 ARG JUPYTER_HUB_VERSION=5.5.1
 ARG BASE_TAG=xxx
 
