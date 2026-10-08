@@ -161,7 +161,6 @@ async def _do_process_s1ard(
             workflow=p.workflow,
             generated_product_to_collection_identifier=p.generated_product_to_collection_identifier or [],
             auxiliary_product_to_collection_identifier=p.auxiliary_product_to_collection_identifier or [],
-            logging_level=p.logging_level,
             dask_task_timeout=3000,
             temporary_folder="/mnt/share/ads-01",  # FIXME temp
             temporary_shared=True,
