@@ -602,7 +602,7 @@ async def adf_conversion(adf_input: AdfProcessIn):
                         ],
                     },
                 }
-                if isinstance(required_types, dict):
+                if isinstance(adf_config.required_types, dict):
                     # The legacy files of the mission-dependent ADF types are specific to each satellite
                     cql2_filter["filter"]["args"].append(
                         {"op": "=", "args": [{"property": "platform"}, adf_input.satellite]},
