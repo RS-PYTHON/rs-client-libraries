@@ -26,7 +26,7 @@ from os import path as osp
 from pathlib import Path
 
 import anyio
-from prefect import get_run_logger, task
+from prefect import task
 from pystac import Asset, Item
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
@@ -35,6 +35,7 @@ from rs_workflows import catalog_flow
 from rs_workflows.flow_utils import DprProcessedItemMetadata, FlowEnv, FlowEnvArgs
 from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
+from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import parse_logs
 
 
@@ -188,6 +189,9 @@ def create_stac_item(
                 # "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json",
                 # "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
             ]
+        # tempfix for OL2 with 'datetime': null in the feature_dict, we set it to the 'created' property if available
+        if feature_dict["properties"].get("datetime") is None:
+            feature_dict["properties"]["datetime"] = feature_dict["properties"]["created"]
 
         return Item(
             id=product_name,
@@ -296,7 +300,7 @@ def update_eopf_assets(
         - Each .zattrs file must contain stac_discovery.properties.product:type
         - Uses S3 storage backend (via s3_list and read_zattrs_sync functions)
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info("Starting EOPF asset update.")
     logger.info(f"Payload received: {payload}")
     logger.info(f"Input products: {input_products}")
@@ -326,8 +330,8 @@ def update_eopf_assets(
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
-    # temporarily disabled for olcil1 and mockup
-    if dpr_processor.lower() in ["mockup", "s3_l1olci"]:
+    # disabled for mockup
+    if dpr_processor.lower() in ["mockup"]:
         eopf_origin_datetime = "2026-01-01T00:00:00Z"
     elif input_products and zattrs_list:
         eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
@@ -399,7 +403,7 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
         found among all retrieved items. If no valid items are found,
         returns the fallback value ``"2023-01-01T00:00:00Z"``.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     items = []
     if not input_products:
         logger.error("No valid input products found to compute eopf:origin_datetime. Exit")
@@ -462,7 +466,7 @@ async def run_processor(
         processor: DPR processor name
         s3_payload_run: S3 bucket location of the output final DPR payload file.
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)

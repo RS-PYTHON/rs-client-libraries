@@ -18,7 +18,6 @@ import time
 from typing import Any
 
 from prefect import task
-from pystac import ItemCollection
 
 from rs_client.ogcapi.dpr_client import (
     DprPipeline,
@@ -30,7 +29,6 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
     FlowGeneratedProduct,
     FlowInputProduct,
-    LoggingLevel,
     Priority,
     ProcessingMode,
     WorkflowType,
@@ -44,7 +42,7 @@ def generate_payload_path(owner_id: str) -> str:
     This is a workaroud, waiting for share disk solution.
     """
     # TODO : use a local path on the share disk
-    s3_payload = f"s3://prip-rs-playground/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}"
+    s3_payload = f"s3://rs-dev-cluster-temp/{owner_id}/{time.strftime('%Y-%m-%d--%H-%M-%S')}"
     return s3_payload
 
 
@@ -62,11 +60,10 @@ async def call_dpr_flow(
     workflow: WorkflowType | None,
     generated_product_to_collection_identifier: list[FlowGeneratedProduct],
     auxiliary_product_to_collection_identifier: list[AuxiliaryProductMapping],
-    logging_level: LoggingLevel = LoggingLevel.INFO,
     dask_task_timeout: int | None = None,
     temporary_folder: str | None = None,
     temporary_shared: bool = False,
-) -> None:
+) -> list[dict[str, Any]]:
     """
     Call any DPR processing flow with a set of default parameters.
     In case an optional parameter is not set, its value is get from Prefect Variable named 'prefect_settings'
@@ -89,7 +86,6 @@ async def call_dpr_flow(
         input_products=input_products,
         generated_product_to_collection_identifier=generated_product_to_collection_identifier,
         auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
-        logging_level=logging_level,
         dask_task_timeout=dask_task_timeout,
         temporary_folder=temporary_folder,
         temporary_shared=temporary_shared,
@@ -98,10 +94,10 @@ async def call_dpr_flow(
     )
 
     print(a_process.model_dump_json(indent=2))
-    await dpr_processing_task(a_process)
+    return await dpr_processing_task(a_process)
 
 
 @task(name="dpr processing")
-async def dpr_processing_task(*args, **kwargs) -> tuple[bool, ItemCollection | None]:
+async def dpr_processing_task(*args, **kwargs) -> list[dict[str, Any]]:
     """See: dpr_processing"""
     return await dpr_processing.fn(*args, **kwargs)

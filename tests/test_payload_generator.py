@@ -221,7 +221,7 @@ def test_generate_payload_success(
     )
 
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.payload_generator.get_logger", return_value=mock_logger)
 
     mock_secret = MagicMock()
     mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
@@ -257,12 +257,14 @@ def test_generate_payload_success(
     assert payload.config == expected_config
 
 
+@pytest.mark.parametrize("olci_processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI])
 def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
     mocker,
     sample_unit,
     mock_dpr_process_in,
     flow_env,
     _mock_os_env,
+    olci_processor,
 ):
     """
     OLCI requires these triggering options, but they must not be emitted for other processors.
@@ -279,7 +281,7 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
         ),
     )
     mocker.patch("rs_workflows.payload_generator.fetch_csv_from_endpoint", return_value=[])
-    mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.payload_generator.get_logger", return_value=MagicMock())
     mock_secret = MagicMock()
     mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
     mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
@@ -295,7 +297,7 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
     assert "triggering__use_datatree" not in general_configuration
     assert "triggering__use_default_filename" not in general_configuration
 
-    mock_dpr_process_in.processor_name = DprProcessor.S3L1OLCI
+    mock_dpr_process_in.processor_name = olci_processor
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[sample_unit],
@@ -356,7 +358,7 @@ def test_generate_payload_deduplicates_io(mocker, sample_unit, mock_dpr_process_
         return_value=([shared_input], [shared_output]),
     )
     mocker.patch("rs_workflows.payload_generator.fetch_csv_from_endpoint", return_value=[])
-    mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.payload_generator.get_logger", return_value=MagicMock())
     mock_secret = MagicMock()
     mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
     mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)

@@ -844,27 +844,27 @@ def _mocked_dpr_response(ogcapi_response_sample, request):
 @pytest.fixture(name="patch_prefect_logger", autouse=True, scope="function")
 def _patch_prefect_logger(monkeypatch):
     """
-    Patch get_run_logger in rs_workflows.flow_utils to return a real logger.
-    Prevents MissingContextError when FlowEnv.__init__ calls get_run_logger().
+    Patch get_logger in rs_workflows.flow_utils to return a real logger.
+    Prevents MissingContextError when FlowEnv.__init__ calls get_logger().
     """
     test_logger = logging.getLogger("test-flow-env")
     test_logger.setLevel(logging.DEBUG)
     test_logger.addHandler(logging.NullHandler())
-    monkeypatch.setattr(init_pi_db_flow, "get_run_logger", lambda: logging.getLogger("test"))
+    monkeypatch.setattr(init_pi_db_flow, "get_logger", lambda: logging.getLogger("test"))
     monkeypatch.setattr(
-        "rs_workflows.catalog_flow.get_run_logger",
+        "rs_workflows.catalog_flow.get_logger",
         lambda **kwargs: test_logger,
     )
     monkeypatch.setattr(
-        "rs_workflows.flow_utils.get_run_logger",
+        "rs_workflows.flow_utils.get_logger",
         lambda **kwargs: test_logger,
     )
     monkeypatch.setattr(
-        "rs_workflows.on_demand_processing.get_run_logger",
+        "rs_workflows.on_demand_processing.get_logger",
         lambda **kwargs: test_logger,
     )
     monkeypatch.setattr(
-        "rs_workflows.payload_generator.get_run_logger",
+        "rs_workflows.payload_generator.get_logger",
         lambda **kwargs: test_logger,
     )
 
@@ -899,6 +899,8 @@ def _mock_dpr_process_in():
     """
     mock = MagicMock()
 
+    mock.env = FlowEnvArgs(owner_id="test-owner", logging_level=LoggingLevel.INFO)
+
     # input_products: list[dict[product_id, (stac_item_name, collection_id)]]
     # After UI update, input_products = list(InputProduct(name=..., item_id=..., collection_name=...))
     mock.input_products = [
@@ -922,7 +924,6 @@ def _mock_dpr_process_in():
     msg.value = "TEST_PROCESSOR"
     mock.processor_name = msg
 
-    mock.logging_level = LoggingLevel.DEBUG
     mock.temporary_folder = None
 
     return mock
@@ -1063,7 +1064,7 @@ def _flow_env(monkeypatch, generic_rs_client: RsClient) -> FlowEnv:
         "rs_common.prefect_utils.read_prefect_blocks",
         lambda *args, **kwargs: None,
     )
-    args = FlowEnvArgs(owner_id="test-owner")
+    args = FlowEnvArgs(owner_id="test-owner", logging_level=LoggingLevel.INFO)
     env = FlowEnv(args)
     # replace the rs_client that FlowEnv created with the mocked one
     env.rs_client = generic_rs_client

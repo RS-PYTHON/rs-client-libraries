@@ -17,8 +17,9 @@
 import json
 import os
 from datetime import datetime
+from typing import Any
 
-from prefect import flow, get_run_logger, runtime, task
+from prefect import flow, runtime, task
 from pystac import (
     Collection,
     Extent,
@@ -36,6 +37,7 @@ from rs_workflows.flow_utils import (
     FlowEnvArgs,
     FlowGeneratedProduct,
 )
+from rs_workflows.utils.prefect import get_logger
 
 #################
 # Catalog flows #
@@ -58,7 +60,7 @@ async def catalog_search(
         error_if_empty: Raise a ValueError if the results are empty.
         collections: list of collection names to search in
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)
@@ -91,7 +93,7 @@ async def publish(
     env: FlowEnvArgs,
     generated_product_to_collection_identifier: list[FlowGeneratedProduct],
     items_metadata: list[DprProcessedItemMetadata],
-):
+) -> list[dict[str, Any]]:
     """
     Publish items to the catalog
 
@@ -99,11 +101,15 @@ async def publish(
         env: Prefect flow environment
         collection: Catalog collection identifier where the items are published
         items_metadata: List of DprProcessedItemMetadata containing items to publish
+
+    Returns:
+        The successfully published STAC items serialized as JSON-compatible dictionaries.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     flow_env = FlowEnv(env)
 
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+    published_items: list[dict[str, Any]] = []
 
     with flow_env.start_span(__name__, "publish-to-catalog"):
         for item_metadata in items_metadata:
@@ -189,6 +195,9 @@ async def publish(
                     response.status_code,
                     response.text,
                 )
+                published_item = item.to_dict()
+                published_item["collection"] = target_collection
+                published_items.append(published_item)
 
             except Exception as e:
                 # Re-raise with full item context for easier debugging
@@ -198,6 +207,7 @@ async def publish(
                 ) from e
 
     logger.info("End catalog publishing")
+    return published_items
 
 
 @task(name="search-catalog")
@@ -236,7 +246,7 @@ def resolve_collection(
     Raises:
         ValueError: If the product cannot be resolved to any collection.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(
         f"Resolving target collection for item metadata: {item_metadata}"
         f" with generated_product_to_collection_identifier: {generated_product_to_collection_identifier}",
@@ -286,7 +296,7 @@ async def check_and_create_collection(flow_env: FlowEnv, collection_name: str):
     Check if a collection exists, and create it if it doesn't.
     """
     # Check that the collection "collection_name" exists. Otherwise create it.
-    logger = get_run_logger()
+    logger = get_logger()
 
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
     try:

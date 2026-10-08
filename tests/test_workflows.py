@@ -222,7 +222,7 @@ async def test_dpr_processing(
     )
 
     # run the flow
-    await on_demand_processing.dpr_processing(dpr_input)
+    published_items = await on_demand_processing.dpr_processing(dpr_input)
 
     ###########
     # Asserts #
@@ -251,6 +251,7 @@ async def test_dpr_processing(
         result_items[result_item.id] = result_item.to_dict()
 
     assert sorted(result_collection_ids) == sorted([col["collection_name"] for col in MAP_PRODUCT_TO_COLLECTION])
+    assert {item["id"] for item in published_items} == set(result_items)
 
     links = result_items["GRD"]["links"]
     assert any(link["rel"] == "derived_from" for link in links)
@@ -368,7 +369,7 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
     # --- Mock logger ---
     mock_logger = MagicMock()
     mocker.patch(
-        "rs_workflows.on_demand_processing.get_run_logger",
+        "rs_workflows.on_demand_processing.get_logger",
         return_value=mock_logger,
     )
 
@@ -436,14 +437,12 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
     ]
 
     # --- Call ---
-    ref_name, items = (
-        on_demand_processing._resolve_specific_input_product_stac_items(  # pylint:disable=protected-access
-            input_adfs,
-            task_table,
-            unit,
-            provided_input_products,
-            mock_rs_client,
-        )
+    ref_name, items = on_demand_processing.resolve_specific_input_product_stac_items(
+        input_adfs,
+        task_table,
+        unit,
+        provided_input_products,
+        mock_rs_client,
     )
 
     # --- Assertions ---
