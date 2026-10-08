@@ -9,6 +9,9 @@
     "processing_mode": [
         "always"
     ],
+    "reference_date": "2023-10-03",
+    "instrument_mode": "IW",
+    "satellite": "S1A",
     "owner_identifier": "copernicus",
     "dask_cluster_name": "dask-s1ard.vprivat.latest",
     "input_products": [

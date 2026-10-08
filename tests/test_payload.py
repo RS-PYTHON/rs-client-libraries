@@ -63,7 +63,7 @@ logger = Logging.default(__name__)
             # test case 2 and 3
             "oper_mpl_orbsct",
             "S1A-aux-GIP_TILPAR",
-            "S1A-aux-None_ETA__AX",
+            "iw_eta__ax",
         ],
     ],
     indirect=True,
@@ -84,7 +84,7 @@ logger = Logging.default(__name__)
                     # test case 2 and 3
                     "oper_mpl_orbsct",
                     "S1A-aux-GIP_TILPAR",
-                    "S1A-aux-None_ETA__AX",
+                    "iw_eta__ax",
                 ],
             ],
             "edh",
@@ -141,9 +141,6 @@ async def test_whole_payload(
         processor_name="mockup",
         processor_version="1.0",
         dask_cluster_label=DASK_CLUSTER_LABEL,
-        start_datetime=datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
-        end_datetime=datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
-        satellite="S1A",
         s3_payload_file=f"s3://{MOCKED_BUCKET}/payload.yaml",
         **params,
     )
