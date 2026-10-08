@@ -24,6 +24,7 @@ from datetime import timedelta
 # import datetime
 from os import path as osp
 from pathlib import Path
+from typing import cast
 
 import anyio
 from prefect import task
@@ -32,7 +33,12 @@ from pystac import Asset, Item
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_common import prefect_utils
 from rs_workflows import catalog_flow
-from rs_workflows.flow_utils import DprProcessedItemMetadata, FlowEnv, FlowEnvArgs
+from rs_workflows.flow_utils import (
+    DprProcessedItemMetadata,
+    FlowEnv,
+    FlowEnvArgs,
+    FlowInputProduct,
+)
 from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
 from rs_workflows.utils.prefect import get_logger
@@ -260,7 +266,7 @@ def clean_paths(paths: list[str], logger) -> None:
 @task(name="Update eopf assets")
 def update_eopf_assets(
     env,
-    input_products: list[dict],
+    input_products: list[FlowInputProduct],
     payload: PayloadSchema,
     dpr_processor: str,
 ) -> list[DprProcessedItemMetadata]:
@@ -279,7 +285,7 @@ def update_eopf_assets(
 
     Args:
         env: Environment configuration object containing runtime settings.
-        input_products: List of dictionaries representing input product metadata.
+        input_products: Source product references (excluding auxiliary inputs).
         payload: PayloadSchema object containing I/O configuration, including
             output_product paths to scan for .zattrs files.
         dpr_processor: str
@@ -327,6 +333,19 @@ def update_eopf_assets(
         f"output product sections from payload. The list with products to be published: {zattrs_list}",
     )
 
+    input_items = get_input_product_items(env, input_products) if input_products and zattrs_list else []
+    # Copy the first available station, preserving the input property value.
+    acquisition_station_properties = {}
+    for input_item in input_items:
+        properties = input_item.to_dict().get("properties", {})
+        if "sat:acquisition_station" in properties:
+            acquisition_station_properties["sat:acquisition_station"] = properties["sat:acquisition_station"]
+            logger.info(
+                f"Copying sat:acquisition_station={properties['sat:acquisition_station']!r} "
+                "from input products to output STAC items.",
+            )
+            break
+
     # C1.1 Add the property eopf:origin_datetime with value equal to the maximum
     # eopf:origin_datetime among all input products (excluding ADFS inputs)
     # Note: input_products != input_adfs
@@ -334,7 +353,7 @@ def update_eopf_assets(
     if dpr_processor.lower() in ["mockup"]:
         eopf_origin_datetime = "2026-01-01T00:00:00Z"
     elif input_products and zattrs_list:
-        eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products)
+        eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products, items=input_items)
     else:
         eopf_origin_datetime = None
 
@@ -359,6 +378,8 @@ def update_eopf_assets(
         eopf_item = zattrs_data["stac_discovery"]
         logger.debug(f"EOPF discovery metadata extracted: {eopf_item}")
 
+        eopf_item["properties"].update(acquisition_station_properties)
+
         # Build STAC items
         stac_item = create_stac_item(eopf_origin_datetime, eopf_item, zattrs_s3_location, product_name, dpr_processor)
 
@@ -375,36 +396,10 @@ def update_eopf_assets(
     return items_metadata
 
 
-def compute_eopf_origin_datetime(env, input_products) -> str:
-    """
-    Compute the maximum ``eopf:origin_datetime`` across all input products.
-
-    For each input product, this function retrieves the corresponding item
-    from the catalog using its item ID and collection ID, extracts the
-    ``eopf:origin_datetime`` property, and returns the latest (maximum)
-    datetime value found.
-
-    If an item cannot be retrieved from the catalog, the error is logged
-    and processing continues with the remaining products.
-
-    Parameters
-    ----------
-    env : object
-        Execution environment object used to serialize and pass context
-        to the catalog flow.
-    input_products : Iterable[dict]
-        Iterable of input product mappings. Each mapping is expected to
-        contain values of the form ``(item_id, collection_id)``.
-
-    Returns
-    -------
-    str
-        ISO 8601 string representing the maximum ``eopf:origin_datetime``
-        found among all retrieved items. If no valid items are found,
-        returns the fallback value ``"2023-01-01T00:00:00Z"``.
-    """
+def get_input_product_items(env, input_products) -> list[Item]:
+    """Retrieve source STAC items, excluding auxiliary inputs, once per update."""
     logger = get_logger()
-    items = []
+    items: list[Item] = []
     if not input_products:
         logger.error("No valid input products found to compute eopf:origin_datetime. Exit")
         raise RuntimeError("No valid input products found to compute eopf:origin_datetime")
@@ -418,7 +413,9 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
                 collection_name,
                 item_id,
             )
-            if not future.result():
+            # Prefect resolves the async task before returning its result.
+            item = cast(Item | None, future.result())
+            if not item:
                 logger.error(
                     f"Expected valid input product item {item_id} was not found"
                     " to compute eopf:origin_datetime. Exit",
@@ -426,12 +423,48 @@ def compute_eopf_origin_datetime(env, input_products) -> str:
                 raise RuntimeError(
                     f"Expected valid input product item {item_id} was not found to compute eopf:origin_datetime",
                 )
-            items.append(future.result())
+            items.append(item)
         except RuntimeError as rte:
             logger.exception(f"Failed to get item '{item_id}' from collection '{collection_name}'")
             raise RuntimeError("No valid items found to compute eopf:origin_datetime") from rte
 
     logger.info(f"Items matching input found in catalog: {len(items)}")
+
+    return items
+
+
+def compute_eopf_origin_datetime(env, input_products, *, items: list[Item] | None = None) -> str:
+    """
+    Compute the maximum ``eopf:origin_datetime`` across all input products.
+
+    For each input product, this function retrieves the corresponding item
+    from the catalog using its item ID and collection ID, extracts the
+    ``eopf:origin_datetime`` property, and returns the latest (maximum)
+    datetime value found.
+
+    If an item cannot be retrieved from the catalog, processing fails.
+    Already retrieved items can be supplied to avoid duplicate catalog requests.
+
+    Parameters
+    ----------
+    env : object
+        Execution environment object used to serialize and pass context
+        to the catalog flow.
+    input_products : Iterable[FlowInputProduct]
+        Input products with item IDs and collection names.
+    items : list[Item] | None
+        Previously retrieved input STAC items, if available.
+
+    Returns
+    -------
+    str
+        ISO 8601 string representing the maximum ``eopf:origin_datetime``
+        found among all retrieved items. Raises ValueError if no origin
+        datetimes are found.
+    """
+    logger = get_logger()
+    if items is None:
+        items = get_input_product_items(env, input_products)
 
     dates = [
         datetime.datetime.fromisoformat(origin_dt.replace("Z", "+00:00"))
@@ -456,7 +489,7 @@ async def run_processor(
     payload: PayloadSchema,
     cluster_info: ClusterInfo,
     s3_payload_run: str,
-    input_products: list[dict],
+    input_products: list[FlowInputProduct],
 ) -> list[DprProcessedItemMetadata]:
     """
     Run the DPR processor.
