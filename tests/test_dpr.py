@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import responses
+import yaml
 from starlette import status
 
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
@@ -80,71 +81,80 @@ async def test_update_configuration(mocker, dpr_client: DprClient, local_mode):
     """Test DprClient.update_configuration"""
 
     payload_contents = """
-store_params:
-    storage_options:
-    key: ${S3_ACCESSKEY_CLUSTER}
-    secret: ${S3_SECRETKEY_CLUSTER}
-    client_kwargs:
-        endpoint_url: ${S3_ENDPOINT_CLUSTER}
-        region_name: ${S3_REGION_CLUSTER}
+reader_params:
+  storage_options:
+  key: ${S3_ACCESSKEY_CLUSTER}
+  secret: ${S3_SECRETKEY_CLUSTER}
+  client_kwargs:
+    endpoint_url: ${S3_ENDPOINT_CLUSTER}
+    region_name: ${S3_REGION_CLUSTER}
 
-dask_context:
-  cluster_type: gateway
-  cluster_config:
-    address: ${DASK_GATEWAY_ADDRESS}
-    reuse_cluster: ${DASK_CLUSTER_INSTANCE}
-    auth:
-      type: jupyterhub
-      api_token: ${JUPYTERHUB_API_TOKEN}
-    auth_local_mode: # auth for local mode
-      type: basic
-      username: ${LOCAL_DASK_USERNAME}
-      password: ${LOCAL_DASK_PASSWORD}
+context_managers:
+  - module: eopf.dask_utils.dask_context_manager
+    context_manager: DaskContext
+    parameters:
+      cluster_type: gateway
+      cluster_config:
+        address: ${DASK_GATEWAY_ADDRESS}
+        reuse_cluster: ${DASK_CLUSTER_INSTANCE}
+        auth:
+          type: jupyterhub
+          api_token: ${JUPYTERHUB_API_TOKEN}
+        auth_local_mode: # auth for local mode
+          type: basic
+          username: ${LOCAL_DASK_USERNAME}
+          password: ${LOCAL_DASK_PASSWORD}
 
-I/O:
+io:
   output_products:
   - path: s3://bucket/output
 """
 
     expected_results_local = """
-store_params:
+reader_params:
   storage_options: null
   key: ${access_key}
   secret: ${secret_key}
   client_kwargs:
     endpoint_url: ${host_bucket}
     region_name: ${bucket_location}
-dask_context:
-  cluster_type: gateway
-  cluster_config:
-    address: address-value
-    reuse_cluster: instance-value
-    auth:
-      type: basic
-      username: ${LOCAL_DASK_USERNAME}
-      password: ${LOCAL_DASK_PASSWORD}
-I/O:
+context_managers:
+  - module: eopf.dask_utils.dask_context_manager
+    context_manager: DaskContext
+    parameters:
+      cluster_type: gateway
+      cluster_config:
+        address: address-value
+        reuse_cluster: instance-value
+        auth:
+          type: basic
+          username: ${LOCAL_DASK_USERNAME}
+          password: ${LOCAL_DASK_PASSWORD}
+io:
   output_products:
   - path: s3://bucket/output
 """
 
     expected_results_cluster = """
-store_params:
+reader_params:
   storage_options: null
   key: ${S3_ACCESSKEY}
   secret: ${S3_SECRETKEY}
   client_kwargs:
     endpoint_url: ${S3_ENDPOINT}
     region_name: ${S3_REGION}
-dask_context:
-  cluster_type: gateway
-  cluster_config:
-    address: address-value
-    reuse_cluster: instance-value
-    auth:
-      type: jupyterhub
-      api_token: ${JUPYTERHUB_API_TOKEN}
-I/O:
+context_managers:
+  - module: eopf.dask_utils.dask_context_manager
+    context_manager: DaskContext
+    parameters:
+      cluster_type: gateway
+      cluster_config:
+        address: address-value
+        reuse_cluster: instance-value
+        auth:
+          type: jupyterhub
+          api_token: ${JUPYTERHUB_API_TOKEN}
+io:
   output_products:
   - path: s3://bucket/output
 """
@@ -179,7 +189,9 @@ I/O:
         )
 
     mock_s3_upload_empty.assert_awaited_with("s3://bucket/output/.empty")
-    assert uploaded_contents.strip() == (expected_results_local if local_mode else expected_results_cluster).strip()
+    assert yaml.safe_load(uploaded_contents) == yaml.safe_load(
+        expected_results_local if local_mode else expected_results_cluster,
+    )
 
 
 # ---------------------------------------------------------------------------

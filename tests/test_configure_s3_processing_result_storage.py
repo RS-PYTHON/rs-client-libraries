@@ -55,7 +55,6 @@ def test_ignores_non_shared_disk_entries(monkeypatch):
             "kind": "shared_disk",
             "name": "good",
             "absolute_path": "/mnt/good/",
-            "opening_mode": "CREATE_OVERWRITE",
         },
     ]
 
@@ -83,50 +82,6 @@ def test_requires_absolute_path_and_name(monkeypatch):
     assert get_storage_path() == "/mnt/ok"
 
 
-def test_opening_mode_must_be_create_overwrite_when_set(monkeypatch):
-    """Should only accept entry if opening_mode is CREATE_OVERWRITE when present."""
-    storage_configuration = [
-        {
-            "kind": "shared_disk",
-            "name": "ro",
-            "absolute_path": "/mnt/ro/",
-            "opening_mode": "READ_ONLY",
-        },
-        {
-            "kind": "shared_disk",
-            "name": "ok",
-            "absolute_path": "/mnt/ok/",
-            "opening_mode": "CREATE_OVERWRITE",
-        },
-    ]
-
-    def fake_variable_get(_var_name):
-        """Return storage_configuration with a read-only and a writable entry."""
-        return DummyVariableResult({"storage_configuration": storage_configuration})
-
-    monkeypatch.setattr(pv.Variable, "get", staticmethod(fake_variable_get))
-    assert get_storage_path() == "/mnt/ok"
-
-
-def test_allows_create_overwrite_case_insensitive(monkeypatch):
-    """Should treat opening_mode case-insensitively."""
-    storage_configuration = [
-        {
-            "kind": "shared_disk",
-            "name": "ok",
-            "absolute_path": "/mnt/ok/",
-            "opening_mode": "create_overwrite",
-        },
-    ]
-
-    def fake_variable_get(_var_name):
-        """Return a storage configuration using lowercase opening_mode."""
-        return DummyVariableResult({"storage_configuration": storage_configuration})
-
-    monkeypatch.setattr(pv.Variable, "get", staticmethod(fake_variable_get))
-    assert get_storage_path() == "/mnt/ok"
-
-
 def test_returns_first_matching_entry(monkeypatch):
     """Should return the first matching shared_disk entry that satisfies rules."""
     storage_configuration = [
@@ -134,13 +89,11 @@ def test_returns_first_matching_entry(monkeypatch):
             "kind": "shared_disk",
             "name": "first",
             "absolute_path": "/mnt/first/",
-            "opening_mode": "CREATE_OVERWRITE",
         },
         {
             "kind": "shared_disk",
             "name": "second",
             "absolute_path": "/mnt/second/",
-            "opening_mode": "CREATE_OVERWRITE",
         },
     ]
 
@@ -188,27 +141,3 @@ def test_raises_when_storage_configuration_missing_or_not_list(monkeypatch):
     with pytest.raises(RuntimeError) as excinfo2:
         get_storage_path()
     assert "storage_configuration is not a list" in str(excinfo2.value)
-
-
-def test_raises_when_no_matching_entry_found(monkeypatch):
-    """Should raise RuntimeError when no writable shared_disk entry is found."""
-    storage_configuration = [
-        {
-            "kind": "shared_disk",
-            "name": "ro",
-            "absolute_path": "/mnt/ro/",
-            "opening_mode": "READ_ONLY",
-        },
-        {"kind": "other", "name": "x", "absolute_path": "/mnt/x/"},
-    ]
-
-    def fake_variable_get(_var_name):
-        """Return storage_configuration where no entry matches writable criteria."""
-        return DummyVariableResult({"storage_configuration": storage_configuration})
-
-    monkeypatch.setattr(pv.Variable, "get", staticmethod(fake_variable_get))
-
-    with pytest.raises(RuntimeError) as excinfo:
-        get_storage_path()
-
-    assert "Failed to get the shared mounted path from the Prefect values" in str(excinfo.value)

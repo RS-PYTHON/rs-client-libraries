@@ -137,7 +137,7 @@ class StorageOptions(BasePayloadModel):
     """Options to access a storage backend"""
 
     # The field name is excluded to avoid including it in the payload
-    # Otherwise, the processor yelds an error when trying to parse the store_params
+    # Otherwise, the processor yelds an error when trying to parse the store params
     name: str = Field(exclude=True)
     key: SecretStr
     secret: SecretStr
@@ -145,15 +145,21 @@ class StorageOptions(BasePayloadModel):
 
 
 class StoreParams(BasePayloadModel):
-    """Flexible store_params representation for payloads"""
+    """
+    Flexible store params (reader_params or adf_params or writer_params or breakpoints_params)
+    representation for payloads
+    """
 
-    # Either a simple S3 secret alias
+    # Storage is either a simple S3 secret alias
     s3_secret_alias: str | None = None
     # Or a storage options used for s3
     storage_options: StorageOptions | None = None
     # Or a regex + multiplicity
     regex: str | None = None
     multiplicity: str | int | None = None
+
+    # Allow extra fields, copy/pasted from the tasktable
+    model_config = ConfigDict(extra="allow")
 
     @field_validator("multiplicity")
     @classmethod
@@ -168,20 +174,18 @@ class StoreParams(BasePayloadModel):
         return v
 
 
-class LoggingConfig(BasePayloadModel):
-    """Logging configuration used in the general_configuration section"""
-
-    level: str | None = Field(default="INFO", description="Logging level")
-
-
 # Main sections
 
 
 class GeneralConfiguration(BasePayloadModel):
     """General configuration options for EOConfiguration behavior"""
 
-    logging: LoggingConfig | None = LoggingConfig(level="DEBUG")
-    triggering__use_basic_logging: bool | None = True
+    triggering__id: str | None = None
+    triggering__load_default_logging: bool | None = None
+    triggering__use_basic_logging: bool | None = None
+    triggering__progress_logging: bool | None = None
+    logging__progress_level: str | None = "DEBUG"
+    logging__progress_format: str | None = None
     triggering__wait_before_exit: int | None = 10
     triggering__use_datatree: bool | None = None
     triggering__use_default_filename: bool | None = None
@@ -190,7 +194,13 @@ class GeneralConfiguration(BasePayloadModel):
     breakpoints__folder: str | None = None
     triggering__create_temporary: bool | None = None
     triggering__temporary_shared: bool | None = None
+    triggering__stage_s3_outputs: bool | None = None
+    triggering__stage_s3_outputs_min_size: int | None = None
+    triggering__stage_s3_memory_fit_safety_ratio: float | None = None
+    triggering__stage_s3_temporary_prefix: bool | None = None
     triggering__validate_run: bool | None = None
+    triggering__dry_run: bool | None = None
+    triggering__output_generator_consumption: str | None = None
     triggering__validate_mode: str | None = None
     triggering__error_policy: str | None = None
     temporary__folder: str | None = None
@@ -206,7 +216,7 @@ class ExternalModule(BasePayloadModel):
 
     name: str
     alias: str | None = None
-    nested: bool | None = None
+    star_import: bool | None = None
     folder: str | None = None
 
 
@@ -215,7 +225,7 @@ class Breakpoints(BasePayloadModel):
 
     activate_all: bool | None = None
     folder: str | None = None
-    store_params: StoreParams | None = None
+    breakpoints_params: StoreParams | None = None
     ids: list[str] | None = None
 
 
@@ -244,10 +254,9 @@ class InputProduct(BasePayloadModel):
 
     id: str
     path: str
-    type: str | None = Field(default="filename")
-    store_type: str
-    store_params: StoreParams | None = None
-    opening_mode: str | None = Field(default=None)
+    type: str | None = Field(default="file")
+    engine: str
+    reader_params: StoreParams | None = None
     # STAC self links used for lineage only; never serialized to the EOPF payload.
     source_item_hrefs: list[str] = Field(default_factory=list, exclude=True)
 
@@ -257,10 +266,9 @@ class OutputProduct(BasePayloadModel):
 
     id: str
     path: str
-    store_type: str
-    store_params: StoreParams | None = None
-    type: str | None = Field(default="filename")
-    opening_mode: str | None = Field(default="CREATE")
+    engine: str
+    writer_params: StoreParams | None = None
+    type: str | None = Field(default="file")
     apply_eoqc: bool | None = Field(default=False)
     autoclean: bool | None = Field(default=False, exclude=True)
     # Excluded from serialization by default
@@ -276,7 +284,7 @@ class AdfConfig(BasePayloadModel):
 
     id: str
     path: str | SecretStr
-    store_params: StoreParams | None = None
+    adf_params: StoreParams | None = None
 
 
 class IOConfig(BasePayloadModel):
@@ -287,15 +295,22 @@ class IOConfig(BasePayloadModel):
     adfs: list[AdfConfig] = []
 
 
-class DaskContext(BasePayloadModel):
+class DaskContextParameters(BasePayloadModel):
     """Configuration for the DaskContext"""
 
     cluster_type: str | None = "local"  # Optional but if not available "address" is mandatory
     address: str | None = None
     cluster_config: dict[str, str | int | bool] | None = DEFAULT_CLUSTER_CONFIG
     client_config: dict[str, str | int | bool] | None = {}
-    dask_config: dict[str, str | int | bool] | None = DEFAULT_DASK_CONFIG
     performance_report_file: str | None = "report.html"
+
+
+class ContextManager(BasePayloadModel):
+    """Configuration for a ContextManager"""
+
+    module: str = "eopf.dask_utils.dask_context_manager"
+    context_manager: str = "DaskContext"
+    parameters: list[DaskContextParameters]
 
 
 class EOQCConfig(BasePayloadModel):
@@ -320,8 +335,9 @@ class PayloadSchema(BasePayloadModel):
     external_modules: list[ExternalModule] | None = None
     breakpoints: Breakpoints | None = None
     workflow: list[WorkflowStep] | None = None
-    io: IOConfig | None = Field(None, alias="I/O")
-    dask_context: DaskContext | None = None
+    io: IOConfig | None = None
+    context_managers: list[ContextManager] = []
+    dask_config: dict[str, str | int | bool] | None = DEFAULT_DASK_CONFIG
     logging: list[str] | None = None
     config: list[str] | None = None
     secret: list[str] | None = None

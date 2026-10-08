@@ -35,7 +35,6 @@ def get_storage_path():
     - The entry is a dict
     - `entry["kind"] == "shared_disk"`
     - The entry provides both `entry["name"]` and `entry["absolute_path"]`
-    - If `entry["opening_mode"]` is set, it must be `CREATE_OVERWRITE` (case-insensitive) to ensure the path is writable
 
     Returns:
         str: The selected storage entry's `absolute_path`
@@ -66,10 +65,6 @@ def get_storage_path():
             continue
         absolute_path = entry.get("absolute_path")
         if not absolute_path:
-            continue
-        opening_mode = entry.get("opening_mode")
-        # make sure the path is not read only
-        if opening_mode is not None and opening_mode.upper() != "CREATE_OVERWRITE":
             continue
         return absolute_path.rstrip("/")
     raise RuntimeError(f"Failed to get the shared mounted path from the Prefect values: {storage_configuration}")
