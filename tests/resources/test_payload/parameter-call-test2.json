@@ -1,5 +1,4 @@
 {
-    "pipeline": "SLC__1_NRB__1",
     "priority": "low",
     "workflow": "on-demand",
     "processor": {

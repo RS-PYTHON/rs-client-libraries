@@ -277,7 +277,8 @@
                         "streaming_mode": false,
                         "temporary_path": "./tmp",
                         "isp_extraction_batch_size": 5,
-                        "acquisition_report_output_path": "./acq_report"
+                        "acquisition_report_output_path": "./acq_report",
+                        "test_external_variable": "{external_variable.satellite}"
                     }
                 }
             ]

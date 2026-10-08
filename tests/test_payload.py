@@ -15,6 +15,7 @@
 """Test whole payload generation using payload_builder.py, payload_generator.py, the storage configuration, ..."""
 
 import json
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -100,10 +101,15 @@ logger = Logging.default(__name__)
     ids=[""],
 )
 @pytest.mark.parametrize(
-    "dpr_params_filename,tasktable_filename,payload_filename",
+    "dpr_params_filename,tasktable_filename,pipelines,payload_filename",
     [
-        ["parameter-call-test1.json", "tasktable-test1.json", "case1"],
-        ["parameter-call-test2.json", "tasktable-test2.json", "case2"],
+        ["parameter-call-test1.json", "tasktable-test1.json", ["s1_l0_full"], "case1"],
+        [
+            "parameter-call-test2.json",
+            "tasktable-test2.json",
+            ["ARD_DEM_ONLY_PIPELINE", "ARD_REFERENCE_PIPELINE", "SLC_.1_CSL__1", "SLC__1_GSL__1", "SLC__1_NRB__1"],
+            "case2",
+        ],
     ],
     ids=["case1", "case2"],
 )
@@ -112,6 +118,7 @@ async def test_whole_payload(
     mocker,
     dpr_params_filename: str,  # file that contains input parameters for executing the 'dpr-process' flow
     tasktable_filename: str,  # file that contains the tasktable
+    pipelines: list[str],  # list of pipelines to test
     payload_filename: str,  # file that contains the generated payload
     mocked_rspy_landing_pages,  # /auxip, /cadip, /catalog, /...
     mocked_stac_catalog_get_collection,  # /catalog/collections[/...]
@@ -136,48 +143,66 @@ async def test_whole_payload(
     # Read input parameters
     with open(CONFIG_DIR / dpr_params_filename, encoding="utf-8") as opened:
         params = json.load(opened)
-    dpr_input = DprProcessIn(
-        env=FlowEnvArgs(owner_id=OWNER_ID),
-        processor_name="mockup",
-        processor_version="1.0",
-        dask_cluster_label=DASK_CLUSTER_LABEL,
-        s3_payload_file=f"s3://{MOCKED_BUCKET}/payload.yaml",
-        **params,
-    )
 
-    # Read tasktable
-    with open(str(CONFIG_DIR / tasktable_filename), encoding="utf-8") as opened:
-        task_table = json.load(opened)
-
-    @flow(name="process-generic")
-    async def from_a_flow():
-        """Build and generate the payload file from a prefect flow"""
-        payload_task, source_items = on_demand_processing.build_and_generate_payload(
-            logger,
-            flow_env=FlowEnv(dpr_input.env),
-            task_table=task_table,
-            dpr_input=dpr_input,
-            retry_config=RetryConfig(staging_retries=0),
-        )
-        return payload_task.result(), source_items
-
-    payload, _source_items = await from_a_flow()
-    payload_dict = payload.dump(reveal_secrets=True)
-
-    # Remove random uuids from output paths
-    for product in payload_dict["io"]["output_products"]:
-        path = product["path"]
+    # One run per pipeline
+    errors = []
+    for pipeline in pipelines:
         try:
-            UUID(Path(path).stem)
-            product["path"] = str(Path(path).parent / "00000000-0000-0000-0000-000000000001")
-        except ValueError:  # not an uuid
-            pass
+            # Init input parameters
+            dpr_input = DprProcessIn(
+                env=FlowEnvArgs(owner_id=OWNER_ID),
+                processor_name="mockup",
+                processor_version="1.0",
+                dask_cluster_label=DASK_CLUSTER_LABEL,
+                s3_payload_file=f"s3://{MOCKED_BUCKET}/payload.yaml",
+                **params,
+                pipeline=pipeline,
+            )
 
-    # Write result
-    with open(CONFIG_DIR / f"generated-payload-{payload_filename}.yml", "w", encoding="utf-8") as opened:
-        opened.write(yaml.dump(payload_dict, default_flow_style=False, sort_keys=False))
+            # Read tasktable
+            with open(str(CONFIG_DIR / tasktable_filename), encoding="utf-8") as opened:
+                task_table = json.load(opened)
 
-    # Compare with reference
-    with open(CONFIG_DIR / f"reference-payload-{payload_filename}.yml", encoding="utf-8") as opened:
-        reference = yaml.safe_load(opened)
-    assert payload_dict == reference
+            @flow(name="process-generic")
+            async def from_a_flow():
+                """Build and generate the payload file from a prefect flow"""
+                payload_task, source_items = on_demand_processing.build_and_generate_payload(
+                    logger,
+                    flow_env=FlowEnv(dpr_input.env),
+                    task_table=task_table,
+                    dpr_input=dpr_input,
+                    retry_config=RetryConfig(staging_retries=0),
+                )
+                return payload_task.result(), source_items
+
+            payload, _source_items = await from_a_flow()
+            payload_dict = payload.dump(reveal_secrets=True)
+
+            # Remove random uuids from output paths
+            for product in payload_dict["io"]["output_products"]:
+                path = product["path"]
+                try:
+                    UUID(Path(path).stem)
+                    product["path"] = str(Path(path).parent / "00000000-0000-0000-0000-000000000001")
+                except ValueError:  # not an uuid
+                    pass
+
+            # Write result
+            with open(
+                CONFIG_DIR / f"generated-payload-{payload_filename}-{pipeline}.yml",
+                "w",
+                encoding="utf-8",
+            ) as opened:
+                opened.write(yaml.dump(payload_dict, default_flow_style=False, sort_keys=False))
+
+            # Compare with reference
+            with open(CONFIG_DIR / f"reference-payload-{payload_filename}-{pipeline}.yml", encoding="utf-8") as opened:
+                reference = yaml.safe_load(opened)
+            assert payload_dict == reference
+
+        except Exception as error:
+            print(traceback.format_exc())
+            errors.append(error)
+
+    if errors:
+        raise RuntimeError(errors)

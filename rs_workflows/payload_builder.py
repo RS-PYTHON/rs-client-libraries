@@ -29,11 +29,12 @@ class TaskTableError(ValueError):
     """Errors related to Task Table parsing/validation."""
 
 
-def _replace_external_variables(obj, external_variables: dict[str, Any] | None):
+def replace_external_variables(obj, external_variables: dict[str, Any] | None):
+    """Replace configured external variables with the input parameters"""
     if isinstance(obj, dict):
-        return {k: _replace_external_variables(v, external_variables) for k, v in obj.items()}
+        return {k: replace_external_variables(v, external_variables) for k, v in obj.items()}
     if isinstance(obj, list):
-        return [_replace_external_variables(v, external_variables) for v in obj]
+        return [replace_external_variables(v, external_variables) for v in obj]
     if isinstance(obj, str) and external_variables:
 
         def replacer(match: re.Match):
@@ -156,7 +157,6 @@ def _build_entry(
     io_product: dict,
     io_index_type: dict[str, dict[str, Any]],
     processing_modes: Iterable[str] | None,
-    external_variables: dict[str, Any] | None,
     origin: str = "",
 ) -> dict[str, Any] | None:
     """
@@ -212,9 +212,6 @@ def _build_entry(
         if k not in [*product_details, "mode"]:
             product_details[k] = v
 
-    # Finally, replace the external variables with the values given
-    product_details = _replace_external_variables(product_details, external_variables)
-
     return product_details
 
 
@@ -223,7 +220,6 @@ def _build_single_unit_details(
     units_index: dict[str, dict[str, Any]],
     io_index: dict[str, dict[str, dict[str, Any]]],
     processing_modes: Iterable[str] | None,
-    external_variables: dict[str, Any] | None,
     full_pipeline: dict[str, Any] | None = None,
     step_id: int = 0,
     parameters: dict[str, Any] | None = None,
@@ -239,7 +235,6 @@ def _build_single_unit_details(
         units_index: dictionary of the unit descriptions from the "units" section of the tasktable
         io_index: dictionary of the I/O descriptions from the "io" section of the tasktable
         processing_modes: list of processing modes used for this flow
-        external_variables: dictionary of external variables values from flow's input
         full_pipeline: full definition of the pipeline from the tasktable.
             Optional, needed only if the flow mode is "pipeline"
         step_id: ID of the step in the pipeline corresponding to the given unit. Optional, needed only
@@ -275,7 +270,6 @@ def _build_single_unit_details(
             input_product,
             io_index.get("input", {}),
             processing_modes,
-            external_variables,
             origin=input_product_origin,
         )
         if input_entry:
@@ -284,7 +278,7 @@ def _build_single_unit_details(
     # Build input ADFS, only defined by the unit details, does not depend on the mode
     input_adfs: list[dict[str, Any]] = []
     for adfs_product in unit_details.get("input_adfs", {}):
-        adfs_entry = _build_entry(adfs_product, io_index.get("adfs", {}), processing_modes, external_variables)
+        adfs_entry = _build_entry(adfs_product, io_index.get("adfs", {}), processing_modes)
         if adfs_entry:
             input_adfs.append(adfs_entry)
 
@@ -306,7 +300,6 @@ def _build_single_unit_details(
             output_product,
             io_index.get("output", {}),
             processing_modes,
-            external_variables,
             origin=output_product_origin,
         )
         if output_entry:
@@ -336,7 +329,6 @@ def build_unit_list(
     pipeline: str | None = None,
     unit: str | None = None,
     processing_mode: Iterable[str] | None = None,
-    external_variables: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Build the list of units needed for the payload, from the tasktable given and the flow mode (pipeline or unit).
@@ -350,7 +342,6 @@ def build_unit_list(
         pipeline: name of the pipeline to build, if the mode is "pipeline". If "unit" is given, has to be None.
         unit: name of the unit to build, if the mode is "unit". If "pipeline" is given, has to be None.
         processing_mode: list of processing modes used for this flow. Optional
-        external_variables: dictionary of external variables values from flow's input. Optional
     """
     # Validate pipelines shape
     if not isinstance(tasktable, dict):
@@ -392,7 +383,6 @@ def build_unit_list(
             units_index,
             io_index,
             processing_mode,
-            external_variables,
         )
         out_units.append(unit_details)
 
@@ -427,7 +417,6 @@ def build_unit_list(
                 units_index,
                 io_index,
                 processing_mode,
-                external_variables,
                 full_pipeline=full_pipeline,
                 step_id=step["step_id"],
                 parameters=step.get("parameters", None),

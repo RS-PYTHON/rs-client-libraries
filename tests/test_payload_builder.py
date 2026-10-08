@@ -24,6 +24,7 @@ import pytest
 from rs_workflows.payload_builder import (
     TaskTableError,
     build_unit_list,
+    replace_external_variables,
 )
 
 SCENARIOS: dict[str, dict] = {
@@ -101,16 +102,19 @@ def test_build_unit_list_returns_dict(case_id, cfg):  # pylint: disable=unused-a
     with tt_path.open("r", encoding="utf-8") as f:
         tt = json.load(f)
 
-    out = build_unit_list(
-        tasktable=tt,
-        pipeline=cfg["kwargs"].get("pipeline"),
-        unit=cfg["kwargs"].get("unit"),
-        processing_mode=cfg["kwargs"].get("processing_mode"),
+    tt = replace_external_variables(
+        tt,
         external_variables={
             "start_datetime": datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
             "end_datetime": datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
             "satellite": "sentinel-3a",
         },
+    )
+    out = build_unit_list(
+        tasktable=tt,
+        pipeline=cfg["kwargs"].get("pipeline"),
+        unit=cfg["kwargs"].get("unit"),
+        processing_mode=cfg["kwargs"].get("processing_mode"),
     )
     assert isinstance(out, list)
 
@@ -497,14 +501,17 @@ def test_case_s1_l0_exact_output_with_regex():
     start_datetime = datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc)
     end_datetime = datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc)
 
-    out = build_unit_list(
-        tasktable=tt,
-        pipeline="s1_l0_full",
-        processing_mode=None,
+    tt = replace_external_variables(
+        tt,
         external_variables={
             "start_datetime": start_datetime,
             "end_datetime": end_datetime,
         },
+    )
+    out = build_unit_list(
+        tasktable=tt,
+        pipeline="s1_l0_full",
+        processing_mode=None,
     )
 
     expected = [
@@ -582,7 +589,7 @@ def test_case_s1_l0_exact_output_with_regex():
     assert out == expected
 
 
-def test_build_unit_list_none_datetime_raises_task_table_error():
+def test_external_variables_none_datetime_raises_task_table_error():
     """Regression test: a task table referencing a '{external_variable.*datetime}' placeholder
     must raise a clear TaskTableError -- not an AttributeError -- when the corresponding
     external variable value is None (e.g. start_datetime/end_datetime not provided by the flow).
@@ -593,12 +600,9 @@ def test_build_unit_list_none_datetime_raises_task_table_error():
     """
     tt_path = Path(__file__).parent / "resources" / "TaskTable_S1_L0_generated_by_rs_python_v1.json"
     tt = json.loads(tt_path.read_text(encoding="utf-8"))
-
     with pytest.raises(TaskTableError, match="External variable 'start_datetime' is required"):
-        build_unit_list(
-            tasktable=tt,
-            pipeline="s1_l0_full",
-            processing_mode=None,
+        tt = replace_external_variables(
+            tt,
             external_variables={
                 "start_datetime": None,
                 "end_datetime": None,

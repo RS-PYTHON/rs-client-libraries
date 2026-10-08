@@ -47,6 +47,7 @@ from rs_workflows.flow_utils import (
 from rs_workflows.payload_builder import (
     build_cql2_json,
     build_unit_list,
+    replace_external_variables,
 )
 from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
 from rs_workflows.payload_template import PayloadSchema
@@ -571,19 +572,21 @@ def build_and_generate_payload(
         schema = json.load(opened)
     jsonschema.validate(instance=task_table, schema=schema)
 
+    # Dictionary of external variables values from flow's input
+    external_variables = {
+        "start_datetime": dpr_input.start_datetime,
+        "end_datetime": dpr_input.end_datetime,
+        "reference_date": dpr_input.reference_date,
+        "instrument_mode": dpr_input.instrument_mode,
+        "satellite": dpr_input.satellite,
+    }
+
+    # Replace configured external variables from the task table with the input parameters
+    task_table = replace_external_variables(task_table, external_variables)
+
     processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
     unit_list = build_unit_list(
-        tasktable=task_table,
-        pipeline=dpr_input.pipeline,
-        unit=dpr_input.unit,
-        processing_mode=processing_mode,
-        external_variables={
-            "start_datetime": dpr_input.start_datetime,
-            "end_datetime": dpr_input.end_datetime,
-            "reference_date": dpr_input.reference_date,
-            "instrument_mode": dpr_input.instrument_mode,
-            "satellite": dpr_input.satellite,
-        },
+        tasktable=task_table, pipeline=dpr_input.pipeline, unit=dpr_input.unit, processing_mode=processing_mode
     )
 
     tasks = []

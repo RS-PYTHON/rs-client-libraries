@@ -1,5 +1,4 @@
 {
-    "pipeline": "s1_l0_full",
     "priority": "low",
     "workflow": "on-demand",
     "processor": {
