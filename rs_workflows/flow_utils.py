@@ -611,3 +611,9 @@ class ConversionIn(BaseModel):
         title="Selected Assets",
         description=("Set of selected asset keys to stage. If not provided, all assets will be converted"),
     )
+
+    zarr_format: Literal[2, 3] = Field(
+        default=2,
+        title="Zarr format (default: 2)",
+        description="Output Zarr format. Defaults to 2 when omitted. "
+    )

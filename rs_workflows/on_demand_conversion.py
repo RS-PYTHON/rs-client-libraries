@@ -286,7 +286,7 @@ async def on_demand_conversion(
         # Resolve the final S3 bucket using the same rules as generic DPR processing.
         output_bucket = find_s3_output_bucket(
             bucket_configuration,
-            conversion_input.owner_id,
+            flow_env.owner_id,
             output_collection,
             output_product_type,
         )
@@ -296,7 +296,7 @@ async def on_demand_conversion(
         output_zarr_dir_path = os.path.join(
             "s3://",
             output_bucket,
-            conversion_input.owner_id,
+            flow_env.owner_id,
             output_collection,
         )
 
@@ -326,6 +326,7 @@ async def on_demand_conversion(
         payload = {
             "input_safe_path": input_safe_path,
             "output_zarr_dir_path": output_zarr_dir_path,
+            "zarr_format": conversion_input.zarr_format,
         }
 
         cluster_info = ClusterInfo(
