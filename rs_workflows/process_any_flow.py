@@ -69,19 +69,12 @@ async def process_any(
     ##################################################
     # Check default settings from Prefect variable
     ##################################################
-    default_settings_var_name:str = f'{processing_id}-default-setting'
+    default_settings_var_name:str = f'{processing_id.value}-default-setting'
     logger.info(f"Read prefect variable named '{default_settings_var_name}'")
 
-    default_settings = Variable.get(default_settings_var_name)
+    default_settings = await Variable.get(default_settings_var_name)
     if default_settings is None:
         raise RuntimeError(f"❌ Prefect variable {default_settings_var_name!r} is missing")
-
-    # If Prefect variable return JSON (str), we transform it on dic
-    if isinstance(default_settings, str):
-        try:
-            default_settings = json.loads(default_settings)
-        except json.JSONDecodeError as err:
-            raise ValueError(f"❌ Prefect variable {default_settings_var_name!r} contains invalid JSON") from err
 
     # Check JSON schema
     schema = Path("./schemas/processor_default_settings.schema.json")
@@ -96,3 +89,9 @@ async def process_any(
         raise ValueError(
             f"❌ Invalid JSON schema for var set in Prefect variable {default_settings_var_name!r}:\n{err.message}"
         ) from err
+
+
+    ##################################################
+    # Create all input for DPR processing
+    ##################################################
+    
