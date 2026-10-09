@@ -20,6 +20,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import Enum
+from typing import Literal
 
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanContext
@@ -612,10 +613,6 @@ class ConversionIn(BaseModel):
             "Generated product. Specifies a name, the product type, and the collection where the output will be stored."
         ),
     )
-    owner_id: str = Field(
-        title="Owner ID",
-        description="User/owner ID necessary to retrieve the user info from the right Prefect block.",
-    )
     dask_cluster_label: str = Field(
         title="Dask Cluster Label",
         description="Label of the Dask cluster to use for SAFE conversion.",
@@ -625,13 +622,11 @@ class ConversionIn(BaseModel):
         title="Dask Cluster Instance",
         description="Optional Dask cluster instance ID used by the DPR conversion service.",
     )
-
     selected_assets: list[str] | None = Field(
         default=None,
         title="Selected Assets",
         description=("Set of selected asset keys to stage. If not provided, all assets will be converted"),
     )
-
     zarr_format: Literal[2, 3] = Field(
         default=2,
         title="Zarr format (default: 2)",
