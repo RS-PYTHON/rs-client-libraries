@@ -26,6 +26,8 @@ from rs_workflows.staging_flow import staging_task
 from rs_workflows.utils.prefect import get_logger
 from typing import Any
 from enum import Enum
+from prefect.variables import Variable
+from jsonschema import Draft202012Validator
 
 
 from rs_workflows.flow_utils import (
@@ -58,57 +60,17 @@ async def process_any(
     processing_id: ProcessingId,
     workflow: WorkflowType = WorkflowType.ON_DEMAND,
 ):
-    """
-    # Import ADF from Object Storage
-
-    Imports a set of *ADF files* into the *rs-catalog* from an object storage bucket.
-
-    ---
-
-    ## Workflow Steps
-
-    1. *Download* — Retrieves the compressed ADF files from the object storage
-    2. *Decompress* — Extracts the archive contents
-    3. *Filter* — Selects only the relevant ADF files to import
-    4. *Publish* — Pushes the selected files to the rs-catalog as STAC items
-
-    ---
-
-    ## Parameters
-
-    | Parameter | Type | Default | Description |
-    |---|---|---|---|
-    | `configuration` | `dict` | *required* | JSON configuration (see format below) |
-    | `owner` | `str` | `copernicus` | Name of the user triggering the flow |
-    | `obs_id` | `str` | `PUBLICATION` | Object storage identifier for credentials |
-    | `rehearsal_mode` | `bool` | `True` | If `True`, STAC items are *not* published |
-
-    > *Note:* The collection where ADF files are published is derived from `product:type` by default,
-    > but can be *overridden* via the configuration.
-
-    ---
-
-    ## Configuration Format example
-
-    ```json
-    {
-        "input": {
-            "bucket": "rs-f1-archive",
-            "path": "S3_OL1/3.23/S3_OL1_3.23_2023-06-20/Ancillary_Data",
-            "files": ["S3_OL1_3.23_2023-06-20_ADF.tar.gz"],
-            "extract_pattern": "S3__*.tgz|S3A_*.tgz"
-        },
-        "output": {
-            "additional_path": "",
-            "collection": "adf-olci-baseline-3-23",
-            "override": False
-        }
-    }
-    ```
-    ---
-    """
-    logger = get_logger()
-    prefect_variable_name:str = f'{processing_id}-default-setting'
-    logger.info(f"Read prefect variable named '{prefect_variable_name}'")
-
     
+    logger = get_logger()
+
+    ##################################################
+    # Check default settings from Prefect variable
+    ##################################################
+    default_settings_var_name:str = f'{processing_id}-default-setting'
+    logger.info(f"Read prefect variable named '{default_settings_var_name}'")
+
+    default_settings = Variable.get(default_settings_var_name)
+    if default_settings is None:
+        raise RuntimeError(f"❌ Prefect variable {default_settings_var_name!r} is missing")
+
+    default_settings_schema:dict = "./schemas/processor_"
