@@ -639,7 +639,7 @@ def s3_delete(s3_prefix: str, log: bool = False):
         )
 
 
-async def upload_payload_bytes(data: bytes, payload_path: str, **upload_kwargs: dict[str, Any]) -> str:
+async def upload_payload_bytes(data: bytes, payload_path: str, **upload_kwargs: dict[str, Any]):
     """Upload in-memory bytes to either S3 bucket or local file.
 
     Args:
