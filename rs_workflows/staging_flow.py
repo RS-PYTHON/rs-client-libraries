@@ -14,11 +14,12 @@
 
 """Staging flow implementation"""
 
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from pystac import ItemCollection
 
 from rs_client.ogcapi.staging_client import StagingClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.utils.prefect import get_logger
 
 
 @flow(name="stage-generic")
@@ -47,7 +48,7 @@ async def staging(
     Returns:
         dict[str, dict]: Job status after completion
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)

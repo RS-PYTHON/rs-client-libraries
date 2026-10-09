@@ -35,7 +35,7 @@ async def test_process_s3l1_olci_builds_inputs_from_raw_l0_products(mocker):
         "call_dpr_flow",
         new=AsyncMock(return_value=[]),
     )
-    mocker.patch.object(s3_l1_olci, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(s3_l1_olci, "get_logger", return_value=MagicMock())
     mocker.patch.object(
         s3_l1_olci,
         "read_s3_orchestration_settings",
@@ -108,8 +108,8 @@ async def test_process_s3l2_olci_resolves_settings_and_calls_dpr(mocker, overrid
             },
         ),
     )
-    mocker.patch.object(s3_l2_olci, "get_run_logger", return_value=MagicMock())
-    mocker.patch.object(s3_processing_utils, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(s3_l2_olci, "get_logger", return_value=MagicMock())
+    mocker.patch.object(s3_processing_utils, "get_logger", return_value=MagicMock())
     mocker.patch.object(s3_l2_olci.runtime.flow_run, "id", "l2-run-id")
     emit_event = mocker.patch.object(s3_processing_utils, "emit_event")
     expected_result = [{"id": "olci-l2-output", "collection": "olci-l2"}]
@@ -197,8 +197,8 @@ async def test_process_s3l1_emits_published_efr_inputs(mocker, efr_count):
     resolved_params = MagicMock(owner_identifier="toto")
     flow_params.resolve = AsyncMock(return_value=resolved_params)
     mocker.patch.object(s3_l1_olci, "call_dpr_flow", new=AsyncMock(return_value=products))
-    mocker.patch.object(s3_l1_olci, "get_run_logger", return_value=MagicMock())
-    mocker.patch.object(s3_processing_utils, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(s3_l1_olci, "get_logger", return_value=MagicMock())
+    mocker.patch.object(s3_processing_utils, "get_logger", return_value=MagicMock())
     mocker.patch.object(s3_l1_olci.runtime.flow_run, "id", "l1-run-id")
     emit_event = mocker.patch.object(s3_l1_olci, "emit_event")
     # Observe both event emitters together to check quicklooks are requested before L2 processing.

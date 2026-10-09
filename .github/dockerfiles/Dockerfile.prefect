@@ -20,7 +20,7 @@
 #
 
 ARG PYTHON_VERSION=3.13.12
-ARG PREFECT_TAG=3.7.5
+ARG PREFECT_TAG=3.8.7
 
 # K8S image suffix: -k8s or empty
 ARG K8S_IMAGE=xxx
@@ -49,7 +49,7 @@ RUN pip install -U pip && \
         matplotlib \
         rasterio \
         sentineltoolbox \
-        "zarr<3" \
+        "zarr>=3,<4" \
     && layer-cleanup.sh
 
 # The CI builds the wheel packages, downloads them into ./whl/, then builds this Dockerfile from ./whl/,

@@ -30,7 +30,7 @@ from rs_workflows.utils import utils as workflow_utils
 def mock_workflow_utils_logger(monkeypatch, mocker):
     """Replace Prefect run logger with a plain mock."""
     logger = mocker.Mock()
-    monkeypatch.setattr(workflow_utils, "get_run_logger", lambda: logger)
+    monkeypatch.setattr(workflow_utils, "get_logger", lambda: logger)
     return logger
 
 

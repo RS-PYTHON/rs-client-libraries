@@ -18,7 +18,7 @@
 
 from typing import Any
 
-from prefect import flow, get_run_logger, runtime, task
+from prefect import flow, runtime, task
 
 from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct
 from rs_workflows.on_demand.common.types import Level2FlowParams
@@ -26,6 +26,7 @@ from rs_workflows.on_demand.sentinel3.s3_processing_utils import (
     emit_olci_quicklook_event,
 )
 from rs_workflows.utils.dpr import call_dpr_flow
+from rs_workflows.utils.prefect import get_logger
 
 
 @flow(
@@ -42,7 +43,7 @@ async def process_s3l2_olci(
     # to use s3-l2-default-setting
     flow_parameters = await (flow_params or Level2FlowParams()).resolve(mission)
 
-    get_run_logger().info(f"Flow params: {flow_parameters}")
+    get_logger().info(f"Flow params: {flow_parameters}")
     # Call DPR flow
     products = await call_dpr_flow(
         FlowEnvArgs(owner_id=flow_parameters.owner_identifier),

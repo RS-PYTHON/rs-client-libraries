@@ -126,7 +126,7 @@ async def test_init_pi_database(monkeypatch):  # pylint: disable=unused-argument
     This test simulates the full flow execution by:
       - Patching environment variables required to build the database URL.
       - Patching `create_schema` and `insert_pi_categories` tasks with mocks.
-      - Patching `get_run_logger` to capture log output.
+      - Patching `get_logger` to capture log output.
       - Executing the flow with test `FlowEnvArgs`.
 
     Args:
@@ -155,9 +155,9 @@ async def test_init_pi_database(monkeypatch):  # pylint: disable=unused-argument
     mock_insert_pi_categories = MagicMock()
     monkeypatch.setattr(init_pi_db_flow, "insert_pi_categories", mock_insert_pi_categories)
 
-    # Patch get_run_logger to return our mock logger
+    # Patch get_logger to return our mock logger
     mock_logger = MagicMock(name="mock_logger")
-    monkeypatch.setattr(init_pi_db_flow, "get_run_logger", MagicMock(return_value=mock_logger))
+    monkeypatch.setattr(init_pi_db_flow, "get_logger", MagicMock(return_value=mock_logger))
     expected_db_url = (
         f"postgresql+psycopg2://{mock_environ['POSTGRES_USER']}:"
         f"{mock_environ['POSTGRES_PASSWORD']}@{mock_environ['POSTGRES_HOST']}:"

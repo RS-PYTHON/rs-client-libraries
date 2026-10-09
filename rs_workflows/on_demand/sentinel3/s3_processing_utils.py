@@ -17,12 +17,12 @@
 from collections.abc import Awaitable
 from typing import Any, Literal, cast
 
-from prefect import get_run_logger
 from prefect.events import emit_event
 from prefect.variables import Variable
 from pydantic import BaseModel, Field
 
 from rs_workflows.on_demand.common.types import S3_PROCESSING_CONFIGURATION
+from rs_workflows.utils.prefect import get_logger
 
 
 def emit_olci_quicklook_event(
@@ -56,13 +56,13 @@ def emit_olci_quicklook_event(
     )
     if event is None:
         # Missing quicklook events do not prevent returning the published processing results.
-        get_run_logger().warning(
+        get_logger().warning(
             "Quicklook-inputs-ready event was not emitted: event=%s, flow_run_id=%s",
             event_name,
             flow_run_id,
         )
     else:
-        get_run_logger().info(
+        get_logger().info(
             "Emitted event=%s, event_id=%s, product_count=%d",
             event_name,
             event.id,

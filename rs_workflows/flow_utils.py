@@ -24,13 +24,13 @@ from enum import Enum
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanContext
 from opentelemetry.util._decorator import _agnosticcontextmanager
-from prefect import get_run_logger
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pystac import Item
 
 from rs_client.ogcapi.dpr_client import DprPipeline, DprProcessor
 from rs_client.rs_client import RsClient
 from rs_common import init_opentelemetry, prefect_utils
+from rs_workflows.utils.prefect import get_logger
 
 ARCHIVE_SUFFIXES = (".zip", ".tar", ".tgz", ".tar.gz")
 DEFAULT_ROOT_LOGGING_LEVEL = os.getenv("PREFECT_LOGGING_ROOT_LEVEL", "INFO")
@@ -96,7 +96,10 @@ class AdfType(str, Enum):
 
     S00__ADF_ECMWA = "S00__ADF_ECMWA"
     S00__ADF_ECMWF = "S00__ADF_ECMWF"
+    S00__ADF_FPOAX = "S00__ADF_FPOAX"
+    S00__ADF_FROAX = "S00__ADF_FROAX"
     S00__ADF_GETAS = "S00__ADF_GETAS"
+    S00__ADF_OSFAX = "S00__ADF_OSFAX"
     S00__ADF_WATER = "S00__ADF_WATER"
     S03_ADF_OLCAL = "S03_ADF_OLCAL"
     S03_ADF_OLEOP = "S03_ADF_OLEOP"
@@ -105,6 +108,22 @@ class AdfType(str, Enum):
     S03_ADF_OLPRG = "S03_ADF_OLPRG"
     S03_ADF_OLRAC = "S03_ADF_OLRAC"
     S03_ADF_OLSPC = "S03_ADF_OLSPC"
+    S03_ADF_OLPPP = "S03_ADF_OLPPP"
+    S03_ADF_OLPCP = "S03_ADF_OLPCP"
+    S03_ADF_OLCLP = "S03_ADF_OLCLP"
+    S03_ADF_OLWVP = "S03_ADF_OLWVP"
+    S03_ADF_OLVGP = "S03_ADF_OLVGP"
+    S03_ADF_SL1PP = "S03_ADF_SL1PP"
+    S03_ADF_SLADJ = "S03_ADF_SLADJ"
+    S03_ADF_SLANC = "S03_ADF_SLANC"
+    S03_ADF_SLCDP = "S03_ADF_SLCDP"
+    S03_ADF_SLCLO = "S03_ADF_SLCLO"
+    S03_ADF_SLCLP = "S03_ADF_SLCLP"
+    S03_ADF_SLGEC = "S03_ADF_SLGEC"
+    S03_ADF_SLGEO = "S03_ADF_SLGEO"
+    S03_ADF_SLVIC = "S03_ADF_SLVIC"
+    S03_ADF_TIRCD = "S03_ADF_TIRCD"
+    S03_ADF_VSWCD = "S03_ADF_VSWCD"
 
 
 class LoggingLevel(str, Enum):
@@ -190,7 +209,7 @@ class FlowEnv:
         logging.getLogger("prefect.flow_runs").setLevel(self.logging_level)
         logging.getLogger("prefect.task_runs").setLevel(self.logging_level)
 
-        logger = get_run_logger()
+        logger = get_logger()
         logger.info("Initializing FlowEnv with args: %r", args)
 
         # Deserialize the calling span, if any
@@ -208,7 +227,7 @@ class FlowEnv:
             rs_server_href=os.getenv("RSPY_WEBSITE"),
             rs_server_api_key=os.getenv("RSPY_APIKEY"),
             owner_id=self.owner_id,
-            logger=get_run_logger(),  # type: ignore
+            logger=get_logger(),  # type: ignore
         )
 
     def serialize(self) -> FlowEnvArgs:
@@ -518,7 +537,8 @@ class AdfProcessIn(BaseModel):
     satellite: str | SentinelSatellite | None = Field(
         default=None,
         title="Satellite",
-        description="Satellite identifier used in certain queries. Can be a string or SentinelSatellite enum.",
+        description="Satellite identifier used in certain queries. Can be a string or SentinelSatellite enum. "
+        "Mandatory for the mission-dependent ADF types (orbit files).",
     )
     cql2_filter: dict | None = Field(
         default=None,

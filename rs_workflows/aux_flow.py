@@ -18,7 +18,7 @@ import datetime
 import json
 from typing import Any
 
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
 from pystac import Item, ItemCollection
 
@@ -28,6 +28,7 @@ from rs_common.utils import create_valcover_filter
 from rs_workflows.flow_utils import AuxiliarySource, FlowEnv, FlowEnvArgs
 from rs_workflows.staging_flow import staging_task
 from rs_workflows.utils import stac
+from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import asset_unzip_decompress
 
 ###################
@@ -112,7 +113,7 @@ async def aux_staging(
         bool: Return status: False if staging failed, True otherwise
         ItemCollection: List of catalog Items staged from AUX station
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)

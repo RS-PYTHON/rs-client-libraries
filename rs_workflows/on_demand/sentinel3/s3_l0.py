@@ -16,13 +16,14 @@
 
 from typing import Any
 
-from prefect import flow, get_run_logger, runtime, task
+from prefect import flow, runtime, task
 from prefect.events import emit_event
 
 from rs_workflows.flow_utils import FlowInputProduct
 from rs_workflows.on_demand.common.events import products_ready_event_name
 from rs_workflows.on_demand.common.l0_last_steps import process_l0_last_steps
 from rs_workflows.on_demand.common.types import Level0FlowParams
+from rs_workflows.utils.prefect import get_logger
 
 S3_L0_RESULT_STORAGE = "local-file-system/s3-processing-shared-results"
 
@@ -47,7 +48,7 @@ async def process_s3l0(
     # using them to build the DPR input. Explicit flow parameters still win.
     resolved_flow_params = await (flow_params or Level0FlowParams()).resolve("3")
 
-    logger = get_run_logger()
+    logger = get_logger()
     input_products = [
         FlowInputProduct(
             name="S3ACADUS",

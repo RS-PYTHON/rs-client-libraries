@@ -18,12 +18,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from urllib.parse import urlencode, urlparse
 
-from prefect import (
-    apause_flow_run,
-    flow,
-    get_run_logger,
-    task,
-)
+from prefect import apause_flow_run, flow, task
 from prefect.artifacts import (
     acreate_link_artifact,
     acreate_markdown_artifact,
@@ -34,6 +29,7 @@ from rs_workflows.catalog_flow import check_and_create_collection
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.utils.artifact_verbose import ReportManager
 from rs_workflows.utils.cadip import cadip_session_search
+from rs_workflows.utils.prefect import get_logger
 
 
 @task(name="create result artifact")
@@ -61,7 +57,7 @@ async def create_result_artifact(cadip_items: str, duration: timedelta) -> None:
         markdown=markdown_report,
         description="session staging output",
     )
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
     # Base Grafana URL
@@ -102,7 +98,7 @@ async def cadip_session_stage(env: FlowEnvArgs, cadip_search_url: str, catalog_c
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "staging"):
 
-        logger = get_run_logger()
+        logger = get_logger()
 
         # Get staging client from environment
         staging_client = flow_env.rs_client.get_staging_client()
@@ -183,7 +179,7 @@ async def stage_selected_session(cadip_collection: CadipCollections, owner_ident
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
     with flow_env.start_span(__name__, "stage_selected_session"):
-        logger = get_run_logger()
+        logger = get_logger()
 
         # Search for CADIP sessions in the given time window
         session_found = cadip_session_search.submit(
@@ -251,7 +247,7 @@ async def stage_latest_session(
     report_verbose = ReportManager() if verbose else None
 
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_identifier))
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Search for CADIP sessions in the given time window
     session_found = cadip_session_search.submit(
@@ -303,9 +299,9 @@ async def stage_session_common(
     Notes:
         - The function uses Prefect's task submission pattern with result() calls to wait for completion.
         - Staging duration is calculated and included in the result artifact.
-        - Requires an active logger context (from get_run_logger()).
+        - Requires an active logger context (from get_logger()).
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Build catalog collection name based on CADIP collection
     sat = cadip_collection[1]

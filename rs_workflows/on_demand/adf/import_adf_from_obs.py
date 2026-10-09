@@ -24,7 +24,7 @@ from pathlib import Path
 
 import boto3
 from botocore.client import Config
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from prefect.cache_policies import NO_CACHE
 from pystac import Item
 
@@ -40,6 +40,7 @@ from rs_workflows.payload_generator import (
     find_s3_output_bucket,
 )
 from rs_workflows.utils.catalog import get_single_catalog_item, published_stac_item
+from rs_workflows.utils.prefect import get_logger
 
 
 @task(cache_policy=NO_CACHE)
@@ -54,7 +55,7 @@ async def download_adf_files(
     Download ADF files from S3 to a temporary directory.
     Returns the list of local paths to the downloaded files.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     local_paths = []
 
     for file in files:
@@ -73,7 +74,7 @@ async def extract_files(files: list[str], extract_dir: str) -> list[str]:
     Extract all .tar.gz files to the specified directory.
     Returns the list of extracted file paths.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     extracted_files: list[str] = []
 
     for file in files:
@@ -130,7 +131,7 @@ def _handle_rehearsal_mode(item: Item, target_collection: str) -> None:
     """
     Log the STAC item that would be created in rehearsal mode.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(
         f"[REHEARSAL] Would create STAC item in collection '{target_collection}':\n"
         f"{json.dumps(item.to_dict(), indent=2)}",
@@ -148,7 +149,7 @@ async def _handle_production_mode(
     override: bool,
 ) -> None:
     """Handle file upload and STAC item publication in production mode."""
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Ensure the collection exists
     await check_and_create_collection(flow_env, target_collection)
@@ -191,7 +192,7 @@ async def import_items(
     Copy files matching `extract_pattern` to the target S3 bucket and STAC catalog.
     If `rehearsal_mode` is True, only log the actions without executing them.
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Step 1: Filter files by pattern
     logger.debug(f"Filtering files with pattern: '{extract_pattern}'")
@@ -354,7 +355,7 @@ async def import_adf_from_obs(
     ```
     ---
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"Starting import-adf-from-obs flow for {owner}")
     env: FlowEnvArgs = FlowEnvArgs(owner_id=owner)
 
