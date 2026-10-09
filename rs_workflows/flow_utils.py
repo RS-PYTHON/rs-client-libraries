@@ -377,7 +377,7 @@ class DprProcessIn(BaseModel):
 
     s3_payload_file: str = Field(
         title="S3 Payload File",
-        description="S3 path where the processor payload (JSON) will be written for execution.",
+        description="S3 or local path where the processor payload will be written for execution.",
     )
 
     pipeline: str | DprPipeline | None = Field(

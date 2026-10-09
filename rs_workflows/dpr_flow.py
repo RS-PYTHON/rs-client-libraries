@@ -538,6 +538,12 @@ async def run_processor(
         start_time = time.time()
         s3_payload_dir = osp.dirname(s3_payload_run)
         s3_payload_filename = osp.basename(s3_payload_run)
+        is_local_path = not s3_payload_run.startswith(("s3://", "S3://"))
+        logger.info(
+            f'Triggering DPR processor {processor!r} with payload file "'
+            f"{s3_payload_filename!r} in {'local' if is_local_path else 'S3'} dir "
+            f"{s3_payload_dir!r} from s3_payload_run {s3_payload_run!r}",
+        )
         logger.info(f"Triggering DPR processor {processor!r}")
         job_status = dpr_client.run_process(
             process=processor,
@@ -550,35 +556,38 @@ async def run_processor(
             dpr_client.wait_for_job(job_status, logger, f"{processor!r} processor")
         finally:
             logger.info(f"Processor execution time: {str(timedelta(seconds=time.time() - start_time))}")
-            # Download reports folder from the s3 bucket
-            with tempfile.TemporaryDirectory() as tmpdir:
-                await prefect_utils.s3_download_dir(s3_payload_dir, tmpdir)
-
-                # Display here the log from eopf processors if it exists in the reports folder.
-                # We search for a log file that shares the same name as the payload file, but
-                # has the suffix ".processor.log". This approach is consistent with the current implementation
-                # of the rs-dpr-service, which creates a subfolder named "reports" in the same directory as
-                # the payload file. The processor log filename will be built by the rs-dpr-service
-                # by using the same base name as the payload file, but with the addition of the
-                # ".processor.log" suffix instead of ".yaml".
+            if is_local_path:
+                # For local paths, the processor writes reports to the local directory directly
+                local_report_dir = osp.join(s3_payload_dir, "reports")
                 local_log_file = osp.join(
-                    tmpdir,
-                    "reports",
+                    local_report_dir,
                     Path(s3_payload_filename).with_suffix(".processor.log").name,
                 )
                 try:
                     async with await anyio.open_file(local_log_file, encoding="utf-8") as opened:
-
                         s3_log_file = await opened.read()
-
-                        # Parse each line from s3_log_file and display it asa a Prefect log level
                         for entry in parse_logs(s3_log_file):
-
                             level = entry["level"].strip().lower()
                             getattr(logger, level, logger.info)(entry["message"])
-
                 except FileNotFoundError:
-                    logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
+                    logger.info(f"No processor log file was found at: {local_log_file!r}")
+            else:
+                # Download reports folder from the s3 bucket
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    await prefect_utils.s3_download_dir(s3_payload_dir, tmpdir)
+                    local_log_file = osp.join(
+                        tmpdir,
+                        "reports",
+                        Path(s3_payload_filename).with_suffix(".processor.log").name,
+                    )
+                    try:
+                        async with await anyio.open_file(local_log_file, encoding="utf-8") as opened:
+                            s3_log_file = await opened.read()
+                            for entry in parse_logs(s3_log_file):
+                                level = entry["level"].strip().lower()
+                                getattr(logger, level, logger.info)(entry["message"])
+                    except FileNotFoundError:
+                        logger.info(f"No processor log file was uploaded under: {s3_payload_dir!r}")
             # After processing, clean up autoclean paths. IMPORTANT : the shared disk has to be mounted
             # in the current flow environment (prefect worker) for this to work ! So, the shared_disk has to be
             # mounted in both dask worker environment (where the processor runs) and in the prefect worker
