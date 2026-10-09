@@ -79,10 +79,11 @@ async def test_on_demand_conversion_helpers_cover_mapping_zarr_and_safe_task(tmp
         )
 
     # 2. Zarr STAC discovery.
-    # read_zarr_stac_item reads the root .zattrs file written by EOPF and builds
+    # read_zarr_stac_item reads the root attributes written by EOPF and builds
     # the STAC item through the same create_stac_item helper used by DPR flows.
     zarr_dir = tmp_path / "S01SIWSLC_SAFE_CONVERTED.zarr"
     zarr_dir.mkdir()
+    (zarr_dir / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
     (zarr_dir / ".zattrs").write_text(
         json.dumps(
             {
@@ -110,6 +111,7 @@ async def test_on_demand_conversion_helpers_cover_mapping_zarr_and_safe_task(tmp
     with pytest.raises(RuntimeError, match="Missing 'stac_discovery' metadata"):
         invalid_zarr_dir = tmp_path / "invalid.zarr"
         invalid_zarr_dir.mkdir()
+        (invalid_zarr_dir / ".zgroup").write_text('{"zarr_format": 2}', encoding="utf-8")
         (invalid_zarr_dir / ".zattrs").write_text("{}", encoding="utf-8")
         on_demand_conversion_flow.read_zarr_stac_item(str(invalid_zarr_dir))
 
