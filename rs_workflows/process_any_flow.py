@@ -30,7 +30,7 @@ from prefect.variables import Variable
 import json
 from pathlib import Path
 from jsonschema import validate, ValidationError
-
+from rs_workflows.utils.dpr import dpr_processing_task, call_dpr_flow
 
 
 from rs_workflows.flow_utils import (
@@ -72,7 +72,7 @@ async def process_any(
     default_settings_var_name:str = f'{processing_id.value}-default-setting'
     logger.info(f"Read prefect variable named '{default_settings_var_name}'")
 
-    default_settings = await Variable.get(default_settings_var_name)
+    default_settings:dict = await Variable.get(default_settings_var_name)
     if default_settings is None:
         raise RuntimeError(f"❌ Prefect variable {default_settings_var_name!r} is missing")
 
@@ -94,4 +94,28 @@ async def process_any(
     ##################################################
     # Create all input for DPR processing
     ##################################################
+    call_dpr_flow(
+        env=env,
+
+
+
+        processor_name=default_settings["processor"]["name"],
+        processor_version=default_settings["processor"]["version"],
+        dask_cluster_label=default_settings["dask_cluster_name"],
+
+        s3_payload_file=f"{s3_payload}/payload_{processor_name}.yaml",
+        pipeline=(),
+        unit=unit,
+        priority=Priority(priority),
+        workflow_type=WorkflowType(workflow),
+        input_products=input_products,
+        generated_product_to_collection_identifier=generated_product_to_collection_identifier,
+        auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
+        dask_task_timeout=dask_task_timeout,
+        processing_mode=workflow,
+        **external_variables,
+    )
+    
+    print(a_process.model_dump_json(indent=2))
+    return await dpr_processing_task(a_process)
     
