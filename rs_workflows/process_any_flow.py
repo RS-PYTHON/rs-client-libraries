@@ -27,7 +27,10 @@ from rs_workflows.utils.prefect import get_logger
 from typing import Any
 from enum import Enum
 from prefect.variables import Variable
-from jsonschema import Draft202012Validator
+import json
+from pathlib import Path
+from jsonschema import validate, ValidationError
+
 
 
 from rs_workflows.flow_utils import (
@@ -73,4 +76,23 @@ async def process_any(
     if default_settings is None:
         raise RuntimeError(f"❌ Prefect variable {default_settings_var_name!r} is missing")
 
-    default_settings_schema:dict = "./schemas/processor_"
+    # If Prefect variable return JSON (str), we transform it on dic
+    if isinstance(default_settings, str):
+        try:
+            default_settings = json.loads(default_settings)
+        except json.JSONDecodeError as err:
+            raise ValueError(f"❌ Prefect variable {default_settings_var_name!r} contains invalid JSON") from err
+
+    # Check JSON schema
+    schema = Path("./schemas/processor_default_settings.schema.json")
+    if not schema.is_file():
+        raise FileNotFoundError(f"❌ Schema file not found: {schema.resolve()}")
+    with open(schema, "r", encoding="utf-8") as f:
+        default_settings_schema = json.load(f)
+
+    try:
+        validate(instance=default_settings, schema=default_settings_schema)
+    except ValidationError as err:
+        raise ValueError(
+            f"❌ Invalid JSON schema for var set in Prefect variable {default_settings_var_name!r}:\n{err.message}"
+        ) from err
