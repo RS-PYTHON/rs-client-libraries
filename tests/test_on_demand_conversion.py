@@ -192,7 +192,6 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
         env=serialized_env,
         stac_input=stac_input,
         generated_product_to_collection_identifier=generated_product,
-        owner_id=owner_id,
         dask_cluster_label="dask-safe",
         dask_cluster_instance="dask-instance-1",
     )
@@ -229,6 +228,7 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
     monkeypatch.setenv("RSPY_HOST_OSAM", "https://osam.test")
 
     flow_env_mock = MagicMock()
+    flow_env_mock.owner_id = owner_id
     flow_env_mock.serialize.return_value = serialized_env
     flow_env_mock.start_span.return_value = nullcontext()
     catalog_client_mock = MagicMock()
@@ -318,6 +318,7 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
     assert payload == {
         "input_safe_path": f"s3://staged-bucket/work/{safe_item_id}",
         "output_zarr_dir_path": f"s3://output-bucket/{owner_id}/{output_collection}",
+        "zarr_format": 2,
     }
     assert cluster_info.jupyter_token == ""
     assert cluster_info.dask_gateway_address == ""
@@ -357,7 +358,6 @@ async def test_on_demand_conversion_raises_when_staging_produces_no_item(monkeyp
             product_type="S01SIWSLC",
             collection_name="s01siwslc",
         ),
-        owner_id=owner_id,
         dask_cluster_label="dask-safe",
         dask_cluster_instance="dask-instance-1",
     )

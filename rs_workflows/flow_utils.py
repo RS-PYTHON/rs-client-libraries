@@ -630,5 +630,5 @@ class ConversionIn(BaseModel):
     zarr_format: Literal[2, 3] = Field(
         default=2,
         title="Zarr format (default: 2)",
-        description="Output Zarr format. Defaults to 2 when omitted. "
+        description="Output Zarr format. Defaults to 2 when omitted. ",
     )
