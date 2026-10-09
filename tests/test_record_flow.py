@@ -60,7 +60,7 @@ def mock_db_env(monkeypatch, mocker):
         monkeypatch.setenv(key, value)
 
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=mock_logger)
     mock_engine = MagicMock()
     mocker.patch("rs_workflows.record_performance.create_engine", return_value=mock_engine)
     mock_session = MagicMock()
@@ -190,7 +190,7 @@ def mock_tables(monkeypatch):
 
 def test_record_flow_run_inserts_new_entry(mock_db_env, mocker):
     """It should insert a new row when no record exists."""
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=MagicMock())
 
     # Fake flow_run context
     mock_flow_run = MagicMock()
@@ -237,7 +237,7 @@ def test_record_flow_run_updates_existing_entry(mock_db_env, mocker):
         mock_db_env: A fixture providing a mocked database session and engine.
         mocker: Pytest-mock fixture used for patching modules, functions, and objects.
     """
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=MagicMock())
 
     # Fake flow_run context
     mock_flow_run = MagicMock()
@@ -498,7 +498,7 @@ def test_record_product_expected_rollback_on_keyerror(mocker, mock_db_env):
     mock_session, _ = mock_db_env
 
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=mock_logger)
 
     mocker.patch("rs_workflows.record_performance.extract_min_datetime", return_value="2025-01-01T00:00:00")
     mocker.patch("rs_workflows.record_performance.get_pi_category_id", return_value=1)
@@ -529,7 +529,7 @@ def test_inserts_missing_products(mock_db_env, mock_tables, mocker):
     mock_session, _ = mock_db_env
     _, _, _ = mock_tables
     logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=logger)
 
     flow_id = "FLOW123"
 
@@ -575,7 +575,7 @@ def test_inserts_missing_products_else_branch(mock_db_env, mock_tables, mocker):
     mock_session, _ = mock_db_env
     _, _, _ = mock_tables
     logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=logger)
 
     flow_id = "FLOW123"
 
@@ -618,7 +618,7 @@ def test_skips_when_missing_already_recorded(mock_db_env, mock_tables, mocker):
     mock_session, _ = mock_db_env
     _, _, _ = mock_tables
     logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=logger)
 
     flow_id = "FLOW123"
 
@@ -662,7 +662,7 @@ def test_marks_too_many_as_unexpected(mock_db_env, mock_tables, mocker):
     mock_session, _ = mock_db_env
     _, _, _ = mock_tables
     logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=logger)
     flow_id = "FLOW123"
 
     res_expected = MagicMock()
@@ -708,7 +708,7 @@ def test_skips_when_too_many_already_marked(mock_db_env, mock_tables, mocker):
     mock_session, _ = mock_db_env
     _, _, _ = mock_tables
     logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=logger)
     flow_id = "FLOW123"
 
     res_expected = MagicMock()
@@ -754,7 +754,7 @@ def test_marks_extra_type_as_unexpected(mock_db_env, mock_tables, mocker):
     mock_session, _ = mock_db_env
     _, _, _ = mock_tables
     logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=logger)
 
     flow_id = "FLOW123"
 
@@ -796,7 +796,7 @@ def test_rollback_on_exception(mock_db_env, mock_tables, mocker):
     """Should rollback and log error if exception occurs."""
     mock_session, _ = mock_db_env
     logger = MagicMock()
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=logger)
 
     mock_session.execute.side_effect = Exception("err!")
 
@@ -814,7 +814,7 @@ def test_no_products_found(mocker, mock_db_env):
     mock_session, _ = mock_db_env
     mock_logger = MagicMock()
 
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=mock_logger)
     flow_run_id = "FLOW999"
 
     # Mock empty DB result
@@ -833,7 +833,7 @@ def test_update_timeliness_fields_exception(mocker, mock_db_env):
     mock_logger = MagicMock()
     flow_run_id = "FLOWEXC"
 
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=mock_logger)
 
     # Make execute raise an exception
     mock_session.execute.side_effect = Exception("DB Error")
@@ -854,7 +854,7 @@ def test_update_timeliness_fields(mocker, mock_db_env):
     flow_run_id = "FLOW123"
 
     # Patch logger
-    mocker.patch("rs_workflows.record_performance.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.record_performance.get_logger", return_value=mock_logger)
 
     metadata = MetaData()
     product_realised = Table(

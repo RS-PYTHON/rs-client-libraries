@@ -221,7 +221,7 @@ def test_generate_payload_success(
     )
 
     mock_logger = MagicMock()
-    mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.payload_generator.get_logger", return_value=mock_logger)
 
     mock_secret = MagicMock()
     mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
@@ -281,7 +281,7 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
         ),
     )
     mocker.patch("rs_workflows.payload_generator.fetch_csv_from_endpoint", return_value=[])
-    mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.payload_generator.get_logger", return_value=MagicMock())
     mock_secret = MagicMock()
     mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
     mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
@@ -358,7 +358,7 @@ def test_generate_payload_deduplicates_io(mocker, sample_unit, mock_dpr_process_
         return_value=([shared_input], [shared_output]),
     )
     mocker.patch("rs_workflows.payload_generator.fetch_csv_from_endpoint", return_value=[])
-    mocker.patch("rs_workflows.payload_generator.get_run_logger", return_value=MagicMock())
+    mocker.patch("rs_workflows.payload_generator.get_logger", return_value=MagicMock())
     mock_secret = MagicMock()
     mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
     mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)

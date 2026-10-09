@@ -66,7 +66,7 @@ def _patch_l0(
     unpublished=(False, None),
     published=(True, datetime.now(timezone.utc)),
 ):
-    mocker.patch.object(l0, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(l0, "get_logger", return_value=MagicMock())
     flow_env = MagicMock()
     flow_env.start_span.return_value.__enter__.return_value = MagicMock()
     mocker.patch.object(l0, "FlowEnv", return_value=flow_env)
@@ -83,7 +83,7 @@ def _patch_l0(
 
 async def test_process_l0_rejects_bad_session_name(mocker):
     """An invalid session name raises ValueError before any processing."""
-    mocker.patch.object(l0, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(l0, "get_logger", return_value=MagicMock())
     with pytest.raises(ValueError, match="Invalid session name"):
         await l0.process_l0.fn("INVALID", _flow_params())
 
@@ -147,7 +147,7 @@ async def test_process_l0_uses_default_params_when_none(mocker):
 # process_l0_last_steps
 # --------------------------------------------------------------------------- #
 def _patch_last_steps(mocker, item):
-    mocker.patch.object(l0_last_steps, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(l0_last_steps, "get_logger", return_value=MagicMock())
     flow_env = MagicMock()
     flow_env.start_span.return_value.__enter__.return_value = MagicMock()
     mocker.patch.object(l0_last_steps, "FlowEnv", return_value=flow_env)
@@ -256,7 +256,7 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
     )
     emitted_event = MagicMock(id="event-id")
     emit_event = mocker.patch.object(s3_l0, "emit_event", return_value=emitted_event)
-    mocker.patch.object(s3_l0, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(s3_l0, "get_logger", return_value=MagicMock())
     mocker.patch.object(s3_l0.runtime.flow_run, "id", "flow-run-id")
     resolved_params = _resolved_params()
     resolved_params.session_collection = "s03-cadip-session"

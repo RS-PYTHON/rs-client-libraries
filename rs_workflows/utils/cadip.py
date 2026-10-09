@@ -17,15 +17,13 @@
 import json
 from datetime import datetime, timedelta, timezone
 
-from prefect import (
-    get_run_logger,
-    task,
-)
+from prefect import task
 from pystac import Item, ItemCollection
 
 from rs_client.stac.cadip_client import CadipClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.utils.catalog import is_published
+from rs_workflows.utils.prefect import get_logger
 
 
 def is_evicted(item: Item) -> tuple[bool, datetime | None]:
@@ -45,7 +43,7 @@ async def get_cadip_station(flow_env: FlowEnv, session: str, cadip_collections: 
     """
     Retrieve a cadip station that owns the session.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     result = None
 
     # Initialize flow environment and telemetry span
@@ -106,7 +104,7 @@ async def cadip_session_search(
         ItemCollection:
             A pystac ItemCollection containing the sessions found.
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Initialize flow environment and telemetry span
     flow_env = FlowEnv(env)

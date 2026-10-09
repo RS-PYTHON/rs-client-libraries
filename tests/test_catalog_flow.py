@@ -40,7 +40,7 @@ async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages)
     # Mock FlowEnv to avoid Prefect block loading
     mock_logger = MagicMock()
     mocker.patch(
-        "rs_workflows.catalog_flow.get_run_logger",
+        "rs_workflows.catalog_flow.get_logger",
         return_value=mock_logger,
     )
     mocker.patch(
@@ -181,7 +181,7 @@ async def test_publish_continues_after_item_publish_failure(
 
     mock_logger = MagicMock()
     mocker.patch(
-        "rs_workflows.catalog_flow.get_run_logger",
+        "rs_workflows.catalog_flow.get_logger",
         return_value=mock_logger,
     )
     mocker.patch(
@@ -279,7 +279,7 @@ async def test_check_and_create_collection(
     # Mock FlowEnv and CatalogClient
     mock_logger = MagicMock()
     mocker.patch(
-        "rs_workflows.catalog_flow.get_run_logger",
+        "rs_workflows.catalog_flow.get_logger",
         return_value=mock_logger,
     )
 

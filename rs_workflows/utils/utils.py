@@ -23,7 +23,7 @@ from os.path import commonprefix
 from pathlib import Path
 from typing import Any
 
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from pystac import Item, ItemCollection
 
 from rs_common.prefect_utils import s3_delete, s3_download_file, s3_upload_dir
@@ -37,6 +37,7 @@ from rs_common.utils import (
 )
 from rs_workflows.flow_utils import ARCHIVE_SUFFIXES
 from rs_workflows.payload_template import PayloadSchema, WorkflowStep
+from rs_workflows.utils.prefect import get_logger
 
 
 def search_by_name(values: list[dict[str, Any]], name: str) -> Any:
@@ -230,7 +231,7 @@ async def download_and_extract_assets_task(
         extract_to: Local directory where assets should be extracted.
         asset: Optional asset name to download. When omitted, all assets are downloaded.
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     for item in _normalize_stac_items(items):
         for asset_name, item_asset in item.assets.items():
@@ -295,7 +296,7 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
 
     The function returns the new S3 prefix pointing to the extracted content.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"Processing asset: {asset_href}")
 
     if not asset_name.lower().endswith(ARCHIVE_SUFFIXES):
@@ -365,7 +366,7 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
 @flow(name="Asset unzip and decompress")
 async def asset_unzip_decompress(stac_item: Item, use_extension: bool = False) -> Item:
     """Prefect flow used to unzip and decompress catalog store assets."""
-    logger = get_run_logger()
+    logger = get_logger()
     updated_assets = {}
 
     for asset_name, asset in stac_item.assets.items():

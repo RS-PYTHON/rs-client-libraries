@@ -23,7 +23,6 @@ from typing import Any
 import numpy as np
 import rasterio
 from PIL import Image
-from prefect import get_run_logger
 from rasterio.control import GroundControlPoint
 from rasterio.transform import from_bounds
 from rasterio.warp import Resampling, reproject
@@ -31,6 +30,7 @@ from sentineltoolbox.api import S3BucketCredentials, open_datatree
 
 from rs_common import prefect_utils
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.utils.prefect import get_logger
 
 JPEG_MEDIA_TYPE = "image/jpeg"
 COG_MEDIA_TYPE = "image/tiff; application=geotiff; profile=cloud-optimized"
@@ -195,7 +195,7 @@ async def generate_quicklooks(
     if not published_items:
         raise ValueError("At least one published catalog item is required")
 
-    logger = get_run_logger()
+    logger = get_logger()
     flow_env = FlowEnv(FlowEnvArgs(owner_id=owner_id))
     with flow_env.start_span(span_module, span_name):
         catalog_client = flow_env.rs_client.get_catalog_client()
