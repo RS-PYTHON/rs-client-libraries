@@ -77,7 +77,7 @@ async def process_any(
         raise RuntimeError(f"❌ Prefect variable {default_settings_var_name!r} is missing")
 
     # Check JSON schema
-    schema = Path("./schemas/processor_default_settings.schema.json")
+    schema = Path("rs_workflows/schemas/processor_default_settings.schema.json")
     if not schema.is_file():
         raise FileNotFoundError(f"❌ Schema file not found: {schema.resolve()}")
     with open(schema, "r", encoding="utf-8") as f:
