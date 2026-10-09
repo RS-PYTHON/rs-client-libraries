@@ -398,7 +398,7 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
     """
 
     if payload.io is None:
-        raise ValueError("Payload I/O configuration is missing")
+        raise ValueError("Payload io configuration is missing")
 
     workflow = payload.workflow or []
     input_ids = {input_product.id for input_product in payload.io.input_products}
@@ -443,7 +443,7 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
 
         for adf_reference in (step.adfs or {}).values():
             if adf_reference not in adf_ids:
-                raise ValueError(f"Workflow ADF '{adf_reference}' from step '{step.name}' is missing from payload I/O")
+                raise ValueError(f"Workflow ADF '{adf_reference}' from step '{step.name}' is missing from payload io")
             sources.add(adf_reference)
 
         resolving.remove(output_reference)

@@ -1,0 +1,118 @@
+# Copyright 2023-2026 Airbus, CS Group
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+general_configuration:
+  logging__progress_level: INFO
+  triggering__wait_before_exit: 10
+  triggering__temporary_shared: false
+workflow:
+- name: Calibration.1
+  active: true
+  validate: false
+  module: s1_ard.computing.ard_processing_units
+  processing_unit: Calibration
+  inputs:
+    slcs: slcs
+  adfs:
+    ETAD: ETAD
+    ORBIT: ORBIT
+  parameters:
+    recompute: 'True'
+- name: ReferenceDEM.2
+  active: true
+  validate: false
+  module: s1_ard.computing.ard_processing_units
+  processing_unit: ReferenceDEM
+  inputs:
+    slcs: Calibration.1.slcs
+  outputs:
+    DEM: DEM
+  adfs:
+    DEM: DEM
+  parameters:
+    recompute: 'True'
+- name: ReferenceGeometry.3
+  active: true
+  validate: false
+  module: s1_ard.computing.ard_processing_units
+  processing_unit: ReferenceGeometry
+  inputs:
+    slcs: Calibration.1.slcs
+    dem: ReferenceDEM.2.DEM
+  outputs:
+    simulation_ref: simulation_ref
+  parameters:
+    recompute: 'True'
+io:
+  input_products:
+  - id: slcs
+    path: s3://test-bucket/S1CADUS
+    type: file
+    engine: cpm_zarr
+    reader_params:
+      storage_options:
+        key: testing
+        secret: testing
+        client_kwargs:
+          endpoint_url: https://localhost:5000
+          region_name: us-east-1
+  output_products:
+  - id: DEM
+    path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
+    engine: cpm_zarr
+    type: file
+    apply_eoqc: false
+  - id: simulation_ref
+    path: s3:/rs-dev-cluster-catalog/toto/s01simref/00000000-0000-0000-0000-000000000001
+    engine: cpm_zarr
+    writer_params:
+      storage_options:
+        key: testing
+        secret: testing
+        client_kwargs:
+          endpoint_url: https://localhost:5000
+          region_name: us-east-1
+    type: folder
+    apply_eoqc: false
+  adfs:
+  - id: DEM
+    path: s3://mock-bucket/DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw.bin
+    adf_params:
+      storage_options:
+        key: testing
+        secret: testing
+        client_kwargs:
+          endpoint_url: https://localhost:5000
+          region_name: us-east-1
+  - id: ETAD
+    path: s3://mock-bucket
+    adf_params:
+      storage_options:
+        key: testing
+        secret: testing
+        client_kwargs:
+          endpoint_url: https://localhost:5000
+          region_name: us-east-1
+  - id: ORBIT
+    path: s3://mock-bucket
+    adf_params:
+      storage_options:
+        key: testing
+        secret: testing
+        client_kwargs:
+          endpoint_url: https://localhost:5000
+          region_name: us-east-1
+context_managers: []
+dask_config:
+  distributed.worker.local_directory: ~/eopf/output

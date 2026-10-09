@@ -24,7 +24,7 @@ import pytest
 from rs_workflows.payload_builder import (
     TaskTableError,
     build_unit_list,
-    extract_external_modules,
+    replace_external_variables,
 )
 
 SCENARIOS: dict[str, dict] = {
@@ -102,16 +102,19 @@ def test_build_unit_list_returns_dict(case_id, cfg):  # pylint: disable=unused-a
     with tt_path.open("r", encoding="utf-8") as f:
         tt = json.load(f)
 
-    out = build_unit_list(
-        tasktable=tt,
-        pipeline=cfg["kwargs"].get("pipeline"),
-        unit=cfg["kwargs"].get("unit"),
-        processing_mode=cfg["kwargs"].get("processing_mode"),
+    tt = replace_external_variables(
+        tt,
         external_variables={
             "start_datetime": datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
             "end_datetime": datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
             "satellite": "sentinel-3a",
         },
+    )
+    out = build_unit_list(
+        tasktable=tt,
+        pipeline=cfg["kwargs"].get("pipeline"),
+        unit=cfg["kwargs"].get("unit"),
+        processing_mode=cfg["kwargs"].get("processing_mode"),
     )
     assert isinstance(out, list)
 
@@ -133,7 +136,7 @@ def _valid_tasktable():
                 "output_products": [],
             },
         ],
-        "io": [],
+        "io": {},
     }
 
 
@@ -160,7 +163,7 @@ def test_build_unit_list_invalid_tasktable_root_type():
 def test_build_unit_list_missing_or_invalid_pipelines_list():
     """Test that a missing or non-list 'pipelines' field in the task table raises
     TaskTableError with the expected message."""
-    tt: dict[str, Any] = {"units": [], "io": []}
+    tt: dict[str, Any] = {"units": [], "io": {}}
     with pytest.raises(TaskTableError, match=r"Missing or invalid 'pipelines' list in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
@@ -168,7 +171,7 @@ def test_build_unit_list_missing_or_invalid_pipelines_list():
 def test_build_unit_list_missing_or_invalid_units_list():
     """Test that a missing or non-list 'units' field in the task table raises
     TaskTableError with the expected message."""
-    tt: dict[str, Any] = {"pipelines": [], "io": []}
+    tt: dict[str, Any] = {"pipelines": [], "io": {}}
     with pytest.raises(TaskTableError, match=r"Missing or invalid 'units' list in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
@@ -179,7 +182,7 @@ def test_build_unit_list_missing_or_invalid_io_list():
         "pipelines": [{"name": "p1", "steps": [{"step_id": 1, "unit_name": "u1"}]}],
         "units": [{"name": "u1", "module": "m", "input_products": [], "input_adfs": [], "output_products": []}],
     }
-    with pytest.raises(TaskTableError, match=r"Missing or invalid 'io' list in task table:.+"):
+    with pytest.raises(TaskTableError, match=r"Missing or invalid 'io' dict in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
 
@@ -195,7 +198,7 @@ def test_select_unit_names_reports_available_pipelines():
                 "output_products": [],
             },
         ],
-        "io": [],
+        "io": {},
         "pipelines": [
             {
                 "name": "good_pipeline",
@@ -221,7 +224,7 @@ def test_build_unit_list_reports_available_units():
             {"name": "u1", "module": "pkg.u1", "input_products": [], "input_adfs": [], "output_products": []},
             {"name": "u2", "module": "pkg.u2", "input_products": [], "input_adfs": [], "output_products": []},
         ],
-        "io": [],
+        "io": {},
         "pipelines": [],  # not needed for this case
     }
 
@@ -253,12 +256,14 @@ def test_build_entries_filters_by_mode():
             },
         ],
         # Provide minimal IO entries so build_unit_list can resolve types
-        "io": [
-            {"name": "always_p", "type": "folder", "store_type": "safe"},
-            {"name": "none_p", "type": "folder", "store_type": "safe"},
-            {"name": "nrt_p", "type": "folder", "store_type": "safe"},
-            {"name": "ntc_p", "type": "folder", "store_type": "safe"},
-        ],
+        "io": {
+            "input": [
+                {"name": "always_p", "type": "folder", "engine": "cpm_safe"},
+                {"name": "none_p", "type": "folder", "engine": "cpm_safe"},
+                {"name": "nrt_p", "type": "folder", "engine": "cpm_safe"},
+                {"name": "ntc_p", "type": "folder", "engine": "cpm_safe"},
+            ],
+        },
         "pipelines": [
             {
                 "name": "p_full",
@@ -319,11 +324,11 @@ def test_case_8_exact_output():
                     "origin": "pipeline_input",
                     "mandatory": False,
                     "type": "folder",
-                    "store_type": "safe",
+                    "engine": "cpm_safe",
                 },
             ],
             "input_adfs": [
-                {"name": "CONFIG", "mandatory": False, "type": "filename"},
+                {"name": "CONFIG", "mandatory": False, "type": "file"},
                 {"name": "ETAD", "mandatory": False, "type": "folder"},
             ],
             "output_products": [
@@ -332,8 +337,7 @@ def test_case_8_exact_output():
                     "origin": "pipeline_internal",
                     "mandatory": True,
                     "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
+                    "engine": "cpm_zarr",
                 },
             ],
             "parameters": {"reference_date": "somevalue"},
@@ -347,16 +351,21 @@ def test_case_8_exact_output():
                     "origin": "calibration.1.CAL_SLCS",
                     "mandatory": False,
                     "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
+                    "engine": "cpm_safe",
                 },
             ],
             "input_adfs": [
-                {"name": "CONFIG", "mandatory": False, "type": "filename"},
+                {"name": "CONFIG", "mandatory": False, "type": "file"},
                 {"name": "DEM", "mandatory": False, "type": "folder"},
             ],
             "output_products": [
-                {"name": "reference_dem", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
+                {
+                    "name": "reference_dem",
+                    "origin": "pipeline_internal",
+                    "mandatory": True,
+                    "type": "folder",
+                    "engine": "cpm_zarr",
+                },
             ],
         },
         {
@@ -368,8 +377,7 @@ def test_case_8_exact_output():
                     "origin": "calibration.1.CAL_SLCS",
                     "mandatory": False,
                     "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
+                    "engine": "cpm_safe",
                 },
                 {
                     "name": "reference_dem",
@@ -378,9 +386,15 @@ def test_case_8_exact_output():
                     "type": "folder",
                 },
             ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
+            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "file"}],
             "output_products": [
-                {"name": "simulation_ref", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
+                {
+                    "name": "simulation_ref",
+                    "origin": "pipeline_internal",
+                    "mandatory": True,
+                    "type": "folder",
+                    "engine": "cpm_zarr",
+                },
             ],
         },
         {
@@ -392,8 +406,7 @@ def test_case_8_exact_output():
                     "origin": "calibration.1.CAL_SLCS",
                     "mandatory": False,
                     "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
+                    "engine": "cpm_safe",
                 },
                 {
                     "name": "reference_dem",
@@ -408,15 +421,15 @@ def test_case_8_exact_output():
                     "type": "folder",
                 },
             ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
+            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "file"}],
             "output_products": [
                 {
                     "name": "cslcs",
                     "origin": "pipeline_internal",
                     "mandatory": True,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                    "writer_params": {"consolidate": True},
                 },
             ],
         },
@@ -428,9 +441,9 @@ def test_case_8_exact_output():
                     "name": "cslcs",
                     "origin": "coregistration.4.cslcs",
                     "mandatory": False,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                    "reader_params": {"consolidate": True},
                 },
                 {
                     "name": "simulation_ref",
@@ -439,15 +452,15 @@ def test_case_8_exact_output():
                     "type": "folder",
                 },
             ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
+            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "file"}],
             "output_products": [
                 {
                     "name": "gslcs",
                     "origin": "pipeline_internal",
                     "mandatory": True,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                    "writer_params": {"consolidate": True},
                 },
             ],
         },
@@ -459,20 +472,20 @@ def test_case_8_exact_output():
                     "name": "gslcs",
                     "origin": "geocoding.5.gslcs",
                     "mandatory": False,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                    "reader_params": {"consolidate": True},
                 },
             ],
-            "input_adfs": [{"name": "S2_TILES", "mandatory": False, "type": "filename"}],
+            "input_adfs": [{"name": "S2_TILES", "mandatory": False, "type": "file"}],
             "output_products": [
                 {
                     "name": "nrb",
                     "origin": "pipeline_output",
                     "mandatory": True,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                    "writer_params": {"consolidate": True},
                 },
             ],
         },
@@ -488,14 +501,17 @@ def test_case_s1_l0_exact_output_with_regex():
     start_datetime = datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc)
     end_datetime = datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc)
 
-    out = build_unit_list(
-        tasktable=tt,
-        pipeline="s1_l0_full",
-        processing_mode=None,
+    tt = replace_external_variables(
+        tt,
         external_variables={
             "start_datetime": start_datetime,
             "end_datetime": end_datetime,
         },
+    )
+    out = build_unit_list(
+        tasktable=tt,
+        pipeline="s1_l0_full",
+        processing_mode=None,
     )
 
     expected = [
@@ -508,15 +524,15 @@ def test_case_s1_l0_exact_output_with_regex():
                     "origin": "pipeline_input",
                     "mandatory": True,
                     "type": "folder",
-                    "store_type": "cadu",
+                    "engine": "cadu",
                 },
             ],
             "input_adfs": [
                 {
                     "name": "osf",
                     "mandatory": False,
-                    "type": "filename",
-                    "store_type": "safe",
+                    "type": "file",
+                    "engine": "cpm_safe",
                     "alternatives": [
                         {
                             "order": 1,
@@ -537,8 +553,8 @@ def test_case_s1_l0_exact_output_with_regex():
                 {
                     "name": "fro",
                     "mandatory": False,
-                    "type": "filename",
-                    "store_type": "safe",
+                    "type": "file",
+                    "engine": "cpm_safe",
                     "alternatives": [
                         {
                             "order": 1,
@@ -564,8 +580,7 @@ def test_case_s1_l0_exact_output_with_regex():
                     "mandatory": True,
                     "regex": ".*",
                     "type": "folder",
-                    "store_type": "zarr",
-                    "opening_mode": "CREATE_OVERWRITE",
+                    "engine": "cpm_zarr",
                 },
             ],
         },
@@ -574,7 +589,7 @@ def test_case_s1_l0_exact_output_with_regex():
     assert out == expected
 
 
-def test_build_unit_list_none_datetime_raises_task_table_error():
+def test_external_variables_none_datetime_raises_task_table_error():
     """Regression test: a task table referencing a '{external_variable.*datetime}' placeholder
     must raise a clear TaskTableError -- not an AttributeError -- when the corresponding
     external variable value is None (e.g. start_datetime/end_datetime not provided by the flow).
@@ -585,45 +600,11 @@ def test_build_unit_list_none_datetime_raises_task_table_error():
     """
     tt_path = Path(__file__).parent / "resources" / "TaskTable_S1_L0_generated_by_rs_python_v1.json"
     tt = json.loads(tt_path.read_text(encoding="utf-8"))
-
     with pytest.raises(TaskTableError, match="External variable 'start_datetime' is required"):
-        build_unit_list(
-            tasktable=tt,
-            pipeline="s1_l0_full",
-            processing_mode=None,
+        tt = replace_external_variables(
+            tt,
             external_variables={
                 "start_datetime": None,
                 "end_datetime": None,
             },
         )
-
-
-def test_extract_external_modules():
-    """
-    Unit test for extract_external_modules
-    """
-    test_tasktable_with_external_modules = {
-        "external_modules": ["testmodule.submodule.testclass"],
-        "units": [
-            {
-                "name": "u1",
-                "module": "pkg.u1",
-                "input_products": [],
-                "input_adfs": [],
-                "output_products": [],
-            },
-        ],
-        "io": [],
-        "pipelines": [
-            {
-                "name": "good_pipeline",
-                "steps": [{"unit_name": "u1", "step_id": 1, "input_products": {}, "output_products": {}}],
-            },
-        ],
-    }
-
-    expected_external_modules = [{"name": "testmodule.submodule.testclass", "nested": "true"}]
-
-    extracted_modules = extract_external_modules(test_tasktable_with_external_modules)
-
-    assert extracted_modules == expected_external_modules

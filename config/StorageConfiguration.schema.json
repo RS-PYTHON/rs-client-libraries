@@ -1,0 +1,196 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Product storage configuration",
+    "type": "object",
+    "required": [
+        "product",
+        "storage_configuration"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "$schema": {
+            "type": "string"
+        },
+        "product": {
+            "type": "object",
+            "required": [
+                "default"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "default": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "adfs",
+                        "unit",
+                        "pipeline"
+                    ],
+                    "properties": {
+                        "adfs": {
+                            "$ref": "#/$defs/storageRef"
+                        },
+                        "unit": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/sectionStorageUnit"
+                            }
+                        },
+                        "pipeline": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/sectionStoragePipeline"
+                            }
+                        }
+                    }
+                },
+                "specific": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": [
+                            "product_name",
+                            "storage"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                            "product_name": {
+                                "type": "string"
+                            },
+                            "storage": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "storage_configuration": {
+            "type": "array",
+            "items": {
+                "oneOf": [
+                    {
+                        "type": "object",
+                        "required": [
+                            "name",
+                            "kind",
+                            "storage_options"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "kind": {
+                                "const": "obs"
+                            },
+                            "storage_options": {
+                                "type": "object",
+                                "required": [
+                                    "key",
+                                    "secret"
+                                ],
+                                "additionalProperties": false,
+                                "properties": {
+                                    "key": {
+                                        "type": "string"
+                                    },
+                                    "secret": {
+                                        "type": "string"
+                                    },
+                                    "endpoint_url": {
+                                        "type": "string"
+                                    },
+                                    "region_name": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "type": "object",
+                        "required": [
+                            "name",
+                            "kind",
+                            "absolute_path"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "kind": {
+                                "enum": [
+                                    "shared_disk",
+                                    "local_disk"
+                                ]
+                            },
+                            "absolute_path": {
+                                "type": "string"
+                            },
+                            "autoclean": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "$defs": {
+        "storageRef": {
+            "type": "object",
+            "required": [
+                "storage"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "storage": {
+                    "type": "string"
+                }
+            }
+        },
+        "sectionStorageUnit": {
+            "type": "object",
+            "required": [
+                "section",
+                "storage"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "section": {
+                    "type": "string",
+                    "enum": [
+                        "input_products",
+                        "output_products"
+                    ]
+                },
+                "storage": {
+                    "type": "string"
+                }
+            }
+        },
+        "sectionStoragePipeline": {
+            "type": "object",
+            "required": [
+                "section",
+                "storage"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "section": {
+                    "type": "string",
+                    "enum": [
+                        "pipeline_input",
+                        "pipeline_output",
+                        "other"
+                    ]
+                },
+                "storage": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

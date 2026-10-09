@@ -23,7 +23,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 import pytest
 import pytest_responses  # pylint: disable=unused-import # noqa: F401 # used to avoid adding @responses.activate
 import responses
-from prefect.variables import Variable
 from pystac import Asset, Item, ItemCollection
 from starlette import status
 
@@ -55,9 +54,6 @@ from tests.conftest import (
 from tests.test_utils import setup_worklow_test_env
 
 CONFIG_DIR = Path(__file__).parent / "resources"
-
-# Prefect variable name for the storage configuration
-STORAGE_CONFIG = "processing-storage-configuration"
 
 
 ##################
@@ -106,21 +102,6 @@ def mock_record_performance_indicators(mocker):
     mocker.patch("rs_workflows.dpr_flow.record_performance_indicators", fake_task, create=True)
 
     return fake_task
-
-
-#####################################
-# Mock Prefect blocks and variables #
-#####################################
-
-
-@pytest.fixture(name="storage_configuration")
-def _storage_configuration():
-    """Set prefect variable that contains the storage configuration"""
-    path = Path(__file__).parent.parent / "config" / "storage_configuration.json"
-    with open(path, encoding="utf-8") as f:
-        Variable.set(STORAGE_CONFIG, json.load(f), overwrite=True)
-    yield
-    Variable.unset(STORAGE_CONFIG)
 
 
 #############
@@ -394,33 +375,37 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
 
     # --- Task table ---
     task_table = {
-        "io": [
-            {
-                "name": "ADFS_INPUT",
-                "multiplicity": "one_per_input",
-                "alternatives": [
-                    {
-                        "order": 1,
-                        "timeout_seconds": 0,
-                        "query": {
-                            "name": "LatestValCover",
-                            "parameters": {
-                                "product_type": "SOMETHING",
-                                "start_datetime": "{S1CADUS.start_datetime}",
-                                "end_datetime": "{S1CADUS.end_datetime}",
-                                "satellite": "{S1CADUS.platform}",
-                                "dTa": 0,
-                                "dTb": 0,
+        "io": {
+            "adfs": [
+                {
+                    "name": "ADFS_INPUT",
+                    "multiplicity": "one_per_input",
+                    "alternatives": [
+                        {
+                            "order": 1,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCover",
+                                "parameters": {
+                                    "product_type": "SOMETHING",
+                                    "start_datetime": "{S1CADUS.start_datetime}",
+                                    "end_datetime": "{S1CADUS.end_datetime}",
+                                    "satellite": "{S1CADUS.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
                             },
                         },
-                    },
-                ],
-            },
-            {
-                "name": "S1CADUS",
-                "store_params": {"regex": r".*item\d"},
-            },
-        ],
+                    ],
+                },
+            ],
+            "input": [
+                {
+                    "name": "S1CADUS",
+                    "reader_params": {"regex": r".*item\d"},
+                },
+            ],
+        },
     }
 
     # --- Unit config ---
@@ -475,7 +460,7 @@ async def test_dpr_processing_raises_on_unstaged_adf(
                 datetime=datetime.now(),
             )
             it.add_asset("data", Asset(href=f"s3://{MOCKED_BUCKET}/unstaged1.bin"))
-            return ("ADFS_NAME", "filename", (False, ItemCollection([it])))
+            return ("ADFS_NAME", "file", (False, ItemCollection([it])))
 
     class ProcessInputAdfsTaskFailMock(Mock):
         """Mock of process_input_adfs to force status=False in the flow."""

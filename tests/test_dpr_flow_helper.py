@@ -562,7 +562,7 @@ async def test_run_processor_raises_on_missing_io_config(mocker):
     mocker.patch("rs_workflows.dpr_flow.FlowEnv", return_value=mock_flow_env)
 
     # Verify ValueError is raised
-    with pytest.raises(ValueError, match="Payload I/O configuration is missing"):
+    with pytest.raises(ValueError, match="Payload io configuration is missing"):
         await run_processor.fn(
             env=env,
             processor=processor,
