@@ -182,7 +182,7 @@ def test_build_unit_list_missing_or_invalid_io_list():
         "pipelines": [{"name": "p1", "steps": [{"step_id": 1, "unit_name": "u1"}]}],
         "units": [{"name": "u1", "module": "m", "input_products": [], "input_adfs": [], "output_products": []}],
     }
-    with pytest.raises(TaskTableError, match=r"Missing or invalid 'io' list or dict in task table:.+"):
+    with pytest.raises(TaskTableError, match=r"Missing or invalid 'io' dict in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
 
@@ -608,39 +608,3 @@ def test_external_variables_none_datetime_raises_task_table_error():
                 "end_datetime": None,
             },
         )
-
-
-@pytest.mark.parametrize("scenario", SCENARIOS.values())
-def test_build_unit_list_flat_io(scenario):
-    """Flat I/O entries resolve the same roles and origins as grouped entries."""
-    tasktable = json.loads((Path(__file__).parent / "resources" / scenario["json_path"]).read_text())
-    # Flat I/O has one shared definition per name, including pipeline intermediates.
-    shared = {entry["name"]: entry for entries in tasktable["io"].values() for entry in entries}
-    tasktable["io"] = {role: [shared[entry["name"]] for entry in entries] for role, entries in tasktable["io"].items()}
-    expected = build_unit_list(tasktable, **scenario["kwargs"])
-    tasktable["io"] = list(shared.values())
-    assert build_unit_list(tasktable, **scenario["kwargs"]) == expected
-
-
-def test_build_unit_list_preserves_flat_io_storage_fields():
-    """New storage metadata and ADF alternatives survive unit construction."""
-    tasktable = {
-        "pipelines": [],
-        "units": [
-            {
-                "name": "processor",
-                "module": "processor.module",
-                "input_products": [{"name": "source", "mandatory": True}],
-                "input_adfs": [{"name": "orbit", "mandatory": True}],
-                "output_products": [{"name": "result", "mandatory": False}],
-            }
-        ],
-        "io": [
-            {"name": "source", "type": "filename", "store_type": "zarr", "store_params": {"consolidate": True}},
-            {"name": "orbit", "type": "filename", "alternatives": [{"order": 1}]},
-            {"name": "result", "type": "folder", "store_type": "zarr", "store_params": {"consolidate": True}},
-        ],
-    }
-    built = build_unit_list(tasktable, unit="processor")[0]
-    for role, details in zip(("input_products", "input_adfs", "output_products"), tasktable["io"]):
-        assert all(built[role][0][key] == value for key, value in details.items())
