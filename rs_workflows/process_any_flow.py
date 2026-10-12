@@ -67,7 +67,39 @@ async def process_any(
     processing_id: ProcessingId,
     workflow: WorkflowType = WorkflowType.ON_DEMAND,
 ):
-    
+    """
+    # Process Any
+
+    This flow reads part of parameters from a Prefect Variable before starting the 
+    process-generic flow.
+
+    ---
+    ## Workflow Steps
+
+    1. *Load settings* — Reads the `{processing_id}-default-setting` Prefect
+    Variable and validates it against the processor default settings JSON
+    schema.
+    2. *Check clusters* — Verifies that the target Dask cluster and the staging
+    Dask cluster are ready.
+    3. *Process* — Calls the DPR flow with the input products, external
+    variables, and the resolved processor/pipeline/priority settings.
+    4. *Collect results* — Retrieves the list of generated/published items.
+    5. Raise a Prefect event per product generated
+    ---
+    ## Parameters
+    Parameter | Type | Default | Description |
+    |---|---|---|---|
+    | `env_args` | `FlowEnvArgs` | *required* | Flow environment/runtime arguments |
+    | `input_products` | `list[FlowInputProduct]` | *required* | Input products to process |
+    | `external_variables` | `dict[str, Any]` | *required* | External variables used to retrieved aux data |
+    | `processing_id` | `ProcessingId` | *required* | processor identifier to be lanched. It is used to resolve the `{processing_id}-default-setting` Prefect Variable |
+    | `workflow` | `WorkflowType` | `WorkflowType.ON_DEMAND` | Type of workflow triggering this run |
+
+    > *Note:* The default settings variable must match the
+    > `processor_default_settings.schema.json` schema.
+
+    ---
+    """
     logger = get_logger()
 
     ########################################################################
