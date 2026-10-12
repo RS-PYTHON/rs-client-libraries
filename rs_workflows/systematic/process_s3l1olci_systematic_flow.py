@@ -38,6 +38,7 @@ from rs_workflows.flow_utils import (
 from rs_workflows.on_demand.adf.convert_adf_set import compute_cql2
 from rs_workflows.catalog_flow import catalog_search_task
 from rs_client.stac.catalog_client import CatalogClient
+import json
 
 
 
@@ -62,7 +63,9 @@ async def process_s3l1olci_ondemand(
         stac_item = catalog_client.get_item(single_input_product.collection_name, single_input_product.item_id)
         if stac_item is None:
             raise RuntimeError(f"❌ STAC item '{single_input_product.item_id}' not found in collection '{single_input_product.collection_name}'.")
-        
+
+        print(json.dumps(stac_item, indent=2, ensure_ascii=False))
+        print(json.dumps(stac_item["properties"], indent=2, ensure_ascii=False))
         #logger.info(f"Start Catalog search: {catalog_cql2}")
         #cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb, satellite)
 
