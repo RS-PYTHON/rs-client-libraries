@@ -64,8 +64,6 @@ async def process_s3l1olci_ondemand(
         if stac_item is None:
             raise RuntimeError(f"❌ STAC item '{single_input_product.item_id}' not found in collection '{single_input_product.collection_name}'.")
 
-        print(json.dumps(stac_item, indent=2, ensure_ascii=False))
-
         logger.info("STAC Item:\n%s",
                     json.dumps(stac_item.to_dict(), indent=2, ensure_ascii=False)
                     )
