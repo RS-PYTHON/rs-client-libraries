@@ -103,8 +103,7 @@ async def process_any(
         if await is_dask_cluster_running(processing_dask_cluster) is False:
             raise ValueError(f"❌ '{processing_dask_cluster}' is unknown or not ready.")
         if await is_dask_cluster_running(DASK_CLUSTER_STAGING) is False:
-            raise ValueError(f"❌ 'DASK_CLUSTER_STAGING' is unknown or not ready.")
-        
+            raise ValueError(f"❌ '{DASK_CLUSTER_STAGING}' is unknown or not ready.")        
 
 
         ##################################################
