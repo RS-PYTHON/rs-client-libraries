@@ -350,8 +350,8 @@ def build_unit_list(
         raise TaskTableError(f"Missing or invalid 'pipelines' list in task table: {tasktable}")
     if "units" not in tasktable or not isinstance(tasktable["units"], list):
         raise TaskTableError(f"Missing or invalid 'units' list in task table: {tasktable}")
-    if "io" not in tasktable or not isinstance(tasktable["io"], dict):
-        raise TaskTableError(f"Missing or invalid 'io' dict in task table: {tasktable}")
+    if "io" not in tasktable or not isinstance(tasktable["io"], (list, dict)):
+        raise TaskTableError(f"Missing or invalid 'io' list or dict in task table: {tasktable}")
 
     if pipeline and unit:
         raise TaskTableError("Provide either 'pipeline' or 'unit', not both.")
@@ -368,11 +368,19 @@ def build_unit_list(
 
     # Retrieve details of inputs/adfs/outputs from "io" field
     io_index: dict[str, dict[str, dict[str, Any]]] = {}
-    for io_type, io_values in tasktable["io"].items():
-        io_index[io_type] = {}
-        for io in io_values:
-            if isinstance(io, dict) and isinstance(io.get("name"), str):
-                io_index[io_type][io["name"]] = io
+    if isinstance(tasktable["io"], list):
+        # The unit declarations determine each product's role in the flat I/O list.
+        products = {
+            io["name"]: io for io in tasktable["io"] if isinstance(io, dict) and isinstance(io.get("name"), str)
+        }
+        io_index = {io_type: products for io_type in ("input", "adfs", "output")}
+    else:
+        # Keep support for task tables using the previous grouped format.
+        for io_type, io_values in tasktable["io"].items():
+            io_index[io_type] = {}
+            for io in io_values:
+                if isinstance(io, dict) and isinstance(io.get("name"), str):
+                    io_index[io_type][io["name"]] = io
 
     out_units: list[dict[str, Any]] = []
 

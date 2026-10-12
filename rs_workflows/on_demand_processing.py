@@ -368,7 +368,8 @@ def resolve_specific_input_product_stac_items(
         its regex. If the ADFS multiplicity is not 'one_per_input', (None, [None]) is returned so the ADFS
         is staged once.
     """
-    input_adfs_io = search_by_name(task_table["io"].get("adfs", {}), input_adfs["name"])
+    io = task_table["io"]
+    input_adfs_io = search_by_name(io if isinstance(io, list) else io.get("adfs", []), input_adfs["name"])
     if input_adfs_io.get("multiplicity", None) == "one_per_input":
         logger = get_logger()
         input_product_names: set[str] = {product["name"] for product in unit["input_products"]}
@@ -388,10 +389,12 @@ def resolve_specific_input_product_stac_items(
         referenced_input_product_name = next(iter(referenced_input_product_names))
         logger.info(f"ADFS multiplicity 'one_per_input' refers to input '{referenced_input_product_name}'")
         input_product_io: dict[str, Any] = search_by_name(
-            task_table["io"].get("input", {}),
+            io if isinstance(io, list) else io.get("input", []),
             referenced_input_product_name,
         )
-        input_product_regex: str = input_product_io.get("reader_params", {}).get("regex", None)
+        input_product_regex: str = input_product_io.get("store_params", input_product_io.get("reader_params", {})).get(
+            "regex", None
+        )
         if not input_product_regex:
             logger.warning(
                 f"⚠️ Input product '{referenced_input_product_name}' should define a regex "

@@ -339,7 +339,8 @@ async def test_normalize_archived_auxip_items_wraps_catalog_update_errors(mocker
         )
 
 
-def test_resolve_specific_input_product_stac_items_nominal(mocker):
+@pytest.mark.parametrize("flat_io", [False, True])
+def test_resolve_specific_input_product_stac_items_nominal(mocker, flat_io):
     """
     Nominal case:
     - multiplicity = one_per_input
@@ -407,6 +408,10 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
             ],
         },
     }
+
+    if flat_io:
+        task_table["io"]["input"][0]["store_params"] = task_table["io"]["input"][0].pop("reader_params")
+        task_table["io"] = [entry for entries in task_table["io"].values() for entry in entries]
 
     # --- Unit config ---
     unit = {
