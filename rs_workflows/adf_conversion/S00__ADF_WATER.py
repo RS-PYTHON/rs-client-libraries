@@ -140,11 +140,13 @@ in_dir = Path(environ.get("ADF_INPUT", "../../shared/ADF"))
 # ~ Data5 : LandMarineMaskFit_LZW.tif (S3__SR_2_MLM_AX)
 # ~ Data6 : SurfaceClassificationFit_LZW.tif (S3__SR_2_SURFAX)
 # read S3__AX___LWM_AX
-lwm_path = (
-    in_dir
-    / "S3__AX___LWM_AX_20000101T000000_20991231T235959_20151214T120000___________________MPC_O_AL_001.SEN3"
-    / "land_water_bitmask_geo_bc_tiled.tif"
-)
+lwm_candidates = sorted(in_dir.glob("S3__AX___LWM_AX_*.SEN3"))
+if len(lwm_candidates) != 1:
+    raise ValueError(
+        f"❌ Single file LWM_AX was awaited, found {len(lwm_candidates)} : {lwm_candidates} in {in_dir}"
+    )
+
+lwm_path = lwm_candidates[0] / "land_water_bitmask_geo_bc_tiled.tif"
 with rasterio.open(lwm_path) as data1:
     full_width = data1.width
     full_height = data1.height
@@ -152,36 +154,41 @@ with rasterio.open(lwm_path) as data1:
     geotransform = data1.transform.to_gdal()
 
 # read S3__AX___CLM_AX
-clm_path = (
-    in_dir
-    / "S3__AX___CLM_AX_20000101T000000_20991231T235959_20151214T120000___________________MPC_O_AL_001.SEN3"
-    / "coastline_bitmask_geo_bc_tiled.tif"
-)
-# ~ data2 = rasterio.open(clm_path)
+clm_candidates = sorted(in_dir.glob("S3__AX___CLM_AX_*.SEN3"))
+if len(clm_candidates) != 1:
+    raise ValueError(
+        f"❌ Single file CLM_AX was awaited, found {len(clm_candidates)} : {clm_candidates} in {in_dir}"
+    )
+clm_path = clm_candidates[0] / "coastline_bitmask_geo_bc_tiled.tif"
+
 
 # read S3__AX___TRM_AX
-trm_path = (
-    in_dir
-    / "S3__AX___TRM_AX_20000101T000000_20991231T235959_20151214T120000___________________MPC_O_AL_001.SEN3"
-    / "tidal_regions_bitmask_geo_bc_tiled.tif"
-)
+trm_candidates = sorted(in_dir.glob("S3__AX___TRM_AX_*.SEN3"))
+if len(trm_candidates) != 1:
+    raise ValueError(
+        f"❌ Single file TRM_AX was awaited, found {len(trm_candidates)} : {trm_candidates} in {in_dir}"
+    )
+trm_path = trm_candidates[0] / "tidal_regions_bitmask_geo_bc_tiled.tif"
 # ~ data3 = rasterio.open(trm_path)
 
 # read S3__AX___OOM_AX
-oom_path = (
-    in_dir
-    / "S3__AX___OOM_AX_20000101T000000_20991231T235959_20151214T120000___________________MPC_O_AL_001.SEN3"
-    / "open_ocean_bitmask_geo_bc_tiled.tif"
-)
+oom_candidates = sorted(in_dir.glob("S3__AX___OOM_AX_*.SEN3"))
+if len(oom_candidates) != 1:
+    raise ValueError(
+        f"❌ Single file OOM_AX was awaited, found {len(oom_candidates)} : {oom_candidates} in {in_dir}"
+    )
+oom_path = oom_candidates[0] / "open_ocean_bitmask_geo_bc_tiled.tif"
 # ~ data4 = rasterio.open(oom_path)
 
 # read S3__SR_2_MLM_AX and resample
-mlm_path = (
-    in_dir
-    / "S3__SR_2_MLM_AX_20160216T000000_20991231T235959_20200512T120000___________________MPC_O_AL_004.SEN3"
-    / "LandMarineMask_2p2_km.nc"
-)
+mlm_candidates = sorted(in_dir.glob("S3__SR_2_MLM_AX_*.SEN3"))
+if len(mlm_candidates) != 1:
+    raise ValueError(
+        f"❌ Single file MLM_AX was awaited, found {len(mlm_candidates)} : {mlm_candidates} in {in_dir}"
+    )
+mlm_path = mlm_candidates[0] / "LandMarineMask_2p2_km.nc"
 mlm_vrt_path = mlm_path.parent / "LandMarineMask_2p2_km_warp.vrt"
+
 with rasterio.open(mlm_path) as raw_data5:
     with WarpedVRT(
         raw_data5,
@@ -193,11 +200,12 @@ with rasterio.open(mlm_path) as raw_data5:
         rio_copy(data5, mlm_vrt_path, driver="VRT")
 
 # read S3__SR_2_SURFAX
-surfax_path = (
-    in_dir
-    / "S3__SR_2_SURFAX_20000101T000000_20991231T235959_20151214T120000___________________MPC_O_AL_001.SEN3"
-    / "SurfaceClassification.dat"
-)
+surfax_candidates = sorted(in_dir.glob("S3__SR_2_SURFAX_*.SEN3"))
+if len(surfax_candidates) != 1:
+    raise ValueError(
+        f"❌ Single file SURFAX was awaited, found {len(surfax_candidates)} : {surfax_candidates} in {in_dir}"
+    )
+surfax_path = surfax_candidates[0] / "SurfaceClassification.dat"
 surfax_tif_path = surfax_path.parent / "SurfaceClassification.tif"
 surfax_vrt_path = surfax_path.parent / "SurfaceClassification_warp.vrt"
 if not surfax_tif_path.is_file():
