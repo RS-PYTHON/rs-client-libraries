@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import jsonschema
 import pytest
 
 from rs_workflows.payload_builder import (
@@ -608,3 +609,24 @@ def test_external_variables_none_datetime_raises_task_table_error():
                 "end_datetime": None,
             },
         )
+
+
+@pytest.mark.parametrize("selection", [{"pipeline": "ol1_eo"}, {"unit": "OL1Processor"}])
+def test_s3_olci_l1_grouped_io(selection):
+    """The OLCI L1 task table supports grouped I/O in pipeline and unit modes."""
+    root = Path(__file__).resolve().parent.parent
+    tasktable = json.loads((root / "tests/resources/TaskTable_S3_OLCI_L1.json").read_text())
+    schema = json.loads((root / "config/TaskTable.schema.json").read_text())
+    jsonschema.validate(tasktable, schema)
+
+    units = build_unit_list(tasktable, **selection)
+    assert len(units) == 1
+    built = units[0]
+    assert built["module"] == "s3olci.s3_ol1.ol1_processor"
+    for role, io_role in (("input_products", "input"), ("input_adfs", "adfs"), ("output_products", "output")):
+        expected = tasktable["io"][io_role]
+        assert [entry["name"] for entry in built[role]] == [entry["name"] for entry in expected]
+        for entry, details in zip(built[role], expected):
+            assert all(entry[key] == value for key, value in details.items())
+    assert all(entry["origin"] == "pipeline_input" for entry in built["input_products"])
+    assert all(entry["origin"] == "pipeline_output" for entry in built["output_products"])

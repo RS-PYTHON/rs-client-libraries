@@ -20,6 +20,7 @@ from copy import deepcopy
 from typing import Any
 
 from rs_common.utils import strftime_millis
+from rs_workflows.utils.prefect import get_logger
 
 EXTERNAL_VAR_PATTERN = re.compile(r"\{external_variable\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
 VARIABLE_PATTERN = re.compile(r"^{(.*)}$")  # matches exactly "{var}" (whole string)
@@ -343,6 +344,18 @@ def build_unit_list(
         unit: name of the unit to build, if the mode is "unit". If "pipeline" is given, has to be None.
         processing_mode: list of processing modes used for this flow. Optional
     """
+    io = tasktable.get("io") if isinstance(tasktable, dict) else None
+    get_logger(__name__).debug(
+        "Task table IO diagnostic: file=%s expected_io_type=dict tasktable_type=%s io_type=%s io_keys=%s "
+        "pipeline=%s unit=%s",
+        __file__,
+        type(tasktable).__name__,
+        type(io).__name__,
+        list(io) if isinstance(io, dict) else None,
+        pipeline,
+        unit,
+    )
+
     # Validate pipelines shape
     if not isinstance(tasktable, dict):
         raise TaskTableError(f"Task table root must be a JSON object (dict): {tasktable}")
