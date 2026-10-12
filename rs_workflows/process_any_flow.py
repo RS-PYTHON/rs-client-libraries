@@ -27,6 +27,8 @@ from rs_workflows.utils.prefect import get_logger
 from typing import Any
 from enum import Enum
 from prefect.variables import Variable
+from rs_workflows.utils.dask import is_dask_cluster_running
+
 import json
 from pathlib import Path
 from jsonschema import validate, ValidationError
@@ -43,6 +45,8 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
     WorkflowType,
 )
+
+DASK_CLUSTER_STAGING = "dask-staging"
 
 class ProcessingId(str, Enum):
     """
@@ -92,13 +96,23 @@ async def process_any(
 
 
     ##################################################
+    # Check cluster dasks
+    ##################################################
+    processing_dask_cluster = default_settings["dask_cluster_name"]
+    if await is_dask_cluster_running(processing_dask_cluster) is False:
+        raise ValueError(f"❌ '{processing_dask_cluster}' is unknown or not ready.")
+    if await is_dask_cluster_running(DASK_CLUSTER_STAGING) is False:
+        raise ValueError(f"❌ 'DASK_CLUSTER_STAGING' is unknown or not ready.")
+
+
+    ##################################################
     # Create all input for DPR processing
     ##################################################
     published_items : list[dict[str, Any]] = await call_dpr_flow(
         env=env,
         input_products=input_products,
         external_variables=external_variables,
-        dask_cluster_label=default_settings["dask_cluster_name"],
+        dask_cluster_label=processing_dask_cluster,
         processor_name=default_settings["processor"]["name"],
         processor_version=default_settings["processor"]["version"],
         pipeline=default_settings.get("pipeline", None),
@@ -114,8 +128,3 @@ async def process_any(
     for i, item in enumerate(published_items):
         print(f"--- Item {i + 1} ---")
         print(json.dumps(item, indent=2, ensure_ascii=False))
-
-    
-    
-    
-    
