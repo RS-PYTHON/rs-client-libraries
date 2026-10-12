@@ -66,9 +66,9 @@ async def process_any(
     
     logger = get_logger()
 
-    ##################################################
-    # Check default settings from Prefect variable
-    ##################################################
+    ########################################################################
+    # Check Prefect variable {processing_id.value}-default-setting format
+    #########################################################################
     default_settings_var_name:str = f'{processing_id.value}-default-setting'
     logger.info(f"Read prefect variable named '{default_settings_var_name}'")
 
@@ -94,28 +94,28 @@ async def process_any(
     ##################################################
     # Create all input for DPR processing
     ##################################################
-    call_dpr_flow(
+    published_items : list[dict[str, Any]] = await call_dpr_flow(
         env=env,
-
-
-
+        input_products=input_products,
+        external_variables=external_variables,
+        dask_cluster_label=default_settings["dask_cluster_name"],
         processor_name=default_settings["processor"]["name"],
         processor_version=default_settings["processor"]["version"],
-        dask_cluster_label=default_settings["dask_cluster_name"],
-
-        s3_payload_file=f"{s3_payload}/payload_{processor_name}.yaml",
-        pipeline=(),
-        unit=unit,
-        priority=Priority(priority),
-        workflow_type=WorkflowType(workflow),
-        input_products=input_products,
-        generated_product_to_collection_identifier=generated_product_to_collection_identifier,
-        auxiliary_product_to_collection_identifier=auxiliary_product_to_collection_identifier,
-        dask_task_timeout=dask_task_timeout,
-        processing_mode=workflow,
-        **external_variables,
+        pipeline=default_settings.get("pipeline", None),
+        unit=default_settings.get("unit", None),
+        priority=default_settings.get("priority", Priority.LOW),
+        processing_mode=default_settings.get("processing_mode", [ProcessingMode.ALWAYS]),
+        workflow=workflow,
+        generated_product_to_collection_identifier=default_settings.get("generated_product_to_collection_identifier", []),
+        auxiliary_product_to_collection_identifier = default_settings.get("auxiliary_product_to_collection_identifier", []),
     )
+
+    # TEMP : il faudra mettre générer un évènement pour chacun de ces items.
+    for i, item in enumerate(published_items):
+        print(f"--- Item {i + 1} ---")
+        print(json.dumps(item, indent=2, ensure_ascii=False))
+
     
-    print(a_process.model_dump_json(indent=2))
-    return await dpr_processing_task(a_process)
+    
+    
     
