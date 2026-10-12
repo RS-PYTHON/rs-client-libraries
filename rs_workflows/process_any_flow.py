@@ -61,7 +61,7 @@ class ProcessingId(str, Enum):
 
 @flow(name="process-any")
 async def process_any(
-    env: FlowEnvArgs,
+    env_args: FlowEnvArgs,
     input_products: list[FlowInputProduct],
     external_variables: dict[str, Any],
     processing_id: ProcessingId,
@@ -94,38 +94,39 @@ async def process_any(
             f"❌ Invalid JSON schema for var set in Prefect variable {default_settings_var_name!r}:\n{err.message}"
         ) from err
 
+    flow_env = FlowEnv(env_args)
+    with flow_env.start_span(__name__, f"process-any-{processing_id}"):    
+        ##################################################
+        # Check cluster dasks
+        ##################################################
+        processing_dask_cluster = default_settings["dask_cluster_name"]
+        if await is_dask_cluster_running(processing_dask_cluster) is False:
+            raise ValueError(f"❌ '{processing_dask_cluster}' is unknown or not ready.")
+        if await is_dask_cluster_running(DASK_CLUSTER_STAGING) is False:
+            raise ValueError(f"❌ 'DASK_CLUSTER_STAGING' is unknown or not ready.")
+        
 
-    ##################################################
-    # Check cluster dasks
-    ##################################################
-    processing_dask_cluster = default_settings["dask_cluster_name"]
-    if await is_dask_cluster_running(processing_dask_cluster) is False:
-        raise ValueError(f"❌ '{processing_dask_cluster}' is unknown or not ready.")
-    if await is_dask_cluster_running(DASK_CLUSTER_STAGING) is False:
-        raise ValueError(f"❌ 'DASK_CLUSTER_STAGING' is unknown or not ready.")
-    
 
+        ##################################################
+        # Create all input for DPR processing
+        ##################################################
+        published_items : list[dict[str, Any]] = await call_dpr_flow(
+            env=env_args,
+            input_products=input_products,
+            external_variables=external_variables,
+            dask_cluster_label=processing_dask_cluster,
+            processor_name=default_settings["processor"]["name"],
+            processor_version=default_settings["processor"]["version"],
+            pipeline=default_settings.get("pipeline", None),
+            unit=default_settings.get("unit", None),
+            priority=default_settings.get("priority", Priority.LOW),
+            processing_mode=default_settings.get("processing_mode", [ProcessingMode.ALWAYS]),
+            workflow=workflow,
+            generated_product_to_collection_identifier=default_settings.get("generated_product_to_collection_identifier", []),
+            auxiliary_product_to_collection_identifier = default_settings.get("auxiliary_product_to_collection_identifier", []),
+        )
 
-    ##################################################
-    # Create all input for DPR processing
-    ##################################################
-    published_items : list[dict[str, Any]] = await call_dpr_flow(
-        env=env,
-        input_products=input_products,
-        external_variables=external_variables,
-        dask_cluster_label=processing_dask_cluster,
-        processor_name=default_settings["processor"]["name"],
-        processor_version=default_settings["processor"]["version"],
-        pipeline=default_settings.get("pipeline", None),
-        unit=default_settings.get("unit", None),
-        priority=default_settings.get("priority", Priority.LOW),
-        processing_mode=default_settings.get("processing_mode", [ProcessingMode.ALWAYS]),
-        workflow=workflow,
-        generated_product_to_collection_identifier=default_settings.get("generated_product_to_collection_identifier", []),
-        auxiliary_product_to_collection_identifier = default_settings.get("auxiliary_product_to_collection_identifier", []),
-    )
-
-    # TEMP : il faudra mettre générer un évènement pour chacun de ces items.
-    for i, item in enumerate(published_items):
-        print(f"--- Item {i + 1} ---")
-        print(json.dumps(item, indent=2, ensure_ascii=False))
+        # TEMP : il faudra mettre générer un évènement pour chacun de ces items.
+        for i, item in enumerate(published_items):
+            print(f"--- Item {i + 1} ---")
+            print(json.dumps(item, indent=2, ensure_ascii=False))
