@@ -96,12 +96,12 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
         if found_next:
             logger.info(
                 "STAC Item properties for the next product:\n%s",
-                json.dumps(found_next.to_dict(), indent=2, ensure_ascii=False),
+                json.dumps(found_next[0].to_dict(), indent=2, ensure_ascii=False),
             )
             input_products.append(
                 {
                     "name": f"{single_input_product.name}{index}",
-                    "item_id": found_next.to_dict()["features"]["id"],
+                    "item_id": found_next[0].to_dict()["features"]["id"],
                     "collection_name": single_input_product.collection_name,
                 },
             )
