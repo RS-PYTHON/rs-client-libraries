@@ -22,7 +22,8 @@ from pystac import ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
 from rs_client.stac.prip_client import PripClient
-from rs_common.utils import create_valcover_filter
+from rs_common.utils import create_valcover_filter, strftime_millis
+from rs_workflows.adf_flow import substitute_values
 from rs_workflows.catalog_flow import catalog_search_task
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
@@ -63,10 +64,42 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
                 f"❌ STAC item '{single_input_product.item_id}' not found in collection '{single_input_product.collection_name}'.",
             )
 
-        logger.debug(
+        logger.info(
             "STAC Item properties:\n%s",
             json.dumps(stac_item.to_dict()["properties"], indent=2, ensure_ascii=False),
         )
+        item: dict = stac_item.to_dict()
 
-        # logger.info(f"Start Catalog search: {catalog_cql2}")
-        # cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb, satellite)
+        satellite = item["properties"]["platform"]
+        start_datetime_txt = item["properties"]["start_datetime"]
+        end_datetime_txt = item["properties"]["end_datetime"]
+        product_type = item["properties"]["product:type"]
+
+        # We will extract the product duration in seconds
+        start_datetime = datetime.datetime.fromisoformat(start_datetime_txt)
+        end_datetime = datetime.datetime.fromisoformat(end_datetime_txt)
+        duration_seconds = (end_datetime - start_datetime).total_seconds()
+
+        logger.info("🧹 Computing cql2_filter")
+        included_in_interval = compute_cql2("LatestIncludedWithSatellite", 1, 1, satellite)
+        cql2_filter = substitute_values(
+            included_in_interval,
+            {
+                "start_datetime": strftime_millis(start_datetime),
+                "end_datetime": strftime_millis(end_datetime),
+                "product_type": product_type,
+                "satellite": satellite,
+            },
+        )
+        found = catalog_client.search(
+            method="POST",
+            stac_filter=cql2_filter.get("filter"),
+            max_items=cql2_filter.get("limit"),
+            sortby=cql2_filter.get("sortby"),
+            collections=[single_input_product.collection_name],
+        )
+
+        logger.info(
+            "STAC Item properties:\n%s",
+            json.dumps(found.to_dict(), indent=2, ensure_ascii=False),
+        )
