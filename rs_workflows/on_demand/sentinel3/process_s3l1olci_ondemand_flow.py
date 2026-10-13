@@ -105,7 +105,6 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
         )
 
         search_params = {
-            "datetime": None,
             "method": "POST",
             "stac_filter": cql2_filter.get("filter"),
             "max_items": cql2_filter.get("limit"),
