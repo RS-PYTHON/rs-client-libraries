@@ -44,8 +44,8 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
     logger = get_logger()
 
     # The first element is the one used to call the flow
-    input_products: list[FlowInputProduct] = {}
-    input_products.add(
+    input_products: list[FlowInputProduct] = []
+    input_products.append(
         {
             "name": f"{single_input_product.name}1",
             "item_id": single_input_product.item_id,
@@ -98,7 +98,7 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
                 "STAC Item properties for the next product:\n%s",
                 json.dumps(found_next.to_dict(), indent=2, ensure_ascii=False),
             )
-            input_products.add(
+            input_products.append(
                 {
                     "name": f"{single_input_product.name}{index}",
                     "item_id": found_next.to_dict()["id"],
