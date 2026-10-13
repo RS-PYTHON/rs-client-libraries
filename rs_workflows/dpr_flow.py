@@ -563,6 +563,7 @@ async def run_processor(
                     local_report_dir,
                     Path(s3_payload_filename).with_suffix(".processor.log").name,
                 )
+                logger.info(f"Reading processor log file from local path: {local_log_file!r}")
                 try:
                     async with await anyio.open_file(local_log_file, encoding="utf-8") as opened:
                         s3_log_file = await opened.read()
