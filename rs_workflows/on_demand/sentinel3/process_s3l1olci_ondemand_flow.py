@@ -91,6 +91,19 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
                 "satellite": satellite,
             },
         )
+        logger.info(
+            "stac_filter:\n%s",
+            json.dumps(cql2_filter.get("filter"), indent=2, ensure_ascii=False),
+        )
+        logger.info(
+            "stac_sortby:\n%s",
+            json.dumps(cql2_filter.get("sortby"), indent=2, ensure_ascii=False),
+        )
+        logger.info(
+            "stac_limit:\n%s",
+            json.dumps(cql2_filter.get("limit"), indent=2, ensure_ascii=False),
+        )
+
         found = catalog_client.search(
             datetime=start_datetime,
             method="POST",
