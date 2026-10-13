@@ -25,8 +25,11 @@ from prefect import flow, task
 from prefect.variables import Variable
 from pystac import ItemCollection
 
+from rs_client.stac.catalog_client import CatalogClient
 from rs_client.stac.prip_client import PripClient
-from rs_common.utils import create_valcover_filter
+from rs_common.utils import create_valcover_filter, strftime_millis
+from rs_workflows.adf_flow import substitute_values
+from rs_workflows.catalog_flow import catalog_search_task
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
     DprProcessIn,
@@ -39,6 +42,7 @@ from rs_workflows.flow_utils import (
     RetryConfig,
     WorkflowType,
 )
+from rs_workflows.on_demand.adf.convert_adf_set import compute_cql2
 from rs_workflows.staging_flow import staging_task
 from rs_workflows.utils.dask import is_dask_cluster_running
 from rs_workflows.utils.dpr import call_dpr_flow, dpr_processing_task
@@ -164,3 +168,43 @@ async def process_any(
         for i, item in enumerate(published_items):
             print(f"--- Item {i + 1} ---")
             print(json.dumps(item, indent=2, ensure_ascii=False))
+
+
+def get_latest_product_covering_interval(
+    env_args: FlowEnvArgs,
+    interval_begin_datetime: datetime,
+    interval_end_datetime: datetime,
+    product_type: str,
+    satellite: str,
+    collection: str,
+) -> ItemCollection | None:
+
+    logger = get_logger()
+    flow_env = FlowEnv(env_args)
+    with flow_env.start_span(__name__, f"process_s3l1olci_ondemand"):
+        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+
+        logger.info("🧹 Computing cql2_filter")
+        included_in_interval = compute_cql2("LatestIncludedWithSatellite", 1, 1, satellite)
+        cql2_filter = substitute_values(
+            included_in_interval,
+            {
+                "start_datetime": strftime_millis(interval_begin_datetime),
+                "end_datetime": strftime_millis(interval_end_datetime),
+                "product_type": product_type,
+                "satellite": satellite,
+            },
+        )
+        logger.info(
+            f"We query the rs-catalog to found a product with type {product_type} on the interval [{interval_begin_datetime}, {interval_end_datetime}]",
+        )
+
+        found = catalog_client.search(
+            method="POST",
+            stac_filter=cql2_filter.get("filter"),
+            max_items=cql2_filter.get("limit"),
+            sortby=cql2_filter.get("sortby"),
+            collections=[collection],
+        )
+
+        return found
