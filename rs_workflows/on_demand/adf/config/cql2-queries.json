@@ -214,28 +214,28 @@
                             {
                                 "interval": [
                                     {
-                                        "op": "-",
-                                        "args": [
-                                            "{start_datetime}",
-                                            "{dTa}"
-                                        ]
+                                        "property": "start_datetime"
                                     },
                                     {
-                                        "op": "+",
-                                        "args": [
-                                            "{end_datetime}",
-                                            "{dTb}"
-                                        ]
+                                        "property": "end_datetime"
                                     }
                                 ]
                             },
                             {
                                 "interval": [
                                     {
-                                        "property": "start_datetime"
+                                        "op": "+",
+                                        "args": [
+                                            "{start_datetime}",
+                                            "{dTa}"
+                                        ]
                                     },
                                     {
-                                        "property": "end_datetime"
+                                        "op": "-",
+                                        "args": [
+                                            "{end_datetime}",
+                                            "{dTb}"
+                                        ]
                                     }
                                 ]
                             }
