@@ -383,7 +383,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     taken from stac_discovery.id when present, otherwise it is derived
     from the filename (minus the .json extension).
     """
-    logger = logger = get_logger()
+    logger = get_logger()
     is_json_product = zarr_path.is_file()
 
     if is_json_product:
