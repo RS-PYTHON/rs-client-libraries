@@ -39,12 +39,20 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
     """
     This flow compute other input and external variable from a single input.
     Then it forwards to process-any  with workflow  set to "on-demand".
-    The "name" from FlowInputProduct will be ignored.
+
     """
     logger = get_logger()
 
-    # single_input_product.collection_name
-    # single_input_product.item_id
+    # The first element is the one used to call the flow
+    input_products: list[FlowInputProduct] = {}
+    input_products.add(
+        {
+            "name": f"{single_input_product.name}1",
+            "item_id": single_input_product.item_id,
+            "collection_name": single_input_product.collection_name,
+        },
+    )
+    index: int = 2
 
     flow_env = FlowEnv(env_args)
     with flow_env.start_span(__name__, f"process_s3l1olci_ondemand"):
@@ -76,7 +84,7 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
         next_interval_start = start_datetime + datetime.timedelta(seconds=duration_seconds)
         next_interval_end = end_datetime + datetime.timedelta(seconds=duration_seconds)
 
-        found = get_latest_product_covering_interval(
+        found_next = get_latest_product_covering_interval(
             env_args,
             next_interval_start,
             next_interval_end,
@@ -85,7 +93,21 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
             single_input_product.collection_name,
         )
 
+        if found_next:
+            logger.info(
+                "STAC Item properties for the next product:\n%s",
+                json.dumps(found_next.to_dict(), indent=2, ensure_ascii=False),
+            )
+            input_products.add(
+                {
+                    "name": f"{single_input_product.name}{index}",
+                    "item_id": found_next.to_dict()["id"],
+                    "collection_name": single_input_product.collection_name,
+                },
+            )
+            index = index + 1
+
         logger.info(
-            "STAC Item properties ( the same for test purpose ):\n%s",
-            json.dumps(found.to_dict(), indent=2, ensure_ascii=False),
+            "input_products:\n%s",
+            json.dumps(input_products, indent=2, ensure_ascii=False),
         )
