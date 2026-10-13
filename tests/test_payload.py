@@ -141,7 +141,15 @@ async def test_whole_payload(
         return_value=[["*", "*", "*", "90", RSPY_CATALOG_BUCKET]],
     )
     mocker.patch(
+        "rs_workflows.on_demand_processing.fetch_csv_from_endpoint",
+        return_value=[["*", "*", "*", "90", RSPY_CATALOG_BUCKET]],
+    )
+    mocker.patch(
         "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value=(None, f"s3://{MOCKED_BUCKET}/S1CADUS"),
+    )
+    mocker.patch(
+        "rs_workflows.on_demand_processing.resolve_stac_input_path",
         return_value=(None, f"s3://{MOCKED_BUCKET}/S1CADUS"),
     )
     await setup_worklow_test_env()
@@ -181,7 +189,7 @@ async def test_whole_payload(
     payload_dict = payload.dump(reveal_secrets=True)
 
     # Remove random uuids from output paths
-    for product in payload_dict["io"]["output_products"]:
+    for product in payload_dict["io"]["output_products"] + payload_dict["io"]["adfs"]:
         path = product["path"]
         try:
             UUID(Path(path).stem)

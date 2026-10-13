@@ -379,7 +379,7 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
             "adfs": [
                 {
                     "name": "ADFS_INPUT",
-                    "multiplicity": "one_per_input",
+                    "folder_multiplicity": "one_per_input",
                     "alternatives": [
                         {
                             "order": 1,
