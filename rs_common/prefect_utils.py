@@ -669,6 +669,7 @@ def delete_payload_file(payload_path: str, log: bool = False) -> None:
         payload_path: Path to delete (S3 path starting with s3:// or local file path)
         log: Whether to log the deletion (for S3 paths only)
     """
+    logger.info(f"Deleting payload file: {payload_path}")
     if payload_path.startswith(("s3://", "S3://")):
         # Handle S3 path
         s3_delete(payload_path, log=log)

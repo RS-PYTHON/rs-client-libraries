@@ -573,7 +573,8 @@ async def dpr_processing(
         try:
             processed_items.result()
         finally:
-            prefect_utils.delete_payload_file(dpr_input.s3_payload_file, True)
+            logger.info("Deleting payload file")
+            prefect_utils.delete_payload_file(dpr_input.s3_payload_file, log=True)
 
         processed = processed_items.result()
 
