@@ -593,10 +593,11 @@ class RetryConfig(BaseModel):
 
 class ConversionIn(BaseModel):
     """
-    Input parameters for executing the 'on_demand_conversion' flow.
+    Input parameters for the 'convert-safe' Prefect flow, implemented by 'on_demand_conversion'.
 
-    This model defines all the configuration needed to run an on-demand conversion flow,
-    including input datasets, generated outputs, and scheduling parameters.
+    Defines the configuration needed to convert a legacy SAFE product to its EOPF (Zarr)
+    counterpart on demand, including the input product, output collection, Dask cluster,
+    and output Zarr format.
     """
 
     env: FlowEnvArgs = Field(
