@@ -105,13 +105,14 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
         )
 
         search_params = {
+            "datetime": "2026-10-08T05:12:47.070713Z",
+            "Datetime": "2026-10-08T05:14:47.018084Z",
             "method": "POST",
             "stac_filter": cql2_filter.get("filter"),
             "max_items": cql2_filter.get("limit"),
             "sortby": cql2_filter.get("sortby"),
             "collections": [single_input_product.collection_name],
         }
-        search_params = {key: value for key, value in search_params.items() if value is not None}
 
         found = catalog_client.search(**search_params)
 
