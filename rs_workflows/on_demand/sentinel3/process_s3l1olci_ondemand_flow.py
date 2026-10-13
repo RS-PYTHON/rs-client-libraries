@@ -101,7 +101,7 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
             input_products.append(
                 {
                     "name": f"{single_input_product.name}{index}",
-                    "item_id": found_next.to_dict()["id"],
+                    "item_id": found_next.to_dict()["features"]["id"],
                     "collection_name": single_input_product.collection_name,
                 },
             )
