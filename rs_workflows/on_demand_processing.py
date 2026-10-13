@@ -23,6 +23,7 @@ from copy import deepcopy
 from os import path as osp
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
+from uuid import uuid4
 
 import jsonschema
 import yaml
@@ -49,7 +50,12 @@ from rs_workflows.payload_builder import (
     build_unit_list,
     replace_external_variables,
 )
-from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
+from rs_workflows.payload_generator import (
+    fetch_csv_from_endpoint,
+    find_s3_output_bucket,
+    generate_payload,
+    resolve_stac_input_path,
+)
 from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import (
@@ -302,7 +308,7 @@ async def process_input_adfs(
     specific_input_product: tuple[str | None, Item | None] = (None, None),
     staging_retries: int = 3,
     staging_retry_delay: int = 60,
-) -> tuple[str, str, tuple[bool, ItemCollection]]:
+) -> tuple[str, str, tuple[bool, ItemCollection]] | None:
     """
     Stage the ADFS inputs described in the task table for one processing unit input.
 
@@ -321,11 +327,12 @@ async def process_input_adfs(
     Returns:
         tuple[str, str, tuple[bool, ItemCollection]]:
             The input ADFS name and type together with the original staging status/item
-            collection tuple shape expected by downstream code.
+            collection tuple shape expected by downstream code, or None if no alternative returned
+            staged data for a non-mandatory ADFS.
 
     Raises:
         RuntimeError:
-            If no alternative returns staged data, or if the task table content
+            If no alternative returns staged data for a mandatory ADFS, or if the task table content
             cannot be read as expected.
     """
     logger = get_logger()
@@ -345,6 +352,9 @@ async def process_input_adfs(
             if result is not None:
                 return result
 
+        if not input_adfs.get("mandatory", True):
+            logger.warning(f"⚠️ Searching for optional adfs input {input_adfs['name']} did not return any result")
+            return None
         raise RuntimeError(f"Searching for adfs input {input_adfs['name']} did not return any result")
 
     except KeyError as kerr:
@@ -369,7 +379,7 @@ def resolve_specific_input_product_stac_items(
         is staged once.
     """
     input_adfs_io = search_by_name(task_table["io"].get("adfs", {}), input_adfs["name"])
-    if input_adfs_io.get("multiplicity", None) == "one_per_input":
+    if input_adfs_io.get("folder_multiplicity", None) == "one_per_input":
         logger = get_logger()
         input_product_names: set[str] = {product["name"] for product in unit["input_products"]}
         referenced_input_product_names = {
@@ -586,13 +596,19 @@ def build_and_generate_payload(
 
     processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
     unit_list = build_unit_list(
-        tasktable=task_table, pipeline=dpr_input.pipeline, unit=dpr_input.unit, processing_mode=processing_mode
+        tasktable=task_table,
+        pipeline=dpr_input.pipeline,
+        unit=dpr_input.unit,
+        processing_mode=processing_mode,
     )
 
     tasks = []
     for unit in unit_list:
         # For each input_adfs element computed on STEP 1
         for input_adfs in unit["input_adfs"]:
+            # HACK for S1-ARD: REFERENCE_DB is not staged, see below
+            if input_adfs["name"] == "REFERENCE_DB":
+                continue
             # For each specific input in case of multiplicity=one_per_input
             specific_input_name, product_stac_items = resolve_specific_input_product_stac_items(
                 input_adfs,
@@ -618,7 +634,9 @@ def build_and_generate_payload(
                 )
 
     try:
-        aux_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [t.result() for t in tasks]
+        aux_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [
+            result for t in tasks if (result := t.result()) is not None
+        ]
     except (RuntimeError, KeyError) as err:
         raise err
 
@@ -637,6 +655,19 @@ def build_and_generate_payload(
                 adfs.add((name, adf_type, asset.href))
             else:
                 raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
+
+    # HACK for S1-ARD: the reference pipeline writes the REFERENCE_DB in a new s3 folder
+    if dpr_input.pipeline == "ARD_REFERENCE_PIPELINE":
+        logger.warning(f"ARD HACK FOR PIPELINE {dpr_input.pipeline}")
+        owner_id: str = dpr_input.env.owner_id
+        output_collection = "s1-ard-reference-db"
+        adf_type = "ARD_REFERENCE_DB"
+        bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
+        bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, adf_type)
+        ref_db_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
+        logger.warning(f"ARD REFERENCE_DB: {ref_db_path}")
+        # adf_type is not 'folder' on purpose, so that the path is not truncated by build_adfs
+        adfs.add(("REFERENCE_DB", adf_type, ref_db_path))
 
     # generate the dpr payload file
     return (

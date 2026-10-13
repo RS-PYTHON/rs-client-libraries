@@ -113,6 +113,15 @@ io:
         client_kwargs:
           endpoint_url: https://localhost:5000
           region_name: us-east-1
+  - id: REFERENCE_DB
+    path: s3:/rs-dev-cluster-catalog/toto/s1-ard-reference-db/00000000-0000-0000-0000-000000000001
+    adf_params:
+      storage_options:
+        key: testing
+        secret: testing
+        client_kwargs:
+          endpoint_url: https://localhost:5000
+          region_name: us-east-1
 context_managers: []
 dask_config:
   distributed.worker.local_directory: ~/eopf/output
