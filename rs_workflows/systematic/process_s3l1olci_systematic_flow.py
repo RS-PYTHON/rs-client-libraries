@@ -42,31 +42,13 @@ from rs_workflows.staging_flow import staging_task
 from rs_workflows.utils.prefect import get_logger
 
 
-@flow(name="process-s3l1olci-ondemand")
-async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product: FlowInputProduct):
+@flow(name="process-s3l1olci-systematic")
+async def process_s3l1olci_systematic():
     """
-    This flow compute other input and external variable from a single input.
-    Then it forwards to process-any  with workflow  set to "on-demand".
-    The "name" from FlowInputProduct will be ignored.
+    This flow compute input and external variable from an event.
+    Then it forwards to process-any  with workflow  set to "systematic".
     """
     logger = get_logger()
 
     # single_input_product.collection_name
     # single_input_product.item_id
-
-    flow_env = FlowEnv(env_args)
-    with flow_env.start_span(__name__, f"process_s3l1olci_ondemand"):
-        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-        stac_item = catalog_client.get_item(single_input_product.collection_name, single_input_product.item_id)
-        if stac_item is None:
-            raise RuntimeError(
-                f"❌ STAC item '{single_input_product.item_id}' not found in collection '{single_input_product.collection_name}'.",
-            )
-
-        logger.debug(
-            "STAC Item properties:\n%s",
-            json.dumps(stac_item.to_dict()["properties"], indent=2, ensure_ascii=False),
-        )
-
-        # logger.info(f"Start Catalog search: {catalog_cql2}")
-        # cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb, satellite)
