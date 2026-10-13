@@ -45,7 +45,6 @@ from pydantic import SecretStr
 from rs_client.osam_client import BucketCredentials, OsamClient
 from rs_common.logging import Logging
 from rs_common.utils import env_bool
-from rs_workflows.utils.prefect import get_logger
 
 # In local mode, all your services are running locally.
 # In cluster mode, we use the services deployed on the RS-Server website.
@@ -670,8 +669,6 @@ def delete_payload_file(payload_path: str, log: bool = False) -> None:
         payload_path: Path to delete (S3 path starting with s3:// or local file path)
         log: Whether to log the deletion (for S3 paths only)
     """
-    logger_prefect = get_logger()
-    logger_prefect.info(f"Deleting payload file: {payload_path}")
     if payload_path.startswith(("s3://", "S3://")):
         # Handle S3 path
         s3_delete(payload_path, log=log)
@@ -679,10 +676,10 @@ def delete_payload_file(payload_path: str, log: bool = False) -> None:
         # Handle local file path
         try:
             if log:
-                logger_prefect.info(f"Deleting local file: {payload_path}")
+                logger.info(f"Deleting local file: {payload_path}")
             os.remove(payload_path)
             if log:
-                logger_prefect.info(f"Deleted local file: {payload_path}")
+                logger.info(f"Deleted local file: {payload_path}")
         except FileNotFoundError:
             # File already deleted, ignore
             pass

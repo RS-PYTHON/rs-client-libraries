@@ -574,8 +574,7 @@ async def dpr_processing(
             processed_items.result()
         finally:
             logger.info("Deleting payload file")
-            prefect_utils.delete_payload_file(dpr_input.s3_payload_file, log=True)
-            logger.info("Deleting payload file : prefect_utils.delete_payload_file called !")
+            prefect_utils.delete_payload_file(dpr_input.s3_payload_file)
 
         processed = processed_items.result()
 
