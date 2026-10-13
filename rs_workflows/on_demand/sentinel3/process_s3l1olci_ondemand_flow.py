@@ -91,18 +91,6 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
                 "satellite": satellite,
             },
         )
-        logger.info(
-            "stac_filter:\n%s",
-            json.dumps(cql2_filter.get("filter"), indent=2, ensure_ascii=False),
-        )
-        logger.info(
-            "stac_sortby:\n%s",
-            json.dumps(cql2_filter.get("sortby"), indent=2, ensure_ascii=False),
-        )
-        logger.info(
-            "stac_limit:\n%s",
-            json.dumps(cql2_filter.get("limit"), indent=2, ensure_ascii=False),
-        )
 
         found = catalog_client.search(
             method="POST",
@@ -113,6 +101,30 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
         )
 
         logger.info(
-            "STAC Item properties:\n%s",
+            "STAC Item properties ( the same for test purpose ):\n%s",
             json.dumps(found.to_dict(), indent=2, ensure_ascii=False),
+        )
+
+        next_product_start = start_datetime + datetime.timedelta(seconds=duration_seconds)
+        next_product_end = end_datetime + datetime.timedelta(seconds=duration_seconds)
+        cql2_filter = substitute_values(
+            included_in_interval,
+            {
+                "start_datetime": strftime_millis(next_product_start),
+                "end_datetime": strftime_millis(next_product_end),
+                "product_type": product_type,
+                "satellite": satellite,
+            },
+        )
+        found2 = catalog_client.search(
+            method="POST",
+            stac_filter=cql2_filter.get("filter"),
+            max_items=cql2_filter.get("limit"),
+            sortby=cql2_filter.get("sortby"),
+            collections=[single_input_product.collection_name],
+        )
+
+        logger.info(
+            "STAC Item properties ( next one ):\n%s",
+            json.dumps(found2.to_dict(), indent=2, ensure_ascii=False),
         )
