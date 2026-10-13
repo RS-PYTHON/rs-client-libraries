@@ -339,7 +339,8 @@ async def test_normalize_archived_auxip_items_wraps_catalog_update_errors(mocker
         )
 
 
-def test_resolve_specific_input_product_stac_items_nominal(mocker):
+@pytest.mark.parametrize("named_io", [False, True])
+def test_resolve_specific_input_product_stac_items_nominal(mocker, named_io):
     """
     Nominal case:
     - multiplicity = one_per_input
@@ -407,6 +408,13 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
             ],
         },
     }
+
+    if named_io:
+        task_table["io"] = {
+            entry["name"]: {key: value for key, value in entry.items() if key != "name"}
+            for entries in task_table["io"].values()
+            for entry in entries
+        }
 
     # --- Unit config ---
     unit = {

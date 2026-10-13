@@ -630,3 +630,21 @@ def test_s3_olci_l1_grouped_io(selection):
             assert all(entry[key] == value for key, value in details.items())
     assert all(entry["origin"] == "pipeline_input" for entry in built["input_products"])
     assert all(entry["origin"] == "pipeline_output" for entry in built["output_products"])
+
+
+@pytest.mark.parametrize("selection", [{"pipeline": "ol1_eo"}, {"unit": "OL1Processor"}])
+def test_build_unit_list_io_indexed_by_product_name(selection):
+    """Product names used as dictionary keys replace each entry's name field."""
+    root = Path(__file__).resolve().parent.parent
+    tasktable = json.loads((root / "tests/resources/TaskTable_S3_OLCI_L1.json").read_text())
+    expected = build_unit_list(tasktable, **selection)
+    tasktable["io"] = {
+        entry["name"]: {key: value for key, value in entry.items() if key != "name"}
+        for entries in tasktable["io"].values()
+        for entry in entries
+    }
+    original_io = json.dumps(tasktable["io"])
+    schema = json.loads((root / "config/TaskTable.schema.json").read_text())
+    jsonschema.validate(tasktable, schema)
+    assert build_unit_list(tasktable, **selection) == expected
+    assert json.dumps(tasktable["io"]) == original_io

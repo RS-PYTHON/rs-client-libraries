@@ -30,6 +30,23 @@ class TaskTableError(ValueError):
     """Errors related to Task Table parsing/validation."""
 
 
+def get_io_entries(tasktable: dict[str, Any], role: str) -> list[dict[str, Any]]:
+    """Read grouped or product-name-indexed I/O without changing the task table."""
+    io = tasktable["io"]
+    if not isinstance(io, dict):
+        raise TaskTableError("Task table 'io' must be a dictionary")
+    if any(isinstance(io.get(key), list) for key in ("input", "adfs", "output")):
+        return io.get(role, [])
+    entries = []
+    for name, details in io.items():
+        if not isinstance(details, dict):
+            raise TaskTableError(f"Invalid IO definition for '{name}': expected an object")
+        if details.get("name", name) != name:
+            raise TaskTableError(f"IO key '{name}' conflicts with name '{details['name']}'")
+        entries.append({**details, "name": name})
+    return entries
+
+
 def replace_external_variables(obj, external_variables: dict[str, Any] | None):
     """Replace configured external variables with the input parameters"""
     if isinstance(obj, dict):
@@ -381,11 +398,8 @@ def build_unit_list(
 
     # Retrieve details of inputs/adfs/outputs from "io" field
     io_index: dict[str, dict[str, dict[str, Any]]] = {}
-    for io_type, io_values in tasktable["io"].items():
-        io_index[io_type] = {}
-        for io in io_values:
-            if isinstance(io, dict) and isinstance(io.get("name"), str):
-                io_index[io_type][io["name"]] = io
+    for io_type in ("input", "adfs", "output"):
+        io_index[io_type] = {entry["name"]: entry for entry in get_io_entries(tasktable, io_type)}
 
     out_units: list[dict[str, Any]] = []
 

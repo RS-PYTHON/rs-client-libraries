@@ -47,6 +47,7 @@ from rs_workflows.flow_utils import (
 from rs_workflows.payload_builder import (
     build_cql2_json,
     build_unit_list,
+    get_io_entries,
     replace_external_variables,
 )
 from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
@@ -368,7 +369,7 @@ def resolve_specific_input_product_stac_items(
         its regex. If the ADFS multiplicity is not 'one_per_input', (None, [None]) is returned so the ADFS
         is staged once.
     """
-    input_adfs_io = search_by_name(task_table["io"].get("adfs", {}), input_adfs["name"])
+    input_adfs_io = search_by_name(get_io_entries(task_table, "adfs"), input_adfs["name"])
     if input_adfs_io.get("multiplicity", None) == "one_per_input":
         logger = get_logger()
         input_product_names: set[str] = {product["name"] for product in unit["input_products"]}
@@ -388,7 +389,7 @@ def resolve_specific_input_product_stac_items(
         referenced_input_product_name = next(iter(referenced_input_product_names))
         logger.info(f"ADFS multiplicity 'one_per_input' refers to input '{referenced_input_product_name}'")
         input_product_io: dict[str, Any] = search_by_name(
-            task_table["io"].get("input", {}),
+            get_io_entries(task_table, "input"),
             referenced_input_product_name,
         )
         input_product_regex: str = input_product_io.get("reader_params", {}).get("regex", None)
