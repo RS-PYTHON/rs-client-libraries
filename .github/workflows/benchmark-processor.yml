@@ -42,7 +42,7 @@ on:
           - "1.4.0"
           - "1.5.0"
       scenario:
-        description: Processor version
+        description: Scenario
         required: true
         type: choice
         options: # mocked values from rs-demo/notebooks/sprints/sprint38/1099_first_benchmarking_flow/1099_first_benchmarking_flow.json
