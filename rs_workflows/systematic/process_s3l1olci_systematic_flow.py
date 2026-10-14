@@ -16,6 +16,7 @@
 
 import datetime
 import json
+from typing import Any
 
 from prefect import flow, task
 from pystac import ItemCollection
@@ -43,12 +44,11 @@ from rs_workflows.utils.prefect import get_logger
 
 
 @flow(name="process-s3l1olci-systematic")
-async def process_s3l1olci_systematic():
+async def process_s3l1olci_systematic(event_name: str, payload: dict[str, Any]):
     """
     This flow compute input and external variable from an event.
     Then it forwards to process-any  with workflow  set to "systematic".
     """
     logger = get_logger()
-
-    # single_input_product.collection_name
-    # single_input_product.item_id
+    logger.info(f"flow started from event named {event_name}.")
+    logger.info(f"event payload is {payload}.")
