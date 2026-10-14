@@ -164,7 +164,7 @@ async def process_any(
             ),
         )
 
-        # TEMP : il faudra mettre générer un évènement pour chacun de ces items.
+        # TODO  : il faudra  générer un évènement pour chacun de ces items.
         for i, item in enumerate(published_items):
             print(f"--- Item {i + 1} ---")
             print(json.dumps(item, indent=2, ensure_ascii=False))

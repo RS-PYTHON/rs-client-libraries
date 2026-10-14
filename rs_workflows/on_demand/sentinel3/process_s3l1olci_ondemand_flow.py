@@ -94,9 +94,9 @@ def compute_s3l1olci_inputs(
         duration_seconds = (end_datetime - start_datetime).total_seconds()
         logger.info(f"The product duration is {duration_seconds} seconds.")
 
-        ####################################
-        #  TRY to get the next product     #
-        ####################################
+        #####################################################
+        #  TRY to get the next product   OLCL0_PRODUCT_TYPE #
+        #####################################################
         found_next = get_latest_product_covering_interval(
             env_args,
             start_datetime + datetime.timedelta(seconds=duration_seconds),
@@ -116,9 +116,9 @@ def compute_s3l1olci_inputs(
             )
             index = index + 1
 
-        ####################################
-        #  TRY to get the previous product #
-        ####################################
+        #######################################################
+        #  TRY to get the previous product OLCL0_PRODUCT_TYPE #
+        #######################################################
         found_previous = get_latest_product_covering_interval(
             env_args,
             start_datetime - datetime.timedelta(seconds=duration_seconds),
@@ -137,6 +137,27 @@ def compute_s3l1olci_inputs(
                 },
             )
             index = index + 1
+
+        #######################################
+        #  Get the product NATL0_PRODUCT_TYPE #
+        #######################################
+        found_nat = get_latest_product_covering_interval(
+            env_args,
+            start_datetime,
+            end_datetime,
+            NATL0_PRODUCT_TYPE,
+            satellite,
+            collection_natl0,
+        )
+
+        if found_nat:
+            input_products.append(
+                {
+                    "name": f"{navl0_base_name}1",
+                    "item_id": found_nat[0].to_dict()["id"],
+                    "collection_name": collection_natl0,
+                },
+            )
 
     return input_products
 
