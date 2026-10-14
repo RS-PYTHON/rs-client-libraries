@@ -558,7 +558,7 @@ def build_output_products(
                 path=output_path,
                 engine=mapping["engine"],
                 writer_params=store_params,
-                type=mapping.get("type", "file"),
+                type="folder",
                 final_product=mapping.get("final_product", True),
                 autoclean=autoclean,
             ),
