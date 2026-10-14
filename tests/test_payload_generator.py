@@ -961,11 +961,13 @@ def test_build_adfs_non_edh_url_not_replaced(mock_store_params):
 # build_output_products
 
 
+@pytest.mark.parametrize("writer_mode", [None, "w-"])
 def test_build_output_products_specific_storage(
     sample_unit,
     mock_dpr_process_in,
     mock_store_params,
     mocker,
+    writer_mode,
 ):
     """
     Test output products with specific storage configuration in unit.
@@ -974,6 +976,9 @@ def test_build_output_products_specific_storage(
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
     mock_storage.get_storage_kind.return_value = "obs"
+
+    if writer_mode is not None:
+        sample_unit["output_products"][0]["writer_params"] = {"mode": writer_mode}
 
     # Provide mappings for BOTH output1 and output2
     mock_dpr_process_in.generated_product_to_collection_identifier = [
@@ -997,6 +1002,10 @@ def test_build_output_products_specific_storage(
     assert outputs[1].id == "output2"
     assert outputs[1].engine == "s3_cache"
     assert outputs[1].path == "s3://out-bucket/test-owner/OUT_COLL/00000000-0000-0000-0000-000000000000"
+
+    assert outputs[0].dump()["writer_params"]["mode"] == (writer_mode or "w")
+    assert outputs[1].dump()["writer_params"]["mode"] == "w"
+    assert not hasattr(mock_store_params, "mode")
 
     mock_storage.get_storage_for_specific_product.assert_called_with("output2")  # last call
 
@@ -1286,7 +1295,7 @@ def test_build_output_products_disk_uses_disk_path(
 ):
     """
     For shared_disk and local_disk output products path must come from disk_config["path"],
-    not from a bucket lookup and writer_params must be None
+    not from a bucket lookup; writer_params must include write mode.
     """
     disk_path = "/mnt/shared/job-uuid"
     mock_storage = MagicMock()
@@ -1312,7 +1321,7 @@ def test_build_output_products_disk_uses_disk_path(
     assert len(outputs) == 2
     for out in outputs:
         assert out.path == disk_path
-        assert out.writer_params is None
+        assert out.dump()["writer_params"] == {"mode": "w"}
         assert out.autoclean is True
 
 

@@ -86,17 +86,22 @@ io:
   - id: DEM
     path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
+    writer_params:
+      mode: w
     type: file
     apply_eoqc: false
   - id: cslcs
     path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
+    writer_params:
+      mode: w
     type: file
     apply_eoqc: false
   - id: gslcs
     path: s3:/rs-dev-cluster-catalog/toto/s01siwglc/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
     writer_params:
+      mode: w
       storage_options:
         key: testing
         secret: testing
@@ -108,6 +113,8 @@ io:
   - id: simulation_ref
     path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
+    writer_params:
+      mode: w
     type: folder
     apply_eoqc: false
   adfs:

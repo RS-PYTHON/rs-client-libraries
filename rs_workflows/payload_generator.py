@@ -544,13 +544,13 @@ def build_output_products(
         else:
             raise RuntimeError(f"Unknown storage kind '{kind}' for output product '{product_name}'")
 
-        # Add extra writer_params fields
-        if extra_fields := mapping.get("writer_params"):
-            if not store_params:
-                store_params = StoreParams(**extra_fields)
-            else:
-                for key, value in extra_fields.items():
-                    setattr(store_params, key, value)
+        # Default to write mode, allowing explicit task table settings to override it.
+        extra_fields = {"mode": "w", **(mapping.get("writer_params") or {})}
+        if not store_params:
+            store_params = StoreParams(**extra_fields)
+        else:
+            for key, value in extra_fields.items():
+                setattr(store_params, key, value)
 
         outputs.append(
             OutputProduct(

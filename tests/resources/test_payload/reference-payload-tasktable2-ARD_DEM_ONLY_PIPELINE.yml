@@ -71,12 +71,15 @@ io:
   - id: DEM
     path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
+    writer_params:
+      mode: w
     type: file
     apply_eoqc: false
   - id: simulation_ref
     path: s3:/rs-dev-cluster-catalog/toto/s01simref/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
     writer_params:
+      mode: w
       storage_options:
         key: testing
         secret: testing
