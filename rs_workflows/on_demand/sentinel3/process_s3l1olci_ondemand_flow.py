@@ -23,11 +23,7 @@ from pydantic import BaseModel, Field
 from pystac import ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
-from rs_workflows.flow_utils import (
-    FlowEnv,
-    FlowEnvArgs,
-    FlowInputProduct,
-)
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct, WorkflowType
 from rs_workflows.process_any_flow import (
     ProcessingId,
     get_latest_product_covering_interval,
@@ -220,4 +216,12 @@ async def process_s3l1olci_ondemand(
         logger.info(
             "external_variables:\n%s",
             json.dumps(external_variables, indent=2, ensure_ascii=False),
+        )
+
+        await process_any(
+            env_args=env_args,
+            input_products=input_products,
+            external_variables=external_variables,
+            processing_id=ProcessingId.S3_OLCI_L1,
+            workflow=WorkflowType.ON_DEMAND,
         )
