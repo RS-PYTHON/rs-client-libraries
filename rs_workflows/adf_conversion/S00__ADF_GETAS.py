@@ -37,10 +37,12 @@ from util import REF_DATE_FORMAT, duplicate_first_longitude, gen_static_adf_name
 s3 = None
 
 adf_dir = PurePath(environ.get("ADF_INPUT", "../../shared/ADF"))
-input_folder = PurePath(osp.join(adf_dir, "getasse30v1/ACE_V1_041203"))
-input_folder = (
-    adf_dir / "S3__AX___DEM_AX_20000101T000000_20991231T235959_20151214T120000___________________MPC_O_AL_001.SEN3"
-)
+dem_candidates = sorted(adf_dir.glob("S3__AX___DEM_AX_*.SEN3"))
+if len(dem_candidates) != 1:
+    raise ValueError(
+        f"❌ Single file DEM AX was awaited, found {len(dem_candidates)} : {dem_candidates} in {adf_dir}"
+    )
+input_folder = dem_candidates[0]
 
 
 @dask.delayed
