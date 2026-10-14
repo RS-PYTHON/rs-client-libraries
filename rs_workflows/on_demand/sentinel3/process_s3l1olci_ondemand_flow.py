@@ -46,17 +46,19 @@ class FlowInputS3l1olci(BaseModel):
         return self.model_dump().items()
 
 
-@flow(name="process-s3l1olci-ondemand")
-async def process_s3l1olci_ondemand(
+def compute_s3l1olci_inputs(
     env_args: FlowEnvArgs,
-    single_input_product: FlowInputS3l1olci,
-    olcil0_base_name: str = "S3OLCIL0_",
-    navl0_base_name: str = "S3NAVL0_",
-):
+    item_id: str,
+    collection_name: str,
+    satellite: str,
+    start_datetime_txt: str,
+    end_datetime_txt: str,
+    product_type: str,
+    olcil0_base_name: str,
+    navl0_base_name: str,
+) -> list[FlowInputProduct]:
     """
-    This flow compute other input and external variable from a single input.
-    Then it forwards to process-any  with workflow  set to "on-demand".
-
+    Comput input products for the flow s3l1olci
     """
     logger = get_logger()
 
@@ -65,32 +67,13 @@ async def process_s3l1olci_ondemand(
     input_products.append(
         {
             "name": f"{olcil0_base_name}1",
-            "item_id": single_input_product.S3OLCIL0_item_id,
-            "collection_name": single_input_product.collection_name,
+            "item_id": item_id,
+            "collection_name": collection_name,
         },
     )
     index: int = 2
-
     flow_env = FlowEnv(env_args)
-    with flow_env.start_span(__name__, f"process_s3l1olci_ondemand"):
-        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-        stac_item = catalog_client.get_item(single_input_product.collection_name, single_input_product.item_id)
-        if stac_item is None:
-            raise RuntimeError(
-                f"❌ STAC item '{single_input_product.item_id}' not found in collection '{single_input_product.collection_name}'.",
-            )
-
-        logger.info(
-            "STAC Item properties:\n%s",
-            json.dumps(stac_item.to_dict()["properties"], indent=2, ensure_ascii=False),
-        )
-        item: dict = stac_item.to_dict()
-
-        satellite = item["properties"]["platform"]
-        start_datetime_txt = item["properties"]["start_datetime"]
-        end_datetime_txt = item["properties"]["end_datetime"]
-        product_type = item["properties"]["product:type"]
-
+    with flow_env.start_span(__name__, f"process_s3l1olci_input"):
         # We will extract the product duration in seconds
         start_datetime = datetime.datetime.fromisoformat(start_datetime_txt)
         end_datetime = datetime.datetime.fromisoformat(end_datetime_txt)
@@ -107,22 +90,56 @@ async def process_s3l1olci_ondemand(
             next_interval_end,
             product_type,
             satellite,
-            single_input_product.collection_name,
+            collection_name,
         )
 
         if found_next:
-            logger.info(
-                "STAC Item properties for the next product:\n%s",
-                json.dumps(found_next[0].to_dict(), indent=2, ensure_ascii=False),
-            )
+            logger.info(f"Found the next item named '{found_next[0].to_dict()["id"]}'")
             input_products.append(
                 {
                     "name": f"{olcil0_base_name}{index}",
                     "item_id": found_next[0].to_dict()["id"],
-                    "collection_name": single_input_product.collection_name,
+                    "collection_name": collection_name,
                 },
             )
             index = index + 1
+
+
+@flow(name="process-s3l1olci-ondemand")
+async def process_s3l1olci_ondemand(
+    env_args: FlowEnvArgs,
+    single_input_product: FlowInputS3l1olci,
+    olcil0_base_name: str = "S3OLCIL0_",
+    navl0_base_name: str = "S3NAVL0_",
+):
+    """
+    This flow compute other input and external variable from a single input.
+    Then it forwards to process-any  with workflow  set to "on-demand".
+
+    """
+    logger = get_logger()
+
+    flow_env = FlowEnv(env_args)
+    with flow_env.start_span(__name__, f"process_s3l1olci_ondemand"):
+        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+        stac_item = catalog_client.get_item(single_input_product.collection_name, single_input_product.item_id)
+        if stac_item is None:
+            raise RuntimeError(
+                f"❌ STAC item '{single_input_product.item_id}' not found in collection '{single_input_product.collection_name}'.",
+            )
+        item: dict = stac_item.to_dict()
+
+        input_products: list[FlowInputProduct] = compute_s3l1olci_inputs(
+            env_args,
+            single_input_product.item_id,
+            single_input_product.collection_name,
+            item["properties"]["platform"],
+            item["properties"]["start_datetime"],
+            item["properties"]["end_datetime"],
+            item["properties"]["product:type"],
+            olcil0_base_name,
+            navl0_base_name,
+        )
 
         logger.info(
             "input_products:\n%s",
