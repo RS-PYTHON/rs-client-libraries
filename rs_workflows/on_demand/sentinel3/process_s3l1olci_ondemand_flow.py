@@ -80,6 +80,10 @@ def compute_s3l1olci_inputs(
         duration_seconds = (end_datetime - start_datetime).total_seconds()
         logger.info(f"The product duration is {duration_seconds} seconds.")
 
+        ####################################
+        #  TRY to get the next product     #
+        ####################################
+
         # we compute the search interval for the next product
         next_interval_start = start_datetime + datetime.timedelta(seconds=duration_seconds)
         next_interval_end = end_datetime + datetime.timedelta(seconds=duration_seconds)
@@ -94,7 +98,7 @@ def compute_s3l1olci_inputs(
         )
 
         if found_next:
-            logger.info(f"Found the next item named '{found_next[0].to_dict()["id"]}'")
+            logger.info(f"✅ Found the NEXT {olcil0_base_name} named '{found_next[0].to_dict()["id"]}'")
             input_products.append(
                 {
                     "name": f"{olcil0_base_name}{index}",
@@ -103,6 +107,40 @@ def compute_s3l1olci_inputs(
                 },
             )
             index = index + 1
+        else:
+            logger.info(f"No NEXT {olcil0_base_name} found.")
+
+        ####################################
+        #  TRY to get the previous product     #
+        ####################################
+
+        # we compute the search interval for the next product
+        previous_interval_start = start_datetime - datetime.timedelta(seconds=duration_seconds)
+        previous_interval_end = end_datetime - datetime.timedelta(seconds=duration_seconds)
+
+        found_previous = get_latest_product_covering_interval(
+            env_args,
+            next_interval_start,
+            next_interval_end,
+            product_type,
+            satellite,
+            collection_name,
+        )
+
+        if found_previous:
+            logger.info(f"✅ Found the PREVIOUS {olcil0_base_name} named '{found_previous[0].to_dict()["id"]}'")
+            input_products.append(
+                {
+                    "name": f"{olcil0_base_name}{index}",
+                    "item_id": found_previous[0].to_dict()["id"],
+                    "collection_name": collection_name,
+                },
+            )
+            index = index + 1
+        else:
+            logger.info(f"No PREVIOUS {olcil0_base_name} found.")
+
+    return input_products
 
 
 @flow(name="process-s3l1olci-ondemand")
