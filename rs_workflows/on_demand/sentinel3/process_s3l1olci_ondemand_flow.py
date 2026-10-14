@@ -16,6 +16,7 @@
 
 import datetime
 import json
+from typing import Any
 
 from prefect import flow, task
 from pydantic import BaseModel, Field
@@ -162,6 +163,14 @@ def compute_s3l1olci_inputs(
     return input_products
 
 
+def compute_s3l1olci_external_variables(
+    satellite: str,
+    start_datetime_txt: str,
+    end_datetime_txt: str,
+) -> dict[str, Any]:
+    return {"start_datetime": start_datetime_txt, "end_datetime": end_datetime_txt, "satellite": satellite}
+
+
 @flow(name="process-s3l1olci-ondemand")
 async def process_s3l1olci_ondemand(
     env_args: FlowEnvArgs,
@@ -200,4 +209,15 @@ async def process_s3l1olci_ondemand(
         logger.info(
             "input_products:\n%s",
             json.dumps(input_products, indent=2, ensure_ascii=False),
+        )
+
+        external_variables = compute_s3l1olci_external_variables(
+            item["properties"]["platform"],
+            item["properties"]["start_datetime"],
+            item["properties"]["end_datetime"],
+        )
+
+        logger.info(
+            "external_variables:\n%s",
+            json.dumps(external_variables, indent=2, ensure_ascii=False),
         )
