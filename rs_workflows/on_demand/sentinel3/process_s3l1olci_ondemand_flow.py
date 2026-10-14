@@ -18,6 +18,7 @@ import datetime
 import json
 
 from prefect import flow, task
+from pydantic import BaseModel, Field
 from pystac import ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
@@ -34,8 +35,24 @@ from rs_workflows.process_any_flow import (
 from rs_workflows.utils.prefect import get_logger
 
 
+class FlowInputS3l1olci(BaseModel):
+    """Represents input product for the processor S3l1olci."""
+
+    item_id: str = Field(description="STAC item identifier for S3OLCIL0 product.")
+    collection_name: str = Field(description="Collection name for S3OLCIL0 product.")
+
+    def items(self):
+        """Helper method to return the model fields as items, useful for logging."""
+        return self.model_dump().items()
+
+
 @flow(name="process-s3l1olci-ondemand")
-async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product: FlowInputProduct):
+async def process_s3l1olci_ondemand(
+    env_args: FlowEnvArgs,
+    single_input_product: FlowInputS3l1olci,
+    olcil0_base_name: str = "S3OLCIL0_",
+    navl0_base_name: str = "S3NAVL0_",
+):
     """
     This flow compute other input and external variable from a single input.
     Then it forwards to process-any  with workflow  set to "on-demand".
@@ -47,8 +64,8 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
     input_products: list[FlowInputProduct] = []
     input_products.append(
         {
-            "name": f"{single_input_product.name}1",
-            "item_id": single_input_product.item_id,
+            "name": f"{olcil0_base_name}1",
+            "item_id": single_input_product.S3OLCIL0_item_id,
             "collection_name": single_input_product.collection_name,
         },
     )
@@ -100,7 +117,7 @@ async def process_s3l1olci_ondemand(env_args: FlowEnvArgs, single_input_product:
             )
             input_products.append(
                 {
-                    "name": f"{single_input_product.name}{index}",
+                    "name": f"{olcil0_base_name}{index}",
                     "item_id": found_next[0].to_dict()["id"],
                     "collection_name": single_input_product.collection_name,
                 },
