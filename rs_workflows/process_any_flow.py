@@ -185,7 +185,7 @@ def get_latest_product_covering_interval(
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
 
         logger.info("🧹 Computing cql2_filter")
-        included_in_interval = compute_cql2("LatestIncludedWithSatellite", 1, 1, satellite)
+        included_in_interval = compute_cql2("LatestIncludedWithSatellite", 2, 2, satellite)
         cql2_filter = substitute_values(
             included_in_interval,
             {
