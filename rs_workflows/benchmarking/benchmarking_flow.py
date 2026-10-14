@@ -17,13 +17,17 @@
 import asyncio
 import json
 import os
+from os import path as osp
 
 from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
 from prefect.runtime import flow_run
 from prefect.variables import Variable
 
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_client.ogcapi.dpr_client import DprProcessor
+from rs_common.prefect_utils import get_share_bucket, s3_delete
+from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs
+from rs_workflows.utils.dpr import dpr_processing_task
 from rs_workflows.utils.prefect import get_logger
 
 
@@ -107,5 +111,47 @@ async def benchmark_processor_task(
         )
         logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
-        # Sleep a few seconds to simulate a processor runtime
-        await asyncio.sleep(10)
+        # TODO Verify input data given: staged and available in catalog
+        #   => if failed, stop flow
+
+        # Retrieve list of collection names to empty before processing
+        collections_to_empty = []
+
+        for aux_collection in this_value.get("auxiliary_product_to_collection_identifier", []):
+            collections_to_empty.append(aux_collection["collection_name"])
+        for generated_collection in this_value.get("generated_product_to_collection_identifier", []):
+            collections_to_empty.append(generated_collection["collection_name"])
+
+        # Make sure all collection names start with "benchmark", if it's not the case throw an error and stop the process
+        for collection_name in collections_to_empty:
+            if not collection_name.startswith("benchmark"):
+                raise ValueError(
+                    f"Cannot empty collection '{collection_name}' because it does not start with 'benchmark'.\nFor safety reasons, all collections used in benchmarking must start with 'benchmark'.",
+                )
+
+        # Get the prefect share bucket
+        share_bucket, _ = await get_share_bucket()
+        # Build s3_path for each collection and delete its content
+        for collection_name in collections_to_empty:
+            # TODO take owner_id from env or from this_value?
+            collection_s3_path = osp.join("s3://", share_bucket, env.owner_id, collection_name)
+            logger.info(f"Deleting content of collection '{collection_name}' at '{collection_s3_path}'")
+            s3_delete(collection_s3_path, log=True)
+
+        # Build parameters to run a generic DPR process
+        benchmark_dpr_process_in: DprProcessIn = DprProcessIn(
+            env=env,
+            processor_name=DprProcessor(processor_name),
+            processor_version=processor_version,
+            dask_cluster_label=this_value["dask_cluster_label"],
+            s3_payload_file="",  # f"{s3_payload}/payload_{processor_name}.yaml",  TODO payload ?
+            pipeline=this_value["pipeline"],
+            priority=this_value["priority"],
+            workflow_type=all_value["workflow_type"],
+            input_products=this_value["input_products"],
+            generated_product_to_collection_identifier=this_value["generated_product_to_collection_identifier"],
+            auxiliary_product_to_collection_identifier=this_value["auxiliary_product_to_collection_identifier"],
+            processing_mode=this_value["processing_mode"],
+        )
+
+        return await dpr_processing_task(benchmark_dpr_process_in)
