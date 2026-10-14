@@ -34,6 +34,9 @@ from rs_workflows.process_any_flow import (
 )
 from rs_workflows.utils.prefect import get_logger
 
+OLCL0_PRODUCT_TYPE = "S03OLCL0_"
+NATL0_PRODUCT_TYPE = "S03NATL0_"
+
 
 class FlowInputS3l1olci(BaseModel):
     """Represents input product for the processor S3l1olci."""
@@ -53,7 +56,6 @@ def compute_s3l1olci_inputs(
     satellite: str,
     start_datetime_txt: str,
     end_datetime_txt: str,
-    product_type: str,
     olcil0_base_name: str,
     navl0_base_name: str,
 ) -> list[FlowInputProduct]:
@@ -61,6 +63,18 @@ def compute_s3l1olci_inputs(
     Comput input products for the flow s3l1olci
     """
     logger = get_logger()
+
+    #
+    # Each product should be stored on a collection named <product_type>
+    # We check if this is the case. If not, we will use the same 'collection_name' for both OLCL0 and NATL0
+    collection_natl0: str = ""
+    if OLCL0_PRODUCT_TYPE.lower == collection_name:
+        collection_natl0 = NATL0_PRODUCT_TYPE.lower
+        logger.info(f"🛈 We use collection {collection_natl0} for S3L0NATLO products")
+
+    else:
+        collection_natl0 = collection_name
+        logger.warning(f"⚠️ Workaround: we use collection {collection_natl0} for S3L0NATLO products")
 
     # The first element is the one used to call the flow
     input_products: list[FlowInputProduct] = []
@@ -83,22 +97,16 @@ def compute_s3l1olci_inputs(
         ####################################
         #  TRY to get the next product     #
         ####################################
-
-        # we compute the search interval for the next product
-        next_interval_start = start_datetime + datetime.timedelta(seconds=duration_seconds)
-        next_interval_end = end_datetime + datetime.timedelta(seconds=duration_seconds)
-
         found_next = get_latest_product_covering_interval(
             env_args,
-            next_interval_start,
-            next_interval_end,
-            product_type,
+            start_datetime + datetime.timedelta(seconds=duration_seconds),
+            end_datetime + datetime.timedelta(seconds=duration_seconds),
+            OLCL0_PRODUCT_TYPE,
             satellite,
             collection_name,
         )
 
         if found_next:
-            logger.info(f"✅ Found the NEXT {olcil0_base_name} named '{found_next[0].to_dict()["id"]}'")
             input_products.append(
                 {
                     "name": f"{olcil0_base_name}{index}",
@@ -107,28 +115,20 @@ def compute_s3l1olci_inputs(
                 },
             )
             index = index + 1
-        else:
-            logger.info(f"No NEXT {olcil0_base_name} found.")
 
         ####################################
-        #  TRY to get the previous product     #
+        #  TRY to get the previous product #
         ####################################
-
-        # we compute the search interval for the next product
-        previous_interval_start = start_datetime - datetime.timedelta(seconds=duration_seconds)
-        previous_interval_end = end_datetime - datetime.timedelta(seconds=duration_seconds)
-
         found_previous = get_latest_product_covering_interval(
             env_args,
-            next_interval_start,
-            next_interval_end,
-            product_type,
+            start_datetime - datetime.timedelta(seconds=duration_seconds),
+            end_datetime - datetime.timedelta(seconds=duration_seconds),
+            OLCL0_PRODUCT_TYPE,
             satellite,
             collection_name,
         )
 
         if found_previous:
-            logger.info(f"✅ Found the PREVIOUS {olcil0_base_name} named '{found_previous[0].to_dict()["id"]}'")
             input_products.append(
                 {
                     "name": f"{olcil0_base_name}{index}",
@@ -137,8 +137,6 @@ def compute_s3l1olci_inputs(
                 },
             )
             index = index + 1
-        else:
-            logger.info(f"No PREVIOUS {olcil0_base_name} found.")
 
     return input_products
 
@@ -174,7 +172,6 @@ async def process_s3l1olci_ondemand(
             item["properties"]["platform"],
             item["properties"]["start_datetime"],
             item["properties"]["end_datetime"],
-            item["properties"]["product:type"],
             olcil0_base_name,
             navl0_base_name,
         )

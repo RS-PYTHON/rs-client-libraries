@@ -181,7 +181,7 @@ def get_latest_product_covering_interval(
 
     logger = get_logger()
     flow_env = FlowEnv(env_args)
-    with flow_env.start_span(__name__, f"process_s3l1olci_ondemand"):
+    with flow_env.start_span(__name__, f"catalog_retrieve_product"):
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
 
         logger.info("🧹 Computing cql2_filter")
@@ -206,5 +206,10 @@ def get_latest_product_covering_interval(
             sortby=cql2_filter.get("sortby"),
             collections=[collection],
         )
+
+        if found:
+            logger.info(f"✅ Found item named '{found[0].to_dict()["id"]}'")
+        else:
+            logger.info(f"🛈 No item found on the interval.")
 
         return found
