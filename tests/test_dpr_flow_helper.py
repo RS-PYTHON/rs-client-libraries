@@ -304,6 +304,30 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
     )
 
 
+def test_create_stac_item_uses_created_when_datetime_is_null():
+    """Use the created timestamp as the STAC datetime when the source is null."""
+    eopf_feature = {
+        "id": "feature_1",
+        "geometry": None,
+        "bbox": None,
+        "properties": {
+            "datetime": None,
+            "created": "2024-01-01T00:00:00",
+        },
+    }
+
+    item = create_stac_item(
+        eopf_origin_datetime=None,
+        eopf_feature=eopf_feature,
+        s3_data_location="s3://my-bucket/output/feature_1.zarr",
+        product_name="feature_1",
+        dpr_processor=DprProcessor.S1L0,
+    )
+
+    assert item.datetime == datetime.datetime(2024, 1, 1)
+    assert item.properties["datetime"] == "2024-01-01T00:00:00"
+
+
 @typing.no_type_check
 def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
     """
@@ -346,6 +370,16 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
         assert asset.output_product_id == "dummy_prod_id"
 
 
+def test_update_eopf_assets_raises_on_missing_io_config(mocker):
+    """Raise a clear error if the payload has no I/O configuration."""
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
+    payload = mocker.Mock()
+    payload.io = None
+
+    with pytest.raises(RuntimeError, match="Payload I/O configuration is missing"):
+        update_eopf_assets.fn(mocker.Mock(), [], payload, DprProcessor.S1L0)
+
+
 def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
     """
     Verify that update_eopf_assets raises RuntimeError when a .zattrs file
@@ -382,6 +416,28 @@ def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
             payload=payload,
             dpr_processor=DprProcessor.S1L0,
         )
+
+
+@pytest.mark.parametrize(
+    "zattrs_data",
+    [
+        pytest.param({"other_metadata": {}}, id="missing-stac-discovery"),
+        pytest.param({"stac_discovery": {}}, id="missing-properties"),
+    ],
+)
+def test_update_eopf_assets_raises_on_missing_discovery_properties(mocker, zattrs_data):
+    """Reject output metadata without the required EOPF discovery properties."""
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://bucket/output/prod/.zattrs"])
+    mocker.patch("rs_workflows.dpr_flow.read_zattrs_sync", return_value=zattrs_data)
+    payload = mocker.Mock()
+    payload.io.output_products = [mocker.Mock(id="output", path="s3://bucket/output")]
+
+    with pytest.raises(
+        RuntimeError,
+        match="does not contain EOPF discovery metadata",
+    ):
+        update_eopf_assets.fn(mocker.Mock(), [], payload, DprProcessor.S1L0)
 
 
 def test_update_eopf_assets_skips_non_final_products(mocker):
