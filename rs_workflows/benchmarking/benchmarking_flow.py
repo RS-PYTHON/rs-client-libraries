@@ -153,6 +153,9 @@ async def benchmark_processor_task(
             generated_product_to_collection_identifier=this_value["generated_product_to_collection_identifier"],
             auxiliary_product_to_collection_identifier=this_value["auxiliary_product_to_collection_identifier"],
             processing_mode=this_value["processing_mode"],
+            start_datetime=this_value["external_variables"]["start_datetime"],
+            end_datetime=this_value["external_variables"]["end_datetime"],
+            satellite=this_value["external_variables"]["satellite"],
         )
 
         return await dpr_processing_task(benchmark_dpr_process_in)
