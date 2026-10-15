@@ -139,6 +139,7 @@ async def benchmark_processor_task(
             s3_delete(collection_s3_path, log=True)
 
         # Build parameters to run a generic DPR process
+        logger.info("Creating input configuration to run DPR processing...")
         benchmark_dpr_process_in: DprProcessIn = DprProcessIn(
             env=env,
             processor_name=DprProcessor(processor_name),
