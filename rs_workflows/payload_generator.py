@@ -864,7 +864,6 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
         # The dask context_managers section is built in the dpr_service
         # context_managers=context_managers,
         logging=logging,
-        config=config,
         secret=["secrets.json"] if temp_folder_s3_secret else None,
     )
     logger.debug(f"Generated payload: \n {payload}")
