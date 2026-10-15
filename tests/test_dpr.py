@@ -17,6 +17,7 @@
 import getpass
 import re
 import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -220,6 +221,77 @@ def _setup_run_processor_mocks(mocker):
         "rs_workflows.dpr_flow.prefect_utils.s3_download_dir",
         new_callable=AsyncMock,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "is_local_path, log_exists",
+    [
+        pytest.param(True, True, id="local-log"),
+        pytest.param(True, False, id="local-log-missing"),
+        pytest.param(False, True, id="s3-log"),
+        pytest.param(False, False, id="s3-log-missing"),
+    ],
+)
+async def test_run_processor_reads_processor_logs(mocker, tmp_path, is_local_path, log_exists):
+    """Read and dispatch processor logs from local and downloaded report folders."""
+    _setup_run_processor_mocks(mocker)
+    mock_logger = mocker.Mock()
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mock_logger)
+    mock_download_dir = mocker.patch(
+        "rs_workflows.dpr_flow.prefect_utils.s3_download_dir",
+        new_callable=AsyncMock,
+    )
+
+    if is_local_path:
+        s3_payload_run = str(tmp_path / "payload.yaml")
+        log_file = tmp_path / "reports" / "payload.processor.log"
+        if log_exists:
+            log_file.parent.mkdir()
+            log_file.write_text(
+                "2026-04-17 11:56:08 - processor - ERROR - processor reported an error\n",
+                encoding="utf-8",
+            )
+    else:
+        s3_payload_run = "s3://bucket/payload.yaml"
+        if log_exists:
+
+            async def download_reports(s3_dir, local_dir):
+                """Populate the temporary report directory as an S3 download would."""
+                assert s3_dir == "s3://bucket"
+                report_dir = Path(local_dir) / "reports"
+                report_dir.mkdir()
+                (report_dir / "payload.processor.log").write_text(
+                    "2026-04-17 11:56:08 - processor - ERROR - processor reported an error\n",
+                    encoding="utf-8",
+                )
+
+            mock_download_dir.side_effect = download_reports
+
+    payload = mocker.Mock()
+    payload.io.output_products = []
+
+    await run_processor.fn(
+        env=mocker.Mock(),
+        processor="s3_l0",
+        payload=payload,
+        cluster_info=CLUSTER_INFO,
+        s3_payload_run=s3_payload_run,
+        input_products=[],
+    )
+
+    if is_local_path:
+        mock_download_dir.assert_not_awaited()
+        if log_exists:
+            mock_logger.error.assert_called_once_with("processor reported an error")
+        else:
+            mock_logger.info.assert_any_call(f"No processor log file was found at: {str(log_file)!r}")
+    else:
+        mock_download_dir.assert_awaited_once()
+        if log_exists:
+            mock_logger.error.assert_called_once_with("processor reported an error")
+        else:
+            mock_logger.info.assert_any_call("No processor log file was uploaded under: 's3://bucket'")
 
 
 @pytest.mark.asyncio
