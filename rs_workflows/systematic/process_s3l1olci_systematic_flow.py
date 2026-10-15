@@ -44,11 +44,11 @@ from rs_workflows.utils.prefect import get_logger
 
 
 @flow(name="process-s3l1olci-systematic")
-async def process_s3l1olci_systematic(event_name: str, payload: dict[str, Any]):
+async def process_s3l1olci_systematic(payload: dict[str, Any]):
     """
     This flow compute input and external variable from an event.
     Then it forwards to process-any  with workflow  set to "systematic".
     """
     logger = get_logger()
-    logger.info(f"flow started from event named {event_name}.")
+    logger.info(f"flow started from event.")
     logger.info(f"event payload is {payload}.")

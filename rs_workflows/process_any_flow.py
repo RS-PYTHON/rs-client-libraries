@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from jsonschema import ValidationError, validate
-from prefect import flow, task
+from prefect import flow, runtime, task
 from prefect.events import emit_event
 from prefect.variables import Variable
 from pystac import ItemCollection
@@ -165,10 +165,48 @@ async def process_any(
             ),
         )
 
-        # TODO  : il faudra  générer un évènement pour chacun de ces items.
+        # Generate one event per product
         for i, item in enumerate(published_items):
-            print(f"--- Item {i + 1} ---")
-            print(json.dumps(item, indent=2, ensure_ascii=False))
+            logger.info(f"--- Item {i + 1} ---")
+            logger.info(json.dumps(item, indent=2, ensure_ascii=False))
+
+            flow_run_id = str(runtime.flow_run.id or "unknown")
+            flow_name = runtime.flow_run.flow_name or "unknown"
+
+            event_name = f"product.{item['properties']['product:type']}.generated"
+            event = emit_event(
+                event=event_name,
+                resource={
+                    "prefect.resource.id": f"prefect.flow-run.{flow_run_id}",
+                    "prefect.resource.name": f"{item['properties']['product:type']}",
+                },
+                related=[
+                    {
+                        "prefect.resource.id": f"prefect.flow-run.{flow_run_id}",
+                        "prefect.resource.name": f"{flow_name}",
+                        "prefect.resource.role": "flow-run",
+                    },
+                    {"prefect.resource.id": "prefect.tag.processing", "prefect.resource.role": "tag"},
+                    {
+                        "prefect.resource.id": f"prefect.tag.{item['properties']['platform']}",
+                        "prefect.resource.role": "tag",
+                    },
+                ],
+                payload={
+                    "owner_id": f"{env_args.owner_id}",
+                    "product": {
+                        "id": f"{item['id']}",
+                        "geometry": f"item['geometry']",
+                        "collection": f"item['collection']",
+                        "properties": f"item['properties']",
+                    },
+                },
+            )
+
+            if event is None:
+                get_logger().warning(f"⚠️ Event '{event_name}' was not emitted")
+            else:
+                get_logger().info(f"Event '{event_name}' (id='{event.id}') emitted.")
 
 
 def get_latest_product_covering_interval(
