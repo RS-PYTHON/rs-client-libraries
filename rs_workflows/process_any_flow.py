@@ -22,6 +22,7 @@ from typing import Any
 
 from jsonschema import ValidationError, validate
 from prefect import flow, task
+from prefect.events import emit_event
 from prefect.variables import Variable
 from pystac import ItemCollection
 
@@ -91,7 +92,7 @@ async def process_any(
     ## Parameters
     Parameter | Type | Default | Description |
     |---|---|---|---|
-    | `env_args` | `FlowEnvArgs` | *required* | Flow environment/runtime arguments |
+    | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments |
     | `input_products` | `list[FlowInputProduct]` | *required* | Input products to process |
     | `external_variables` | `dict[str, Any]` | *required* | External variables used to retrieved aux data |
     | `processing_id` | `ProcessingId` | *required* | processor identifier to be lanched. It is used to resolve the `{processing_id}-default-setting` Prefect Variable |

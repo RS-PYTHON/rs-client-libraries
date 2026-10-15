@@ -175,9 +175,32 @@ async def process_s3l1olci_ondemand(
     navl0_base_name: str = "S3NAVL0_",
 ):
     """
-    This flow compute other input and external variable from a single input.
-    Then it forwards to process-any  with workflow  set to "on-demand".
+    # Process S3 L1 OLCI
 
+    This flow is in charge to prepare the S3 L1 OLCI processing y computing all the needed inputs.
+    Then it forwards to process-any with workflow set to "on-demand".
+
+    ---
+    ## Workflow Steps
+
+    1. *compute input products* — retrieve the stac items `S3OLCIL0_` from rs-catalog.
+       The first one is retrieve from `item_id` and `collection_name` parameters.
+       The other ones are get by requesting contiguous period on the rs-catalog.
+       They can be one or two in this case.
+    2. *compute external variables* — external variables are extracted from the first item properties.
+    3. *start the processing* — calls the flow `process-any`
+    ---
+    ## Parameters
+    Parameter | Type | Default | Description |
+    |---|---|---|---|
+    | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments |
+    | `single_input_product` | `FlowInputS3l1olci` | *required* | Stac item identifier and collection name corresponding to the OLCI L0 product |
+    | `olcil0_base_name` | `str` | `S3OLCIL0_` | prefix of the OLCI L0 product name on the task table. |
+    | `navl0_base_name` | `str` | `S3NAVL0_` | prefix of the NAV L0 product name on the task table. |
+
+    > *Note:* if the collection for `S3OLCIL0_`name is equal to `s3olcil0_`, `S3NAVL0_` will be stored on the collection `s3navl0_`.
+    Otherwise, `S3NAVL0_` will be stored on the same collection than `S3OLCIL0_`.
+    ---
     """
     logger = get_logger()
 
