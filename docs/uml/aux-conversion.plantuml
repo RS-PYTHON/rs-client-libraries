@@ -24,9 +24,9 @@ activate Prefect
 activate Obs
 activate Catalog
 
-John -> Prefect: Run flow 'adf-conversion'\n(S00__ADF_ECMWA,\n[2026-04-03T00:00:00Z, 2026-04-03T23:59:59Z])
+John -> Prefect: Run flow 'convert-adf'\n(S00__ADF_ECMWA,\n[2026-04-03T00:00:00Z, 2026-04-03T23:59:59Z])
 
-Prefect -> Prefect: Run AUXIP Staging flow\n(AX___MA1_AX + AX___MA2_AX,\n[2026-04-03T00:00:00Z, 2026-04-03T23:59:59Z])
+Prefect -> Prefect: Stage the input auxiliary files\n(AX___MA1_AX + AX___MA2_AX,\n[2026-04-03T00:00:00Z, 2026-04-03T23:59:59Z])
 
 Prefect -> Prefect: Copy + unzip AX___MA1_AX + AX___MA2_AX
 
