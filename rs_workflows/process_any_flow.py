@@ -95,7 +95,7 @@ async def process_any(
     | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments |
     | `input_products` | `list[FlowInputProduct]` | *required* | Input products to process |
     | `external_variables` | `dict[str, Any]` | *required* | External variables used to retrieved aux data |
-    | `processing_id` | `ProcessingId` | *required* | processor identifier to be lanched. It is used to resolve the `{processing_id}-default-setting` Prefect Variable |
+    | `processing_id` | `ProcessingId` | *required* | Processor identifier to be lanched. It is used to resolve the `{processing_id}-default-setting` Prefect Variable |
     | `workflow` | `WorkflowType` | `WorkflowType.ON_DEMAND` | Type of workflow triggering this run |
 
     > *Note:* The default settings variable must match the
