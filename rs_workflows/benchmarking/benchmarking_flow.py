@@ -134,7 +134,7 @@ async def benchmark_processor_task(
         # Build s3_path for each collection and delete its content
         for collection_name in collections_to_empty:
             # TODO take owner_id from env or from this_value?
-            collection_s3_path = osp.join("s3://", share_bucket, env.owner_id, collection_name)
+            collection_s3_path = osp.join("s3://", share_bucket.bucket_name, env.owner_id, collection_name)
             logger.info(f"Deleting content of collection '{collection_name}' at '{collection_s3_path}'")
             s3_delete(collection_s3_path, log=True)
 
