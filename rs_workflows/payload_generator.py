@@ -795,16 +795,16 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     for _type in "input_products", "output_products", "adfs":
         getattr(io_config, _type).sort(key=lambda product: product.id)
 
-    # Add the logging config for l0 and s1 / s3 configurations. These configurations
+    # Add the logging and config files for l0 and s1 / s3 configurations. These configurations
     # are hardcoded in the l0 eopf dask worker image. The path where these files are stored is given
     # by the env var PAYLOAD_CONFIG_FILES
     logging = None
-    config = None
+    adf_l0cfg = ""
     if dpr_process_in.processor_name in (DprProcessor.S1L0, DprProcessor.S3L0):
         logging = ["/opt/dask-l0/logging_config.yaml"]
         match dpr_process_in.processor_name:
             case DprProcessor.S1L0:
-                config = ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
+                adf_l0cfg = "/opt/dask-l0/s1_adf_l0cfg.json"
                 # TODO: this section is temporary, should be removed when the S1 L0 processor doesn't need it anymore
                 # the processor doesn't start without these parameters
                 for workflow_step in workflow_steps:
@@ -818,7 +818,7 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
                     else:
                         workflow_step.parameters = extra_parameters
             case DprProcessor.S3L0:
-                config = ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
+                adf_l0cfg = "/opt/dask-l0/s3_adf_l0cfg.json"
                 # TODO: this section is temporary, should be removed when the S3 L0 processor doesn't need it anymore
                 # the processor doesn't start without these parameters
                 for workflow_step in workflow_steps:
@@ -831,6 +831,9 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
                         workflow_step.parameters.update(extra_parameters)
                     else:
                         workflow_step.parameters = extra_parameters
+
+    # Save the adf_l0cfg config file
+    io_config.adfs.append(AdfConfig(id="adf_l0cfg", path=adf_l0cfg))
 
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
