@@ -122,7 +122,7 @@ async def benchmark_processor_task(
             )
             if not item:
                 raise ValueError(
-                    f"Input product '{input_product['item_id']}' from collection '{input_product['collection_name']}' is not available in the catalog for owner '{env.owner_id}'.\nPlease ensure that the input products are staged and available in the catalog before running the benchmark.",
+                    f"Input product '{input_product['item_id']}' from collection '{input_product['collection_name']}' and owner '{env.owner_id}' is not available in the catalog. Please make sure that the input products are staged and available in the catalog before running the benchmark.",
                 )
             logger.info(
                 f"✅ Input product '{input_product['item_id']}' from collection '{input_product['collection_name']}' is available in the catalog.",
