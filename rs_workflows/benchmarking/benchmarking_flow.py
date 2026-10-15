@@ -14,7 +14,6 @@
 
 """Benchmarking flows."""
 
-import asyncio
 import json
 import os
 from os import path as osp
@@ -25,6 +24,7 @@ from prefect.runtime import flow_run
 from prefect.variables import Variable
 
 from rs_client.ogcapi.dpr_client import DprProcessor
+from rs_client.stac.catalog_client import CatalogClient
 from rs_common.prefect_utils import get_share_bucket, s3_delete
 from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs
 from rs_workflows.utils.dpr import dpr_processing_task
@@ -111,8 +111,22 @@ async def benchmark_processor_task(
         )
         logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
-        # TODO Verify input data given: staged and available in catalog
-        #   => if failed, stop flow
+        # Check that input products exist in the catalog
+        logger.info("Checking availability of input products in catalog...")
+        catalog_client = flow_env.rs_client.get_catalog_client()
+        for input_product in this_value.get("input_products", []):
+            item = catalog_client.get_item(
+                collection_id=input_product["collection_name"],
+                item_id=input_product["item_id"],
+                owner_id=env.owner_id,
+            )
+            if not item:
+                raise ValueError(
+                    f"Input product '{input_product['item_id']}' from collection '{input_product['collection_name']}' is not available in the catalog for owner '{env.owner_id}'.\nPlease ensure that the input products are staged and available in the catalog before running the benchmark.",
+                )
+            logger.info(
+                f"✅ Input product '{input_product['item_id']}' from collection '{input_product['collection_name']}' is available in the catalog.",
+            )
 
         # Retrieve list of collection names to empty before processing
         collections_to_empty = []
