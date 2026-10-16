@@ -108,7 +108,7 @@ pandas = ">=2.2"
 xarray = ">=2024.9.0"
 matplotlib = ">=3.9.0"
 
-[tool.poetry.group.demo.dependencies] # for hybrid mode
+[tool.poetry.group.demo.dependencies] # to run the demo notebooks
 jupyterlab = "^4.5.0"
 boto3 = "^1.43.0"
 papermill = "^2.6.0"
