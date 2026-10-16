@@ -202,8 +202,8 @@ async def on_demand_aux_staging(
     Flow to retrieve AUX files using a ValCover filter with the given time interval defined by
     start_datetime and end_datetime, select only the type of files wanted if eopf_type is given, stage
     the files and add STAC items into the catalog.
-    Informations on ValCover filter:
-    https://pforge-exchange2.astrium.eads.net/confluence/display/COPRS/4.+External+data+selection+policies
+    Information on the ValCover filter:
+    https://home.rs-python.eu/rs-documentation/rs-client-libraries/docs/doc/flows/tasktable-payload/#auxiliary-data-selection-policies
 
     Args:
         env: Prefect flow environment
