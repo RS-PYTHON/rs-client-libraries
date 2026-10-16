@@ -76,9 +76,9 @@ async def process_s3l1olci_systematic(payload: dict[str, Any]):
             env_args,
             payload["product"]["id"],
             payload["product"]["collection"],
-            payload["properties"]["platform"],
-            payload["properties"]["start_datetime"],
-            payload["properties"]["end_datetime"],
+            payload["product"]["properties"]["platform"],
+            payload["product"]["properties"]["start_datetime"],
+            payload["product"]["properties"]["end_datetime"],
             OLCL0_DEFAULT_BASE_NAME,
             NAVL0_DEFAULT_BASE_NAME,
         )
@@ -89,9 +89,9 @@ async def process_s3l1olci_systematic(payload: dict[str, Any]):
         )
 
         external_variables = compute_s3l1olci_external_variables(
-            payload["properties"]["platform"],
-            payload["properties"]["start_datetime"],
-            payload["properties"]["end_datetime"],
+            payload["product"]["properties"]["platform"],
+            payload["product"]["properties"]["start_datetime"],
+            payload["product"]["properties"]["end_datetime"],
         )
 
         logger.info(
