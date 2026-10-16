@@ -71,10 +71,7 @@ async def process_s3l2olci_ondemand(
     ---
     ## Workflow Steps
 
-    1. *compute input products* — retrieve the stac items `S3OLCIL0_` from rs-catalog.
-       The first one is retrieve from `item_id` and `collection_name` parameters.
-       The other ones are get by requesting contiguous period on the rs-catalog.
-       They can be one or two in this case.
+    1. *compute input products* — Single `S03OLCEFR` item get from parameters call.
     2. *compute external variables* — external variables are extracted from the first item properties.
     3. *start the processing* — calls the flow `process-any`
     ---
@@ -82,7 +79,7 @@ async def process_s3l2olci_ondemand(
     Parameter | Type | Default | Description |
     |---|---|---|---|
     | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments |
-    | `single_input_product` | `FlowInputS3l2olci` | *required* | Stac item identifier and collection name corresponding to the OLCI L0 product |
+    | `single_input_product` | `FlowInputS3l2olci` | *required* | Stac item identifier and collection name corresponding to the `S03OLCEFR` product |
     | `force_systematic` | `bool` | `False` | When this option is set to true, one event per product will be generated at the end of the processing. |
     | `olcefr_base_name` | `str` | `S03OLCEFR` | S03OLCEFR product name on the task table. |
 
