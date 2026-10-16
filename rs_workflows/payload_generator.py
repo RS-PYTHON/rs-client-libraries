@@ -851,6 +851,7 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
         # add some default params, as stated in a comment from jira (stories 800/1050)
         general_configuration=GeneralConfiguration(
             logging__progress_level=dpr_process_in.env.logging_level.value,
+            logging={"level": dpr_process_in.env.logging_level.value},
             triggering__temporary_shared=dpr_process_in.temporary_shared,
             triggering__use_datatree=True if is_olci_processor else None,
             triggering__use_default_filename=True if is_olci_processor else None,
