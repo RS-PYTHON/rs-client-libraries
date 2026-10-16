@@ -33,6 +33,8 @@ from rs_workflows.utils.prefect import get_logger
 
 OLCL0_PRODUCT_TYPE = "S03OLCL0_"
 NATL0_PRODUCT_TYPE = "S03NATL0_"
+OLCL0_DEFAULT_BASE_NAME = ("S3OLCIL0_",)
+NAVL0_DEFAULT_BASE_NAME = ("S3NAVL0_",)
 
 
 class FlowInputS3l1olci(BaseModel):
@@ -171,8 +173,8 @@ def compute_s3l1olci_external_variables(
 async def process_s3l1olci_ondemand(
     env_args: FlowEnvArgs,
     single_input_product: FlowInputS3l1olci,
-    olcil0_base_name: str = "S3OLCIL0_",
-    navl0_base_name: str = "S3NAVL0_",
+    olcil0_base_name: str = OLCL0_DEFAULT_BASE_NAME,
+    navl0_base_name: str = NAVL0_DEFAULT_BASE_NAME,
 ):
     """
     # Process S3 L1 OLCI

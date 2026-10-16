@@ -46,6 +46,12 @@ from rs_workflows.flow_utils import (
     WorkflowType,
 )
 from rs_workflows.on_demand.adf.convert_adf_set import compute_cql2
+from rs_workflows.on_demand.sentinel3.process_s3l1olci_ondemand_flow import (
+    NAVL0_DEFAULT_BASE_NAME,
+    OLCL0_DEFAULT_BASE_NAME,
+    compute_s3l1olci_external_variables,
+    compute_s3l1olci_inputs,
+)
 from rs_workflows.process_any_flow import ProcessingId, process_any
 from rs_workflows.staging_flow import staging_task
 from rs_workflows.utils.prefect import get_logger
@@ -58,5 +64,37 @@ async def process_s3l1olci_systematic(payload: dict[str, Any]):
     Then it forwards to process-any  with workflow  set to "systematic".
     """
     logger = get_logger()
-    logger.info(f"flow started from event.")
-    logger.info(f"event payload is {payload}.")
+    logger.info(f"Flow started from event with payload {payload}.")
+
+    owner_id: str = payload["owner_id"]
+    env_args: FlowEnvArgs = FlowEnvArgs(owner_id=owner_id)
+
+    flow_env: FlowEnv = FlowEnv(env_args)
+
+    with flow_env.start_span(__name__, f"process_systematic_s3l1olci_input"):
+        input_products: list[FlowInputProduct] = compute_s3l1olci_inputs(
+            env_args,
+            payload["product"]["id"],
+            payload["product"]["collection"],
+            payload["properties"]["platform"],
+            payload["properties"]["start_datetime"],
+            payload["properties"]["end_datetime"],
+            OLCL0_DEFAULT_BASE_NAME,
+            NAVL0_DEFAULT_BASE_NAME,
+        )
+
+        logger.info(
+            "input_products:\n%s",
+            json.dumps(input_products, indent=2, ensure_ascii=False),
+        )
+
+        external_variables = compute_s3l1olci_external_variables(
+            payload["properties"]["platform"],
+            payload["properties"]["start_datetime"],
+            payload["properties"]["end_datetime"],
+        )
+
+        logger.info(
+            "external_variables:\n%s",
+            json.dumps(external_variables, indent=2, ensure_ascii=False),
+        )

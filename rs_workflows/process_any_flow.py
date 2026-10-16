@@ -182,9 +182,8 @@ async def process_any(
                 },
                 related=[
                     {
-                        "prefect.resource.id": f"prefect.flow-run.{flow_run_id}",
-                        "prefect.resource.name": f"{flow_name}",
-                        "prefect.resource.role": "flow-run",
+                        "prefect.resource.id": "systematic",
+                        "prefect.resource.role": "workflow",
                     },
                     {"prefect.resource.id": "prefect.tag.processing", "prefect.resource.role": "tag"},
                     {
