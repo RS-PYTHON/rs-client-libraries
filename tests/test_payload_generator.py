@@ -243,6 +243,7 @@ def test_generate_payload_success(
     assert general_configuration["triggering__use_basic_logging"] is True
     assert len(payload.workflow or []) == 1
     assert payload.io.adfs[0].id == "ADF1"
+    assert all(adf.id != "adf_l0cfg" for adf in payload.io.adfs)
     assert payload.logging is None
     assert payload.config is None
     mock_logger.info.assert_any_call("Building workflow and I/O sections")
@@ -258,6 +259,10 @@ def test_generate_payload_success(
         dpr_process_in=mock_dpr_process_in,
     )
     assert payload.logging == expected_logging
+    assert any(
+        adf.id == "adf_l0cfg" and adf.path == f"/opt/dask-l0/{processor_name.value[:2]}_adf_l0cfg.json"
+        for adf in payload.io.adfs
+    )
     assert payload.config == expected_config
 
 
@@ -309,6 +314,7 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
         dpr_process_in=mock_dpr_process_in,
     )
     general_configuration = payload.general_configuration.dump()
+    assert all(adf.id != "adf_l0cfg" for adf in payload.io.adfs)
     assert general_configuration["triggering__use_datatree"] is True
     assert general_configuration["triggering__use_default_filename"] is True
 
