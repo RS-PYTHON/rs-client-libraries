@@ -238,9 +238,9 @@ def test_generate_payload_success(
     assert isinstance(payload.io, IOConfig)
     assert isinstance(payload.general_configuration, GeneralConfiguration)
     general_configuration = payload.general_configuration.dump()
-    assert general_configuration["logging"] == {
-        "level": general_configuration["logging__progress_level"],
-    }
+    assert general_configuration["logging__level"] == general_configuration["logging__progress_level"]
+    assert "logging" not in general_configuration
+    assert general_configuration["triggering__use_basic_logging"] is True
     assert len(payload.workflow or []) == 1
     assert payload.io.adfs[0].id == "ADF1"
     assert payload.logging is None

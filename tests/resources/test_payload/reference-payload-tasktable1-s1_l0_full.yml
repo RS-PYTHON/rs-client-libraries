@@ -14,8 +14,8 @@
 
 general_configuration:
   logging__progress_level: INFO
-  logging:
-    level: INFO
+  logging__level: INFO
+  triggering__use_basic_logging: true
   triggering__wait_before_exit: 10
   triggering__temporary_shared: false
 external_modules:

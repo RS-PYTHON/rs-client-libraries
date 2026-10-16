@@ -185,7 +185,7 @@ class GeneralConfiguration(BasePayloadModel):
     triggering__use_basic_logging: bool | None = None
     triggering__progress_logging: bool | None = None
     logging__progress_level: str | None = "DEBUG"
-    logging: dict[str, str] | None = None
+    logging__level: str | None = None
     logging__progress_format: str | None = None
     triggering__wait_before_exit: int | None = 10
     triggering__use_datatree: bool | None = None
