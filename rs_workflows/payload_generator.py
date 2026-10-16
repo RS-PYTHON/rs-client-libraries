@@ -798,12 +798,14 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     # Add the logging and config files for l0 and s1 / s3 configurations. These configurations
     # are hardcoded in the l0 eopf dask worker image. The path where these files are stored is given
     # by the env var PAYLOAD_CONFIG_FILES
+    triggering__use_basic_logging = True
     logging = None
     adf_l0cfg = ""
     if dpr_process_in.processor_name in (DprProcessor.S1L0, DprProcessor.S3L0):
         logging = ["/opt/dask-l0/logging_config.yaml"]
         match dpr_process_in.processor_name:
             case DprProcessor.S1L0:
+                triggering__use_basic_logging = False
                 adf_l0cfg = "/opt/dask-l0/s1_adf_l0cfg.json"
                 # TODO: this section is temporary, should be removed when the S1 L0 processor doesn't need it anymore
                 # the processor doesn't start without these parameters
@@ -853,7 +855,7 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
         general_configuration=GeneralConfiguration(
             logging__progress_level=dpr_process_in.env.logging_level.value,
             logging__level=dpr_process_in.env.logging_level.value,
-            triggering__use_basic_logging=True,
+            triggering__use_basic_logging=triggering__use_basic_logging,
             triggering__temporary_shared=dpr_process_in.temporary_shared,
             triggering__use_datatree=True if is_olci_processor else None,
             triggering__use_default_filename=True if is_olci_processor else None,
