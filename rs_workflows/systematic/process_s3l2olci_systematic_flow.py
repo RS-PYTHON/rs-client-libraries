@@ -17,6 +17,8 @@
 import json
 from typing import Any
 
+from prefect import flow
+
 from rs_workflows.flow_utils import (
     FlowEnv,
     FlowEnvArgs,
@@ -25,7 +27,6 @@ from rs_workflows.flow_utils import (
 )
 from rs_workflows.on_demand.sentinel3.process_s3l2olci_ondemand_flow import (
     OLCEFR_DEFAULT_BASE_NAME,
-    OLCEFR_PRODUCT_TYPE,
     compute_s3l2olci_external_variables,
 )
 from rs_workflows.process_any_flow import ProcessingId, process_any
@@ -60,11 +61,8 @@ async def process_s3l2olci_systematic(payload: dict[str, Any]):
     logger = get_logger()
     logger.info(f"Flow started from event with payload {payload}.")
 
-    owner_id: str = payload["owner_id"]
-    env_args: FlowEnvArgs = FlowEnvArgs(owner_id=owner_id)
-
+    env_args: FlowEnvArgs = FlowEnvArgs(owner_id=payload["owner_id"])
     flow_env: FlowEnv = FlowEnv(env_args)
-
     with flow_env.start_span(__name__, f"process_systematic_s3l2olci_input"):
 
         input_products: list[FlowInputProduct] = []
