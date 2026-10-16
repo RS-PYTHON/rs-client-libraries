@@ -30,6 +30,7 @@ import logging
 import os
 import tempfile
 import uuid
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import boto3
@@ -39,12 +40,14 @@ import requests
 import responses
 from moto import mock_aws
 from prefect.testing.utilities import prefect_test_harness
+from prefect.variables import Variable
 from pydantic import SecretStr
 from pystac import Asset, Item
 from starlette import status
 
 from rs_client.rs_client import RsClient
 from rs_client.stac.cdse_client import CDSE_STAC_HREF
+from rs_client.stac.earthdatahub_client import EDH_STAC_HREF
 from rs_client.stac.stac_base import StacBase
 from rs_common.config import EPlatform
 from rs_common.utils import env_bool
@@ -72,6 +75,7 @@ S3_ENDPOINT = "https://localhost:5000"
 AWS_SECURITY_TOKEN = "testing"
 AWS_SESSION_TOKEN = "testing"
 MOCKED_BUCKET = "test-bucket"
+STORAGE_CONFIG = "processing-storage-configuration"
 
 RSPY_UAC_CHECK_URL = "https://www.rspy-uac-manager.com"
 RS_SERVER_API_KEY = "RS_SERVER_API_KEY"
@@ -81,50 +85,55 @@ OWNER_ID = "toto"
 COLLECTION_ID = "S1_L1"
 
 MOCKED_RSPY_WEBSITE = "https://mocked_rspy_website"
-COLLECTION_RESPONSE = {
-    "id": COLLECTION_ID,
-    "type": "Collection",
-    "links": [
-        {
-            "rel": "items",
-            "type": "application/geo+json",
-            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items",
+
+
+def collection_response(collection_id=COLLECTION_ID):
+    """Mock an http response that returns a collection"""
+    return {
+        "id": collection_id,
+        "type": "Collection",
+        "links": [
+            {
+                "rel": "items",
+                "type": "application/geo+json",
+                "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}/items",
+            },
+            {
+                "rel": "parent",
+                "type": "application/json",
+                "href": f"{MOCKED_RSPY_WEBSITE}/catalog/catalogs/{OWNER_ID}",
+            },
+            {
+                "rel": "root",
+                "type": "application/json",
+                "href": f"{MOCKED_RSPY_WEBSITE}/catalog/catalogs/{OWNER_ID}",
+            },
+            {
+                "rel": "self",
+                "type": "application/json",
+                "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}",
+            },
+            {
+                "rel": "items",
+                "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}/items/",
+                "type": "application/geo+json",
+            },
+            {
+                "rel": "license",
+                "href": "https://creativecommons.org/licenses/publicdomain/",
+                "title": "public domain",
+            },
+        ],
+        "owner": OWNER_ID,
+        "extent": {
+            "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
+            "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
         },
-        {
-            "rel": "parent",
-            "type": "application/json",
-            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/catalogs/{OWNER_ID}",
-        },
-        {
-            "rel": "root",
-            "type": "application/json",
-            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/catalogs/{OWNER_ID}",
-        },
-        {
-            "rel": "self",
-            "type": "application/json",
-            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}",
-        },
-        {
-            "rel": "items",
-            "href": f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items/",
-            "type": "application/geo+json",
-        },
-        {
-            "rel": "license",
-            "href": "https://creativecommons.org/licenses/publicdomain/",
-            "title": "public domain",
-        },
-    ],
-    "owner": OWNER_ID,
-    "extent": {
-        "spatial": {"bbox": [[-94.6911621, 37.0332547, -94.402771, 37.1077651]]},
-        "temporal": {"interval": [["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]]},
-    },
-    "license": "public-domain",
-    "description": "Some description",
-    "stac_version": "1.1.0",
-}
+        "license": "public-domain",
+        "description": "Some description",
+        "stac_version": "1.1.0",
+    }
+
 
 ITEM_RESPONSE = {
     "id": "S1A_OPER_AUX_PREORB_OPOD_20240527T062732_V20240527T062732_20240527T062732.EOF",
@@ -151,7 +160,7 @@ ITEM_RESPONSE = {
     ],
     "assets": {},
     "geometry": None,
-    "collection": "S1_L1",
+    "collection": COLLECTION_ID,
     "properties": {
         "owner": OWNER_ID,
         "created": "2024-05-27T09:44:09.509000Z",
@@ -444,23 +453,41 @@ def mocked_stac_catalog_add_collection_error():
 
 
 @pytest.fixture
-def mocked_stac_catalog_get_collection():
-    """Mock responses to a STAC catalog server made with the "requests" library."""
-    # This is the returned content when calling a real STAC catalog service with:
-    # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
-    json_landing_page = common.json_landing_page(MOCKED_RSPY_WEBSITE, f"{OWNER_ID}:{COLLECTION_ID}", conforms_to=True)
-    responses.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=status.HTTP_200_OK)
-    responses.get(
-        url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}",
-        json=COLLECTION_RESPONSE,
-        status=status.HTTP_200_OK,
-    )
-    responses.get(
-        url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items?collections={COLLECTION_ID}",
-        json=COLLECTION_RESPONSE,
-        status=status.HTTP_200_OK,
-    )
-    responses.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections", json=COLLECTION_RESPONSE, status=status.HTTP_200_OK)
+def mocked_stac_catalog_get_collection(request):
+    """
+    Mock responses to a STAC catalog server made with the "requests" library.
+
+    Args:
+        request.param contains the collection_ids to mock. By default: COLLECTION_ID
+    """
+    collection_ids = request.param if hasattr(request, "param") else [COLLECTION_ID]
+    for collection_id in collection_ids:
+        collection_id_response = collection_response(collection_id)
+
+        # This is the returned content when calling a real STAC catalog service with:
+        # requests.get("http://real_stac_catalog_url/catalog/catalogs/<owner>").json()
+        json_landing_page = common.json_landing_page(
+            MOCKED_RSPY_WEBSITE,
+            f"{OWNER_ID}:{collection_id}",
+            conforms_to=True,
+        )
+        responses.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=status.HTTP_200_OK)
+        responses.get(
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}",
+            json=collection_id_response,
+            status=status.HTTP_200_OK,
+        )
+        responses.get(
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{collection_id}"
+            f"/items?collections={collection_id}",
+            json=collection_id_response,
+            status=status.HTTP_200_OK,
+        )
+        responses.get(
+            url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections",
+            json=collection_id_response,
+            status=status.HTTP_200_OK,
+        )
 
 
 @pytest.fixture
@@ -472,179 +499,203 @@ def mocked_stac_catalog_search_inside_collection(request):
         request.param contains the list of mocked services. By default: only the catalog.
     """
     services = request.param if hasattr(request, "param") else ["catalog"]
-    for service in services:
-        json_landing_page = common.json_landing_page(
-            MOCKED_RSPY_WEBSITE,
-            f"{OWNER_ID}:{COLLECTION_ID}",
-            service=service,
-            conforms_to=True,
-        )
-        responses.get(url=f"{MOCKED_RSPY_WEBSITE}/{service}/", json=json_landing_page, status=status.HTTP_200_OK)
-        json_response = {
-            "type": "FeatureCollection",
-            "context": {"limit": 10, "returned": 2},
-            "features": [
-                {
-                    "id": "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw",
-                    "bbox": [-180, -90, 180, 90],
-                    "type": "Feature",
-                    "links": [
-                        {
-                            "rel": "collection",
-                            "type": "application/json",
-                            "href": (f"{MOCKED_RSPY_WEBSITE}/{service}/collections/" "toto:S1_L1"),
-                        },
-                        {
-                            "rel": "parent",
-                            "type": "application/json",
-                            "href": (f"{MOCKED_RSPY_WEBSITE}/{service}/collections/" "toto:S1_L1"),
-                        },
-                        {
-                            "rel": "root",
-                            "type": "application/json",
-                            "href": f"{MOCKED_RSPY_WEBSITE}/{service}/catalogs/toto",
-                        },
-                        {
-                            "rel": "self",
-                            "type": "application/geo+json",
-                            "href": (
-                                f"{MOCKED_RSPY_WEBSITE}/{service}/collections/"
-                                "toto:S1_L1/items/"
-                                "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw"
-                            ),
-                        },
-                    ],
-                    "assets": {
-                        "data": {"href": "s3://mock-bucket/DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw.bin"},
-                    },
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
-                    },
-                    "collection": "S1_L1",
-                    "properties": {
-                        "gsd": 0.12345,
-                        "owner": "toto",
-                        "width": 2500,
-                        "height": 2500,
-                        "expires": "2024-08-08T07:12:45.662521Z",
-                        "updated": "2024-07-09T07:12:45.662521Z",
-                        "datetime": "2024-07-09T07:12:45.459911Z",
-                        "proj:epsg": 3857,
-                        "published": "2024-07-09T07:12:45.662515Z",
-                        "orientation": "nadir",
-                        "product:type": "mocked_product_type",
-                    },
-                    "stac_version": "1.1.0",
-                    "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
-                },
-                {
-                    "id": "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ",
-                    "bbox": [-180, -90, 180, 90],
-                    "type": "Feature",
-                    "links": [
-                        {
-                            "rel": "collection",
-                            "type": "application/json",
-                            "href": (f"{MOCKED_RSPY_WEBSITE}/{service}/collections/" "toto:S1_L1"),
-                        },
-                        {
-                            "rel": "parent",
-                            "type": "application/json",
-                            "href": (f"{MOCKED_RSPY_WEBSITE}/{service}/collections/" "toto:S1_L1"),
-                        },
-                        {
-                            "rel": "root",
-                            "type": "application/json",
-                            "href": f"{MOCKED_RSPY_WEBSITE}/{service}/catalogs/toto",
-                        },
-                        {
-                            "rel": "self",
-                            "type": "application/geo+json",
-                            "href": (
-                                f"{MOCKED_RSPY_WEBSITE}/{service}/collections/"
-                                "toto:S1_L1/items/"
-                                "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ"
-                            ),
-                        },
-                    ],
-                    "assets": {
-                        "data": {
-                            "href": "s3://mock-bucket/S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ.bin",  # noqa: E501 # pylint: disable=line-too-long
-                        },
-                    },
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
-                    },
-                    "collection": "S1_L1",
-                    "properties": {
-                        "gsd": 0.12345,
-                        "owner": "toto",
-                        "width": 2500,
-                        "height": 2500,
-                        "expires": "2024-08-08T07:12:39.570544Z",
-                        "updated": "2024-07-09T07:12:39.570544Z",
-                        "datetime": "2024-07-09T07:12:39.081716Z",
-                        "proj:epsg": 3857,
-                        "published": "2024-07-09T07:12:39.570534Z",
-                        "orientation": "nadir",
-                        "product:type": "mocked_product_type",
-                    },
-                    "stac_version": "1.1.0",
-                    "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
-                },
-            ],
-            "links": [
-                {
-                    "rel": "collection",
-                    "type": "application/json",
-                    "href": f"{MOCKED_RSPY_WEBSITE}/{service}/collections/toto:S1_L1",
-                },
-                {
-                    "rel": "parent",
-                    "type": "application/json",
-                    "href": f"{MOCKED_RSPY_WEBSITE}/{service}/collections/toto:S1_L1",
-                },
-                {
-                    "rel": "root",
-                    "type": "application/json",
-                    "href": f"{MOCKED_RSPY_WEBSITE}/{service}/catalogs/toto",
-                },
-                {
-                    "rel": "self",
-                    "type": "application/geo+json",
-                    "href": (f"{MOCKED_RSPY_WEBSITE}/{service}/collections/toto:S1_L1/items"),
-                },
-            ],
-        }
-        responses.post(url=f"{MOCKED_RSPY_WEBSITE}/{service}/search", json=json_response, status=status.HTTP_200_OK)
+    for _service in services:
 
-        # Mock the search by individual feature with a GET request
-        ids = []
-        collections = set()
-        for feature in json_response["features"]:
+        # If service is a str, we are mocking only COLLECTION_ID
+        if isinstance(_service, str):
+            service = _service
+            collection_ids = [COLLECTION_ID]
 
-            _id = feature["id"]  # type: ignore
-            ids.append(_id)
+        # Else it's a tuple as [service, [collection_ids...]]
+        else:
+            service = _service[0]
+            collection_ids = _service[1]
 
-            collection = feature["collection"]  # type: ignore
-            collections.add(collection)
+        # Special case for edh (earthdatahub)
+        if service == "edh":
+            website = "https://earthdatahub.destine.eu"
+            service = "api/stac/v1"
 
-            json_response_feature = copy.deepcopy(json_response)
-            json_response_feature["features"] = [feature]
+        # General case
+        else:
+            website = MOCKED_RSPY_WEBSITE
+
+        for collection_id in collection_ids:
+            json_landing_page = common.json_landing_page(
+                website,
+                f"{OWNER_ID}:{collection_id}",
+                service=service,
+                conforms_to=True,
+            )
+            responses.get(url=f"{website}/{service}/", json=json_landing_page, status=status.HTTP_200_OK)
+            json_response = {
+                "type": "FeatureCollection",
+                "context": {"limit": 10, "returned": 2},
+                "features": [
+                    {
+                        "id": "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw",
+                        "bbox": [-180, -90, 180, 90],
+                        "type": "Feature",
+                        "links": [
+                            {
+                                "rel": "collection",
+                                "type": "application/json",
+                                "href": (f"{website}/{service}/collections/toto:{collection_id}"),
+                            },
+                            {
+                                "rel": "parent",
+                                "type": "application/json",
+                                "href": (f"{website}/{service}/collections/toto:{collection_id}"),
+                            },
+                            {
+                                "rel": "root",
+                                "type": "application/json",
+                                "href": f"{website}/{service}/catalogs/toto",
+                            },
+                            {
+                                "rel": "self",
+                                "type": "application/geo+json",
+                                "href": (
+                                    f"{website}/{service}/collections/"
+                                    f"toto:{collection_id}/items/"
+                                    "DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw"
+                                ),
+                            },
+                        ],
+                        "assets": {
+                            "data": {"href": "s3://mock-bucket/DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw.bin"},
+                        },
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
+                        },
+                        "collection": collection_id,
+                        "properties": {
+                            "gsd": 0.12345,
+                            "owner": "toto",
+                            "width": 2500,
+                            "height": 2500,
+                            "expires": "2024-08-08T07:12:45.662521Z",
+                            "updated": "2024-07-09T07:12:45.662521Z",
+                            "datetime": "2024-07-09T07:12:45.459911Z",
+                            "proj:epsg": 3857,
+                            "published": "2024-07-09T07:12:45.662515Z",
+                            "orientation": "nadir",
+                            "product:type": "mocked_product_type",
+                        },
+                        "stac_version": "1.1.0",
+                        "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
+                    },
+                    {
+                        "id": "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ",
+                        "bbox": [-180, -90, 180, 90],
+                        "type": "Feature",
+                        "links": [
+                            {
+                                "rel": "collection",
+                                "type": "application/json",
+                                "href": (f"{website}/{service}/collections/toto:{collection_id}"),
+                            },
+                            {
+                                "rel": "parent",
+                                "type": "application/json",
+                                "href": (f"{website}/{service}/collections/toto:{collection_id}"),
+                            },
+                            {
+                                "rel": "root",
+                                "type": "application/json",
+                                "href": f"{website}/{service}/catalogs/toto",
+                            },
+                            {
+                                "rel": "self",
+                                "type": "application/geo+json",
+                                "href": (
+                                    f"{website}/{service}/collections/"
+                                    f"toto:{collection_id}/items/"
+                                    "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ"
+                                ),
+                            },
+                        ],
+                        "assets": {
+                            "data": {
+                                "href": (
+                                    "s3://mock-bucket/"
+                                    "S2__OPER_AUX_ECMWFD_PDMC_20190216T120000_V20190217T090000_20190217T210000.TGZ.bin"
+                                ),
+                            },
+                        },
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]],
+                        },
+                        "collection": collection_id,
+                        "properties": {
+                            "gsd": 0.12345,
+                            "owner": "toto",
+                            "width": 2500,
+                            "height": 2500,
+                            "expires": "2024-08-08T07:12:39.570544Z",
+                            "updated": "2024-07-09T07:12:39.570544Z",
+                            "datetime": "2024-07-09T07:12:39.081716Z",
+                            "proj:epsg": 3857,
+                            "published": "2024-07-09T07:12:39.570534Z",
+                            "orientation": "nadir",
+                            "product:type": "mocked_product_type",
+                        },
+                        "stac_version": "1.1.0",
+                        "stac_extensions": ["https://stac-extensions.github.io/alternate-assets/v1.1.0/schema.json"],
+                    },
+                ],
+                "links": [
+                    {
+                        "rel": "collection",
+                        "type": "application/json",
+                        "href": f"{website}/{service}/collections/toto:{collection_id}",
+                    },
+                    {
+                        "rel": "parent",
+                        "type": "application/json",
+                        "href": f"{website}/{service}/collections/toto:{collection_id}",
+                    },
+                    {
+                        "rel": "root",
+                        "type": "application/json",
+                        "href": f"{website}/{service}/catalogs/toto",
+                    },
+                    {
+                        "rel": "self",
+                        "type": "application/geo+json",
+                        "href": (f"{website}/{service}/collections/toto:{collection_id}/items"),
+                    },
+                ],
+            }
+            responses.post(url=f"{website}/{service}/search", json=json_response, status=status.HTTP_200_OK)
+
+            # Mock the search by individual feature with a GET request
+            ids = []
+            collections = set()
+            for feature in json_response["features"]:
+
+                _id = feature["id"]  # type: ignore
+                ids.append(_id)
+
+                collection = feature["collection"]  # type: ignore
+                collections.add(collection)
+
+                json_response_feature = copy.deepcopy(json_response)
+                json_response_feature["features"] = [feature]
+                responses.get(
+                    url=f"{website}/{service}/search?ids={_id}&collections={collection}",
+                    json=json_response_feature,
+                    status=status.HTTP_200_OK,
+                )
+
+            # Mock the search on all features with a GET request
             responses.get(
-                url=f"{MOCKED_RSPY_WEBSITE}/{service}/search?ids={_id}&collections={collection}",
+                url=f"{website}/{service}/search?ids={','.join(ids)}&collections={','.join(collections)}",
                 json=json_response_feature,
                 status=status.HTTP_200_OK,
             )
-
-        # Mock the search on all features with a GET request
-        responses.get(
-            url=f"{MOCKED_RSPY_WEBSITE}/{service}/search?ids={','.join(ids)}&collections={','.join(collections)}",
-            json=json_response_feature,
-            status=status.HTTP_200_OK,
-        )
 
 
 @pytest.fixture(name="mocked_rspy_landing_pages")
@@ -665,6 +716,15 @@ def mocked_rspy_landing_pages_():
             "https://stac.dataspace.copernicus.eu",
             f"{OWNER_ID}:{COLLECTION_ID}",
             service="v1",
+        ),
+        status=status.HTTP_200_OK,
+    )
+    responses.get(
+        url=EDH_STAC_HREF,
+        json=common.json_landing_page(
+            "https://earthdatahub.destine.eu",
+            f"{OWNER_ID}:{COLLECTION_ID}",
+            service="api/stac/v1",
         ),
         status=status.HTTP_200_OK,
     )
@@ -741,7 +801,7 @@ def _mocked_stac_catalog_invalid_get_item():
     responses.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=status.HTTP_200_OK)
     responses.get(
         url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}",
-        json=COLLECTION_RESPONSE,
+        json=collection_response(),
         status=status.HTTP_200_OK,
     )
     responses.get(
@@ -762,7 +822,7 @@ def _mocked_stac_catalog_get_item():
     responses.get(url=f"{MOCKED_RSPY_WEBSITE}/catalog/", json=json_landing_page, status=status.HTTP_200_OK)
     responses.get(
         url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}",
-        json=COLLECTION_RESPONSE,
+        json=collection_response(),
         status=status.HTTP_200_OK,
     )
     url = f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{COLLECTION_ID}/items/{item_id}"
@@ -876,15 +936,15 @@ def _sample_unit():
         "name": "unit1.1",
         "module": "module1",
         "input_products": [
-            {"name": "S1CADUS", "origin": "pipeline_input_1", "store_type": "S3"},
-            {"name": "S3CADUS", "origin": "external_proc", "store_type": "S3"},
+            {"name": "S1CADUS", "origin": "pipeline_input_1", "engine": "s3_cache"},
+            {"name": "S3CADUS", "origin": "external_proc", "engine": "s3_cache"},
         ],
         "input_adfs": [
             {"name": "ADF1"},
         ],
         "output_products": [
-            {"name": "output1", "regex": "*.tif", "store_type": "S3"},
-            {"name": "output2", "store_type": "S3"},
+            {"name": "output1", "regex": "*.tif", "engine": "s3_cache"},
+            {"name": "output2", "engine": "s3_cache"},
         ],
         "parameters": {
             "testparam": "testvalue",
@@ -1075,6 +1135,20 @@ def _flow_env(monkeypatch, generic_rs_client: RsClient) -> FlowEnv:
 def _catalog_client(generic_rs_client):
     """The catalog client extracted from the RsClient."""
     return generic_rs_client.get_catalog_client()
+
+
+@pytest.fixture(name="storage_configuration")
+def _storage_configuration(request):
+    """Set prefect variable that contains the storage configuration"""
+    if hasattr(request, "param"):
+        path = request.param
+    else:
+        path = Path(__file__).parent.parent / "config" / "storage_configuration.json"
+
+    with open(path, encoding="utf-8") as f:
+        Variable.set(STORAGE_CONFIG, json.load(f), overwrite=True)
+    yield
+    Variable.unset(STORAGE_CONFIG)
 
 
 # Mock Response Class for fetching CSV tests

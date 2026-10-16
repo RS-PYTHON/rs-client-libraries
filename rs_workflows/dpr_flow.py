@@ -312,7 +312,7 @@ def update_eopf_assets(
     logger.info(f"Input products: {input_products}")
 
     if payload.io is None:
-        raise RuntimeError("Payload I/O configuration is missing.")
+        raise RuntimeError("Payload io configuration is missing.")
     # Get all .zattrs files found in the output products paths
     zattrs_list = []
     for prod in payload.io.output_products:
@@ -505,7 +505,7 @@ async def run_processor(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "run-processor"):
         if payload.io is None:
-            raise ValueError("Payload I/O configuration is missing.")
+            raise ValueError("Payload io configuration is missing.")
         # First, remove the output products that are not final products from
         # the payload to avoid triggering the catalog registration for them
         # Create a temporary list for keeping track of products to keep
