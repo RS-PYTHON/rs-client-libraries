@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Process on-demand S3 OLCI L1 flow implementation"""
+"""Process on-demand S3 OLCI L2 flow implementation"""
 
 import datetime
 import json
@@ -41,7 +41,10 @@ class FlowInputS3l1olci(BaseModel):
     """Represents input product for the processor S3l1olci."""
 
     item_id: str = Field(description="STAC item identifier for S3OLCIL0 product.")
-    collection_name: str = Field(description="Collection name for S3OLCIL0 product.")
+    collection_name: str = Field(
+        default=OLCL0_PRODUCT_TYPE.lower(),
+        description="Collection name for S3OLCIL0 product.",
+    )
 
     def items(self):
         """Helper method to return the model fields as items, useful for logging."""
