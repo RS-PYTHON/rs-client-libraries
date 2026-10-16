@@ -16,9 +16,17 @@
 
 import datetime
 import json
+from datetime import timedelta
 from typing import Any
 
 from prefect import flow, task
+from prefect.automations import (
+    Automation,
+    EventTrigger,
+    Posture,
+    ResourceSpecification,
+    RunDeployment,
+)
 from pystac import ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
@@ -43,7 +51,7 @@ from rs_workflows.staging_flow import staging_task
 from rs_workflows.utils.prefect import get_logger
 
 
-@flow(name="process-s3l1olci-systematic")
+@flow(name="process-s3-l1-olci-systematic")
 async def process_s3l1olci_systematic(payload: dict[str, Any]):
     """
     This flow compute input and external variable from an event.

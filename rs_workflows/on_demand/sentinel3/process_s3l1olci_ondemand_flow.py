@@ -167,7 +167,7 @@ def compute_s3l1olci_external_variables(
     return {"start_datetime": start_datetime_txt, "end_datetime": end_datetime_txt, "satellite": satellite}
 
 
-@flow(name="process-s3l1olci-ondemand")
+@flow(name="process-s3-l1-olci-ondemand")
 async def process_s3l1olci_ondemand(
     env_args: FlowEnvArgs,
     single_input_product: FlowInputS3l1olci,
