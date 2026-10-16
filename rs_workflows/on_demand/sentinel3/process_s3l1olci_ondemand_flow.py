@@ -173,6 +173,7 @@ def compute_s3l1olci_external_variables(
 async def process_s3l1olci_ondemand(
     env_args: FlowEnvArgs,
     single_input_product: FlowInputS3l1olci,
+    force_sytematic: bool = False,
     olcil0_base_name: str = OLCL0_DEFAULT_BASE_NAME,
     navl0_base_name: str = NAVL0_DEFAULT_BASE_NAME,
 ):
@@ -197,6 +198,7 @@ async def process_s3l1olci_ondemand(
     |---|---|---|---|
     | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments |
     | `single_input_product` | `FlowInputS3l1olci` | *required* | Stac item identifier and collection name corresponding to the OLCI L0 product |
+    | `force_sytematic` | `bool` | `False` | When this option is set to true, at the end of the processing one event per product is generated. |
     | `olcil0_base_name` | `str` | `S3OLCIL0_` | Prefix of the OLCI L0 product name on the task table. |
     | `navl0_base_name` | `str` | `S3NAVL0_` | Prefix of the NAV L0 product name on the task table. |
 
@@ -243,10 +245,13 @@ async def process_s3l1olci_ondemand(
             json.dumps(external_variables, indent=2, ensure_ascii=False),
         )
 
+        if force_sytematic:
+            logger.info("🛈 This flow is started manually, but we force systematic to generate events at the end.")
+
         await process_any(
             env_args=env_args,
             input_products=input_products,
             external_variables=external_variables,
             processing_id=ProcessingId.S3_OLCI_L1,
-            workflow=WorkflowType.ON_DEMAND,
+            workflow=WorkflowType.SYSTEMATIC if force_sytematic else WorkflowType.ON_DEMAND,
         )

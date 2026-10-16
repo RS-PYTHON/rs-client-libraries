@@ -63,9 +63,9 @@ async def process_s3l1olci_systematic(payload: dict[str, Any]):
     # Process SYSTEMATIC S3 L1 OLCI
 
     This flow is started from automation.
-    It get the very first input from the event content/
+    It get the very first input from the 'event' that triggers the flow.
     Then it prepares the S3 L1 OLCI processing inputs.
-    Then it forwards to `process-any` with workflow set to "systematic".
+    Finally it forwards to `process-any` with workflow set to "systematic".
 
     ---
     ## Workflow Steps
