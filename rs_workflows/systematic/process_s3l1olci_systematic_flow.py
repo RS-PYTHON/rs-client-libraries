@@ -14,38 +14,18 @@
 
 """Process systematic S3 OLCI L1 flow implementation"""
 
-import datetime
 import json
-from datetime import timedelta
 from typing import Any
 
-from prefect import flow, task
-from prefect.automations import (
-    Automation,
-    EventTrigger,
-    Posture,
-    ResourceSpecification,
-    RunDeployment,
-)
-from pystac import ItemCollection
+from prefect import flow
 
-from rs_client.stac.catalog_client import CatalogClient
-from rs_client.stac.prip_client import PripClient
-from rs_common.utils import create_valcover_filter
 from rs_workflows.catalog_flow import catalog_search_task
 from rs_workflows.flow_utils import (
-    AuxiliaryProductMapping,
-    DprProcessIn,
     FlowEnv,
     FlowEnvArgs,
-    FlowGeneratedProduct,
     FlowInputProduct,
-    Priority,
-    ProcessingMode,
-    RetryConfig,
     WorkflowType,
 )
-from rs_workflows.on_demand.adf.convert_adf_set import compute_cql2
 from rs_workflows.on_demand.sentinel3.process_s3l1olci_ondemand_flow import (
     NAVL0_DEFAULT_BASE_NAME,
     OLCL0_DEFAULT_BASE_NAME,
@@ -53,7 +33,6 @@ from rs_workflows.on_demand.sentinel3.process_s3l1olci_ondemand_flow import (
     compute_s3l1olci_inputs,
 )
 from rs_workflows.process_any_flow import ProcessingId, process_any
-from rs_workflows.staging_flow import staging_task
 from rs_workflows.utils.prefect import get_logger
 
 
@@ -85,11 +64,6 @@ async def process_s3l1olci_systematic(payload: dict[str, Any]):
     > *Note:* if the collection retieved for `S3OLCIL0_`name is equal to `s3olcil0_`, `S3NAVL0_` will be stored on the collection `s3navl0_`.
     Otherwise, `S3NAVL0_` will be stored on the same collection than `S3OLCIL0_`.
     ---
-    """
-
-    """
-    This flow compute input and external variable from an event.
-    Then it forwards to process-any  with workflow  set to "systematic".
     """
     logger = get_logger()
     logger.info(f"Flow started from event with payload {payload}.")

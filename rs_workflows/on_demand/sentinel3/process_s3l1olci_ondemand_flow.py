@@ -18,9 +18,8 @@ import datetime
 import json
 from typing import Any
 
-from prefect import flow, task
+from prefect import flow
 from pydantic import BaseModel, Field
-from pystac import ItemCollection
 
 from rs_client.stac.catalog_client import CatalogClient
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct, WorkflowType
