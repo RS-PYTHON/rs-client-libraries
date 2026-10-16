@@ -802,10 +802,10 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     logging = None
     adf_l0cfg = ""
     if dpr_process_in.processor_name in (DprProcessor.S1L0, DprProcessor.S3L0):
+        triggering__use_basic_logging = False
         logging = ["/opt/dask-l0/logging_config.yaml"]
         match dpr_process_in.processor_name:
             case DprProcessor.S1L0:
-                triggering__use_basic_logging = False
                 adf_l0cfg = "/opt/dask-l0/s1_adf_l0cfg.json"
                 # TODO: this section is temporary, should be removed when the S1 L0 processor doesn't need it anymore
                 # the processor doesn't start without these parameters
@@ -836,7 +836,7 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
 
     # Save the config file only for L0 processors that define it.
     if adf_l0cfg:
-        io_config.adfs.append(AdfConfig(id="adf_l0cfg", path=adf_l0cfg))
+        io_config.adfs.append(AdfConfig(id="ADF_L0CFG", path=adf_l0cfg))
 
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
