@@ -177,9 +177,9 @@ async def process_s3l1olci_ondemand(
     navl0_base_name: str = NAVL0_DEFAULT_BASE_NAME,
 ):
     """
-    # Process S3 L1 OLCI
+    # Process ON DEMAND S3 L1 OLCI
 
-    This flow is in charge to prepare the S3 L1 OLCI processing y computing all the needed inputs.
+    This flow is in charge to prepare the S3 L1 OLCI processing by computing all the needed inputs.
     Then it forwards to `process-any` with workflow set to "on-demand".
 
     ---

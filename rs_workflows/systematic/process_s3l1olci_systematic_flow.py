@@ -60,6 +60,34 @@ from rs_workflows.utils.prefect import get_logger
 @flow(name="process-s3-l1-olci-systematic")
 async def process_s3l1olci_systematic(payload: dict[str, Any]):
     """
+    # Process SYSTEMATIC S3 L1 OLCI
+
+    This flow is started from automation.
+    It get the very first input from the event content/
+    Then it prepares the S3 L1 OLCI processing inputs.
+    Then it forwards to `process-any` with workflow set to "systematic".
+
+    ---
+    ## Workflow Steps
+
+    1. *compute input products* — retrieve the stac items `S3OLCIL0_` from rs-catalog.
+       The first one is retrieve from the `event` that trigger this flow.
+       The other ones are get by requesting contiguous period on the rs-catalog.
+       They can be one or two.
+    2. *compute external variables* — external variables are extracted from the first item properties.
+    3. *start the processing* — calls the flow `process-any`
+    ---
+    ## Parameters
+    Parameter | Type | Default | Description |
+    |---|---|---|---|
+    | `payload` | dict[str, Any] | *required* | The event that trigger this flow. |
+
+    > *Note:* if the collection retieved for `S3OLCIL0_`name is equal to `s3olcil0_`, `S3NAVL0_` will be stored on the collection `s3navl0_`.
+    Otherwise, `S3NAVL0_` will be stored on the same collection than `S3OLCIL0_`.
+    ---
+    """
+
+    """
     This flow compute input and external variable from an event.
     Then it forwards to process-any  with workflow  set to "systematic".
     """
@@ -97,4 +125,12 @@ async def process_s3l1olci_systematic(payload: dict[str, Any]):
         logger.info(
             "external_variables:\n%s",
             json.dumps(external_variables, indent=2, ensure_ascii=False),
+        )
+
+        await process_any(
+            env_args=env_args,
+            input_products=input_products,
+            external_variables=external_variables,
+            processing_id=ProcessingId.S3_OLCI_L1,
+            workflow=WorkflowType.SYSTEMATIC,
         )
