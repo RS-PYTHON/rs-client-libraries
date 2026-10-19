@@ -245,7 +245,7 @@ class WorkflowStep(BasePayloadModel):
     parameters: None | (
         dict[
             str,
-            (str | int | float | bool | list[int] | list[str]),
+            (str | int | float | bool | list[int] | list[str] | dict),
         ]
     ) = None
 

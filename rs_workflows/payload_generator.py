@@ -800,13 +800,11 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     # by the env var PAYLOAD_CONFIG_FILES
     triggering__use_basic_logging = True
     logging = None
-    adf_l0cfg = ""
     if dpr_process_in.processor_name in (DprProcessor.S1L0, DprProcessor.S3L0):
         triggering__use_basic_logging = False
         logging = ["/opt/dask-l0/logging_config.yaml"]
         match dpr_process_in.processor_name:
             case DprProcessor.S1L0:
-                adf_l0cfg = "/opt/dask-l0/s1_adf_l0cfg.json"
                 # TODO: this section is temporary, should be removed when the S1 L0 processor doesn't need it anymore
                 # the processor doesn't start without these parameters
                 for workflow_step in workflow_steps:
@@ -820,7 +818,6 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
                     else:
                         workflow_step.parameters = extra_parameters
             case DprProcessor.S3L0:
-                adf_l0cfg = "/opt/dask-l0/s3_adf_l0cfg.json"
                 # TODO: this section is temporary, should be removed when the S3 L0 processor doesn't need it anymore
                 # the processor doesn't start without these parameters
                 for workflow_step in workflow_steps:
@@ -833,10 +830,6 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
                         workflow_step.parameters.update(extra_parameters)
                     else:
                         workflow_step.parameters = extra_parameters
-
-    # Save the config file only for L0 processors that define it.
-    if adf_l0cfg:
-        io_config.adfs.append(AdfConfig(id="ADF_L0CFG", path=adf_l0cfg))
 
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service

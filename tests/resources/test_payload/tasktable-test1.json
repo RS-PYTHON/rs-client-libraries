@@ -1,5 +1,5 @@
 {
-    "$schema": "./../../2. Task table/2. schema/TaskTable.schema.json",
+    "$schema": "../../../config/TaskTable.schema.json",
     "tasktable": {
         "name": "s1-l0",
         "version": "1.0.1",
@@ -278,7 +278,17 @@
                         "temporary_path": "./tmp",
                         "isp_extraction_batch_size": 5,
                         "acquisition_report_output_path": "./acq_report",
-                        "test_external_variable": "{external_variable.satellite}"
+                        "test_external_variable": "{external_variable.satellite}",
+                        "cadu_chunk_size": {
+                            "navatt": 10000,
+                            "olci": 10000,
+                            "etc": 10000
+                        },
+                        "isp_chunk_size": {
+                            "S03NAT_IG": 10000,
+                            "S03OLCCIG": 10000,
+                            "etc": 10000
+                        }
                     }
                 }
             ]
