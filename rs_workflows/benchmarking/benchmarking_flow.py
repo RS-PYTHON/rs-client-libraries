@@ -16,6 +16,7 @@
 
 import json
 import os
+from datetime import datetime
 from os import path as osp
 
 from prefect import flow, task
@@ -177,4 +178,28 @@ async def benchmark_processor_task(
             satellite=this_value["external_variables"]["satellite"],
         )
 
-        return await dpr_processing_task(benchmark_dpr_process_in)
+        # Run the DPR processing task and measure execution time
+        execution_start_time = datetime.now()
+        try:
+            await dpr_processing_task(benchmark_dpr_process_in)
+            execution_end_time = datetime.now()
+            execution_status = "success"
+        except Exception as e:
+            execution_end_time = datetime.now()
+            execution_status = "failure"
+            logger.error(f"Error during DPR processing: {e}")
+
+        report = f"""
+{report}
+
+### Execution results
+
+**Status:** {execution_status}
+**Duration:** {execution_end_time - execution_start_time} seconds
+        """
+        await acreate_markdown_artifact(
+            key=artifact_key_name,
+            markdown=report,
+            description="Benchmarking processor report",
+        )
+        logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
