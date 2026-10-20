@@ -188,18 +188,10 @@ def test_get_io_missing_field_raises(mock_dpr_process_in, mock_store_params, flo
     ],
 )
 @pytest.mark.parametrize(
-    "processor_name, expected_logging, expected_config",
+    "processor_name, expected_logging",
     [
-        (
-            DprProcessor.S1L0,
-            ["/opt/dask-l0/logging_config.yaml"],
-            ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"],
-        ),
-        (
-            DprProcessor.S3L0,
-            ["/opt/dask-l0/logging_config.yaml"],
-            ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"],
-        ),
+        (DprProcessor.S1L0, ["/opt/dask-l0/logging_config.yaml"]),
+        (DprProcessor.S3L0, ["/opt/dask-l0/logging_config.yaml"]),
     ],
 )
 def test_generate_payload_success(
@@ -209,7 +201,6 @@ def test_generate_payload_success(
     flow_env,
     processor_name,
     expected_logging,
-    expected_config,
     _mock_os_env,
     staging_options,
 ):
@@ -277,7 +268,7 @@ def test_generate_payload_success(
     mock_logger.info.assert_any_call("Building workflow and I/O sections")
     mock_logger.info.assert_any_call("Building the payload")
 
-    # test the s1 l0 specific logging and config paths
+    # test the s1 l0 specific logging path
     mock_dpr_process_in.processor_name = processor_name
 
     payload = generate_payload.fn(
@@ -291,7 +282,7 @@ def test_generate_payload_success(
         adf.id == "adf_l0cfg" and adf.path == f"/opt/dask-l0/{processor_name.value[:2]}_adf_l0cfg.json"
         for adf in payload.io.adfs
     )
-    assert payload.config == expected_config
+    assert payload.config is None
 
 
 @pytest.mark.parametrize("olci_processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI])

@@ -376,7 +376,7 @@ def test_update_eopf_assets_raises_on_missing_io_config(mocker):
     payload = mocker.Mock()
     payload.io = None
 
-    with pytest.raises(RuntimeError, match="Payload I/O configuration is missing"):
+    with pytest.raises(RuntimeError, match="Payload io configuration is missing"):
         update_eopf_assets.fn(mocker.Mock(), [], payload, DprProcessor.S1L0)
 
 
@@ -965,7 +965,8 @@ def test_extract_olci_zarr_v3_metadata(container):
     product = f"{base}/{container}product"
     files = [f"{product}/.zattrs", f"{product}/zarr.json", f"{product}/measurements/zarr.json"]
     assert extract_products_and_zattrs(files, base, zarr_v3=True) == [("product", f"{product}/zarr.json")]
-    assert extract_products_and_zattrs(files, base) == [("product", f"{product}/.zattrs")]
+    assert extract_products_and_zattrs(files, base) == [("product", f"{product}/zarr.json")]
+    assert extract_products_and_zattrs(files, base, zarr_v3=False) == [("product", f"{product}/.zattrs")]
     assert extract_products_and_zattrs(files, product, zarr_v3=True) == [("product", f"{product}/zarr.json")]
 
 

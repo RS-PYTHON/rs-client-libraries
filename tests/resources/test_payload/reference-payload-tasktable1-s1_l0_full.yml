@@ -13,11 +13,15 @@
 # limitations under the License.
 
 general_configuration:
+  triggering__use_basic_logging: true
   logging__progress_level: INFO
   logging__level: INFO
-  triggering__use_basic_logging: true
   triggering__wait_before_exit: 10
   triggering__temporary_shared: false
+  triggering__stage_s3_outputs: true
+  triggering__stage_s3_temporary_prefix: false
+  triggering__stage_s3_memory_fit_safety_ratio: 0.25
+  triggering__stage_s3_outputs_min_size: 0
 external_modules:
 - name: l0.cadu_processing.cadu_reader
   star_import: true
@@ -43,6 +47,14 @@ workflow:
     isp_extraction_batch_size: 5
     acquisition_report_output_path: ./acq_report
     test_external_variable: S1A
+    cadu_chunk_size:
+      navatt: 10000
+      olci: 10000
+      etc: 10000
+    isp_chunk_size:
+      S03NAT_IG: 10000
+      S03OLCCIG: 10000
+      etc: 10000
 io:
   input_products:
   - id: S1CADUS
