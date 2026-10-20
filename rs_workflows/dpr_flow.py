@@ -208,6 +208,12 @@ def create_stac_item(
         if feature_dict["properties"].get("datetime") is None:
             feature_dict["properties"]["datetime"] = feature_dict["properties"]["created"]
 
+        # STAC 1.1 allows bands on assets, but forbids them in Item properties.
+        if dpr_processor in (DprProcessor.S3L1OLCI.value, DprProcessor.S3L2OLCI.value):
+            bands = feature_dict["properties"].pop("bands", None)
+            if bands is not None:
+                assets[product_name].extra_fields["bands"] = bands
+
         return Item(
             id=product_name,
             geometry=feature_dict.get("geometry"),
