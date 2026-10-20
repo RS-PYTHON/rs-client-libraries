@@ -9,6 +9,16 @@ To run them, see [Run existing flows](https://github.com/RS-PYTHON/rs-documentat
 To learn more about Prefect, see the [Prefect documentation](https://docs.prefect.io/v3/get-started) and
 [Prefect](https://github.com/RS-PYTHON/rs-documentation/blob/develop/docs/services/virtual-environment/prefect.md).
 
+## Overview
+
+![Overview of the flows](../../images/flows-overview.svg)
+
+The search and staging flows bring the products of the external stations into the catalog. The processing flows
+generate new products from them with the DPR processors, through the generic flow `process-generic`, which also
+stages the auxiliary files (ADFs) they need. The Sentinel-3 flows are chained automatically by Prefect automations,
+see [Systematic processing](../advanced/systematic-processing.md). The conversion flows convert the legacy products
+and auxiliary files to Zarr, and the operation flows maintain the platform.
+
 ## Flow families
 
 | Family | Flows | Documentation |
