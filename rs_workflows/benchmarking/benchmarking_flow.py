@@ -24,7 +24,6 @@ from prefect.runtime import flow_run
 from prefect.variables import Variable
 
 from rs_client.ogcapi.dpr_client import DprProcessor
-from rs_client.stac.catalog_client import CatalogClient
 from rs_common.prefect_utils import get_share_bucket, s3_delete
 from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs
 from rs_workflows.utils.dpr import dpr_processing_task, generate_payload_path
@@ -122,10 +121,13 @@ async def benchmark_processor_task(
             )
             if not item:
                 raise ValueError(
-                    f"Input product '{input_product['item_id']}' from collection '{input_product['collection_name']}' and owner '{env.owner_id}' is not available in the catalog. Please make sure that the input products are staged and available in the catalog before running the benchmark.",
+                    f"Input product '{input_product['item_id']}' from collection '{input_product['collection_name']}' "
+                    f"and owner '{env.owner_id}' is not available in the catalog. Please make sure that the input "
+                    "products are staged and available in the catalog before running the benchmark.",
                 )
             logger.info(
-                f"✅ Input product '{input_product['item_id']}' from collection '{input_product['collection_name']}' is available in the catalog.",
+                f"✅ Input product '{input_product['item_id']}' from collection '{input_product['collection_name']}' "
+                "is available in the catalog.",
             )
 
         # Retrieve list of collection names to empty before processing
@@ -136,18 +138,19 @@ async def benchmark_processor_task(
         for generated_collection in this_value.get("generated_product_to_collection_identifier", []):
             collections_to_empty.append(generated_collection["collection_name"])
 
-        # Make sure all collection names start with "benchmark", if it's not the case throw an error and stop the process
+        # Make sure all collection names start with "benchmark",
+        # if it's not the case throw an error and stop the process
         for collection_name in collections_to_empty:
             if not collection_name.startswith("benchmark"):
                 raise ValueError(
-                    f"Cannot empty collection '{collection_name}' because it does not start with 'benchmark'.\nFor safety reasons, all collections used in benchmarking must start with 'benchmark'.",
+                    f"Cannot empty collection '{collection_name}' because it does not start with 'benchmark'.\n"
+                    "For safety reasons, all collections used in benchmarking must start with 'benchmark'.",
                 )
 
         # Get the prefect share bucket
         share_bucket, _ = await get_share_bucket()
         # Build s3_path for each collection and delete its content
         for collection_name in collections_to_empty:
-            # TODO take owner_id from env or from this_value?
             collection_s3_path = osp.join("s3://", share_bucket.bucket_name, env.owner_id, collection_name)
             logger.info(f"Deleting content of collection '{collection_name}' at '{collection_s3_path}'")
             s3_delete(collection_s3_path, log=True)
