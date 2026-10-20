@@ -27,7 +27,7 @@ from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common.prefect_utils import get_share_bucket, s3_delete
 from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs
-from rs_workflows.utils.dpr import dpr_processing_task
+from rs_workflows.utils.dpr import dpr_processing_task, generate_payload_path
 from rs_workflows.utils.prefect import get_logger
 
 
@@ -154,12 +154,13 @@ async def benchmark_processor_task(
 
         # Build parameters to run a generic DPR process
         logger.info("Creating input configuration to run DPR processing...")
+        s3_payload: str = generate_payload_path(env.owner_id)
         benchmark_dpr_process_in: DprProcessIn = DprProcessIn(
             env=env,
             processor_name=DprProcessor(processor_name),
             processor_version=processor_version,
             dask_cluster_label=this_value["dask_cluster_label"],
-            s3_payload_file="",  # f"{s3_payload}/payload_{processor_name}.yaml",  TODO payload ?
+            s3_payload_file=f"{s3_payload}/payload_{processor_name}.yaml",
             pipeline=this_value["pipeline"],
             priority=this_value["priority"],
             workflow_type=all_value["workflow_type"],
