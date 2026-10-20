@@ -180,14 +180,16 @@ async def benchmark_processor_task(
 
         # Run the DPR processing task and measure execution time
         execution_start_time = datetime.now()
-        try:
-            await dpr_processing_task(benchmark_dpr_process_in)
-            execution_end_time = datetime.now()
-            execution_status = "success"
-        except Exception as e:
-            execution_end_time = datetime.now()
+        dpr_processing = await dpr_processing_task(benchmark_dpr_process_in, return_state=True)
+        execution_end_time = datetime.now()
+
+        # Retrieve execution status
+        if dpr_processing.is_failed():
             execution_status = "failure"
-            logger.error(f"Error during DPR processing: {e}")
+            error = dpr_processing.result(raise_on_failure=False)
+            logger.error(f"Error during DPR processing: {error}")
+        else:
+            execution_status = "success"
 
         report = f"""
 {report}
