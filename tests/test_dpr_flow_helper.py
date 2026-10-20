@@ -993,3 +993,18 @@ def test_update_olci_zarr_v3_assets(mocker, processor):
     assert result[0].product_type == "S03OLCEFR"
     assert result[0].output_product_id == "olci"
     assert result[0].stac_item.assets["product"].href == "s3://bucket/output/product"
+
+
+@pytest.mark.parametrize("processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI])
+def test_olci_bands_are_published_on_zarr_asset(processor):
+    """STAC 1.1 forbids bands in Item properties; preserve them on the asset."""
+    bands = [{"name": "oa01", "eo:center_wavelength": 0.4}]
+    feature = {
+        "properties": {"datetime": "2025-06-12T02:12:12Z", "bands": bands},
+        "geometry": None,
+        "bbox": None,
+    }
+    item = create_stac_item(None, feature, "s3://bucket/product/zarr.json", "product", processor)
+    published = item.to_dict()
+    assert "bands" not in published["properties"]
+    assert published["assets"]["product"]["bands"] == bands
