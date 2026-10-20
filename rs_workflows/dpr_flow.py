@@ -53,7 +53,7 @@ def s3_list(s3_prefix: str):
     return [f"s3://{s3_bucket.bucket_name}/{obj.key}" for obj in objects.filter(Prefix=prefix.rstrip("/") + "/")]
 
 
-def extract_products_and_zattrs(files: list[str], base_path: str, *, zarr_v3: bool = False):
+def extract_products_and_zattrs(files: list[str], base_path: str, *, zarr_v3: bool = True):
     """Extract product names and their corresponding .zattrs file paths.
 
     With ``zarr_v3=True``, also discover zarr.json and prefer it per product.
@@ -327,11 +327,7 @@ def update_eopf_assets(
     for prod in payload.io.output_products:
         path = prod.path
         # Keep track of which output product ID each .zattrs belongs to
-        is_olci = dpr_processor in (DprProcessor.S3L1OLCI.value, DprProcessor.S3L2OLCI.value)
-        if is_olci:
-            new_zattrs = extract_products_and_zattrs(s3_list(path), path, zarr_v3=True)
-        else:
-            new_zattrs = extract_products_and_zattrs(s3_list(path), path)
+        new_zattrs = extract_products_and_zattrs(s3_list(path), path)
         for name, loc in new_zattrs:
             zattrs_list.append((name, loc, prod.id))
         logger.info(
