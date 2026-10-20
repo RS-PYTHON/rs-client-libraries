@@ -13,62 +13,42 @@
 ' limitations under the License.
 
 @startuml dpr-as-a-service
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam sequence {
+  ParticipantBackgroundColor #E0F2F1
+  ParticipantBorderColor #00796B
+  LifeLineBorderColor #00796B
+}
 
 actor John
+participant "JupyterHub" as Jupyter
+participant "Prefect flow run\n(process-generic)" as Prefect
+participant "rs-dpr-service" as DPR
+participant "Dask cluster" as Dask
+collections "rs-server\n(catalog, staging)" as Catalog
 
-entity JupyterLab_Python_3.13 as Jupyter
-entity Prefect_Python_3.13 as Prefect
-entity DPR_service_Python_3.11 as DPR
-collections Catalog
-
-activate Jupyter
-activate Prefect
-activate DPR
-activate Catalog
-
-John -> Jupyter: Edit/Run flow in notebook
-
-Jupyter -> Prefect: Run flow
-
+John -> Jupyter: edit and run a flow\n(or run it from the Prefect dashboard)
+Jupyter -> Prefect: run the flow
 Prefect -> DPR: GET /dpr/processes/{processor}
-DPR -> DPR: dask submit:\neopf trigger tasktable
-DPR --> Prefect: tasktable
-
-Prefect -> Prefect: generate EOPF payload
-
-Prefect -> DPR: POST /dpr/processes/{processor}/execution(payload)
-DPR --> Prefect: acknowledge (job_id)
-DPR -> DPR: dask async processing
-
-loop until_complete
-  Prefect -> DPR: GET /dpr/jobs/{job_id}
-  DPR --> Prefect: progress (%)
+DPR -> Dask: submit: read the task table (eopf)
+Dask --> DPR: task table
+DPR --> Prefect: task table
+Prefect -> Catalog: search and stage the\nauxiliary files (ADFs)
+Prefect -> Prefect: generate the EOPF payload file
+Prefect -> DPR: POST /dpr/processes/{processor}/execution
+DPR --> Prefect: job ID
+DPR -> Dask: submit: run the processor (eopf)
+loop until the job is completed
+  Prefect -> DPR: GET /dpr/jobs/{job_id}, /dpr/jobs/{job_id}/logs
+  DPR --> Prefect: status, progress, logs
 end
-
-Prefect -> Catalog: POST item(s)
-
-alt S3L1
-  Prefect -> Prefect: generate quicklooks
-  Prefect -> Catalog: PATCH item(s)
-end
-
+Prefect -> Catalog: publish the generated items
 Prefect --> Jupyter: flow result
-Jupyter --> John: flow result
 
-newpage manual_dismiss
+newpage Cancel a run
 
-John -> Jupyter: Edit/Run test in notebook
-
-Jupyter -> Jupyter: generate EOPF payload
-
-Jupyter -> DPR: POST /dpr/processes/{processor}/execution(payload)
-DPR --> Jupyter: acknowledge (job_id)
-DPR -> DPR: dask async processing
-
-Jupyter -> DPR: DELETE /dpr/jobs/{job_id}
-DPR -> DPR: retrieve dask client
-DPR -> DPR: retrieve dask future
-DPR -> DPR: cancel dask future
-DPR --> Jupyter: acknowledge (job_id, status=dismissed)
-
+John -> DPR: DELETE /dpr/jobs/{job_id}
+DPR -> Dask: cancel the Dask future
+DPR --> John: job dismissed
 @enduml

@@ -38,7 +38,8 @@ async def benchmark_processor(
     scenario_name: str,
 ):
     """
-    https://pforge-exchange2.astrium.eads.net/jira/browse/RSPY-1099
+    Benchmark a DPR processor (mocked implementation).
+
     This flow reads one Prefect variable named "benchmarking-<processor_name>-settings" associated to the input
     parameter "processor name".
     This variable provides a mocked structured information to define the benchmarking context.
