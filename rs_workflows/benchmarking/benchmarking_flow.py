@@ -186,7 +186,7 @@ async def benchmark_processor_task(
         # Retrieve execution status
         if dpr_processing.is_failed():
             execution_status = "failure"
-            error = dpr_processing.result(raise_on_failure=False)
+            error = await dpr_processing.result(raise_on_failure=False)
             logger.error(f"Error during DPR processing: {error}")
         else:
             execution_status = "success"
@@ -205,3 +205,6 @@ async def benchmark_processor_task(
             description="Benchmarking processor report",
         )
         logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
+
+        if execution_status == "failure":
+            raise RuntimeError("DPR processing failed. Please check the logs for more details.")
