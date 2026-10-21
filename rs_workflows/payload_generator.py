@@ -837,7 +837,8 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     # Save the config file only for L0 processors that define it.
     if adf_l0cfg:
         io_config.adfs.append(AdfConfig(id="adf_l0cfg", path=adf_l0cfg))
-        workflow_step.adfs["adf_l0cfg"] = "adf_l0cfg"
+        for workflow_step in workflow_steps:
+            workflow_step.adfs["adf_l0cfg"] = "adf_l0cfg"
 
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
