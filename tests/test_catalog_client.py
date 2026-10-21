@@ -66,7 +66,7 @@ def test_missing_collection_catalog_client(
     (since pystac-client 0.9.1, Client.get_collection returns None on 404 instead of raising).
     """
     responses.get(
-        url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/OWNERID:no_such_collection",  # special chars removed from owner id
+        url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/OWNERID:no_such_collection",  # special chars removed
         json={"code": "NotFoundError", "description": "Collection not found"},
         status=404,
     )
