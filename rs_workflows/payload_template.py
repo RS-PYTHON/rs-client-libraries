@@ -210,6 +210,7 @@ class GeneralConfiguration(BasePayloadModel):
     triggering__dask_monitor__enabled: bool | None = None
     triggering__dask_monitor__cancel: bool | None = None
     triggering__dask_monitor__cancel_state: str | None = None
+    zarr__format: int | None = None  # 2 or 3
 
 
 class ExternalModule(BasePayloadModel):
