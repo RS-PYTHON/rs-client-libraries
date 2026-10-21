@@ -168,6 +168,18 @@ class StacBase(RsClient):
         # Get all the available collections
         return self.ps_client.get_collections()
 
+    def _get_ps_collection(self, collection_id: str) -> Collection | CollectionClient:
+        """
+        Call pystac_client.Client.get_collection and raise if the collection is missing.
+
+        Since pystac-client 0.9.1, get_collection returns None on a 404 instead of raising an APIError.
+        We restore the previous behaviour so that our callers keep getting an exception.
+        """
+        collection = self.ps_client.get_collection(collection_id)
+        if collection is None:
+            raise APIError(f"NotFoundError: collection {collection_id!r} does not exist")
+        return collection
+
     @lru_cache
     @handle_api_error
     def get_collection(self, collection_id: str) -> Collection | CollectionClient:
@@ -183,7 +195,7 @@ class StacBase(RsClient):
         Raises:
             RuntimeError: If an API error occurs.
         """
-        return self.ps_client.get_collection(collection_id)
+        return self._get_ps_collection(collection_id)
 
     @handle_api_error
     def get_items(
@@ -208,7 +220,7 @@ class StacBase(RsClient):
         """
 
         # Retrieve the collection
-        collection = self.ps_client.get_collection(collection_id)
+        collection = self._get_ps_collection(collection_id)
 
         # If non-standard query params are provided, call the /items endpoint manually.
         if query_params:
@@ -289,7 +301,7 @@ class StacBase(RsClient):
         """
 
         # Retrieve the collection
-        collection = self.ps_client.get_collection(collection_id)
+        collection = self._get_ps_collection(collection_id)
         item = collection.get_item(item_id)
         if not item:
             self.logger.error(f"Item with ID '{item_id}' not found in collection '{collection_id}'.")

@@ -56,6 +56,26 @@ def test_get_collection_catalog_client(
     assert collection.id == "S1_L1" if collection else False
 
 
+@pytest.mark.parametrize("method", ["get_collection", "get_items", "get_item"])
+def test_missing_collection_catalog_client(
+    mocked_stac_catalog_get_collection,  # pylint: disable=unused-argument
+    method,
+):
+    """
+    A missing collection must raise an exception, whatever the pystac-client version
+    (since pystac-client 0.9.1, Client.get_collection returns None on 404 instead of raising).
+    """
+    responses.get(
+        url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/OWNERID:no_such_collection",  # special chars removed from owner id
+        json={"code": "NotFoundError", "description": "Collection not found"},
+        status=404,
+    )
+    catalog: CatalogClient = RsClient(MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
+    args = ["no_such_collection", "item_id"] if method == "get_item" else ["no_such_collection"]
+    with pytest.raises(RuntimeError, match="NotFoundError"):
+        getattr(catalog, method)(*args)
+
+
 def test_all_collections_catalog_client(
     mocked_stac_catalog_get_collection,  # pylint: disable=unused-argument
 ):  # pylint: disable=missing-function-docstring
