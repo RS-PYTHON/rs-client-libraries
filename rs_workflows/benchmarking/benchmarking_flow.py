@@ -159,7 +159,7 @@ async def benchmark_processor_task(
 
         # Build parameters to run a generic DPR process
         logger.info("Creating input configuration to run DPR processing...")
-        s3_payload: str = generate_payload_path(env.owner_id)
+        s3_payload: str = await generate_payload_path(env.owner_id)
         benchmark_dpr_process_in: DprProcessIn = DprProcessIn(
             env=env,
             processor_name=DprProcessor(processor_name),
