@@ -139,6 +139,10 @@ async def publish(
                 providers = item.properties.get("providers", [])
                 valid_providers = []
                 for provider in providers:
+                    name = provider.get("name")
+                    if not isinstance(name, str) or not name:
+                        logger.warning("Provider name must be a nonempty string. Removing provider.")
+                        continue
                     roles = provider.get("roles")
                     # ensure roles is a list before checking
                     if isinstance(roles, list):

@@ -33,7 +33,10 @@ from tests.conftest import MOCKED_RSPY_WEBSITE, OWNER_ID
 
 
 @pytest.mark.asyncio
-async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages):  # pylint: disable=unused-argument
+@pytest.mark.parametrize("include_valid_providers", [True, False])
+async def test_publish_tempfixes(
+    mocker, monkeypatch, mocked_rspy_landing_pages, include_valid_providers
+):  # pylint: disable=unused-argument
     """Test the temporary fixes in the publish function."""
     env = FlowEnvArgs(owner_id=OWNER_ID)
 
@@ -145,11 +148,23 @@ async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages)
                 properties={
                     "product:type": "S1_GRD",
                     "datetime": "2024-01-01T00:00:00Z",
-                    "providers": [
-                        {"name": "valid", "roles": ["producer", "host"]},
-                        {"name": "invalid_role", "roles": ["invalid"]},
-                        {"name": "mixed", "roles": ["processor", "bad"]},
-                        {"name": "no_roles", "other": "info"},
+                    "providers": (
+                        [
+                            {"name": "valid", "roles": ["producer", "host"]},
+                            {"name": "invalid_role", "roles": ["invalid"]},
+                            {"name": "mixed", "roles": ["processor", "bad"]},
+                            {"name": "no_roles", "other": "info"},
+                        ]
+                        if include_valid_providers
+                        else []
+                    )
+                    + [
+                        {"name": [], "roles": ["processor"]},
+                        {"name": [], "roles": ["producer"]},
+                        {"name": "", "roles": ["producer"]},
+                        {"name": None},
+                        {"name": 123},
+                        {"roles": ["host"]},
                     ],
                 },
                 datetime=datetime(2024, 1, 1, tzinfo=timezone.utc),
@@ -164,9 +179,11 @@ async def test_publish_tempfixes(mocker, monkeypatch, mocked_rspy_landing_pages)
     published_items = await catalog_flow.publish.fn(env, catalog_mapping, items_metadata_3)
     _, _, added_item = spy_add_item.call_args_list[0][0]
     providers = added_item.properties["providers"]
-    assert len(providers) == 2
-    assert providers[0]["name"] == "valid"
-    assert providers[1]["name"] == "no_roles"  # No 'roles' key so it's kept
+    assert providers == (
+        [{"name": "valid", "roles": ["producer", "host"]}, {"name": "no_roles", "other": "info"}]
+        if include_valid_providers
+        else []
+    )
     assert published_items == [{**added_item.to_dict(), "collection": collection_id}]
 
 
