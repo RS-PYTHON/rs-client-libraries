@@ -14,16 +14,20 @@
 
 """Benchmarking flows."""
 
-import asyncio
 import json
 import os
+from datetime import datetime
+from os import path as osp
 
 from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
 from prefect.runtime import flow_run
 from prefect.variables import Variable
 
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_client.ogcapi.dpr_client import DprProcessor
+from rs_common.prefect_utils import get_share_bucket, s3_delete
+from rs_workflows.flow_utils import DprProcessIn, FlowEnv, FlowEnvArgs
+from rs_workflows.utils.dpr import dpr_processing_task, generate_payload_path
 from rs_workflows.utils.prefect import get_logger
 
 
@@ -68,10 +72,10 @@ async def benchmark_processor_task(
     with flow_env.start_span(__name__, "benchmark-processor"):
 
         # Read the prefect variable value
-        all_value = await Variable.get(f"benchmarking-{processor_name}-settings")
+        all_scenarii = await Variable.get(f"benchmarking-{processor_name}-settings")
 
         # Read contents for the given scenario and processor version
-        this_value = all_value["scenarios"][scenario_name]["processor_versions"][processor_version]
+        selected_scenario = all_scenarii["scenarios"][scenario_name]["processor_versions"][processor_version]
 
         # Markdown report
         parameters = {
@@ -96,7 +100,7 @@ async def benchmark_processor_task(
 
 ### Settings
 ```json
-{json.dumps(this_value, indent=2)}
+{json.dumps(selected_scenario, indent=2)}
 ```
 """
         # Save as a markdown artifact
@@ -108,5 +112,98 @@ async def benchmark_processor_task(
         )
         logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
-        # Sleep a few seconds to simulate a processor runtime
-        await asyncio.sleep(10)
+        # Check that input products exist in the catalog
+        logger.info("Checking availability of input products in catalog...")
+        catalog_client = flow_env.rs_client.get_catalog_client()
+        for input_product in selected_scenario.get("input_products", []):
+            item = catalog_client.get_item(
+                collection_id=input_product["collection_name"],
+                item_id=input_product["item_id"],
+                owner_id=env.owner_id,
+            )
+            if not item:
+                raise ValueError(
+                    f"Input product '{input_product['item_id']}' from collection '{input_product['collection_name']}' "
+                    f"and owner '{env.owner_id}' is not available in the catalog. Please make sure that the input "
+                    "products are staged and available in the catalog before running the benchmark.",
+                )
+            logger.info(
+                f"✅ Input product '{input_product['item_id']}' from collection '{input_product['collection_name']}' "
+                "is available in the catalog.",
+            )
+
+        # Retrieve list of collection names to empty before processing
+        collections_to_empty = []
+        for aux_collection in selected_scenario.get("auxiliary_product_to_collection_identifier", []):
+            collections_to_empty.append(aux_collection["collection_name"])
+        for generated_collection in selected_scenario.get("generated_product_to_collection_identifier", []):
+            collections_to_empty.append(generated_collection["collection_name"])
+
+        # Make sure all collection names start with "benchmark",
+        # if it's not the case throw an error and stop the process
+        for collection_name in collections_to_empty:
+            if not collection_name.startswith("benchmark"):
+                raise ValueError(
+                    f"Cannot empty collection '{collection_name}' because it does not start with 'benchmark'.\n"
+                    "For safety reasons, all collections used in benchmarking must start with 'benchmark'.",
+                )
+
+        # Get the prefect share bucket
+        share_bucket, _ = await get_share_bucket()
+        # Build s3_path for each collection and delete its content
+        for collection_name in collections_to_empty:
+            collection_s3_path = osp.join("s3://", share_bucket.bucket_name, env.owner_id, collection_name)
+            logger.info(f"Deleting content of collection '{collection_name}' at '{collection_s3_path}'")
+            s3_delete(collection_s3_path, log=True)
+
+        # Build parameters to run a generic DPR process
+        logger.info("Creating input configuration to run DPR processing...")
+        s3_payload: str = await generate_payload_path(env.owner_id)
+        benchmark_dpr_process_in: DprProcessIn = DprProcessIn(
+            env=env,
+            processor_name=DprProcessor(processor_name),
+            processor_version=processor_version,
+            dask_cluster_label=selected_scenario["dask_cluster_label"],
+            s3_payload_file=f"{s3_payload}/payload_{processor_name}.yaml",
+            pipeline=selected_scenario["pipeline"],
+            priority=selected_scenario["priority"],
+            workflow_type=all_scenarii["workflow_type"],
+            input_products=selected_scenario["input_products"],
+            generated_product_to_collection_identifier=selected_scenario["generated_product_to_collection_identifier"],
+            auxiliary_product_to_collection_identifier=selected_scenario["auxiliary_product_to_collection_identifier"],
+            processing_mode=selected_scenario["processing_mode"],
+            start_datetime=selected_scenario["external_variables"]["start_datetime"],
+            end_datetime=selected_scenario["external_variables"]["end_datetime"],
+            satellite=selected_scenario["external_variables"]["satellite"],
+        )
+
+        # Run the DPR processing task and measure execution time
+        execution_start_time = datetime.now()
+        dpr_processing = await dpr_processing_task(benchmark_dpr_process_in, return_state=True)
+        execution_end_time = datetime.now()
+
+        # Retrieve execution status
+        if dpr_processing.is_failed():
+            execution_status = "failure"
+            error = await dpr_processing.result(raise_on_failure=False)
+            logger.error(f"Error during DPR processing: {error}")
+        else:
+            execution_status = "success"
+
+        report = f"""
+{report}
+
+### Execution results
+
+**Status:** {execution_status}
+**Duration:** {execution_end_time - execution_start_time} seconds
+        """
+        await acreate_markdown_artifact(
+            key=artifact_key_name,
+            markdown=report,
+            description="Benchmarking processor report",
+        )
+        logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
+
+        if execution_status == "failure":
+            raise RuntimeError("DPR processing failed. Please check the logs for more details.")
