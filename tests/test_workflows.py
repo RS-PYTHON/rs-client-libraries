@@ -375,7 +375,7 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker, named_io):
     }
 
     # --- Task table ---
-    task_table = {
+    task_table: dict[str, typing.Any] = {
         "io": {
             "adfs": [
                 {

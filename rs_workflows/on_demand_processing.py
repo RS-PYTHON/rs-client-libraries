@@ -588,7 +588,10 @@ def build_and_generate_payload(
 
     processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
     unit_list = build_unit_list(
-        tasktable=task_table, pipeline=dpr_input.pipeline, unit=dpr_input.unit, processing_mode=processing_mode
+        tasktable=task_table,
+        pipeline=dpr_input.pipeline,
+        unit=dpr_input.unit,
+        processing_mode=processing_mode,
     )
 
     tasks = []
