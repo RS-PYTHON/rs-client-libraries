@@ -22,6 +22,7 @@ general_configuration:
   triggering__stage_s3_temporary_prefix: false
   triggering__stage_s3_memory_fit_safety_ratio: 0.25
   triggering__stage_s3_outputs_min_size: 0
+  zarr__format: 3
 workflow:
 - name: Calibration.1
   active: true
@@ -94,14 +95,14 @@ io:
     engine: cpm_zarr
     writer_params:
       mode: w
-    type: folder
+    type: file
     apply_eoqc: false
   - id: cslcs
     path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
     engine: cpm_zarr
     writer_params:
       mode: w
-    type: folder
+    type: file
     apply_eoqc: false
   - id: gslcs
     path: s3:/rs-dev-cluster-catalog/toto/s01siwglc/00000000-0000-0000-0000-000000000001
@@ -114,7 +115,7 @@ io:
           endpoint_url: https://localhost:5000
           region_name: us-east-1
       mode: w
-    type: folder
+    type: file
     apply_eoqc: false
   - id: simulation_ref
     path: /my_share_directory/here/00000000-0000-0000-0000-000000000001

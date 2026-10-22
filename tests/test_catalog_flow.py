@@ -35,7 +35,10 @@ from tests.conftest import MOCKED_RSPY_WEBSITE, OWNER_ID
 @pytest.mark.asyncio
 @pytest.mark.parametrize("include_valid_providers", [True, False])
 async def test_publish_tempfixes(
-    mocker, monkeypatch, mocked_rspy_landing_pages, include_valid_providers
+    mocker,
+    monkeypatch,
+    mocked_rspy_landing_pages,
+    include_valid_providers,
 ):  # pylint: disable=unused-argument
     """Test the temporary fixes in the publish function."""
     env = FlowEnvArgs(owner_id=OWNER_ID)

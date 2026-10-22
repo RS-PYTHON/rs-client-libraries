@@ -22,6 +22,7 @@ general_configuration:
   triggering__stage_s3_temporary_prefix: false
   triggering__stage_s3_memory_fit_safety_ratio: 0.25
   triggering__stage_s3_outputs_min_size: 0
+  zarr__format: 3
 external_modules:
 - name: l0.cadu_processing.cadu_reader
   star_import: true

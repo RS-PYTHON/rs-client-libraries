@@ -90,7 +90,7 @@ def extract_products_and_zattrs(files: list[str], base_path: str, *, zarr_v3: bo
     """
     # OLCI CPM 3 writes root attributes in zarr.json. Prefer it over legacy metadata.
     metadata_names = ("zarr.json", ".zattrs") if zarr_v3 else (".zattrs",)
-    dirs_and_attrs = {}
+    dirs_and_attrs: dict = {}
 
     normalized_base_path = base_path.rstrip("/")
 
