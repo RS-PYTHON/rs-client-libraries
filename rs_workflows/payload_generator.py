@@ -821,18 +821,6 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
                         workflow_step.parameters = extra_parameters
             case DprProcessor.S3L0:
                 adf_l0cfg = "/opt/dask-l0/s3_adf_l0cfg.json"
-                # TODO: this section is temporary, should be removed when the S3 L0 processor doesn't need it anymore
-                # the processor doesn't start without these parameters
-                # for workflow_step in workflow_steps:
-                #     extra_parameters = {
-                #         "temporary_path": "./S3_D_TDS_1/output/tmp",
-                #         "acquisition_report_output_path": "./S3_D_TDS_1/output/default/Report/",
-                #         "ignore_output": "S03CACHE",
-                #     }
-                #     if workflow_step.parameters:
-                #         workflow_step.parameters.update(extra_parameters)
-                #     else:
-                #         workflow_step.parameters = extra_parameters
 
     # Save the config file only for L0 processors that define it.
     if adf_l0cfg:
@@ -868,7 +856,6 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
             dask_utils__timeout=dpr_process_in.dask_task_timeout,
             temporary__folder=dpr_process_in.temporary_folder,
             temporary__folder_s3_secret=temp_folder_s3_secret,
-            zarr__format=3,
         ),
         external_modules=external_modules,
         workflow=workflow_steps,
