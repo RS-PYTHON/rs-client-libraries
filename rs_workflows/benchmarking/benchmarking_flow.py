@@ -72,10 +72,10 @@ async def benchmark_processor_task(
     with flow_env.start_span(__name__, "benchmark-processor"):
 
         # Read the prefect variable value
-        all_value = await Variable.get(f"benchmarking-{processor_name}-settings")
+        all_scenarii = await Variable.get(f"benchmarking-{processor_name}-settings")
 
         # Read contents for the given scenario and processor version
-        this_value = all_value["scenarios"][scenario_name]["processor_versions"][processor_version]
+        selected_scenario = all_scenarii["scenarios"][scenario_name]["processor_versions"][processor_version]
 
         # Markdown report
         parameters = {
@@ -100,7 +100,7 @@ async def benchmark_processor_task(
 
 ### Settings
 ```json
-{json.dumps(this_value, indent=2)}
+{json.dumps(selected_scenario, indent=2)}
 ```
 """
         # Save as a markdown artifact
@@ -115,7 +115,7 @@ async def benchmark_processor_task(
         # Check that input products exist in the catalog
         logger.info("Checking availability of input products in catalog...")
         catalog_client = flow_env.rs_client.get_catalog_client()
-        for input_product in this_value.get("input_products", []):
+        for input_product in selected_scenario.get("input_products", []):
             item = catalog_client.get_item(
                 collection_id=input_product["collection_name"],
                 item_id=input_product["item_id"],
@@ -134,10 +134,9 @@ async def benchmark_processor_task(
 
         # Retrieve list of collection names to empty before processing
         collections_to_empty = []
-
-        for aux_collection in this_value.get("auxiliary_product_to_collection_identifier", []):
+        for aux_collection in selected_scenario.get("auxiliary_product_to_collection_identifier", []):
             collections_to_empty.append(aux_collection["collection_name"])
-        for generated_collection in this_value.get("generated_product_to_collection_identifier", []):
+        for generated_collection in selected_scenario.get("generated_product_to_collection_identifier", []):
             collections_to_empty.append(generated_collection["collection_name"])
 
         # Make sure all collection names start with "benchmark",
@@ -164,18 +163,18 @@ async def benchmark_processor_task(
             env=env,
             processor_name=DprProcessor(processor_name),
             processor_version=processor_version,
-            dask_cluster_label=this_value["dask_cluster_label"],
+            dask_cluster_label=selected_scenario["dask_cluster_label"],
             s3_payload_file=f"{s3_payload}/payload_{processor_name}.yaml",
-            pipeline=this_value["pipeline"],
-            priority=this_value["priority"],
-            workflow_type=all_value["workflow_type"],
-            input_products=this_value["input_products"],
-            generated_product_to_collection_identifier=this_value["generated_product_to_collection_identifier"],
-            auxiliary_product_to_collection_identifier=this_value["auxiliary_product_to_collection_identifier"],
-            processing_mode=this_value["processing_mode"],
-            start_datetime=this_value["external_variables"]["start_datetime"],
-            end_datetime=this_value["external_variables"]["end_datetime"],
-            satellite=this_value["external_variables"]["satellite"],
+            pipeline=selected_scenario["pipeline"],
+            priority=selected_scenario["priority"],
+            workflow_type=all_scenarii["workflow_type"],
+            input_products=selected_scenario["input_products"],
+            generated_product_to_collection_identifier=selected_scenario["generated_product_to_collection_identifier"],
+            auxiliary_product_to_collection_identifier=selected_scenario["auxiliary_product_to_collection_identifier"],
+            processing_mode=selected_scenario["processing_mode"],
+            start_datetime=selected_scenario["external_variables"]["start_datetime"],
+            end_datetime=selected_scenario["external_variables"]["end_datetime"],
+            satellite=selected_scenario["external_variables"]["satellite"],
         )
 
         # Run the DPR processing task and measure execution time
