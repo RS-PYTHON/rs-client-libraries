@@ -982,9 +982,7 @@ def test_update_zarr_assets(mocker, processor, metadata_name):
         },
     }
     metadata = (
-        attributes
-        if metadata_name == ".zattrs"
-        else {"zarr_format": 3, "node_type": "group", "attributes": attributes}
+        attributes if metadata_name == ".zattrs" else {"zarr_format": 3, "node_type": "group", "attributes": attributes}
     )
     mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=[f"s3://bucket/output/product/{metadata_name}"])
