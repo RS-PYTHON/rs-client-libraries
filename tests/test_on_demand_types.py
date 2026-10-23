@@ -29,7 +29,6 @@ from rs_workflows.on_demand.common.types import (
     DEFAULT_PREFECT_CONFIGURATION,
     PROCESSING_PREFECT_CONFIGURATION,
     Level0FlowParams,
-    Level1FlowParams,
     ProcessingFlowParams,
 )
 
@@ -57,9 +56,9 @@ def test_resolve_specific_base_returns_empty():
     assert not ProcessingFlowParams()._resolve_specific({"anything": 1})
 
 
-def test_level1_datetime_fields_parse_iso_strings():
-    """Level-1 datetime fields are annotated Pydantic fields accepting ISO input."""
-    params = Level1FlowParams.model_validate(
+def test_level0_datetime_fields_parse_iso_strings():
+    """Level-0 datetime fields are annotated Pydantic fields accepting ISO input."""
+    params = Level0FlowParams.model_validate(
         {
             "start_datetime": "2024-05-27T09:44:09.509000Z",
             "end_datetime": "2024-05-27T10:44:09.509000Z",
@@ -70,27 +69,25 @@ def test_level1_datetime_fields_parse_iso_strings():
     assert isinstance(params.end_datetime, datetime)
 
 
-async def test_level1_resolve_uses_prefect_datetime_settings(mocker):
-    """Level-1 parameters fall back to the datetime window configured in Prefect."""
+async def test_level0_resolve_merges_common_settings(mocker):
+    """The common section of the unified variable is merged with the level section."""
     _patch_variable(
         mocker,
         {
-            "common": {"owner_identifier": "settings-owner"},
-            "l1": {
-                "satellite": "sentinel-3a",
-                "start_datetime": "2025-06-12T02:11:13Z",
-                "end_datetime": "2025-06-12T02:13:13Z",
+            "common": {"owner_identifier": "settings-owner", "dask_cluster_name": "common-cluster"},
+            "l0": {
+                "dask_cluster_name": "l0-cluster",
+                "session_collection": "s03-cadip-session",
             },
         },
         unified=True,
     )
 
-    resolved = await Level1FlowParams().resolve("3")
+    resolved = await Level0FlowParams().resolve("3")
 
-    assert resolved.satellite == "sentinel-3a"
     assert resolved.owner_identifier == "settings-owner"
-    assert resolved.start_datetime == datetime(2025, 6, 12, 2, 11, 13, tzinfo=timezone.utc)
-    assert resolved.end_datetime == datetime(2025, 6, 12, 2, 13, 13, tzinfo=timezone.utc)
+    assert resolved.dask_cluster_label == "l0-cluster"
+    assert resolved.session_collection == "s03-cadip-session"
 
 
 async def test_level0_resolve_uses_prefect_datetime_settings(mocker):

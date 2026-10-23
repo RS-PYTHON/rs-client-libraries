@@ -13,7 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1340 960" width="1340" height="960" font-family="Arial, Helvetica, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1340 1120" width="1340" height="1120" font-family="Arial, Helvetica, sans-serif">
 <title>RS-Python Prefect flows: overview of their interactions</title>
 <defs>
 <marker id="arrow-call" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1F3864"/></marker>
@@ -34,23 +34,23 @@ limitations under the License.
 <symbol id="bolt" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#FFFFFF" stroke="#E8710A" stroke-width="2"/><path fill="#E8710A" d="M13.5 3.5L6.5 13.5h5l-1 7 7-10h-5z"/></symbol>
 <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#FFFFFF" stroke="#7B1FA2" stroke-width="2"/><path d="M12 5.5V12l4.5 2.5" fill="none" stroke="#7B1FA2" stroke-width="2.2" stroke-linecap="round"/></symbol>
 </defs>
-<rect width="1340" height="960" fill="#FFFFFF"/>
-<rect x="14" y="14" width="156" height="532" rx="22" fill="#FFFFFF" stroke="#1F3864" stroke-width="1.6" stroke-dasharray="7 5"/>
+<rect width="1340" height="1120" fill="#FFFFFF"/>
+<rect x="14" y="14" width="156" height="692" rx="22" fill="#FFFFFF" stroke="#1F3864" stroke-width="1.6" stroke-dasharray="7 5"/>
 <use href="#i-sources" x="40.6" y="27" width="22" height="22" color="#00796B"/>
 <text x="70.6" y="45" font-size="19" font-weight="bold" fill="#222222">Sources</text>
 <text x="92.0" y="64" text-anchor="middle" font-size="12" fill="#6B6B6B">external stations</text>
-<use href="#dish" x="72" y="84" width="40" height="40"/>
-<text x="92" y="142" text-anchor="middle" font-size="13" font-weight="bold" fill="#222222">CADIP stations</text>
-<use href="#station" x="72" y="176" width="40" height="40" color="#00796B"/>
-<text x="92" y="234" text-anchor="middle" font-size="13" font-weight="bold" fill="#222222">AUXIP</text>
-<use href="#station" x="72" y="268" width="40" height="40" color="#00796B"/>
-<text x="92" y="326" text-anchor="middle" font-size="13" font-weight="bold" fill="#222222">PRIP</text>
-<use href="#station" x="72" y="360" width="40" height="40" color="#00796B"/>
-<text x="92" y="418" text-anchor="middle" font-size="13" font-weight="bold" fill="#222222">CDSE</text>
-<use href="#globe" x="72" y="452" width="40" height="40" color="#00796B"/>
-<text x="92" y="510" text-anchor="middle" font-size="13" font-weight="bold" fill="#222222">EarthDataHub</text>
+<use href="#dish" x="72" y="90" width="40" height="40"/>
+<text x="92" y="148" text-anchor="middle" font-size="13" font-weight="bold" fill="#222222">CADIP stations</text>
+<use href="#station" x="72" y="214" width="40" height="40" color="#00796B"/>
+<text x="92" y="272" text-anchor="middle" font-size="13" font-weight="bold" fill="#222222">AUXIP</text>
+<use href="#station" x="72" y="338" width="40" height="40" color="#00796B"/>
+<text x="92" y="396" text-anchor="middle" font-size="13" font-weight="bold" fill="#222222">PRIP</text>
+<use href="#station" x="72" y="462" width="40" height="40" color="#00796B"/>
+<text x="92" y="520" text-anchor="middle" font-size="13" font-weight="bold" fill="#222222">CDSE</text>
+<use href="#globe" x="72" y="586" width="40" height="40" color="#00796B"/>
+<text x="92" y="644" text-anchor="middle" font-size="13" font-weight="bold" fill="#222222">EarthDataHub</text>
 <path d="M170 100h6v-8l12 17-12 17v-8h-6z" fill="#9AA5B1"/>
-<path d="M170 374h6v-8l12 17-12 17v-8h-6z" fill="#9AA5B1"/>
+<path d="M170 454h6v-8l12 17-12 17v-8h-6z" fill="#9AA5B1"/>
 <rect x="190" y="14" width="360" height="190" rx="22" fill="#FFFFFF" stroke="#1F3864" stroke-width="1.6" stroke-dasharray="7 5"/>
 <use href="#i-search" x="323.8" y="27" width="22" height="22" color="#1E88E5"/>
 <text x="353.8" y="45" font-size="19" font-weight="bold" fill="#222222">Search</text>
@@ -66,7 +66,7 @@ limitations under the License.
 <rect x="374" y="114" width="160" height="32" rx="9" fill="#E3F2FD" stroke="#1E88E5" stroke-width="1.4"/>
 <text x="454.0" y="134.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">search-catalog</text>
 <text x="454" y="182" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">also used as sub-flows</text>
-<rect x="190" y="220" width="360" height="326" rx="22" fill="#FFFFFF" stroke="#1F3864" stroke-width="1.6" stroke-dasharray="7 5"/>
+<rect x="190" y="220" width="360" height="486" rx="22" fill="#FFFFFF" stroke="#1F3864" stroke-width="1.6" stroke-dasharray="7 5"/>
 <use href="#i-staging" x="318.6" y="233" width="22" height="22" color="#43A047"/>
 <text x="348.6" y="251" font-size="19" font-weight="bold" fill="#222222">Staging</text>
 <text x="370.0" y="270" text-anchor="middle" font-size="12" fill="#6B6B6B">copy the products into the catalog</text>
@@ -85,26 +85,16 @@ limitations under the License.
 <rect x="374" y="412" width="160" height="32" rx="9" fill="#E8F5E9" stroke="#43A047" stroke-width="1.4"/>
 <text x="454.0" y="432.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">stage-aux-cql2</text>
 <path d="M326 428H371" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
-<text x="370" y="494" text-anchor="middle" font-size="11" fill="#6B6B6B" font-style="italic">the items already in the catalog</text>
-<text x="370" y="508" text-anchor="middle" font-size="11" fill="#6B6B6B" font-style="italic">are not staged again</text>
-<text x="370" y="532" text-anchor="middle" font-size="11" fill="#6B6B6B" font-style="italic">bold: the Stage Cadip deployment</text>
-<rect x="566" y="14" width="760" height="532" rx="22" fill="#FFFFFF" stroke="#1F3864" stroke-width="1.6" stroke-dasharray="7 5"/>
+<text x="370" y="492" text-anchor="middle" font-size="11" fill="#6B6B6B" font-style="italic">the items already in the catalog</text>
+<text x="370" y="506" text-anchor="middle" font-size="11" fill="#6B6B6B" font-style="italic">are not staged again</text>
+<text x="370" y="530" text-anchor="middle" font-size="11" fill="#6B6B6B" font-style="italic">bold: the Stage Cadip deployment</text>
+<rect x="566" y="14" width="760" height="692" rx="22" fill="#FFFFFF" stroke="#1F3864" stroke-width="1.6" stroke-dasharray="7 5"/>
 <use href="#i-processing" x="879.0" y="27" width="22" height="22" color="#F57C00"/>
 <text x="909.0" y="45" font-size="19" font-weight="bold" fill="#222222">Processing</text>
 <text x="946.0" y="64" text-anchor="middle" font-size="12" fill="#6B6B6B">DPR processors run by rs-dpr-service on Dask clusters</text>
 <rect x="880" y="104" width="160" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
 <text x="960.0" y="124.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-l0</text>
 <text x="1050" y="124" text-anchor="start" font-size="11.5" fill="#6B6B6B" font-style="italic">generic Level-0 entry point</text>
-<rect x="610" y="280" width="180" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
-<text x="700.0" y="300.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s3-l0</text>
-<rect x="610" y="360" width="180" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
-<text x="700.0" y="380.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s3-l1-olci</text>
-<rect x="610" y="440" width="180" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
-<text x="700.0" y="460.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s3-l2-olci</text>
-<rect x="860" y="360" width="260" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
-<text x="990.0" y="380.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">generate-s3-l1-olci-quicklooks</text>
-<rect x="860" y="440" width="260" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
-<text x="990.0" y="460.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">generate-s3-l2-olci-quicklooks</text>
 <rect x="1150" y="280" width="150" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
 <text x="1225.0" y="300.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s1-l0</text>
 <text x="995" y="254" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">Sentinel-1 ARD (on demand)</text>
@@ -112,38 +102,57 @@ limitations under the License.
 <text x="995.0" y="282.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s1-ard-reference</text>
 <rect x="880" y="304" width="230" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
 <text x="995.0" y="324.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s1-ard</text>
-<path d="M1110 278H1135V491" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
-<path d="M1110 320H1132" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
 <text x="1240" y="348" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">custom processing:</text>
 <text x="1240" y="362" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">run process-generic</text>
 <text x="1240" y="376" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">directly</text>
-<rect x="590" y="494" width="720" height="38" rx="10" fill="#F57C00"/>
-<text x="950" y="518" text-anchor="middle" font-size="14" fill="#FFFFFF"><tspan font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-weight="bold">process-generic</tspan>  ·  stage the inputs and the ADFs, run the processor, publish the products</text>
 <path d="M880 120H574V250H553" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
 <text x="730" y="114" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">stage the session if needed</text>
 <path d="M930 136V210H700V277" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
 <path d="M990 136V210H1225V277" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
 <text x="960" y="228" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">call the flow of the mission</text>
-<path d="M610 306H598V491" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
-<path d="M610 376H598" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
-<path d="M610 456H598" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
-<path d="M1165 312V491" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
-<path d="M590 513H558V428H537" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
 <text x="452" y="462" text-anchor="middle" font-size="11" fill="#1F3864">stage the ADFs</text>
 <path d="M534 296H607" fill="none" stroke="#E8710A" stroke-width="2.2" stroke-dasharray="7 4" marker-end="url(#arrow-automation)"/>
 <use href="#bolt" x="562.0" y="286.0" width="20" height="20"/>
 <text x="554" y="280" text-anchor="start" font-size="10" fill="#E8710A" font-style="italic">Completed</text>
+<rect x="610" y="280" width="180" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
+<text x="700.0" y="300.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s3-l0</text>
+<rect x="620" y="360" width="236" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
+<text x="738.0" y="380.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s3-l1-olci-systematic</text>
+<rect x="620" y="400" width="236" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
+<text x="738.0" y="420.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s3-l1-olci-ondemand</text>
+<rect x="620" y="480" width="236" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
+<text x="738.0" y="500.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s3-l2-olci-systematic</text>
+<rect x="620" y="520" width="236" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
+<text x="738.0" y="540.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s3-l2-olci-ondemand</text>
+<rect x="892" y="380" width="235" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
+<text x="1009.5" y="400.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">generate-s3-l1-olci-quicklooks</text>
+<rect x="892" y="500" width="235" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
+<text x="1009.5" y="520.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">generate-s3-l2-olci-quicklooks</text>
+<rect x="604" y="562" width="523" height="32" rx="9" fill="#FFE0B2" stroke="#F57C00" stroke-width="2.4"/>
+<text x="865.5" y="582.5" text-anchor="middle" font-size="13" fill="#222222"><tspan font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-weight="bold">process-any</tspan>  ·  settings in the &lt;processing_id&gt;-default-setting variable</text>
+<path d="M620 416H608M620 496H608M620 536H608M620 376H608V559" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
+<path d="M865 594V617" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
+<rect x="590" y="620" width="720" height="38" rx="10" fill="#F57C00"/>
+<text x="950" y="644" text-anchor="middle" font-size="14" fill="#FFFFFF"><tspan font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-weight="bold">process-generic</tspan>  ·  stage the inputs and the ADFs, run the processor, publish the products</text>
+<path d="M610 306H596V617" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
+<path d="M1110 278H1135V617" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
+<path d="M1110 320H1132" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
+<path d="M1165 312V617" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
+<path d="M590 639H558V428H537" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
 <path d="M700 312V357" fill="none" stroke="#E8710A" stroke-width="2.2" stroke-dasharray="7 4" marker-end="url(#arrow-automation)"/>
 <use href="#bolt" x="690.0" y="325.0" width="20" height="20"/>
-<text x="714" y="339" text-anchor="start" font-size="10.5" fill="#E8710A" font-style="italic">s3-l0.products-ready</text>
-<path d="M700 392V437" fill="none" stroke="#E8710A" stroke-width="2.2" stroke-dasharray="7 4" marker-end="url(#arrow-automation)"/>
-<use href="#bolt" x="690.0" y="405.0" width="20" height="20"/>
-<text x="714" y="419" text-anchor="start" font-size="10.5" fill="#E8710A" font-style="italic">s3-l1.products-ready</text>
-<path d="M790 376H857" fill="none" stroke="#E8710A" stroke-width="2.2" stroke-dasharray="7 4" marker-end="url(#arrow-automation)"/>
-<use href="#bolt" x="814.0" y="366.0" width="20" height="20"/>
-<path d="M790 456H857" fill="none" stroke="#E8710A" stroke-width="2.2" stroke-dasharray="7 4" marker-end="url(#arrow-automation)"/>
-<use href="#bolt" x="814.0" y="446.0" width="20" height="20"/>
-<text x="990" y="412" text-anchor="middle" font-size="10.5" fill="#E8710A" font-style="italic">quicklook-inputs-ready events</text>
+<text x="714" y="339" text-anchor="start" font-size="10.5" fill="#E8710A" font-style="italic">product.S03OLCL0_.generated</text>
+<path d="M738 432V477" fill="none" stroke="#E8710A" stroke-width="2.2" stroke-dasharray="7 4" marker-end="url(#arrow-automation)"/>
+<use href="#bolt" x="728.0" y="445.0" width="20" height="20"/>
+<text x="752" y="459" text-anchor="start" font-size="10.5" fill="#E8710A" font-style="italic">product.S03OLCEFR.generated</text>
+<path d="M856 376H866V416H856M866 396H889" fill="none" stroke="#E8710A" stroke-width="2.2" stroke-dasharray="7 4" marker-end="url(#arrow-automation)"/>
+<use href="#bolt" x="867.0" y="386.0" width="20" height="20"/>
+<path d="M856 496H866V536H856M866 516H889" fill="none" stroke="#E8710A" stroke-width="2.2" stroke-dasharray="7 4" marker-end="url(#arrow-automation)"/>
+<use href="#bolt" x="867.0" y="506.0" width="20" height="20"/>
+<text x="1009" y="460" text-anchor="middle" font-size="10.5" fill="#E8710A" font-style="italic">quicklook-inputs-ready events</text>
+<path d="M361 706V716h-7l16 10l16 -10h-7V706z" fill="#9AA5B1"/>
+<path d="M1171 706V716h-7l16 10l16 -10h-7V706z" fill="#9AA5B1"/>
+<g transform="translate(0 160)">
 <rect x="14" y="566" width="1312" height="60" rx="14" fill="#E0F2F1" stroke="#00796B" stroke-width="1.6"/>
 <use href="#catalog" x="470" y="580" width="32" height="32"/>
 <text x="512" y="602" font-size="18" font-weight="bold" fill="#222222">Catalog</text>
@@ -151,8 +160,6 @@ limitations under the License.
 <use href="#bucket" x="800" y="580" width="32" height="32"/>
 <text x="842" y="602" font-size="18" font-weight="bold" fill="#222222">Object storage</text>
 <text x="976" y="602" text-anchor="start" font-size="13" fill="#6B6B6B">product files</text>
-<path d="M361 546V556h-7l16 10l16 -10h-7V546z" fill="#9AA5B1"/>
-<path d="M941 546V556h-7l16 10l16 -10h-7V546z" fill="#9AA5B1"/>
 <path d="M391 646V636h-7l16 -10l16 10h-7V646z" fill="#9AA5B1"/>
 <rect x="14" y="646" width="780" height="240" rx="22" fill="#FFFFFF" stroke="#1F3864" stroke-width="1.6" stroke-dasharray="7 5"/>
 <use href="#i-conversion" x="337.0" y="659" width="22" height="22" color="#8E24AA"/>
@@ -210,4 +217,5 @@ limitations under the License.
 <text x="824" y="928" text-anchor="start" font-size="13" fill="#222222">schedule</text>
 <path d="M930 915h30v-8l16 17-16 17v-8h-30z" fill="#9AA5B1"/>
 <text x="986" y="928" text-anchor="start" font-size="13" fill="#222222">reads or writes the products</text>
+</g>
 </svg>
