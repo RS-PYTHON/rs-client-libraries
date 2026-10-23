@@ -22,11 +22,11 @@ from prefect import flow
 from pydantic import BaseModel, Field
 
 from rs_client.stac.catalog_client import CatalogClient
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct, WorkflowType
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct
 from rs_workflows.process_any_flow import (
     ProcessingId,
     get_latest_product_covering_interval,
-    process_any,
+    process_any_on_demand,
 )
 from rs_workflows.utils.prefect import get_logger
 
@@ -69,7 +69,7 @@ def compute_s3l1olci_inputs(
     # Each product should be stored on a collection named <product_type>
     # We check if this is the case. If not, we will use the same 'collection_name' for both OLCL0 and NATL0
     collection_natl0: str = ""
-    if OLCL0_PRODUCT_TYPE.lower == collection_name:
+    if OLCL0_PRODUCT_TYPE.lower() == collection_name:
         collection_natl0 = NATL0_PRODUCT_TYPE.lower()
         logger.info(f"🛈 We use collection {collection_natl0} for S3L0NATLO products")
 
@@ -90,7 +90,7 @@ def compute_s3l1olci_inputs(
     )
     index: int = 2
     flow_env = FlowEnv(env_args)
-    with flow_env.start_span(__name__, "process_s3l1olci_input"):
+    with flow_env.start_span(__name__, "process_s3l1olci_input"):  # NOSONAR
         # We will extract the product duration in seconds
         start_datetime = datetime.datetime.fromisoformat(start_datetime_txt)
         end_datetime = datetime.datetime.fromisoformat(end_datetime_txt)
@@ -170,6 +170,7 @@ def compute_s3l1olci_external_variables(
     start_datetime_txt: str,
     end_datetime_txt: str,
 ) -> dict[str, Any]:
+    """Compute the external variables of the S3 L1 OLCI processor."""
     return {
         "start_datetime": start_datetime_txt,
         "end_datetime": end_datetime_txt,
@@ -186,38 +187,38 @@ async def process_s3l1olci_ondemand(
     navl0_base_name: str = NAVL0_DEFAULT_BASE_NAME,
 ):
     """
-        # Process ON DEMAND S3 L1 OLCI
+    # Process ON DEMAND S3 L1 OLCI
 
-        This flow is in charge to prepare the S3 L1 OLCI processing by computing all the needed inputs.
-        Then it forwards to `process-any` with workflow set to "on-demand".
+    This flow is in charge to prepare the S3 L1 OLCI processing by computing all the needed inputs.
+    Then it forwards to `process-any` with workflow set to "on-demand".
 
-        ---
-        ## Workflow Steps
+    ---
+    ## Workflow Steps
 
     1. *compute input products* — retrieve the stac items `S3OLCIL0_` from rs-catalog.
-           The first one is retrieve from `item_id` and `collection_name` parameters.
-           The other ones are get by requesting contiguous period on the rs-catalog.
-           They can be one or two in this case.
-        2. *compute external variables* — external variables are extracted from the first item properties.
-        3. *start the processing* — calls the flow `process-any`
-        ---
-        ## Parameters
-        Parameter | Type | Default | Description |
-        |---|---|---|---|
-        | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments |
-        | `single_input_product` | `FlowInputS3l1olci` | *required* | Stac item identifier and collection name corresponding to the OLCI L0 product |
-        | `force_systematic` | `bool` | `False` | When this option is set to true, one event per product will be generated at the end of the processing. |
-        | `olcil0_base_name` | `str` | `S3OLCIL0_` | Prefix of the OLCI L0 product name on the task table. |
-        | `navl0_base_name` | `str` | `S3NAVL0_` | Prefix of the NAV L0 product name on the task table. |
+       The first one is retrieve from `item_id` and `collection_name` parameters.
+       The other ones are get by requesting contiguous period on the rs-catalog.
+       They can be one or two in this case.
+    2. *compute external variables* — external variables are extracted from the first item properties.
+    3. *start the processing* — calls the flow `process-any`
+    ---
+    ## Parameters
+    Parameter | Type | Default | Description |
+    |---|---|---|---|
+    | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments |
+    | `single_input_product` | `FlowInputS3l1olci` | *required* | STAC item and collection of the OLCI L0 product |
+    | `force_systematic` | `bool` | `False` | If true, one event per product is emitted at the end of the processing. |
+    | `olcil0_base_name` | `str` | `S3OLCIL0_` | Prefix of the OLCI L0 product name on the task table. |
+    | `navl0_base_name` | `str` | `S3NAVL0_` | Prefix of the NAV L0 product name on the task table. |
 
-        > *Note:* if the collection for `S3OLCIL0_`name is equal to `s3olcil0_`, `S3NAVL0_` will be stored on the collection `s3navl0_`.
-        Otherwise, `S3NAVL0_` will be stored on the same collection than `S3OLCIL0_`.
-        ---
+    > *Note:* if the collection for `S3OLCIL0_`name is equal to `s3olcil0_`, `S3NAVL0_` will be stored on the
+    collection `s3navl0_`. Otherwise, `S3NAVL0_` will be stored on the same collection than `S3OLCIL0_`.
+    ---
     """
     logger = get_logger()
 
     flow_env = FlowEnv(env_args)
-    with flow_env.start_span(__name__, "process_s3l1olci_ondemand"):
+    with flow_env.start_span(__name__, "process_s3l1olci_ondemand"):  # NOSONAR
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
         stac_item = catalog_client.get_item(
             single_input_product.collection_name,
@@ -256,20 +257,10 @@ async def process_s3l1olci_ondemand(
             item["properties"]["end_datetime"],
         )
 
-        logger.info(
-            "external_variables:\n%s",
-            json.dumps(external_variables, indent=2, ensure_ascii=False),
-        )
-
-        if force_systematic:
-            logger.info(
-                "🛈 As force_systematic option is set to true, " "events will be emitted at the end of the processing.",
-            )
-
-        await process_any(
-            env_args=env_args,
-            input_products=input_products,
-            external_variables=external_variables,
-            processing_id=ProcessingId.S3_OLCI_L1,
-            workflow=(WorkflowType.SYSTEMATIC if force_systematic else WorkflowType.ON_DEMAND),
+        await process_any_on_demand(
+            env_args,
+            input_products,
+            external_variables,
+            ProcessingId.S3_OLCI_L1,
+            force_systematic,
         )

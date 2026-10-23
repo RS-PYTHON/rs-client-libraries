@@ -20,6 +20,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+import anyio
 from jsonschema import ValidationError, validate
 from prefect import flow, runtime
 from prefect.events import emit_event
@@ -88,7 +89,7 @@ async def process_any(
     | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments |
     | `input_products` | `list[FlowInputProduct]` | *required* | Input products to process |
     | `external_variables` | `dict[str, Any]` | *required* | External variables used to retrieved aux data |
-    | `processing_id` | `ProcessingId` | *required* | Processor identifier to be lanched. It is used to resolve the `{processing_id}-default-setting` Prefect Variable |
+    | `processing_id` | `ProcessingId` | *required* | Processor to run, see `{processing_id}-default-setting` |
     | `workflow` | `WorkflowType` | `WorkflowType.ON_DEMAND` | Type of workflow triggering this run |
 
     > *Note:* The default settings variable must match the
@@ -112,8 +113,8 @@ async def process_any(
     schema = Path("rs_workflows/schemas/processor_default_settings.schema.json")
     if not schema.is_file():
         raise FileNotFoundError(f"❌ Schema file not found: {schema.resolve()}")
-    with open(schema, encoding="utf-8") as f:
-        default_settings_schema = json.load(f)
+    async with await anyio.open_file(schema, encoding="utf-8") as f:
+        default_settings_schema = json.loads(await f.read())
 
     try:
         validate(instance=default_settings, schema=default_settings_schema)
@@ -123,7 +124,7 @@ async def process_any(
         ) from err
 
     flow_env = FlowEnv(env_args)
-    with flow_env.start_span(__name__, f"process-any-{processing_id}"):
+    with flow_env.start_span(__name__, f"process-any-{processing_id}"):  # NOSONAR
         ##################################################
         # Check cluster dasks
         ##################################################
@@ -164,7 +165,6 @@ async def process_any(
             logger.info(json.dumps(item, indent=2, ensure_ascii=False))
 
             flow_run_id = str(runtime.flow_run.id or "unknown")
-            flow_name = runtime.flow_run.flow_name or "unknown"
 
             event_name = f"product.{item['properties']['product:type']}.generated"
             event = emit_event(
@@ -188,9 +188,9 @@ async def process_any(
                     "owner_id": f"{env_args.owner_id}",
                     "product": {
                         "id": f"{item['id']}",
-                        "geometry": f"item['geometry']",
-                        "collection": f"item['collection']",
-                        "properties": f"item['properties']",
+                        "geometry": item["geometry"],
+                        "collection": item["collection"],
+                        "properties": item["properties"],
                     },
                 },
             )
@@ -201,6 +201,34 @@ async def process_any(
                 get_logger().info(f"Event '{event_name}' (id='{event.id}') emitted.")
 
 
+async def process_any_on_demand(
+    env_args: FlowEnvArgs,
+    input_products: list[FlowInputProduct],
+    external_variables: dict[str, Any],
+    processing_id: ProcessingId,
+    force_systematic: bool,
+):
+    """Call `process-any` from an on-demand flow, as a systematic run when `force_systematic` is set."""
+    logger = get_logger()
+    logger.info(
+        "external_variables:\n%s",
+        json.dumps(external_variables, indent=2, ensure_ascii=False),
+    )
+
+    if force_systematic:
+        logger.info(
+            "🛈 As force_systematic option is set to true, events will be emitted at the end of the processing.",
+        )
+
+    await process_any(
+        env_args=env_args,
+        input_products=input_products,
+        external_variables=external_variables,
+        processing_id=processing_id,
+        workflow=WorkflowType.SYSTEMATIC if force_systematic else WorkflowType.ON_DEMAND,
+    )
+
+
 def get_latest_product_covering_interval(
     env_args: FlowEnvArgs,
     interval_begin_datetime: datetime.datetime,
@@ -209,10 +237,10 @@ def get_latest_product_covering_interval(
     satellite: str,
     collection: str,
 ) -> ItemCollection | None:
-
+    """Search the catalog for the latest product of a type and satellite that covers the given interval."""
     logger = get_logger()
     flow_env = FlowEnv(env_args)
-    with flow_env.start_span(__name__, f"catalog_retrieve_product"):
+    with flow_env.start_span(__name__, "catalog_retrieve_product"):  # NOSONAR
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
 
         logger.info("🧹 Computing cql2_filter")
@@ -227,7 +255,8 @@ def get_latest_product_covering_interval(
             },
         )
         logger.info(
-            f"We query the rs-catalog to found a product with type {product_type} on the interval [{interval_begin_datetime}, {interval_end_datetime}]",
+            f"We query the rs-catalog to found a product with type {product_type} on the interval "
+            f"[{interval_begin_datetime}, {interval_end_datetime}]",
         )
 
         found = catalog_client.search(
@@ -239,8 +268,8 @@ def get_latest_product_covering_interval(
         )
 
         if found:
-            logger.info(f"✅ Found item named '{found[0].to_dict()["id"]}'")
+            logger.info(f"✅ Found item named '{found[0].id}'")
         else:
-            logger.info(f"🛈 No item found on the interval.")
+            logger.info("🛈 No item found on the interval.")
 
         return found

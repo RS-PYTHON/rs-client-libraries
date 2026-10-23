@@ -60,7 +60,8 @@ async def process_s3l1olci_systematic(payload: dict[str, Any]):
     |---|---|---|---|
     | `payload` | dict[str, Any] | *required* | The event that trigger this flow. |
 
-    > *Note:* if the collection retieved for `S3OLCIL0_`name is equal to `s3olcil0_`, `S3NAVL0_` will be stored on the collection `s3navl0_`.
+    > *Note:* if the collection retieved for `S3OLCIL0_`name is equal to `s3olcil0_`, `S3NAVL0_` will be stored on
+    the collection `s3navl0_`.
     Otherwise, `S3NAVL0_` will be stored on the same collection than `S3OLCIL0_`.
     ---
     """
@@ -72,7 +73,7 @@ async def process_s3l1olci_systematic(payload: dict[str, Any]):
 
     flow_env: FlowEnv = FlowEnv(env_args)
 
-    with flow_env.start_span(__name__, f"process_systematic_s3l1olci_input"):
+    with flow_env.start_span(__name__, "process_systematic_s3l1olci_input"):  # NOSONAR
         input_products: list[FlowInputProduct] = compute_s3l1olci_inputs(
             env_args,
             payload["product"]["id"],

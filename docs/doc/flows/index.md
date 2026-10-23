@@ -15,8 +15,9 @@ To learn more about Prefect, see the [Prefect documentation](https://docs.prefec
 
 The search and staging flows bring the products of the external stations into the catalog. The processing flows
 generate new products from them with the DPR processors, through the generic flow `process-generic`, which also
-stages the auxiliary files (ADFs) they need. The Sentinel-3 flows are chained automatically by Prefect automations,
-see [Systematic processing](../advanced/systematic-processing.md). The conversion flows convert the legacy products
+stages the auxiliary files (ADFs) they need. The flows based on `process-any` read their settings from a Prefect
+variable per processor, and `process-any` emits an event for each generated product. The Sentinel-3 flows are
+chained automatically by Prefect automations, see [Systematic processing](../advanced/systematic-processing.md). The conversion flows convert the legacy products
 and auxiliary files to Zarr, and the operation flows maintain the platform.
 
 ## Flow families
@@ -26,11 +27,11 @@ and auxiliary files to Zarr, and the operation flows maintain the platform.
 | Search | `search-cadip`, `search-aux`, `search-prip`, `search-catalog`, `search-earthdatahub` | [Common flows](common-flows.md#search-flows) |
 | Staging | `stage-generic`, `stage-cadip-with-options`, `stage-cadip-latest`, `stage-cadip-selection`, `stage-aux`, `stage-aux-cql2`, `stage-prip` | [Common flows](common-flows.md#staging-flows) |
 | Conversion | `convert-adf`, `convert-adf-group`, `convert-adf-scheduled`, `import-adf-from-obs`, `convert-safe` | [Common flows](common-flows.md#conversion-flows) |
-| Generic processing | `process-generic` | [Customise the DPR processing](../advanced/customise-dpr-flow.md) |
+| Generic processing | `process-generic`, `process-any` | [Customise the DPR processing](../advanced/customise-dpr-flow.md) |
 | Level-0 processing | `process-l0`, `process-s1-l0`, `process-s3-l0` | [Level-0 flows](level0-flows.md) |
 | Sentinel-1 processing | `process-s1-l0`, `process-s1-ard-reference`, `process-s1-ard` | [Sentinel-1 flows](sentinel1-flows.md) |
 | Sentinel-2 processing | | [Sentinel-2 flows](sentinel2-flows.md) |
-| Sentinel-3 processing | `process-s3-l0`, `process-s3-l1-olci`, `process-s3-l2-olci`, `generate-s3-l1-olci-quicklooks`, `generate-s3-l2-olci-quicklooks` | [Sentinel-3 flows](sentinel3-flows.md) |
+| Sentinel-3 processing | `process-s3-l0`, `process-s3-l1-olci`, `process-s3-l2-olci`, `process-s3-l1-olci-ondemand`, `process-s3-l1-olci-systematic`, `process-s3-l2-olci-ondemand`, `process-s3-l2-olci-systematic`, `generate-s3-l1-olci-quicklooks`, `generate-s3-l2-olci-quicklooks` | [Sentinel-3 flows](sentinel3-flows.md) |
 | Operation | `synchronize-osam-accounts`, `update-osam-account`, `collect-obs-logs`, `consolidate-obs-logs`, `initialize-obs-db`, `initialize-pi-db`, `cleanup-offline-workers` | [Common flows](common-flows.md#operation-flows) |
 | Benchmarking | `benchmark-processor` | [Common flows](common-flows.md#benchmarking) |
 

@@ -21,11 +21,8 @@ from prefect import flow
 from pydantic import BaseModel, Field
 
 from rs_client.stac.catalog_client import CatalogClient
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct, WorkflowType
-from rs_workflows.process_any_flow import (
-    ProcessingId,
-    process_any,
-)
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct
+from rs_workflows.process_any_flow import ProcessingId, process_any_on_demand
 from rs_workflows.utils.prefect import get_logger
 
 OLCEFR_PRODUCT_TYPE = "S03OLCEFR"
@@ -50,6 +47,7 @@ def compute_s3l2olci_external_variables(
     start_datetime_txt: str,
     end_datetime_txt: str,
 ) -> dict[str, Any]:
+    """Compute the external variables of the S3 L2 OLCI processor."""
     return {"start_datetime": start_datetime_txt, "end_datetime": end_datetime_txt}
 
 
@@ -77,8 +75,8 @@ async def process_s3l2olci_ondemand(
     Parameter | Type | Default | Description |
     |---|---|---|---|
     | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments |
-    | `single_input_product` | `FlowInputS3l2olci` | *required* | Stac item identifier and collection name corresponding to the `S03OLCEFR` product |
-    | `force_systematic` | `bool` | `False` | When this option is set to true, one event per product will be generated at the end of the processing. |
+    | `single_input_product` | `FlowInputS3l2olci` | *required* | STAC item and collection of the `S03OLCEFR` product |
+    | `force_systematic` | `bool` | `False` | If true, one event per product is emitted at the end of the processing. |
     | `olcefr_base_name` | `str` | `S03OLCEFR` | S03OLCEFR product name on the task table. |
 
     ---
@@ -86,12 +84,13 @@ async def process_s3l2olci_ondemand(
     logger = get_logger()
 
     flow_env = FlowEnv(env_args)
-    with flow_env.start_span(__name__, f"process_s3l2olci_ondemand"):
+    with flow_env.start_span(__name__, "process_s3l2olci_ondemand"):  # NOSONAR
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
         stac_item = catalog_client.get_item(single_input_product.collection_name, single_input_product.item_id)
         if stac_item is None:
             raise RuntimeError(
-                f"❌ STAC item '{single_input_product.item_id}' not found in collection '{single_input_product.collection_name}'.",
+                f"❌ STAC item '{single_input_product.item_id}' not found "
+                f"in collection '{single_input_product.collection_name}'.",
             )
         item: dict = stac_item.to_dict()
 
@@ -118,20 +117,10 @@ async def process_s3l2olci_ondemand(
             item["properties"]["end_datetime"],
         )
 
-        logger.info(
-            "external_variables:\n%s",
-            json.dumps(external_variables, indent=2, ensure_ascii=False),
-        )
-
-        if force_systematic:
-            logger.info(
-                "🛈 As force_systematic option is set to true, events will be emitted at the end of the processing.",
-            )
-
-        await process_any(
-            env_args=env_args,
-            input_products=input_products,
-            external_variables=external_variables,
-            processing_id=ProcessingId.S3_OLCI_L2,
-            workflow=WorkflowType.SYSTEMATIC if force_systematic else WorkflowType.ON_DEMAND,
+        await process_any_on_demand(
+            env_args,
+            input_products,
+            external_variables,
+            ProcessingId.S3_OLCI_L2,
+            force_systematic,
         )
