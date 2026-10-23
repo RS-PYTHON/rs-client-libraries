@@ -66,31 +66,31 @@ SCENARIOS: dict[str, dict] = {
     # S1 ARD
     "9": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"pipeline": "s1_ard_full", "processing_mode": ["nrt", "reprocessing"]},
+        "kwargs": {"pipeline": "SLC__1_NRB__1", "processing_mode": ["nrt", "reprocessing"]},
     },
     "10": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "calibration", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "Calibration", "processing_mode": ["nrt"]},
     },
     "11": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "reference_dem", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "ReferenceDEM", "processing_mode": ["nrt"]},
     },
     "12": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "reference_geometry", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "ReferenceGeometry", "processing_mode": ["nrt"]},
     },
     "13": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "coregistration", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "Coregistration", "processing_mode": ["nrt"]},
     },
     "14": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "geocoding", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "Geocoding", "processing_mode": ["nrt"]},
     },
     "15": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "mosaicking", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "Mosaicking", "processing_mode": ["nrt"]},
     },
 }
 
@@ -109,6 +109,8 @@ def test_build_unit_list_returns_dict(case_id, cfg):  # pylint: disable=unused-a
             "start_datetime": datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
             "end_datetime": datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
             "satellite": "sentinel-3a",
+            "instrument_mode": "IW",
+            "reference_date": "2026-04-08",
         },
     )
     out = build_unit_list(
@@ -311,123 +313,196 @@ def test_case_8_exact_output():
 
     out = build_unit_list(
         tasktable=tt,
-        pipeline="s1_ard_full",
+        pipeline="SLC__1_NRB__1",
         processing_mode=["nrt", "reprocessing"],
     )
 
     expected = [
         {
-            "name": "calibration.1",
-            "module": "s1_l12_rp.computing.ard_processing_units",
+            "name": "Calibration.1",
+            "module": "s1_ard.computing.ard_processing_units",
             "input_products": [
+                {"name": "slcs", "mandatory": True, "origin": "pipeline_input", "type": "file", "engine": "cpm_zarr"},
+            ],
+            "input_adfs": [
                 {
-                    "name": "cal_input",
-                    "origin": "pipeline_input",
+                    "name": "ETAD",
                     "mandatory": False,
                     "type": "folder",
-                    "engine": "cpm_safe",
+                    "engine": "cpm_zarr",
+                    "folder_multiplicity": "one_per_input",
+                    "alternatives": [
+                        {
+                            "order": 1,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCoverWithSatellite",
+                                "parameters": {
+                                    "product_type": "{external_variable.instrument_mode}_ETA__AX",
+                                    "start_datetime": "{slcs.start_datetime}",
+                                    "end_datetime": "{slcs.end_datetime}",
+                                    "satellite": "{slcs.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                    ],
+                },
+                {
+                    "name": "ORBIT",
+                    "mandatory": False,
+                    "type": "folder",
+                    "folder_multiplicity": "one_per_input",
+                    "alternatives": [
+                        {
+                            "order": 1,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValidity",
+                                "parameters": {"product_type": "MPL_ORBSCT", "satellite": "{slcs.platform}"},
+                            },
+                        },
+                        {
+                            "order": 2,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCoverWithSatellite",
+                                "parameters": {
+                                    "product_type": "AUX_POEORB",
+                                    "start_datetime": "{slcs.start_datetime}",
+                                    "end_datetime": "{slcs.end_datetime}",
+                                    "satellite": "{slcs.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                        {
+                            "order": 3,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCoverWithSatellite",
+                                "parameters": {
+                                    "product_type": "AUX_MOEORB",
+                                    "start_datetime": "{slcs.start_datetime}",
+                                    "end_datetime": "{slcs.end_datetime}",
+                                    "satellite": "{slcs.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                        {
+                            "order": 4,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCoverWithSatellite",
+                                "parameters": {
+                                    "product_type": "MPL_ORBRES",
+                                    "start_datetime": "{slcs.start_datetime}",
+                                    "end_datetime": "{slcs.end_datetime}",
+                                    "satellite": "{slcs.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                        {
+                            "order": 5,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCoverWithSatellite",
+                                "parameters": {
+                                    "product_type": "MPL_ORBPRE",
+                                    "start_datetime": "{slcs.start_datetime}",
+                                    "end_datetime": "{slcs.end_datetime}",
+                                    "satellite": "{slcs.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                    ],
+                },
+                {"name": "REFERENCE_DB", "mandatory": False, "type": "folder", "engine": "cpm_zarr"},
+            ],
+            "output_products": [],
+            "parameters": {"recompute": "True", "reference_date": "{external_variable.reference_date}"},
+        },
+        {
+            "name": "ReferenceDEM.2",
+            "module": "s1_ard.computing.ard_processing_units",
+            "input_products": [
+                {
+                    "name": "slcs",
+                    "mandatory": True,
+                    "origin": "Calibration.1.slcs",
+                    "type": "file",
+                    "engine": "cpm_zarr",
                 },
             ],
             "input_adfs": [
-                {"name": "CONFIG", "mandatory": False, "type": "file"},
-                {"name": "ETAD", "mandatory": False, "type": "folder"},
-            ],
-            "output_products": [
                 {
-                    "name": "CAL_SLCS",
-                    "origin": "pipeline_internal",
-                    "mandatory": True,
-                    "type": "folder",
+                    "name": "DEM",
+                    "mandatory": False,
+                    "type": "file",
                     "engine": "cpm_zarr",
+                    "alternatives": [
+                        {
+                            "order": 1,
+                            "timeout_seconds": 0,
+                            "query": {"name": "ByItemId", "parameters": {"item_id": "GLO-30"}},
+                        },
+                    ],
                 },
+                {"name": "REFERENCE_DB", "mandatory": False, "type": "folder", "engine": "cpm_zarr"},
             ],
-            "parameters": {"reference_date": "somevalue"},
+            "output_products": [],
+            "parameters": {"recompute": "True"},
         },
         {
-            "name": "reference_dem.2",
-            "module": "s1_l12_rp.computing.ard_processing_units",
+            "name": "ReferenceGeometry.3",
+            "module": "s1_ard.computing.ard_processing_units",
             "input_products": [
                 {
-                    "name": "cal_slcs",
-                    "origin": "calibration.1.CAL_SLCS",
-                    "mandatory": False,
-                    "type": "folder",
-                    "engine": "cpm_safe",
-                },
-            ],
-            "input_adfs": [
-                {"name": "CONFIG", "mandatory": False, "type": "file"},
-                {"name": "DEM", "mandatory": False, "type": "folder"},
-            ],
-            "output_products": [
-                {
-                    "name": "reference_dem",
-                    "origin": "pipeline_internal",
+                    "name": "slcs",
                     "mandatory": True,
-                    "type": "folder",
+                    "origin": "Calibration.1.slcs",
+                    "type": "file",
                     "engine": "cpm_zarr",
                 },
+                {"name": "dem", "mandatory": True, "origin": "ReferenceDEM.2.DEM", "type": "folder"},
             ],
+            "input_adfs": [{"name": "REFERENCE_DB", "mandatory": True, "type": "folder", "engine": "cpm_zarr"}],
+            "output_products": [],
+            "parameters": {"recompute": "True"},
         },
         {
-            "name": "reference_geometry.3",
-            "module": "s1_l12_rp.computing.ard_processing_units",
+            "name": "Coregistration.4",
+            "module": "s1_ard.computing.ard_processing_units",
             "input_products": [
                 {
-                    "name": "cal_slcs",
-                    "origin": "calibration.1.CAL_SLCS",
-                    "mandatory": False,
-                    "type": "folder",
-                    "engine": "cpm_safe",
+                    "name": "slcs",
+                    "mandatory": True,
+                    "origin": "Calibration.1.slcs",
+                    "type": "file",
+                    "engine": "cpm_zarr",
                 },
-                {
-                    "name": "reference_dem",
-                    "origin": "reference_dem.2.reference_dem",
-                    "mandatory": False,
-                    "type": "folder",
-                },
-            ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "file"}],
-            "output_products": [
+                {"name": "dem", "mandatory": True, "origin": "ReferenceDEM.2.DEM", "type": "folder"},
                 {
                     "name": "simulation_ref",
-                    "origin": "pipeline_internal",
                     "mandatory": True,
-                    "type": "folder",
-                    "engine": "cpm_zarr",
-                },
-            ],
-        },
-        {
-            "name": "coregistration.4",
-            "module": "s1_l12_rp.computing.ard_processing_units",
-            "input_products": [
-                {
-                    "name": "cal_slcs",
-                    "origin": "calibration.1.CAL_SLCS",
-                    "mandatory": False,
-                    "type": "folder",
-                    "engine": "cpm_safe",
-                },
-                {
-                    "name": "reference_dem",
-                    "origin": "reference_dem.2.reference_dem",
-                    "mandatory": False,
-                    "type": "folder",
-                },
-                {
-                    "name": "simulation_ref",
-                    "origin": "reference_geometry.3.simulation_ref",
-                    "mandatory": False,
+                    "origin": "ReferenceGeometry.3.simulation_ref",
                     "type": "folder",
                 },
             ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "file"}],
+            "input_adfs": [],
             "output_products": [
                 {
                     "name": "cslcs",
-                    "origin": "pipeline_internal",
                     "mandatory": True,
+                    "origin": "pipeline_internal",
                     "type": "file",
                     "engine": "cpm_zarr",
                     "writer_params": {"consolidate": True},
@@ -435,30 +510,29 @@ def test_case_8_exact_output():
             ],
         },
         {
-            "name": "geocoding.5",
-            "module": "s1_l12_rp.computing.ard_processing_units",
+            "name": "Geocoding.5",
+            "module": "s1_ard.computing.ard_processing_units",
             "input_products": [
                 {
-                    "name": "cslcs",
-                    "origin": "coregistration.4.cslcs",
-                    "mandatory": False,
+                    "name": "slcs",
+                    "mandatory": True,
+                    "origin": "Coregistration.4.slcs",
                     "type": "file",
                     "engine": "cpm_zarr",
-                    "reader_params": {"consolidate": True},
                 },
                 {
                     "name": "simulation_ref",
-                    "origin": "reference_geometry.3.simulation_ref",
-                    "mandatory": False,
+                    "mandatory": True,
+                    "origin": "ReferenceGeometry.3.simulation_ref",
                     "type": "folder",
                 },
             ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "file"}],
+            "input_adfs": [],
             "output_products": [
                 {
                     "name": "gslcs",
-                    "origin": "pipeline_internal",
                     "mandatory": True,
+                    "origin": "pipeline_internal",
                     "type": "file",
                     "engine": "cpm_zarr",
                     "writer_params": {"consolidate": True},
@@ -466,24 +540,53 @@ def test_case_8_exact_output():
             ],
         },
         {
-            "name": "mosaicking.6",
-            "module": "s1_l12_rp.computing.ard_processing_units",
+            "name": "Mosaicking.6",
+            "module": "s1_ard.computing.ard_processing_units",
             "input_products": [
                 {
                     "name": "gslcs",
-                    "origin": "geocoding.5.gslcs",
-                    "mandatory": False,
+                    "mandatory": True,
+                    "origin": "Geocoding.5.gslcs",
                     "type": "file",
                     "engine": "cpm_zarr",
                     "reader_params": {"consolidate": True},
                 },
+                {
+                    "name": "slcs",
+                    "mandatory": True,
+                    "origin": "Coregistration.4.slcs",
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                },
             ],
-            "input_adfs": [{"name": "S2_TILES", "mandatory": False, "type": "file"}],
+            "input_adfs": [
+                {
+                    "name": "S2_TILES",
+                    "mandatory": True,
+                    "type": "file",
+                    "alternatives": [
+                        {
+                            "order": 1,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCover",
+                                "parameters": {
+                                    "product_type": "GIP_TILPAR",
+                                    "start_datetime": "{external_variable.reference_date}T00:00:00.000Z",
+                                    "end_datetime": "{external_variable.reference_date}T23:59:59.000Z",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                    ],
+                },
+            ],
             "output_products": [
                 {
                     "name": "nrb",
-                    "origin": "pipeline_output",
                     "mandatory": True,
+                    "origin": "pipeline_output",
                     "type": "file",
                     "engine": "cpm_zarr",
                     "writer_params": {"consolidate": True},

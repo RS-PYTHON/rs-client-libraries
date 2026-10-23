@@ -28,7 +28,7 @@ and auxiliary files to Zarr, and the operation flows maintain the platform.
 | Conversion | `convert-adf`, `convert-adf-group`, `convert-adf-scheduled`, `import-adf-from-obs`, `convert-safe` | [Common flows](common-flows.md#conversion-flows) |
 | Generic processing | `process-generic` | [Customise the DPR processing](../advanced/customise-dpr-flow.md) |
 | Level-0 processing | `process-l0`, `process-s1-l0`, `process-s3-l0` | [Level-0 flows](level0-flows.md) |
-| Sentinel-1 processing | `process-s1-l0`, ARD through `process-generic` | [Sentinel-1 flows](sentinel1-flows.md) |
+| Sentinel-1 processing | `process-s1-l0`, `process-s1-ard-reference`, `process-s1-ard` | [Sentinel-1 flows](sentinel1-flows.md) |
 | Sentinel-2 processing | | [Sentinel-2 flows](sentinel2-flows.md) |
 | Sentinel-3 processing | `process-s3-l0`, `process-s3-l1-olci`, `process-s3-l2-olci`, `generate-s3-l1-olci-quicklooks`, `generate-s3-l2-olci-quicklooks` | [Sentinel-3 flows](sentinel3-flows.md) |
 | Operation | `synchronize-osam-accounts`, `update-osam-account`, `collect-obs-logs`, `consolidate-obs-logs`, `initialize-obs-db`, `initialize-pi-db`, `cleanup-offline-workers` | [Common flows](common-flows.md#operation-flows) |
@@ -58,6 +58,8 @@ deployments delivered by default are:
 | Process Generic | `process-generic` | all, processing | integrated |
 | Process L0 | `process-l0` | l0, processing, s1, s2, s3 | integrated |
 | Process S1 L0 | `process-s1-l0` | l0, processing, s1 | integrated |
+| Process S1 ARD Reference | `process-s1-ard-reference` | l1, processing, s1, ard | integrated |
+| Process S1 ARD | `process-s1-ard` | l1, processing, s1, ard | integrated |
 | Process S3 L0 | `process-s3-l0` | l0, processing, s3 | integrated |
 | Process S3 L1 OLCI | `process-s3-l1-olci` | l1, processing, s3, olci | integrated |
 | Process S3 L2 OLCI | `process-s3-l2-olci` | l2, processing, s3, olci | integrated |

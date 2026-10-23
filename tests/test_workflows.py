@@ -380,7 +380,7 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker, named_io):
             "adfs": [
                 {
                     "name": "ADFS_INPUT",
-                    "multiplicity": "one_per_input",
+                    "folder_multiplicity": "one_per_input",
                     "alternatives": [
                         {
                             "order": 1,
@@ -637,3 +637,41 @@ async def test_publish_skips_when_no_matching_output_collection(
         await catalog_flow.publish.fn(env, catalog_collection_identifier, items)
         spy_add_item.assert_not_called()
     assert "Could not find a collection to publish the stac_item from" in str(error.value.__cause__)
+
+
+@pytest.mark.parametrize("mandatory", [False, True])
+async def test_process_input_adfs_without_result(mocker, mandatory):
+    """When no alternative returns staged data, an optional ADFS is skipped and a mandatory one raises."""
+    mocker.patch("rs_workflows.on_demand_processing.get_logger", return_value=MagicMock())
+    mocker.patch.object(on_demand_processing, "_stage_input_adfs_alternative", new=AsyncMock(return_value=None))
+    input_adfs = {"name": "ETAD", "mandatory": mandatory, "alternatives": [{"order": 1}]}
+
+    if mandatory:
+        with pytest.raises(RuntimeError, match="did not return any result"):
+            await on_demand_processing.process_input_adfs.fn(input_adfs, MagicMock(), {})
+    else:
+        assert await on_demand_processing.process_input_adfs.fn(input_adfs, MagicMock(), {}) is None
+
+
+def test_build_and_generate_payload_skips_reference_db(mocker):
+    """The S1-ARD REFERENCE_DB input ADFS is never staged."""
+    mocker.patch.object(on_demand_processing.jsonschema, "validate")
+    mocker.patch.object(on_demand_processing, "replace_external_variables", side_effect=lambda tt, _: tt)
+    unit_list = [{"input_adfs": [{"name": "REFERENCE_DB"}]}]
+    mocker.patch.object(on_demand_processing, "build_unit_list", return_value=unit_list)
+    process_mock = mocker.patch.object(on_demand_processing, "process_input_adfs")
+    generate_mock = mocker.patch.object(on_demand_processing, "generate_payload")
+
+    dpr_input = MagicMock(pipeline="SLC__1_NRB__1", processing_mode=None)
+    _, source_items = on_demand_processing.build_and_generate_payload(
+        MagicMock(),
+        MagicMock(),
+        {},
+        dpr_input,
+        MagicMock(),
+    )
+
+    process_mock.submit.assert_not_called()
+    generate_mock.submit.assert_called_once()
+    assert generate_mock.submit.call_args.args[2] == []
+    assert not source_items

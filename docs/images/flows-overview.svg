@@ -107,7 +107,13 @@ limitations under the License.
 <text x="990.0" y="460.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">generate-s3-l2-olci-quicklooks</text>
 <rect x="1150" y="280" width="150" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
 <text x="1225.0" y="300.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s1-l0</text>
-<text x="1240" y="334" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">Sentinel-1 ARD and</text>
+<text x="995" y="254" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">Sentinel-1 ARD (on demand)</text>
+<rect x="880" y="262" width="230" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
+<text x="995.0" y="282.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s1-ard-reference</text>
+<rect x="880" y="304" width="230" height="32" rx="9" fill="#FFF3E0" stroke="#F57C00" stroke-width="1.4"/>
+<text x="995.0" y="324.5" text-anchor="middle" font-family="'DejaVu Sans Mono', Consolas, Menlo, monospace" font-size="12.5" font-weight="bold" fill="#222222">process-s1-ard</text>
+<path d="M1110 278H1135V491" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
+<path d="M1110 320H1132" fill="none" stroke="#1F3864" stroke-width="1.8" marker-end="url(#arrow-call)"/>
 <text x="1240" y="348" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">custom processing:</text>
 <text x="1240" y="362" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">run process-generic</text>
 <text x="1240" y="376" text-anchor="middle" font-size="11.5" fill="#6B6B6B" font-style="italic">directly</text>
