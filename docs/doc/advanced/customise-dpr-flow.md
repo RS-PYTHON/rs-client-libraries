@@ -123,6 +123,46 @@ The level sections can also contain the level-specific parameters, e.g. `session
 values for one run. When the unified variable doesn't exist, the flows read the legacy
 `s<mission>-l<level>-default-setting` variables.
 
+### Default settings of `process-any`
+
+The `process-any` flow (`env_args`, `input_products`, `external_variables`, `processing_id`, `workflow`) runs a
+processor with the input products and external variables computed by the calling flow (see e.g. the
+[Sentinel-3 flows](../flows/sentinel3-flows.md#flows-based-on-process-any)), and the other parameters read from the
+`<processing_id>-default-setting` Prefect variable: `s3l0-default-setting`, `s3l1olci-default-setting` or
+`s3l2olci-default-setting`. This variable is checked against the
+[processor_default_settings.schema.json](https://github.com/RS-PYTHON/rs-client-libraries/blob/develop/rs_workflows/schemas/processor_default_settings.schema.json)
+JSON schema:
+
+| Field | Mandatory | Description |
+|---|---|---|
+| `processor` | Yes | `name` and `version` of the processor. |
+| `pipeline` or `unit` | Yes (one of them) | The pipeline or the unit of the task table to run. |
+| `priority` | Yes | `low`, `medium` or `high`. |
+| `processing_mode` | Yes | List of processing modes, e.g. `["always"]`. |
+| `dask_cluster_name` | Yes | Label of the Dask cluster of the processor. |
+| `auxiliary_product_to_collection_identifier` | Yes | ADFs to stage: `product_type`, `collection_name` and optional `source`, as above. |
+| `generated_product_to_collection_identifier` | Yes | Generated products: `name`, `product_type` and `collection_name`. |
+
+```json
+{
+  "processor": {"name": "s3_l1olci", "version": "<version>"},
+  "pipeline": "ol1_eo",
+  "priority": "low",
+  "processing_mode": ["always"],
+  "dask_cluster_name": "<dask cluster label>",
+  "auxiliary_product_to_collection_identifier": [
+    {"product_type": "AX___OSF_AX", "collection_name": "ax___osf_ax"}
+  ],
+  "generated_product_to_collection_identifier": [
+    {"name": "S03OLCEFR", "product_type": "S03OLCEFR", "collection_name": "s03olcefr"}
+  ]
+}
+```
+
+Before running the processor, `process-any` checks that its Dask cluster and the `dask-staging` cluster are running.
+When the `workflow` is `systematic`, it emits an event for each generated product, see
+[Systematic processing](systematic-processing.md#product-events-of-process-any).
+
 ## Storage configuration
 
 The `processing-storage-configuration` Prefect variable tells where the processors read and write the products: in

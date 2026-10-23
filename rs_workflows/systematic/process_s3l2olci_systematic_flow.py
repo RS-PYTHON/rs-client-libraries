@@ -63,7 +63,7 @@ async def process_s3l2olci_systematic(payload: dict[str, Any]):
 
     env_args: FlowEnvArgs = FlowEnvArgs(owner_id=payload["owner_id"])
     flow_env: FlowEnv = FlowEnv(env_args)
-    with flow_env.start_span(__name__, f"process_systematic_s3l2olci_input"):
+    with flow_env.start_span(__name__, "process_systematic_s3l2olci_input"):  # NOSONAR
 
         input_products: list[FlowInputProduct] = []
 

@@ -67,6 +67,52 @@ limited in size, they only contain the product types and identifiers, not the co
 The events and the automations runs are visible in the *Event feed* and *Automations* pages of the Prefect
 dashboard.
 
+## Product events of `process-any`
+
+The flows based on `process-any` (see [Sentinel-3 flows](../flows/sentinel3-flows.md#flows-based-on-process-any))
+are chained by product: at the end of a systematic run, `process-any` emits a `product.<product type>.generated`
+event for each generated product, and an automation starts the systematic flow of the next processing for this
+product.
+
+```mermaid
+flowchart LR
+    any1["process-any<br/>(S3 L0)"]
+    l1["process-s3-l1-olci-systematic"]
+    any2["process-any<br/>(S3 L1 OLCI)"]
+    l2["process-s3-l2-olci-systematic"]
+    any3["process-any<br/>(S3 L2 OLCI)"]
+    any1 -.->|"product.S03OLCL0_.generated"| l1 --> any2
+    any2 -.->|"product.S03OLCEFR.generated"| l2 --> any3
+```
+
+| Automation | Trigger | Action |
+|---|---|---|
+| S03OLCL0_ generated -> S3 L1 OLCI | Event `product.S03OLCL0_.generated`. | Run `process-s3-l1-olci-systematic` with the payload of the event. |
+| S03OLCEFR generated -> S3 L2 OLCI | Event `product.S03OLCEFR.generated`. | Run `process-s3-l2-olci-systematic` with the payload of the event. |
+
+The event is related to the flow run that generated the product, and to the `processing` and platform (e.g.
+`sentinel-3a`) tags. Its payload contains the owner and the STAC item of the product, used by the next flow to
+compute its inputs:
+
+```json
+{
+  "event": "product.S03OLCL0_.generated",
+  "resource": {"prefect.resource.id": "prefect.flow-run.<flow run id>", "prefect.resource.name": "S03OLCL0_"},
+  "payload": {
+    "owner_id": "copernicus",
+    "product": {
+      "id": "<item id>",
+      "geometry": {"type": "Polygon", "coordinates": ["..."]},
+      "collection": "s03olcl0_",
+      "properties": {"product:type": "S03OLCL0_", "platform": "sentinel-3a", "start_datetime": "...", "end_datetime": "..."}
+    }
+  }
+}
+```
+
+An on-demand flow run with `force_systematic` also emits these events, to start the rest of the chain from a given
+product.
+
 ## Add a step to the chain
 
 1. Emit an event at the end of the upstream flow, with the information needed by the next one in its payload.
