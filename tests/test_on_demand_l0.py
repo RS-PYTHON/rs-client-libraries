@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from rs_workflows.flow_utils import FlowInputProduct
+from rs_workflows.flow_utils import FlowInputProduct, WorkflowType
 from rs_workflows.on_demand.common import l0, l0_last_steps
 from rs_workflows.on_demand.sentinel1 import s1_l0
 from rs_workflows.on_demand.sentinel3 import s3_l0
@@ -241,8 +241,9 @@ async def test_process_s1l0_builds_s1_input_and_delegates(mocker):
     assert products[0].collection_name == "s01-cadip-session"
 
 
-async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
-    """process_s3l0 runs the real L0 last steps and emits their products."""
+@pytest.mark.parametrize("workflow", ["systematic", "on-demand"])
+async def test_process_s3l0_builds_s3_input_and_delegates(mocker, workflow):
+    """process_s3l0 runs the real L0 last steps and emits an event per product, related to its workflow."""
     products_result = [
         {
             "id": "S03OLCL0__product.zarr",
@@ -254,12 +255,10 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
         "process_l0_last_steps",
         new=AsyncMock(return_value=products_result),
     )
-    emitted_event = MagicMock(id="event-id")
-    emit_event = mocker.patch.object(s3_l0, "emit_event", return_value=emitted_event)
-    mocker.patch.object(s3_l0, "get_logger", return_value=MagicMock())
-    mocker.patch.object(s3_l0.runtime.flow_run, "id", "flow-run-id")
+    emit_events = mocker.patch.object(s3_l0, "emit_product_generated_events")
     resolved_params = _resolved_params()
     resolved_params.session_collection = "s03-cadip-session"
+    resolved_params.workflow = workflow
     flow_params = MagicMock()
     flow_params.resolve = AsyncMock(return_value=resolved_params)
 
@@ -278,15 +277,7 @@ async def test_process_s3l0_builds_s3_input_and_delegates(mocker):
         "item_id": "S3A_session",
         "collection_name": "s03-cadip-session",
     }
-    payload = emit_event.call_args.kwargs["payload"]
-    assert emit_event.call_args.kwargs["event"] == "rs-python.s3-l0.products-ready"
-    assert payload["products"] == [
-        {
-            "S03OLCL0_": "S03OLCL0__product.zarr",
-        },
-    ]
-    assert "mocked" not in payload
-    assert "input_products" not in payload
+    emit_events.assert_called_once_with("owner", products_result, WorkflowType(workflow))
 
 
 async def test_process_s3l0_task_delegates_to_flow(mocker):
