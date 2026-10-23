@@ -974,19 +974,18 @@ def test_extract_olci_zarr_v3_metadata(container):
 @pytest.mark.parametrize("metadata_name", ["zarr.json", ".zattrs"])
 def test_update_zarr_assets(mocker, processor, metadata_name):
     """Publish discovery metadata from both Zarr formats for every processor."""
-    metadata = {
-        "zarr_format": 3,
-        "node_type": "group",
-        "attributes": {
-            "stac_discovery": {
-                "properties": {"product:type": "S03OLCEFR", "datetime": "2025-06-12T02:12:12Z"},
-                "geometry": None,
-                "bbox": None,
-            },
+    attributes = {
+        "stac_discovery": {
+            "properties": {"product:type": "S03OLCEFR", "datetime": "2025-06-12T02:12:12Z"},
+            "geometry": None,
+            "bbox": None,
         },
     }
-    if metadata_name == ".zattrs":
-        metadata = metadata["attributes"]
+    metadata = (
+        attributes
+        if metadata_name == ".zattrs"
+        else {"zarr_format": 3, "node_type": "group", "attributes": attributes}
+    )
     mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=[f"s3://bucket/output/product/{metadata_name}"])
     mocker.patch("rs_workflows.dpr_flow.prefect_utils.s3_read_bytes", return_value=json.dumps(metadata).encode())
