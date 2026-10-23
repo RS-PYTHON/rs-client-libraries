@@ -24,7 +24,7 @@ The flow takes a `dpr_input` parameter (`DprProcessIn`) and an optional `retry_c
 | `pipeline` or `unit` | One of them | Name of the pipeline of the task table to run (usual case), or of a single unit (advanced use). |
 | `dask_cluster_label` | Yes | Label of the Dask cluster where the processor runs, see [Dask](https://github.com/RS-PYTHON/rs-documentation/blob/develop/docs/services/virtual-environment/dask.md). |
 | `dask_cluster_instance` | No | Identifier of a specific Dask cluster instance, used to log the direct URL of its dashboard. |
-| `s3_payload_file` | Yes | S3 path where the payload file is written (deleted after the run). |
+| `s3_payload_file` | Yes | S3 or local path where the payload file is written (deleted after the run). |
 | `input_products` | Yes | The input products: list of `{name, item_id, collection_name}`, where `name` is the input name in the task table, and `item_id` and `collection_name` identify the STAC item in the catalog. |
 | `generated_product_to_collection_identifier` | Yes | Where to publish the generated products, see [Generated products](#generated-products). |
 | `auxiliary_product_to_collection_identifier` | Yes | Where to find and stage the auxiliary files, see [Auxiliary files](#auxiliary-files). |
@@ -36,6 +36,10 @@ The flow takes a `dpr_input` parameter (`DprProcessIn`) and an optional `retry_c
 | `reference_date`, `instrument_mode` | No | Other external variables, used by some task tables. |
 | `edh_api_key` | No | [EarthDataHub](https://earthdatahub.destine.eu/) API key, to read the Copernicus DEM. |
 | `temporary_folder`, `temporary_shared`, `dask_task_timeout` | No | Advanced options of the processor run. |
+| `triggering__stage_s3_outputs` | No | Default `true`. Experimental CPM feature: the outputs written in S3 are saved in a local temporary product, then uploaded to S3. Set to `false` to write directly in S3. |
+| `triggering__stage_s3_temporary_prefix` | No | Default `false`. Experimental CPM feature: when the staging of the S3 outputs is enabled, upload to a temporary S3 prefix, copy to the final prefix, then remove the temporary prefix (the promotion is not atomic). |
+| `triggering__stage_s3_outputs_min_size` | No | Default `0`. Minimum size in bytes of a product to stage its S3 output: `0` stages every output, the smaller products are written directly. |
+| `triggering__stage_s3_memory_fit_safety_ratio` | No | Default `0.25`. Fraction of the memory available on the runner (not on the Dask scheduler) used as threshold for the staged Zarr outputs with a remote Dask scheduler: the products estimated to exceed it use the experimental Sub-DataTree writer. |
 
 The logging level of the processor is given by `env.logging_level`.
 
@@ -130,6 +134,8 @@ the S3 object storage, or on disks mounted on the Dask workers (e.g. for interme
 the administrators from the [template](https://github.com/RS-PYTHON/rs-client-libraries/blob/develop/config/storage_configuration.json)
 delivered with rs-client-libraries (see
 [Initialise the processing environment](https://github.com/RS-PYTHON/rs-documentation/blob/develop/docs/administration/init-processing-environment.md)).
+Its content is validated against the JSON schema
+[StorageConfiguration.schema.json](https://github.com/RS-PYTHON/rs-client-libraries/blob/develop/config/StorageConfiguration.schema.json).
 
 ```json
 {
@@ -152,7 +158,7 @@ delivered with rs-client-libraries (see
   },
   "storage_configuration": [
     {
-      "name": "s3", "kind": "obs", "opening_mode": "CREATE_OVERWRITE",
+      "name": "s3", "kind": "obs",
       "storage_options": {"key": "${S3_ACCESSKEY}", "secret": "${S3_SECRETKEY}",
                           "endpoint_url": "${S3_ENDPOINT}", "region_name": "${S3_REGION}"}
     },
@@ -175,7 +181,9 @@ delivered with rs-client-libraries (see
       Prefect blocks of the user (see [Authentication](../flows/authentication.md#authentication-to-the-object-storage)),
     - `shared_disk`: a volume shared by the Dask workers, mounted under `absolute_path`; a unique folder is created for
       each run, and deleted after the run if `autoclean` is `true`. The payload files of the processors are also
-      written on the first shared disk,
+      written on the first shared disk whose `opening_mode` is `CREATE_OVERWRITE`; this is the only use of the
+      `opening_mode` option, which is not written in the payload anymore (the output products are written with the
+      `writer_params` of the task table, `mode: w` by default),
     - `local_disk`: a local folder of the Dask workers.
 
 The output products written in the object storage are stored in the bucket given by the
