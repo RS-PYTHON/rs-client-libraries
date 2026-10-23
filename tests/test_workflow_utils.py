@@ -281,6 +281,28 @@ async def test_process_asset_rejects_unsupported_extension(mock_workflow_utils_l
 
 
 @pytest.mark.asyncio
+async def test_process_asset_keeps_source_archive_when_upload_fails(monkeypatch, mock_workflow_utils_logger):
+    """The source archive remains available when publishing extracted files fails."""
+    delete_mock = MagicMock()
+
+    def fake_extract_zip(_zip_path, extract_to):
+        (Path(extract_to) / "chunk").write_text("content")
+
+    monkeypatch.setattr(workflow_utils, "s3_download_file", AsyncMock())
+    monkeypatch.setattr(workflow_utils, "s3_delete", delete_mock)
+    monkeypatch.setattr(workflow_utils, "extract_zip", fake_extract_zip)
+    monkeypatch.setattr(workflow_utils, "recursive_extract", MagicMock(return_value=0))
+    monkeypatch.setattr(workflow_utils, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
+    monkeypatch.setattr(workflow_utils, "s3_upload_dir", AsyncMock(side_effect=RuntimeError("upload failed")))
+    monkeypatch.setattr(workflow_utils, "get_upload_prefix", MagicMock(return_value="s3://bucket/path/"))
+
+    with pytest.raises(RuntimeError, match="upload failed"):
+        await workflow_utils.process_asset("s3://bucket/path/data.zip", "data.zip")
+
+    delete_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_asset_unzip_decompress_updates_supported_assets(monkeypatch, mock_workflow_utils_logger):
     """Test asset hrefs and names are updated for supported archive suffixes."""
     item = Item(id="item-1", geometry=None, bbox=None, datetime=datetime.now(UTC), properties={})

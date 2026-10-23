@@ -162,7 +162,10 @@ def extract_zip(zip_path: Path, extract_to: Path):
                 logger.warning(f"Skipping unsafe ZIP member: {name}")
                 continue
             destination = (extract_to / name.replace("\\", "/")).resolve()
-            logger.info(f"Extracting zip entry: {destination}")
+            # Archives containing Zarr stores may have tens of thousands of
+            # chunks. Logging every member at INFO makes Prefect log shipping
+            # substantially slower than extraction itself.
+            logger.debug(f"Extracting zip entry: {destination}")
             if name.endswith("/"):
                 destination.mkdir(parents=True, exist_ok=True)
             else:
