@@ -12,24 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Process systematic and ondemand flow implementation"""
+"""
+Generic processing flow `process-any`, that runs a processor with its settings read from a Prefect variable, and the
+helpers that run it on demand from a catalog product, or systematically from a product event.
+"""
 
-import datetime
 import json
+from collections.abc import Awaitable, Callable
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import anyio
 from jsonschema import ValidationError, validate
-from prefect import flow, runtime
-from prefect.events import emit_event
+from prefect import flow
 from prefect.variables import Variable
-from pystac import ItemCollection
+from pydantic import BaseModel, Field
 
-from rs_client.stac.catalog_client import CatalogClient
-from rs_common.utils import strftime_millis
-from rs_workflows.adf_flow import substitute_values
 from rs_workflows.flow_utils import (
     FlowEnv,
     FlowEnvArgs,
@@ -38,12 +37,14 @@ from rs_workflows.flow_utils import (
     ProcessingMode,
     WorkflowType,
 )
-from rs_workflows.on_demand.adf.convert_adf_set import compute_cql2
+from rs_workflows.on_demand.common.events import emit_product_generated_events
+from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dask import is_dask_cluster_running
 from rs_workflows.utils.dpr import call_dpr_flow
 from rs_workflows.utils.prefect import get_logger
 
 DASK_CLUSTER_STAGING = "dask-staging"
+DEFAULT_SETTINGS_SCHEMA = Path(__file__).parent.parent / "config" / "ProcessorDefaultSettings.schema.json"
 
 
 class ProcessingId(str, Enum):
@@ -51,9 +52,20 @@ class ProcessingId(str, Enum):
     Processing Identifier : usefull to determine configuration file pattern.
     """
 
-    S3_L0 = "s3l0"
     S3_OLCI_L1 = "s3l1olci"
     S3_OLCI_L2 = "s3l2olci"
+
+
+class FlowInputItem(BaseModel):
+    """STAC item of the product to process, read from the catalog."""
+
+    item_id: str = Field(description="STAC item identifier of the product.")
+    collection_name: str = Field(description="Collection of the product.")
+
+
+# Processing of a product, from its STAC item identifier, collection and properties, and the workflow type.
+# Returns the STAC items of the generated products.
+ProductProcessing = Callable[[FlowEnvArgs, str, str, dict[str, Any], WorkflowType], Awaitable[list[dict[str, Any]]]]
 
 
 @flow(name="process-any")
@@ -63,7 +75,7 @@ async def process_any(
     external_variables: dict[str, Any],
     processing_id: ProcessingId,
     workflow: WorkflowType = WorkflowType.ON_DEMAND,
-):
+) -> list[dict[str, Any]]:
     """
     # Process Any
 
@@ -81,7 +93,8 @@ async def process_any(
     3. *Process* — Calls the DPR flow with the input products, external
     variables, and the resolved processor/pipeline/priority settings.
     4. *Collect results* — Retrieves the list of generated/published items.
-    5. Raise a Prefect event per product generated
+    5. *Emit events* — Emits a `product.<product type>.generated` Prefect event per generated product, related to
+    the workflow. When the workflow is systematic, the automations start the next processing of the chain.
     ---
     ## Parameters
     Parameter | Type | Default | Description |
@@ -93,9 +106,11 @@ async def process_any(
     | `workflow` | `WorkflowType` | `WorkflowType.ON_DEMAND` | Type of workflow triggering this run |
 
     > *Note:* The default settings variable must match the
-    > `processor_default_settings.schema.json` schema.
+    > `config/ProcessorDefaultSettings.schema.json` schema.
 
     ---
+    ## Returns
+    The STAC items of the generated products.
     """
     logger = get_logger()
 
@@ -110,10 +125,7 @@ async def process_any(
         raise RuntimeError(f"❌ Prefect variable {default_settings_var_name!r} is missing")
 
     # Check JSON schema
-    schema = Path("rs_workflows/schemas/processor_default_settings.schema.json")
-    if not schema.is_file():
-        raise FileNotFoundError(f"❌ Schema file not found: {schema.resolve()}")
-    async with await anyio.open_file(schema, encoding="utf-8") as f:
+    async with await anyio.open_file(DEFAULT_SETTINGS_SCHEMA, encoding="utf-8") as f:
         default_settings_schema = json.loads(await f.read())
 
     try:
@@ -129,14 +141,18 @@ async def process_any(
         # Check cluster dasks
         ##################################################
         processing_dask_cluster = default_settings["dask_cluster_name"]
-        if await is_dask_cluster_running(processing_dask_cluster) is False:
-            raise ValueError(f"❌ '{processing_dask_cluster}' is unknown or not ready.")
-        if await is_dask_cluster_running(DASK_CLUSTER_STAGING) is False:
-            raise ValueError(f"❌ '{DASK_CLUSTER_STAGING}' is unknown or not ready.")
+        for dask_cluster in (processing_dask_cluster, DASK_CLUSTER_STAGING):
+            if not await is_dask_cluster_running(dask_cluster):
+                raise ValueError(f"❌ '{dask_cluster}' is unknown or not ready.")
 
         ##################################################
         # Create all input for DPR processing
         ##################################################
+        logger.info(
+            "input_products:\n%s",
+            json.dumps([product.model_dump(mode="json") for product in input_products], indent=2, ensure_ascii=False),
+        )
+        logger.info("external_variables:\n%s", json.dumps(external_variables, indent=2, ensure_ascii=False))
         published_items: list[dict[str, Any]] = await call_dpr_flow(
             env=env_args,
             input_products=input_products,
@@ -159,117 +175,71 @@ async def process_any(
             ),
         )
 
-        # Generate one event per product
         for i, item in enumerate(published_items):
             logger.info(f"--- Item {i + 1} ---")
             logger.info(json.dumps(item, indent=2, ensure_ascii=False))
 
-            flow_run_id = str(runtime.flow_run.id or "unknown")
+        # Events of a systematic workflow start the next processing of the chain
+        emit_product_generated_events(env_args.owner_id, published_items, workflow)
 
-            event_name = f"product.{item['properties']['product:type']}.generated"
-            event = emit_event(
-                event=event_name,
-                resource={
-                    "prefect.resource.id": f"prefect.flow-run.{flow_run_id}",
-                    "prefect.resource.name": f"{item['properties']['product:type']}",
-                },
-                related=[
-                    {
-                        "prefect.resource.id": "systematic",
-                        "prefect.resource.role": "workflow",
-                    },
-                    {"prefect.resource.id": "prefect.tag.processing", "prefect.resource.role": "tag"},
-                    {
-                        "prefect.resource.id": f"prefect.tag.{item['properties']['platform']}",
-                        "prefect.resource.role": "tag",
-                    },
-                ],
-                payload={
-                    "owner_id": f"{env_args.owner_id}",
-                    "product": {
-                        "id": f"{item['id']}",
-                        "geometry": item["geometry"],
-                        "collection": item["collection"],
-                        "properties": item["properties"],
-                    },
-                },
-            )
-
-            if event is None:
-                get_logger().warning(f"⚠️ Event '{event_name}' was not emitted")
-            else:
-                get_logger().info(f"Event '{event_name}' (id='{event.id}') emitted.")
+        return published_items
 
 
-async def process_any_on_demand(
+async def process_catalog_product(
     env_args: FlowEnvArgs,
-    input_products: list[FlowInputProduct],
-    external_variables: dict[str, Any],
-    processing_id: ProcessingId,
+    input_item: FlowInputItem,
     force_systematic: bool,
-):
-    """Call `process-any` from an on-demand flow, as a systematic run when `force_systematic` is set."""
-    logger = get_logger()
-    logger.info(
-        "external_variables:\n%s",
-        json.dumps(external_variables, indent=2, ensure_ascii=False),
-    )
+    process_product: ProductProcessing,
+) -> list[dict[str, Any]]:
+    """
+    Process on demand a product read from the catalog.
 
-    if force_systematic:
-        logger.info(
-            "🛈 As force_systematic option is set to true, events will be emitted at the end of the processing.",
-        )
+    Args:
+        env_args: Flow environment arguments.
+        input_item: STAC item identifier and collection of the product.
+        force_systematic: Run the processing as a systematic one, so that the automations start the next processing
+            of the chain from the events of the generated products.
+        process_product: Processing of the product.
 
-    await process_any(
-        env_args=env_args,
-        input_products=input_products,
-        external_variables=external_variables,
-        processing_id=processing_id,
-        workflow=WorkflowType.SYSTEMATIC if force_systematic else WorkflowType.ON_DEMAND,
-    )
-
-
-def get_latest_product_covering_interval(
-    env_args: FlowEnvArgs,
-    interval_begin_datetime: datetime.datetime,
-    interval_end_datetime: datetime.datetime,
-    product_type: str,
-    satellite: str,
-    collection: str,
-) -> ItemCollection | None:
-    """Search the catalog for the latest product of a type and satellite that covers the given interval."""
-    logger = get_logger()
+    Returns:
+        The STAC items of the generated products.
+    """
     flow_env = FlowEnv(env_args)
-    with flow_env.start_span(__name__, "catalog_retrieve_product"):  # NOSONAR
-        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-
-        logger.info("🧹 Computing cql2_filter")
-        included_in_interval = compute_cql2("LatestIncludedWithSatellite", 2, 2, satellite)
-        cql2_filter = substitute_values(
-            included_in_interval,
-            {
-                "start_datetime": strftime_millis(interval_begin_datetime),
-                "end_datetime": strftime_millis(interval_end_datetime),
-                "product_type": product_type,
-                "satellite": satellite,
-            },
-        )
-        logger.info(
-            f"We query the rs-catalog to found a product with type {product_type} on the interval "
-            f"[{interval_begin_datetime}, {interval_end_datetime}]",
+    with flow_env.start_span(__name__, "process-catalog-product"):  # NOSONAR
+        item = await get_single_catalog_item(flow_env, input_item.item_id, [input_item.collection_name])
+        if item is None:
+            raise RuntimeError(
+                f"❌ STAC item '{input_item.item_id}' not found in collection '{input_item.collection_name}'.",
+            )
+        return await process_product(
+            env_args,
+            input_item.item_id,
+            input_item.collection_name,
+            item.properties,
+            WorkflowType.SYSTEMATIC if force_systematic else WorkflowType.ON_DEMAND,
         )
 
-        found = catalog_client.search(
-            method="POST",
-            stac_filter=cql2_filter.get("filter"),
-            max_items=cql2_filter.get("limit"),
-            sortby=cql2_filter.get("sortby"),
-            collections=[collection],
+
+async def process_event_product(payload: dict[str, Any], process_product: ProductProcessing) -> list[dict[str, Any]]:
+    """
+    Process systematically the product of a `product.<product type>.generated` event.
+
+    Args:
+        payload: Payload of the event, with the owner and the STAC item of the product.
+        process_product: Processing of the product.
+
+    Returns:
+        The STAC items of the generated products.
+    """
+    get_logger().info(f"Flow started from event with payload {payload}.")
+    env_args = FlowEnvArgs(owner_id=payload["owner_id"])
+    product = payload["product"]
+    flow_env = FlowEnv(env_args)
+    with flow_env.start_span(__name__, "process-event-product"):  # NOSONAR
+        return await process_product(
+            env_args,
+            product["id"],
+            product["collection"],
+            product["properties"],
+            WorkflowType.SYSTEMATIC,
         )
-
-        if found:
-            logger.info(f"✅ Found item named '{found[0].id}'")
-        else:
-            logger.info("🛈 No item found on the interval.")
-
-        return found

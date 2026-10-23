@@ -25,7 +25,6 @@ from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
     FlowGeneratedProduct,
-    FlowInputProduct,
     Priority,
     ProcessingMode,
     WorkflowType,
@@ -33,7 +32,6 @@ from rs_workflows.flow_utils import (
 
 DEFAULT_PREFECT_CONFIGURATION = "s{mission}-l{level}-default-setting"
 PROCESSING_PREFECT_CONFIGURATION = "s{mission}-processing-default-setting"
-S3_PROCESSING_CONFIGURATION = PROCESSING_PREFECT_CONFIGURATION.format(mission="3")
 
 
 async def _read_prefect_settings(mission: str, level: str) -> dict[str, Any]:
@@ -244,60 +242,3 @@ class Level0FlowParams(ProcessingFlowParams):
         Merge data from Prefect variable and parameters called.
         """
         return await super()._resolve(mission, "0")
-
-
-class Level1FlowParams(ProcessingFlowParams):
-    """
-    Parameters to override default Prefect variable 'sx-l1-default-setting'..
-    """
-
-    start_datetime: datetime | None = Field(
-        default=None,
-        title="Start Datetime",
-        description="Start datetime for processing.",
-        json_schema_extra={"order": 2},
-    )
-    end_datetime: datetime | None = Field(
-        default=None,
-        title="End Datetime",
-        description="End datetime for processing.",
-        json_schema_extra={"order": 3},
-    )
-    satellite: str | None = Field(
-        default=None,
-        title="Satellite",
-        description="Satellite identifier for processing.",
-        json_schema_extra={"order": 4},
-    )
-    input_products: list[FlowInputProduct] = Field(
-        default_factory=list,
-        title="Input Products",
-        description="List of input products to process.",
-        json_schema_extra={"order": 4},
-    )
-
-    def _resolve_specific(self, settings: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "start_datetime": self.start_datetime or settings.get("start_datetime", None),
-            "end_datetime": self.end_datetime or settings.get("end_datetime", None),
-            "satellite": self.satellite or settings.get("satellite", None),
-            "input_products": self.input_products or settings.get("input_products", []),
-        }
-
-    async def resolve(self, mission: str) -> Self:
-        """
-        Merge data from Prefect variable and parameters called.
-        """
-        return await super()._resolve(mission, "1")
-
-
-class Level2FlowParams(Level1FlowParams):
-    """
-    Parameters to override default Prefect variable 'sx-l2-default-setting'..
-    """
-
-    async def resolve(self, mission: str) -> Self:
-        """
-        Merge data from Prefect variable and parameters called.
-        """
-        return await super()._resolve(mission, "2")

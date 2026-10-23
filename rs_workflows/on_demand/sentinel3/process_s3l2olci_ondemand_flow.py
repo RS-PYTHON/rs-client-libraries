@@ -14,41 +14,55 @@
 
 """Process on-demand S3 OLCI L2 flow implementation"""
 
-import json
+from functools import partial
 from typing import Any
 
 from prefect import flow
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-from rs_client.stac.catalog_client import CatalogClient
-from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct
-from rs_workflows.process_any_flow import ProcessingId, process_any_on_demand
-from rs_workflows.utils.prefect import get_logger
+from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, WorkflowType
+from rs_workflows.on_demand.sentinel3.s3_processing_utils import process_olci
+from rs_workflows.process_any_flow import FlowInputItem, process_catalog_product
 
 OLCEFR_PRODUCT_TYPE = "S03OLCEFR"
 OLCEFR_DEFAULT_BASE_NAME = "S03OLCEFR"
 
 
-class FlowInputS3l2olci(BaseModel):
-    """Represents input product for the processor S3l2olci."""
+class FlowInputS3l2olci(FlowInputItem):
+    """S03OLCEFR product to process with the S3 L2 OLCI processor."""
 
-    item_id: str = Field(description="STAC item identifier for S03OLCEFR product.")
     collection_name: str = Field(
         default=OLCEFR_PRODUCT_TYPE.lower(),
         description="Collection name for S03OLCEFR product.",
     )
 
-    def items(self):
-        """Helper method to return the model fields as items, useful for logging."""
-        return self.model_dump().items()
 
+async def process_s3l2olci_product(
+    env_args: FlowEnvArgs,
+    item_id: str,
+    collection_name: str,
+    properties: dict[str, Any],
+    workflow: WorkflowType,
+    olcefr_base_name: str = OLCEFR_DEFAULT_BASE_NAME,
+) -> list[dict[str, Any]]:
+    """
+    Run the S3 L2 OLCI processing of an S03OLCEFR product, its single input, with the sensing dates of the product
+    as external variables.
 
-def compute_s3l2olci_external_variables(
-    start_datetime_txt: str,
-    end_datetime_txt: str,
-) -> dict[str, Any]:
-    """Compute the external variables of the S3 L2 OLCI processor."""
-    return {"start_datetime": start_datetime_txt, "end_datetime": end_datetime_txt}
+    Args:
+        env_args: Flow environment arguments.
+        item_id: STAC item identifier of the S03OLCEFR product.
+        collection_name: Collection of the S03OLCEFR product.
+        properties: STAC item properties of the S03OLCEFR product (`start_datetime`, `end_datetime`).
+        workflow: Type of workflow of the processing.
+        olcefr_base_name: S03OLCEFR product name on the task table.
+
+    Returns:
+        The STAC items of the generated products.
+    """
+    input_products = [FlowInputProduct(name=olcefr_base_name, item_id=item_id, collection_name=collection_name)]
+    external_variables = {"start_datetime": properties["start_datetime"], "end_datetime": properties["end_datetime"]}
+    return await process_olci("l2", env_args, input_products, external_variables, workflow)
 
 
 @flow(name="process-s3-l2-olci-ondemand")
@@ -57,12 +71,12 @@ async def process_s3l2olci_ondemand(
     single_input_product: FlowInputS3l2olci,
     force_systematic: bool = False,
     olcefr_base_name: str = OLCEFR_DEFAULT_BASE_NAME,
-):
+) -> list[dict[str, Any]]:
     """
     # Process ON DEMAND S3 L2 OLCI
 
     This flow is in charge to prepare the S3 L2 OLCI processing by computing all the needed inputs.
-    Then it forwards to `process-any` with workflow set to "on-demand".
+    Then it forwards to `process-any` with workflow set to "on-demand" ("systematic" if `force_systematic` is set).
 
     ---
     ## Workflow Steps
@@ -70,57 +84,21 @@ async def process_s3l2olci_ondemand(
     1. *compute input products* — Single `S03OLCEFR` item get from parameters call.
     2. *compute external variables* — external variables are extracted from the first item properties.
     3. *start the processing* — calls the flow `process-any`
+    4. *request the quicklooks* — emits the `rs-python.s3-l2.quicklook-inputs-ready` event with the generated products.
     ---
     ## Parameters
     Parameter | Type | Default | Description |
     |---|---|---|---|
     | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments |
     | `single_input_product` | `FlowInputS3l2olci` | *required* | STAC item and collection of the `S03OLCEFR` product |
-    | `force_systematic` | `bool` | `False` | If true, one event per product is emitted at the end of the processing. |
+    | `force_systematic` | `bool` | `False` | If true, the workflow is systematic: the next processing follows. |
     | `olcefr_base_name` | `str` | `S03OLCEFR` | S03OLCEFR product name on the task table. |
 
     ---
     """
-    logger = get_logger()
-
-    flow_env = FlowEnv(env_args)
-    with flow_env.start_span(__name__, "process_s3l2olci_ondemand"):  # NOSONAR
-        catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-        stac_item = catalog_client.get_item(single_input_product.collection_name, single_input_product.item_id)
-        if stac_item is None:
-            raise RuntimeError(
-                f"❌ STAC item '{single_input_product.item_id}' not found "
-                f"in collection '{single_input_product.collection_name}'.",
-            )
-        item: dict = stac_item.to_dict()
-
-        input_products: list[FlowInputProduct] = []
-        input_product: FlowInputProduct = FlowInputProduct(
-            name=f"{olcefr_base_name}",
-            item_id=single_input_product.item_id,
-            collection_name=single_input_product.collection_name,
-        )
-
-        input_products.append(input_product)
-
-        logger.info(
-            "input_products:\n%s",
-            json.dumps(
-                [product.model_dump(mode="json") for product in input_products],
-                indent=2,
-                ensure_ascii=False,
-            ),
-        )
-
-        external_variables = compute_s3l2olci_external_variables(
-            item["properties"]["start_datetime"],
-            item["properties"]["end_datetime"],
-        )
-
-        await process_any_on_demand(
-            env_args,
-            input_products,
-            external_variables,
-            ProcessingId.S3_OLCI_L2,
-            force_systematic,
-        )
+    return await process_catalog_product(
+        env_args,
+        single_input_product,
+        force_systematic,
+        partial(process_s3l2olci_product, olcefr_base_name=olcefr_base_name),
+    )

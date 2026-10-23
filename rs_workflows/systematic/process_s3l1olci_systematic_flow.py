@@ -14,29 +14,18 @@
 
 """Process systematic S3 OLCI L1 flow implementation"""
 
-import json
 from typing import Any
 
 from prefect import flow
 
-from rs_workflows.flow_utils import (
-    FlowEnv,
-    FlowEnvArgs,
-    FlowInputProduct,
-    WorkflowType,
-)
 from rs_workflows.on_demand.sentinel3.process_s3l1olci_ondemand_flow import (
-    NAVL0_DEFAULT_BASE_NAME,
-    OLCL0_DEFAULT_BASE_NAME,
-    compute_s3l1olci_external_variables,
-    compute_s3l1olci_inputs,
+    process_s3l1olci_product,
 )
-from rs_workflows.process_any_flow import ProcessingId, process_any
-from rs_workflows.utils.prefect import get_logger
+from rs_workflows.process_any_flow import process_event_product
 
 
 @flow(name="process-s3-l1-olci-systematic")
-async def process_s3l1olci_systematic(payload: dict[str, Any]):
+async def process_s3l1olci_systematic(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """
     # Process SYSTEMATIC S3 L1 OLCI
 
@@ -54,61 +43,16 @@ async def process_s3l1olci_systematic(payload: dict[str, Any]):
        They can be one or two.
     2. *compute external variables* — external variables are extracted from the first item properties.
     3. *start the processing* — calls the flow `process-any`
+    4. *request the quicklooks* — emits the `rs-python.s3-l1.quicklook-inputs-ready` event with the generated products.
     ---
     ## Parameters
     Parameter | Type | Default | Description |
     |---|---|---|---|
-    | `payload` | dict[str, Any] | *required* | The event that trigger this flow. |
+    | `payload` | dict[str, Any] | *required* | Payload of the `product.S03OLCL0_.generated` event. |
 
-    > *Note:* if the collection retieved for `S3OLCIL0_`name is equal to `s3olcil0_`, `S3NAVL0_` will be stored on
-    the collection `s3navl0_`.
+    > *Note:* if the collection retrieved for `S3OLCIL0_`name is equal to `s03olcl0_`, `S3NAVL0_` will be stored on
+    the collection `s03natl0_`.
     Otherwise, `S3NAVL0_` will be stored on the same collection than `S3OLCIL0_`.
     ---
     """
-    logger = get_logger()
-    logger.info(f"Flow started from event with payload {payload}.")
-
-    owner_id: str = payload["owner_id"]
-    env_args: FlowEnvArgs = FlowEnvArgs(owner_id=owner_id)
-
-    flow_env: FlowEnv = FlowEnv(env_args)
-
-    with flow_env.start_span(__name__, "process_systematic_s3l1olci_input"):  # NOSONAR
-        input_products: list[FlowInputProduct] = compute_s3l1olci_inputs(
-            env_args,
-            payload["product"]["id"],
-            payload["product"]["collection"],
-            payload["product"]["properties"]["platform"],
-            payload["product"]["properties"]["start_datetime"],
-            payload["product"]["properties"]["end_datetime"],
-            OLCL0_DEFAULT_BASE_NAME,
-            NAVL0_DEFAULT_BASE_NAME,
-        )
-
-        logger.info(
-            "input_products:\n%s",
-            json.dumps(
-                [product.model_dump(mode="json") for product in input_products],
-                indent=2,
-                ensure_ascii=False,
-            ),
-        )
-
-        external_variables = compute_s3l1olci_external_variables(
-            payload["product"]["properties"]["platform"],
-            payload["product"]["properties"]["start_datetime"],
-            payload["product"]["properties"]["end_datetime"],
-        )
-
-        logger.info(
-            "external_variables:\n%s",
-            json.dumps(external_variables, indent=2, ensure_ascii=False),
-        )
-
-        await process_any(
-            env_args=env_args,
-            input_products=input_products,
-            external_variables=external_variables,
-            processing_id=ProcessingId.S3_OLCI_L1,
-            workflow=WorkflowType.SYSTEMATIC,
-        )
+    return await process_event_product(payload, process_s3l1olci_product)
