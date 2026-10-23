@@ -380,8 +380,9 @@ def update_eopf_assets(
         if not zattrs_data:
             logger.error(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
             raise RuntimeError(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
-        if dpr_processor in (DprProcessor.S3L1OLCI.value, DprProcessor.S3L2OLCI.value):
-            zattrs_data = zattrs_data.get("attributes", zattrs_data)
+        # Zarr v3 stores root attributes inside "attributes" for every processor.
+        # Legacy .zattrs files contain those attributes directly.
+        zattrs_data = zattrs_data.get("attributes", zattrs_data)
         logger.debug(f"DPR processor attributes {zattrs_data}")
 
         # Extract EOPF info
