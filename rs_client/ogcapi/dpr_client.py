@@ -423,20 +423,21 @@ class DprClient(OgcApiClient):
             payload = yaml.safe_load(contents)
 
             # We need to create the output S3 folder with a dummy file before running DPR
-            for output_product in payload["I/O"]["output_products"]:
+            for output_product in payload["io"]["output_products"]:
                 s3_output_dir = output_product["path"]
                 s3_empty_file = f"{s3_output_dir}/.empty"
                 self.logger.info(f"Write empty file: {self.logger.level} {s3_empty_file!r}")
                 await prefect_utils.s3_upload_empty_file(s3_empty_file)
 
             # Change the dask authentication for local mode (used in old demos, could be removed)
-            try:
-                cluster_config = payload["dask_context"]["cluster_config"]
-                if self.local_mode:
-                    cluster_config["auth"] = cluster_config["auth_local_mode"]
-                del cluster_config["auth_local_mode"]
-            except KeyError:
-                pass
+            for manager in payload["context_managers"]:
+                try:
+                    cluster_config = manager["parameters"]["cluster_config"]
+                    if self.local_mode:
+                        cluster_config["auth"] = cluster_config["auth_local_mode"]
+                    del cluster_config["auth_local_mode"]
+                except KeyError:
+                    pass
 
             # yaml to str conversion
             contents = yaml.dump(payload, default_flow_style=False, sort_keys=False)
