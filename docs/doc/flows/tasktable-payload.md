@@ -171,6 +171,14 @@ For each ADF of each unit, the flow tries its `alternatives` in their `order`:
    the `stage-aux-cql2` flow, within `timeout_seconds`,
 4. if at least one file is found, it stops, otherwise it tries the next alternative.
 
+If no alternative returns a file, the flow fails for a mandatory ADF, and only logs a warning for an ADF whose
+`mandatory` flag is `false`, which is then not given to the processor.
+
+When the `io` entry of an ADF has `"folder_multiplicity": "one_per_input"`, the ADF is searched and staged once per
+input product it refers to: the `{<input>.<property>}` parameters of the query (e.g. `{slcs.start_datetime}`,
+`{slcs.platform}`) are replaced by the properties of the STAC item of each input product. It is used for instance by
+the `ETAD` and `ORBIT` ADFs of the [Sentinel-1 ARD](sentinel1-flows.md#analysis-ready-data-ard) processor.
+
 At the end of this step, the S3 path of each ADF is known.
 
 ### 3. Assemble the payload

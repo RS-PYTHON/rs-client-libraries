@@ -413,7 +413,7 @@ def test_update_eopf_assets_raises_on_missing_io_config(mocker):
     payload = mocker.Mock()
     payload.io = None
 
-    with pytest.raises(RuntimeError, match="Payload I/O configuration is missing"):
+    with pytest.raises(RuntimeError, match="Payload io configuration is missing"):
         update_eopf_assets.fn(mocker.Mock(), [], payload, DprProcessor.S1L0)
 
 
@@ -655,7 +655,7 @@ async def test_run_processor_raises_on_missing_io_config(mocker):
     mocker.patch("rs_workflows.dpr_flow.FlowEnv", return_value=mock_flow_env)
 
     # Verify ValueError is raised
-    with pytest.raises(ValueError, match="Payload I/O configuration is missing"):
+    with pytest.raises(ValueError, match="Payload io configuration is missing"):
         await run_processor.fn(
             env=env,
             processor=processor,
@@ -993,3 +993,56 @@ def test_update_eopf_assets_without_outputs_does_not_fetch_inputs(mocker, has_in
 
     assert update_eopf_assets.fn(mocker.Mock(), inputs, payload, "s3_l0") == []
     get_item.assert_not_called()
+
+
+@pytest.mark.parametrize("container", ["", "products/"])
+def test_extract_olci_zarr_v3_metadata(container):
+    """Prefer v3 metadata per product and ignore nested array/group metadata."""
+    base = "s3://bucket/output"
+    product = f"{base}/{container}product"
+    files = [f"{product}/.zattrs", f"{product}/zarr.json", f"{product}/measurements/zarr.json"]
+    assert extract_products_and_zattrs(files, base, zarr_v3=True) == [("product", f"{product}/zarr.json")]
+    assert extract_products_and_zattrs(files, base) == [("product", f"{product}/zarr.json")]
+    assert extract_products_and_zattrs(files, base, zarr_v3=False) == [("product", f"{product}/.zattrs")]
+    assert extract_products_and_zattrs(files, product, zarr_v3=True) == [("product", f"{product}/zarr.json")]
+
+
+@pytest.mark.parametrize("processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI, DprProcessor.S1L0, "mockup"])
+@pytest.mark.parametrize("metadata_name", ["zarr.json", ".zattrs"])
+def test_update_zarr_assets(mocker, processor, metadata_name):
+    """Publish discovery metadata from both Zarr formats for every processor."""
+    attributes = {
+        "stac_discovery": {
+            "properties": {"product:type": "S03OLCEFR", "datetime": "2025-06-12T02:12:12Z"},
+            "geometry": None,
+            "bbox": None,
+        },
+    }
+    metadata = (
+        attributes if metadata_name == ".zattrs" else {"zarr_format": 3, "node_type": "group", "attributes": attributes}
+    )
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=[f"s3://bucket/output/product/{metadata_name}"])
+    mocker.patch("rs_workflows.dpr_flow.prefect_utils.s3_read_bytes", return_value=json.dumps(metadata).encode())
+    payload = mocker.Mock()
+    payload.io.output_products = [mocker.Mock(id="olci", path="s3://bucket/output")]
+    result = update_eopf_assets.fn(mocker.Mock(), [], payload, processor)
+    assert len(result) == 1
+    assert result[0].product_type == "S03OLCEFR"
+    assert result[0].output_product_id == "olci"
+    assert result[0].stac_item.assets["product"].href == "s3://bucket/output/product"
+
+
+@pytest.mark.parametrize("processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI])
+def test_olci_bands_are_published_on_zarr_asset(processor):
+    """STAC 1.1 forbids bands in Item properties; preserve them on the asset."""
+    bands = [{"name": "oa01", "eo:center_wavelength": 0.4}]
+    feature = {
+        "properties": {"datetime": "2025-06-12T02:12:12Z", "bands": bands},
+        "geometry": None,
+        "bbox": None,
+    }
+    item = create_stac_item(None, feature, "s3://bucket/product/zarr.json", "product", processor)
+    published = item.to_dict()
+    assert "bands" not in published["properties"]
+    assert published["assets"]["product"]["bands"] == bands

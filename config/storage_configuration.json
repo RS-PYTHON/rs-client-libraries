@@ -44,7 +44,6 @@
     {
       "name": "s3",
       "kind" : "obs",
-      "opening_mode": "CREATE_OVERWRITE",
       "storage_options": {
         "key": "${S3_ACCESSKEY}",
         "secret": "${S3_SECRETKEY}",
@@ -65,14 +64,12 @@
     {
       "name": "rspython-dev-cs-01",
       "kind" : "shared_disk",
-      "opening_mode": "CREATE_OVERWRITE",
       "absolute_path": "/mnt/share/cs-01/",
       "autoclean" : true
     },
     {
       "name": "my_local_disk1",
       "kind" : "local_disk",
-      "opening_mode": "CREATE_OVERWRITE",
       "absolute_path": "/my_local_path/here/"
     }
   ]

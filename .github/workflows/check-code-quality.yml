@@ -47,4 +47,4 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Validate tasktables
-        run: pipx run check-jsonschema --schemafile tests/schemas/TaskTable.schema.json tests/resources/TaskTable_*.json
+        run: pipx run check-jsonschema --schemafile config/TaskTable.schema.json tests/resources/TaskTable_*.json

@@ -20,6 +20,7 @@ from copy import deepcopy
 from typing import Any
 
 from rs_common.utils import strftime_millis
+from rs_workflows.utils.prefect import get_logger
 
 EXTERNAL_VAR_PATTERN = re.compile(r"\{external_variable\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
 VARIABLE_PATTERN = re.compile(r"^{(.*)}$")  # matches exactly "{var}" (whole string)
@@ -29,11 +30,29 @@ class TaskTableError(ValueError):
     """Errors related to Task Table parsing/validation."""
 
 
-def _replace_external_variables(obj, external_variables: dict[str, Any] | None):
+def get_io_entries(tasktable: dict[str, Any], role: str) -> list[dict[str, Any]]:
+    """Read grouped or product-name-indexed I/O without changing the task table."""
+    io = tasktable["io"]
+    if not isinstance(io, dict):
+        raise TaskTableError("Task table 'io' must be a dictionary")
+    if any(isinstance(io.get(key), list) for key in ("input", "adfs", "output")):
+        return io.get(role, [])
+    entries = []
+    for name, details in io.items():
+        if not isinstance(details, dict):
+            raise TaskTableError(f"Invalid IO definition for '{name}': expected an object")
+        if details.get("name", name) != name:
+            raise TaskTableError(f"IO key '{name}' conflicts with name '{details['name']}'")
+        entries.append({**details, "name": name})
+    return entries
+
+
+def replace_external_variables(obj, external_variables: dict[str, Any] | None):
+    """Replace configured external variables with the input parameters"""
     if isinstance(obj, dict):
-        return {k: _replace_external_variables(v, external_variables) for k, v in obj.items()}
+        return {k: replace_external_variables(v, external_variables) for k, v in obj.items()}
     if isinstance(obj, list):
-        return [_replace_external_variables(v, external_variables) for v in obj]
+        return [replace_external_variables(v, external_variables) for v in obj]
     if isinstance(obj, str) and external_variables:
 
         def replacer(match: re.Match):
@@ -144,12 +163,8 @@ def _extract_io_origin_from_pipeline(
                 f"'{unit_name}' in pipeline. Available steps are: {pipeline_full.get('steps', [])}.",
             )
 
-        # Check that the referenced product exists in the outputs of the unit we found
-        if origin_product_name not in origin_unit.get("output_products", {}):
-            raise TaskTableError(
-                f"Unit '{unit_name}' needs product '{origin_product_name}' from unit '{origin_unit_name}' "
-                f"but available outputs are: {origin_unit.get("output_products", {})}.",
-            )
+        # NOTE: we don't check that the referenced product exists in the outputs of the unit we found.
+        # A product exists in the outputs only if we want to write it on disk or s3.
 
         product_origin = f"{origin_unit_name}.{origin_step_id}.{origin_product_name}"
 
@@ -158,9 +173,8 @@ def _extract_io_origin_from_pipeline(
 
 def _build_entry(
     io_product: dict,
-    io_index: dict[str, dict[str, Any]],
+    io_index_type: dict[str, dict[str, Any]],
     processing_modes: Iterable[str] | None,
-    external_variables: dict[str, Any] | None,
     origin: str = "",
 ) -> dict[str, Any] | None:
     """
@@ -171,7 +185,7 @@ def _build_entry(
 
     Args:
         io_product: content of the field "input_products" (or output, or adfs) from the unit's description
-        io_index: dictionary of the I/O descriptions from the "io" section of the tasktable
+        io_index_type: dictionary of the I/O descriptions from the "io" section of the tasktable
         processing_modes: list of processing modes used for this flow
         origin: origin of the I/O. Needs to be computed beforehand for pipelines. Optional.
     """
@@ -196,11 +210,11 @@ def _build_entry(
         return None
 
     # Retrieve product details from "io" section
-    io_details = io_index.get(io_product["name"], {})
+    io_details = io_index_type.get(io_product["name"], {})
     if not io_details:
         raise TaskTableError(
             f'Could not find details for product "{io_product["name"]}" in "io" section, " \
-                "available products are: {io_index.keys()}.',
+                "available products are: {io_index_type.keys()}.',
         )
 
     # Merge info from both to create the final product details
@@ -216,18 +230,14 @@ def _build_entry(
         if k not in [*product_details, "mode"]:
             product_details[k] = v
 
-    # Finally, replace the external variables with the values given
-    product_details = _replace_external_variables(product_details, external_variables)
-
     return product_details
 
 
 def _build_single_unit_details(
     unit_name: str,
     units_index: dict[str, dict[str, Any]],
-    io_index: dict[str, dict[str, Any]],
+    io_index: dict[str, dict[str, dict[str, Any]]],
     processing_modes: Iterable[str] | None,
-    external_variables: dict[str, Any] | None,
     full_pipeline: dict[str, Any] | None = None,
     step_id: int = 0,
     parameters: dict[str, Any] | None = None,
@@ -243,7 +253,6 @@ def _build_single_unit_details(
         units_index: dictionary of the unit descriptions from the "units" section of the tasktable
         io_index: dictionary of the I/O descriptions from the "io" section of the tasktable
         processing_modes: list of processing modes used for this flow
-        external_variables: dictionary of external variables values from flow's input
         full_pipeline: full definition of the pipeline from the tasktable.
             Optional, needed only if the flow mode is "pipeline"
         step_id: ID of the step in the pipeline corresponding to the given unit. Optional, needed only
@@ -277,9 +286,8 @@ def _build_single_unit_details(
 
         input_entry = _build_entry(
             input_product,
-            io_index,
+            io_index.get("input", {}),
             processing_modes,
-            external_variables,
             origin=input_product_origin,
         )
         if input_entry:
@@ -288,7 +296,7 @@ def _build_single_unit_details(
     # Build input ADFS, only defined by the unit details, does not depend on the mode
     input_adfs: list[dict[str, Any]] = []
     for adfs_product in unit_details.get("input_adfs", {}):
-        adfs_entry = _build_entry(adfs_product, io_index, processing_modes, external_variables)
+        adfs_entry = _build_entry(adfs_product, io_index.get("adfs", {}), processing_modes)
         if adfs_entry:
             input_adfs.append(adfs_entry)
 
@@ -308,9 +316,8 @@ def _build_single_unit_details(
 
         output_entry = _build_entry(
             output_product,
-            io_index,
+            io_index.get("output", {}),
             processing_modes,
-            external_variables,
             origin=output_product_origin,
         )
         if output_entry:
@@ -340,7 +347,6 @@ def build_unit_list(
     pipeline: str | None = None,
     unit: str | None = None,
     processing_mode: Iterable[str] | None = None,
-    external_variables: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Build the list of units needed for the payload, from the tasktable given and the flow mode (pipeline or unit).
@@ -354,8 +360,19 @@ def build_unit_list(
         pipeline: name of the pipeline to build, if the mode is "pipeline". If "unit" is given, has to be None.
         unit: name of the unit to build, if the mode is "unit". If "pipeline" is given, has to be None.
         processing_mode: list of processing modes used for this flow. Optional
-        external_variables: dictionary of external variables values from flow's input. Optional
     """
+    io = tasktable.get("io") if isinstance(tasktable, dict) else None
+    get_logger(__name__).debug(
+        "Task table IO diagnostic: file=%s expected_io_type=dict tasktable_type=%s io_type=%s io_keys=%s "
+        "pipeline=%s unit=%s",
+        __file__,
+        type(tasktable).__name__,
+        type(io).__name__,
+        list(io) if isinstance(io, dict) else None,
+        pipeline,
+        unit,
+    )
+
     # Validate pipelines shape
     if not isinstance(tasktable, dict):
         raise TaskTableError(f"Task table root must be a JSON object (dict): {tasktable}")
@@ -363,8 +380,8 @@ def build_unit_list(
         raise TaskTableError(f"Missing or invalid 'pipelines' list in task table: {tasktable}")
     if "units" not in tasktable or not isinstance(tasktable["units"], list):
         raise TaskTableError(f"Missing or invalid 'units' list in task table: {tasktable}")
-    if "io" not in tasktable or not isinstance(tasktable["io"], list):
-        raise TaskTableError(f"Missing or invalid 'io' list in task table: {tasktable}")
+    if "io" not in tasktable or not isinstance(tasktable["io"], dict):
+        raise TaskTableError(f"Missing or invalid 'io' dict in task table: {tasktable}")
 
     if pipeline and unit:
         raise TaskTableError("Provide either 'pipeline' or 'unit', not both.")
@@ -379,11 +396,10 @@ def build_unit_list(
     if not units_index:
         raise TaskTableError('No valid unit entries found in "units".')
 
-    # Retrieve details of inputs/outputs from "io" field
-    io_index: dict[str, dict[str, Any]] = {}
-    for io in tasktable["io"]:
-        if isinstance(io, dict) and isinstance(io.get("name"), str):
-            io_index[io["name"]] = io
+    # Retrieve details of inputs/adfs/outputs from "io" field
+    io_index: dict[str, dict[str, dict[str, Any]]] = {}
+    for io_type in ("input", "adfs", "output"):
+        io_index[io_type] = {entry["name"]: entry for entry in get_io_entries(tasktable, io_type)}
 
     out_units: list[dict[str, Any]] = []
 
@@ -394,7 +410,6 @@ def build_unit_list(
             units_index,
             io_index,
             processing_mode,
-            external_variables,
         )
         out_units.append(unit_details)
 
@@ -429,7 +444,6 @@ def build_unit_list(
                 units_index,
                 io_index,
                 processing_mode,
-                external_variables,
                 full_pipeline=full_pipeline,
                 step_id=step["step_id"],
                 parameters=step.get("parameters", None),
@@ -459,26 +473,3 @@ def build_cql2_json(query: dict[str, Any], values: dict[str, Any]):
 
     # Work on a deep copy so we don't mutate the original
     return _replace(deepcopy(query))["stac"]
-
-
-def extract_external_modules(tasktable: dict[str, Any]) -> list[dict[str, str]] | None:
-    """
-    Extracts the list of external modules from the tasktable and formats it for the payload
-    Returns an empty list if no external modules are defined.
-    """
-    if "external_modules" not in tasktable:
-        return None
-    if not isinstance(tasktable["external_modules"], list):
-        raise TaskTableError(
-            f"Found 'external_modules' but is a '{type(tasktable['external_modules']).__name__}' instead of a list.",
-        )
-
-    payload_external_modules: list[dict[str, str]] = []
-    for module in tasktable["external_modules"]:
-        module_dict = {
-            "name": module,
-            "nested": "true",
-        }
-        payload_external_modules.append(module_dict)
-
-    return payload_external_modules

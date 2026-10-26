@@ -73,8 +73,10 @@ def find_zarr_zip(zattrs_s3_location: str) -> str | None:
     return None
 
 
-def extract_products_and_zattrs(files: list[str], base_path: str):
+def extract_products_and_zattrs(files: list[str], base_path: str, *, zarr_v3: bool = True):
     """Extract product names and their corresponding .zattrs file paths.
+
+    With ``zarr_v3=True``, also discover zarr.json and prefer it per product.
 
     Filters a list of file paths to find .zattrs files located under product
     directories within a base path, following one of these structures:
@@ -106,14 +108,17 @@ def extract_products_and_zattrs(files: list[str], base_path: str):
         [('product_a', '/data/products/product_a/.zattrs'),
          ('product_b', '/data/products/product_b/.zattrs')]
     """
-    dirs_and_attrs = []
+    # OLCI CPM 3 writes root attributes in zarr.json. Prefer it over legacy metadata.
+    metadata_names = ("zarr.json", ".zattrs") if zarr_v3 else (".zattrs",)
+    dirs_and_attrs: dict = {}
 
     normalized_base_path = base_path.rstrip("/")
 
-    root_zattrs = f"{normalized_base_path}/.zattrs"
-    if root_zattrs in files:
-        product_dirname = normalized_base_path.rsplit("/", maxsplit=1)[-1]
-        return [(product_dirname, root_zattrs)]
+    for metadata_name in metadata_names:
+        root_metadata = f"{normalized_base_path}/{metadata_name}"
+        if root_metadata in files:
+            product_dirname = normalized_base_path.rsplit("/", maxsplit=1)[-1]
+            return [(product_dirname, root_metadata)]
 
     for file in files:
         if not file.startswith(normalized_base_path + "/"):
@@ -123,16 +128,20 @@ def extract_products_and_zattrs(files: list[str], base_path: str):
         parts = rest.split("/")
 
         # 1: base_path/product/.zattrs
-        if len(parts) == 2 and parts[1] == ".zattrs":
+        if len(parts) == 2 and parts[1] in metadata_names:
             product_dirname = parts[0]
-            dirs_and_attrs.append((product_dirname, file))
+            previous = dirs_and_attrs.get(product_dirname)
+            if previous is None or file.endswith("/zarr.json"):
+                dirs_and_attrs[product_dirname] = file
 
         # 2: base_path/products/product/.zattrs
-        elif len(parts) == 3 and parts[0] == "products" and parts[2] == ".zattrs":
+        elif len(parts) == 3 and parts[0] == "products" and parts[2] in metadata_names:
             product_dirname = parts[1]
-            dirs_and_attrs.append((product_dirname, file))
+            previous = dirs_and_attrs.get(product_dirname)
+            if previous is None or file.endswith("/zarr.json"):
+                dirs_and_attrs[product_dirname] = file
 
-    return dirs_and_attrs
+    return list(dirs_and_attrs.items())
 
 
 def read_zattrs_sync(path: str):
@@ -222,6 +231,12 @@ def create_stac_item(
         if feature_dict["properties"].get("datetime") is None:
             feature_dict["properties"]["datetime"] = feature_dict["properties"]["created"]
 
+        # STAC 1.1 allows bands on assets, but forbids them in Item properties.
+        if dpr_processor in (DprProcessor.S3L1OLCI.value, DprProcessor.S3L2OLCI.value):
+            bands = feature_dict["properties"].pop("bands", None)
+            if bands is not None:
+                assets[product_name].extra_fields["bands"] = bands
+
         return Item(
             id=product_name,
             geometry=feature_dict.get("geometry"),
@@ -244,7 +259,7 @@ def create_stac_item(
             Asset: A STAC Asset configured for EOPF output products.
         """
         return Asset(
-            href=path.replace("/.zattrs", ""),
+            href=path.rsplit("/", maxsplit=1)[0] if path.endswith(("/.zattrs", "/zarr.json")) else path,
             title=product_name,
             media_type="application/vnd+zarr",
             roles=["data", "metadata"],
@@ -344,7 +359,7 @@ def update_eopf_assets(
     logger.info(f"Input products: {input_products}")
 
     if payload.io is None:
-        raise RuntimeError("Payload I/O configuration is missing.")
+        raise RuntimeError("Payload io configuration is missing.")
     # Get all .zattrs files found in the output products paths
     zattrs_list = []
     for prod in payload.io.output_products:
@@ -397,7 +412,10 @@ def update_eopf_assets(
         if not zattrs_data:
             logger.error(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
             raise RuntimeError(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
-        logger.info(f"DPR processor output {zattrs_data}")
+        # Zarr v3 stores root attributes inside "attributes" for every processor.
+        # Legacy .zattrs files contain those attributes directly.
+        zattrs_data = zattrs_data.get("attributes", zattrs_data)
+        logger.debug(f"DPR processor attributes {zattrs_data}")
 
         # Extract EOPF info
         if "stac_discovery" not in zattrs_data or "properties" not in zattrs_data["stac_discovery"]:
@@ -547,7 +565,7 @@ async def run_processor(
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "run-processor"):
         if payload.io is None:
-            raise ValueError("Payload I/O configuration is missing.")
+            raise ValueError("Payload io configuration is missing.")
         # First, remove the output products that are not final products from
         # the payload to avoid triggering the catalog registration for them
         # Create a temporary list for keeping track of products to keep

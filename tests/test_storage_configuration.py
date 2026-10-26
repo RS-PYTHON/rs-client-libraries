@@ -61,8 +61,8 @@ def _config_data():
                     "region_name": "${S3_REGION}",
                 },
             },
-            {"name": "local_disk", "kind": "local_disk", "opening_mode": "rw", "absolute_path": "/data"},
-            {"name": "shared_disk", "kind": "shared_disk", "opening_mode": "r", "absolute_path": "/mnt/shared"},
+            {"name": "local_disk", "kind": "local_disk", "absolute_path": "/data"},
+            {"name": "shared_disk", "kind": "shared_disk", "absolute_path": "/mnt/shared"},
         ],
     }
     Variable.set(STORAGE_CONFIG, value, overwrite=True)
@@ -136,7 +136,6 @@ def test_get_disk_storage_local_disk(secrets):
     assert params is None
     disk_storage = sc.get_disk_storage("local_disk")
     assert disk_storage is not None
-    assert disk_storage["opening_mode"] == "rw"
     assert disk_storage["path"] == f"/data/{sc.job_identifier}"
     assert disk_storage["autoclean"] is True
 
@@ -148,7 +147,6 @@ def test_get_disk_storage_shared_disk(secrets):
     assert params is None
     disk_storage = sc.get_disk_storage("shared_disk")
     assert disk_storage is not None
-    assert disk_storage["opening_mode"] == "r"
     assert disk_storage["path"] == f"/mnt/shared/{sc.job_identifier}"
     assert disk_storage["autoclean"] is False
 

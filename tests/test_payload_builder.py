@@ -19,12 +19,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import jsonschema
 import pytest
 
 from rs_workflows.payload_builder import (
     TaskTableError,
     build_unit_list,
-    extract_external_modules,
+    replace_external_variables,
 )
 
 SCENARIOS: dict[str, dict] = {
@@ -65,31 +66,31 @@ SCENARIOS: dict[str, dict] = {
     # S1 ARD
     "9": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"pipeline": "s1_ard_full", "processing_mode": ["nrt", "reprocessing"]},
+        "kwargs": {"pipeline": "SLC__1_NRB__1", "processing_mode": ["nrt", "reprocessing"]},
     },
     "10": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "calibration", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "Calibration", "processing_mode": ["nrt"]},
     },
     "11": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "reference_dem", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "ReferenceDEM", "processing_mode": ["nrt"]},
     },
     "12": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "reference_geometry", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "ReferenceGeometry", "processing_mode": ["nrt"]},
     },
     "13": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "coregistration", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "Coregistration", "processing_mode": ["nrt"]},
     },
     "14": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "geocoding", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "Geocoding", "processing_mode": ["nrt"]},
     },
     "15": {
         "json_path": "TaskTable_S1_ARD_generated_by_rs_python_v1.json",
-        "kwargs": {"unit": "mosaicking", "processing_mode": ["nrt"]},
+        "kwargs": {"unit": "Mosaicking", "processing_mode": ["nrt"]},
     },
 }
 
@@ -102,16 +103,21 @@ def test_build_unit_list_returns_dict(case_id, cfg):  # pylint: disable=unused-a
     with tt_path.open("r", encoding="utf-8") as f:
         tt = json.load(f)
 
+    tt = replace_external_variables(
+        tt,
+        external_variables={
+            "start_datetime": datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+            "end_datetime": datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
+            "satellite": "sentinel-3a",
+            "instrument_mode": "IW",
+            "reference_date": "2026-04-08",
+        },
+    )
     out = build_unit_list(
         tasktable=tt,
         pipeline=cfg["kwargs"].get("pipeline"),
         unit=cfg["kwargs"].get("unit"),
         processing_mode=cfg["kwargs"].get("processing_mode"),
-        external_variables={
-            "start_datetime": datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
-            "end_datetime": datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc),
-            "satellite": "sentinel-3a",
-        },
     )
     assert isinstance(out, list)
 
@@ -133,7 +139,7 @@ def _valid_tasktable():
                 "output_products": [],
             },
         ],
-        "io": [],
+        "io": {},
     }
 
 
@@ -160,7 +166,7 @@ def test_build_unit_list_invalid_tasktable_root_type():
 def test_build_unit_list_missing_or_invalid_pipelines_list():
     """Test that a missing or non-list 'pipelines' field in the task table raises
     TaskTableError with the expected message."""
-    tt: dict[str, Any] = {"units": [], "io": []}
+    tt: dict[str, Any] = {"units": [], "io": {}}
     with pytest.raises(TaskTableError, match=r"Missing or invalid 'pipelines' list in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
@@ -168,7 +174,7 @@ def test_build_unit_list_missing_or_invalid_pipelines_list():
 def test_build_unit_list_missing_or_invalid_units_list():
     """Test that a missing or non-list 'units' field in the task table raises
     TaskTableError with the expected message."""
-    tt: dict[str, Any] = {"pipelines": [], "io": []}
+    tt: dict[str, Any] = {"pipelines": [], "io": {}}
     with pytest.raises(TaskTableError, match=r"Missing or invalid 'units' list in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
@@ -179,7 +185,7 @@ def test_build_unit_list_missing_or_invalid_io_list():
         "pipelines": [{"name": "p1", "steps": [{"step_id": 1, "unit_name": "u1"}]}],
         "units": [{"name": "u1", "module": "m", "input_products": [], "input_adfs": [], "output_products": []}],
     }
-    with pytest.raises(TaskTableError, match=r"Missing or invalid 'io' list in task table:.+"):
+    with pytest.raises(TaskTableError, match=r"Missing or invalid 'io' dict in task table:.+"):
         build_unit_list(tt, pipeline="p1")
 
 
@@ -195,7 +201,7 @@ def test_select_unit_names_reports_available_pipelines():
                 "output_products": [],
             },
         ],
-        "io": [],
+        "io": {},
         "pipelines": [
             {
                 "name": "good_pipeline",
@@ -221,7 +227,7 @@ def test_build_unit_list_reports_available_units():
             {"name": "u1", "module": "pkg.u1", "input_products": [], "input_adfs": [], "output_products": []},
             {"name": "u2", "module": "pkg.u2", "input_products": [], "input_adfs": [], "output_products": []},
         ],
-        "io": [],
+        "io": {},
         "pipelines": [],  # not needed for this case
     }
 
@@ -253,12 +259,14 @@ def test_build_entries_filters_by_mode():
             },
         ],
         # Provide minimal IO entries so build_unit_list can resolve types
-        "io": [
-            {"name": "always_p", "type": "folder", "store_type": "safe"},
-            {"name": "none_p", "type": "folder", "store_type": "safe"},
-            {"name": "nrt_p", "type": "folder", "store_type": "safe"},
-            {"name": "ntc_p", "type": "folder", "store_type": "safe"},
-        ],
+        "io": {
+            "input": [
+                {"name": "always_p", "type": "folder", "engine": "cpm_safe"},
+                {"name": "none_p", "type": "folder", "engine": "cpm_safe"},
+                {"name": "nrt_p", "type": "folder", "engine": "cpm_safe"},
+                {"name": "ntc_p", "type": "folder", "engine": "cpm_safe"},
+            ],
+        },
         "pipelines": [
             {
                 "name": "p_full",
@@ -305,174 +313,283 @@ def test_case_8_exact_output():
 
     out = build_unit_list(
         tasktable=tt,
-        pipeline="s1_ard_full",
+        pipeline="SLC__1_NRB__1",
         processing_mode=["nrt", "reprocessing"],
     )
 
     expected = [
         {
-            "name": "calibration.1",
-            "module": "s1_l12_rp.computing.ard_processing_units",
+            "name": "Calibration.1",
+            "module": "s1_ard.computing.ard_processing_units",
             "input_products": [
+                {"name": "slcs", "mandatory": True, "origin": "pipeline_input", "type": "file", "engine": "cpm_zarr"},
+            ],
+            "input_adfs": [
                 {
-                    "name": "cal_input",
-                    "origin": "pipeline_input",
+                    "name": "ETAD",
                     "mandatory": False,
                     "type": "folder",
-                    "store_type": "safe",
+                    "engine": "cpm_zarr",
+                    "folder_multiplicity": "one_per_input",
+                    "alternatives": [
+                        {
+                            "order": 1,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCoverWithSatellite",
+                                "parameters": {
+                                    "product_type": "{external_variable.instrument_mode}_ETA__AX",
+                                    "start_datetime": "{slcs.start_datetime}",
+                                    "end_datetime": "{slcs.end_datetime}",
+                                    "satellite": "{slcs.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                    ],
+                },
+                {
+                    "name": "ORBIT",
+                    "mandatory": False,
+                    "type": "folder",
+                    "folder_multiplicity": "one_per_input",
+                    "alternatives": [
+                        {
+                            "order": 1,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValidity",
+                                "parameters": {"product_type": "MPL_ORBSCT", "satellite": "{slcs.platform}"},
+                            },
+                        },
+                        {
+                            "order": 2,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCoverWithSatellite",
+                                "parameters": {
+                                    "product_type": "AUX_POEORB",
+                                    "start_datetime": "{slcs.start_datetime}",
+                                    "end_datetime": "{slcs.end_datetime}",
+                                    "satellite": "{slcs.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                        {
+                            "order": 3,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCoverWithSatellite",
+                                "parameters": {
+                                    "product_type": "AUX_MOEORB",
+                                    "start_datetime": "{slcs.start_datetime}",
+                                    "end_datetime": "{slcs.end_datetime}",
+                                    "satellite": "{slcs.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                        {
+                            "order": 4,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCoverWithSatellite",
+                                "parameters": {
+                                    "product_type": "MPL_ORBRES",
+                                    "start_datetime": "{slcs.start_datetime}",
+                                    "end_datetime": "{slcs.end_datetime}",
+                                    "satellite": "{slcs.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                        {
+                            "order": 5,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCoverWithSatellite",
+                                "parameters": {
+                                    "product_type": "MPL_ORBPRE",
+                                    "start_datetime": "{slcs.start_datetime}",
+                                    "end_datetime": "{slcs.end_datetime}",
+                                    "satellite": "{slcs.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                    ],
+                },
+                {"name": "REFERENCE_DB", "mandatory": False, "type": "folder", "engine": "cpm_zarr"},
+            ],
+            "output_products": [],
+            "parameters": {"recompute": "True", "reference_date": "{external_variable.reference_date}"},
+        },
+        {
+            "name": "ReferenceDEM.2",
+            "module": "s1_ard.computing.ard_processing_units",
+            "input_products": [
+                {
+                    "name": "slcs",
+                    "mandatory": True,
+                    "origin": "Calibration.1.slcs",
+                    "type": "file",
+                    "engine": "cpm_zarr",
                 },
             ],
             "input_adfs": [
-                {"name": "CONFIG", "mandatory": False, "type": "filename"},
-                {"name": "ETAD", "mandatory": False, "type": "folder"},
-            ],
-            "output_products": [
                 {
-                    "name": "CAL_SLCS",
-                    "origin": "pipeline_internal",
-                    "mandatory": True,
-                    "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
+                    "name": "DEM",
+                    "mandatory": False,
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                    "alternatives": [
+                        {
+                            "order": 1,
+                            "timeout_seconds": 0,
+                            "query": {"name": "ByItemId", "parameters": {"item_id": "GLO-30"}},
+                        },
+                    ],
                 },
+                {"name": "REFERENCE_DB", "mandatory": False, "type": "folder", "engine": "cpm_zarr"},
             ],
-            "parameters": {"reference_date": "somevalue"},
+            "output_products": [],
+            "parameters": {"recompute": "True"},
         },
         {
-            "name": "reference_dem.2",
-            "module": "s1_l12_rp.computing.ard_processing_units",
+            "name": "ReferenceGeometry.3",
+            "module": "s1_ard.computing.ard_processing_units",
             "input_products": [
                 {
-                    "name": "cal_slcs",
-                    "origin": "calibration.1.CAL_SLCS",
-                    "mandatory": False,
+                    "name": "slcs",
+                    "mandatory": True,
+                    "origin": "Calibration.1.slcs",
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                },
+                {"name": "dem", "mandatory": True, "origin": "ReferenceDEM.2.DEM", "type": "folder"},
+            ],
+            "input_adfs": [{"name": "REFERENCE_DB", "mandatory": True, "type": "folder", "engine": "cpm_zarr"}],
+            "output_products": [],
+            "parameters": {"recompute": "True"},
+        },
+        {
+            "name": "Coregistration.4",
+            "module": "s1_ard.computing.ard_processing_units",
+            "input_products": [
+                {
+                    "name": "slcs",
+                    "mandatory": True,
+                    "origin": "Calibration.1.slcs",
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                },
+                {"name": "dem", "mandatory": True, "origin": "ReferenceDEM.2.DEM", "type": "folder"},
+                {
+                    "name": "simulation_ref",
+                    "mandatory": True,
+                    "origin": "ReferenceGeometry.3.simulation_ref",
                     "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
+                },
+            ],
+            "input_adfs": [],
+            "output_products": [
+                {
+                    "name": "cslcs",
+                    "mandatory": True,
+                    "origin": "pipeline_internal",
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                    "writer_params": {"consolidate": True},
+                },
+            ],
+        },
+        {
+            "name": "Geocoding.5",
+            "module": "s1_ard.computing.ard_processing_units",
+            "input_products": [
+                {
+                    "name": "slcs",
+                    "mandatory": True,
+                    "origin": "Coregistration.4.slcs",
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                },
+                {
+                    "name": "simulation_ref",
+                    "mandatory": True,
+                    "origin": "ReferenceGeometry.3.simulation_ref",
+                    "type": "folder",
+                },
+            ],
+            "input_adfs": [],
+            "output_products": [
+                {
+                    "name": "gslcs",
+                    "mandatory": True,
+                    "origin": "pipeline_internal",
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                    "writer_params": {"consolidate": True},
+                },
+            ],
+        },
+        {
+            "name": "Mosaicking.6",
+            "module": "s1_ard.computing.ard_processing_units",
+            "input_products": [
+                {
+                    "name": "gslcs",
+                    "mandatory": True,
+                    "origin": "Geocoding.5.gslcs",
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                    "reader_params": {"consolidate": True},
+                },
+                {
+                    "name": "slcs",
+                    "mandatory": True,
+                    "origin": "Coregistration.4.slcs",
+                    "type": "file",
+                    "engine": "cpm_zarr",
                 },
             ],
             "input_adfs": [
-                {"name": "CONFIG", "mandatory": False, "type": "filename"},
-                {"name": "DEM", "mandatory": False, "type": "folder"},
-            ],
-            "output_products": [
-                {"name": "reference_dem", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
-            ],
-        },
-        {
-            "name": "reference_geometry.3",
-            "module": "s1_l12_rp.computing.ard_processing_units",
-            "input_products": [
                 {
-                    "name": "cal_slcs",
-                    "origin": "calibration.1.CAL_SLCS",
-                    "mandatory": False,
-                    "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
-                },
-                {
-                    "name": "reference_dem",
-                    "origin": "reference_dem.2.reference_dem",
-                    "mandatory": False,
-                    "type": "folder",
-                },
-            ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
-            "output_products": [
-                {"name": "simulation_ref", "origin": "pipeline_internal", "mandatory": True, "type": "folder"},
-            ],
-        },
-        {
-            "name": "coregistration.4",
-            "module": "s1_l12_rp.computing.ard_processing_units",
-            "input_products": [
-                {
-                    "name": "cal_slcs",
-                    "origin": "calibration.1.CAL_SLCS",
-                    "mandatory": False,
-                    "type": "folder",
-                    "store_type": "safe",
-                    "opening_mode": "CREATE_OVERWRITE",
-                },
-                {
-                    "name": "reference_dem",
-                    "origin": "reference_dem.2.reference_dem",
-                    "mandatory": False,
-                    "type": "folder",
-                },
-                {
-                    "name": "simulation_ref",
-                    "origin": "reference_geometry.3.simulation_ref",
-                    "mandatory": False,
-                    "type": "folder",
-                },
-            ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
-            "output_products": [
-                {
-                    "name": "cslcs",
-                    "origin": "pipeline_internal",
+                    "name": "S2_TILES",
                     "mandatory": True,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "type": "file",
+                    "alternatives": [
+                        {
+                            "order": 1,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCover",
+                                "parameters": {
+                                    "product_type": "GIP_TILPAR",
+                                    "start_datetime": "{external_variable.reference_date}T00:00:00.000Z",
+                                    "end_datetime": "{external_variable.reference_date}T23:59:59.000Z",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
+                            },
+                        },
+                    ],
                 },
             ],
-        },
-        {
-            "name": "geocoding.5",
-            "module": "s1_l12_rp.computing.ard_processing_units",
-            "input_products": [
-                {
-                    "name": "cslcs",
-                    "origin": "coregistration.4.cslcs",
-                    "mandatory": False,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
-                },
-                {
-                    "name": "simulation_ref",
-                    "origin": "reference_geometry.3.simulation_ref",
-                    "mandatory": False,
-                    "type": "folder",
-                },
-            ],
-            "input_adfs": [{"name": "CONFIG", "mandatory": False, "type": "filename"}],
-            "output_products": [
-                {
-                    "name": "gslcs",
-                    "origin": "pipeline_internal",
-                    "mandatory": True,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
-                },
-            ],
-        },
-        {
-            "name": "mosaicking.6",
-            "module": "s1_l12_rp.computing.ard_processing_units",
-            "input_products": [
-                {
-                    "name": "gslcs",
-                    "origin": "geocoding.5.gslcs",
-                    "mandatory": False,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
-                },
-            ],
-            "input_adfs": [{"name": "S2_TILES", "mandatory": False, "type": "filename"}],
             "output_products": [
                 {
                     "name": "nrb",
-                    "origin": "pipeline_output",
                     "mandatory": True,
-                    "type": "filename",
-                    "store_type": "zarr",
-                    "store_params": {"consolidate": True},
+                    "origin": "pipeline_output",
+                    "type": "file",
+                    "engine": "cpm_zarr",
+                    "writer_params": {"consolidate": True},
                 },
             ],
         },
@@ -488,14 +605,17 @@ def test_case_s1_l0_exact_output_with_regex():
     start_datetime = datetime(2023, 10, 3, 11, 0, 0, tzinfo=timezone.utc)
     end_datetime = datetime(2025, 10, 3, 11, 0, 0, tzinfo=timezone.utc)
 
-    out = build_unit_list(
-        tasktable=tt,
-        pipeline="s1_l0_full",
-        processing_mode=None,
+    tt = replace_external_variables(
+        tt,
         external_variables={
             "start_datetime": start_datetime,
             "end_datetime": end_datetime,
         },
+    )
+    out = build_unit_list(
+        tasktable=tt,
+        pipeline="s1_l0_full",
+        processing_mode=None,
     )
 
     expected = [
@@ -508,15 +628,15 @@ def test_case_s1_l0_exact_output_with_regex():
                     "origin": "pipeline_input",
                     "mandatory": True,
                     "type": "folder",
-                    "store_type": "cadu",
+                    "engine": "cadu",
                 },
             ],
             "input_adfs": [
                 {
                     "name": "osf",
                     "mandatory": False,
-                    "type": "filename",
-                    "store_type": "safe",
+                    "type": "file",
+                    "engine": "cpm_safe",
                     "alternatives": [
                         {
                             "order": 1,
@@ -537,8 +657,8 @@ def test_case_s1_l0_exact_output_with_regex():
                 {
                     "name": "fro",
                     "mandatory": False,
-                    "type": "filename",
-                    "store_type": "safe",
+                    "type": "file",
+                    "engine": "cpm_safe",
                     "alternatives": [
                         {
                             "order": 1,
@@ -564,8 +684,7 @@ def test_case_s1_l0_exact_output_with_regex():
                     "mandatory": True,
                     "regex": ".*",
                     "type": "folder",
-                    "store_type": "zarr",
-                    "opening_mode": "CREATE_OVERWRITE",
+                    "engine": "cpm_zarr",
                 },
             ],
         },
@@ -574,7 +693,7 @@ def test_case_s1_l0_exact_output_with_regex():
     assert out == expected
 
 
-def test_build_unit_list_none_datetime_raises_task_table_error():
+def test_external_variables_none_datetime_raises_task_table_error():
     """Regression test: a task table referencing a '{external_variable.*datetime}' placeholder
     must raise a clear TaskTableError -- not an AttributeError -- when the corresponding
     external variable value is None (e.g. start_datetime/end_datetime not provided by the flow).
@@ -585,12 +704,9 @@ def test_build_unit_list_none_datetime_raises_task_table_error():
     """
     tt_path = Path(__file__).parent / "resources" / "TaskTable_S1_L0_generated_by_rs_python_v1.json"
     tt = json.loads(tt_path.read_text(encoding="utf-8"))
-
     with pytest.raises(TaskTableError, match="External variable 'start_datetime' is required"):
-        build_unit_list(
-            tasktable=tt,
-            pipeline="s1_l0_full",
-            processing_mode=None,
+        tt = replace_external_variables(
+            tt,
             external_variables={
                 "start_datetime": None,
                 "end_datetime": None,
@@ -598,32 +714,40 @@ def test_build_unit_list_none_datetime_raises_task_table_error():
         )
 
 
-def test_extract_external_modules():
-    """
-    Unit test for extract_external_modules
-    """
-    test_tasktable_with_external_modules = {
-        "external_modules": ["testmodule.submodule.testclass"],
-        "units": [
-            {
-                "name": "u1",
-                "module": "pkg.u1",
-                "input_products": [],
-                "input_adfs": [],
-                "output_products": [],
-            },
-        ],
-        "io": [],
-        "pipelines": [
-            {
-                "name": "good_pipeline",
-                "steps": [{"unit_name": "u1", "step_id": 1, "input_products": {}, "output_products": {}}],
-            },
-        ],
+@pytest.mark.parametrize("selection", [{"pipeline": "ol1_eo"}, {"unit": "OL1Processor"}])
+def test_s3_olci_l1_grouped_io(selection):
+    """The OLCI L1 task table supports grouped I/O in pipeline and unit modes."""
+    root = Path(__file__).resolve().parent.parent
+    tasktable = json.loads((root / "tests/resources/TaskTable_S3_OLCI_L1.json").read_text())
+    schema = json.loads((root / "config/TaskTable.schema.json").read_text())
+    jsonschema.validate(tasktable, schema)
+
+    units = build_unit_list(tasktable, **selection)
+    assert len(units) == 1
+    built = units[0]
+    assert built["module"] == "s3olci.s3_ol1.ol1_processor"
+    for role, io_role in (("input_products", "input"), ("input_adfs", "adfs"), ("output_products", "output")):
+        expected = tasktable["io"][io_role]
+        assert [entry["name"] for entry in built[role]] == [entry["name"] for entry in expected]
+        for entry, details in zip(built[role], expected):
+            assert all(entry[key] == value for key, value in details.items())
+    assert all(entry["origin"] == "pipeline_input" for entry in built["input_products"])
+    assert all(entry["origin"] == "pipeline_output" for entry in built["output_products"])
+
+
+@pytest.mark.parametrize("selection", [{"pipeline": "ol1_eo"}, {"unit": "OL1Processor"}])
+def test_build_unit_list_io_indexed_by_product_name(selection):
+    """Product names used as dictionary keys replace each entry's name field."""
+    root = Path(__file__).resolve().parent.parent
+    tasktable = json.loads((root / "tests/resources/TaskTable_S3_OLCI_L1.json").read_text())
+    expected = build_unit_list(tasktable, **selection)
+    tasktable["io"] = {
+        entry["name"]: {key: value for key, value in entry.items() if key != "name"}
+        for entries in tasktable["io"].values()
+        for entry in entries
     }
-
-    expected_external_modules = [{"name": "testmodule.submodule.testclass", "nested": "true"}]
-
-    extracted_modules = extract_external_modules(test_tasktable_with_external_modules)
-
-    assert extracted_modules == expected_external_modules
+    original_io = json.dumps(tasktable["io"])
+    schema = json.loads((root / "config/TaskTable.schema.json").read_text())
+    jsonschema.validate(tasktable, schema)
+    assert build_unit_list(tasktable, **selection) == expected
+    assert json.dumps(tasktable["io"]) == original_io
