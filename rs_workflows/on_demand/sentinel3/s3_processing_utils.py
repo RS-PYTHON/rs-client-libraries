@@ -20,25 +20,24 @@ from prefect import runtime
 from prefect.events import emit_event
 
 from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, WorkflowType
-from rs_workflows.process_any_flow import ProcessingId, process_any
+from rs_workflows.utils.dpr import ProcessorSettings, call_dpr_flow
 from rs_workflows.utils.prefect import get_logger
-
-OLCI_PROCESSING_IDS = {"l1": ProcessingId.S3_OLCI_L1, "l2": ProcessingId.S3_OLCI_L2}
 
 
 async def process_olci(
     level: Literal["l1", "l2"],
     env_args: FlowEnvArgs,
+    settings: ProcessorSettings,
     input_products: list[FlowInputProduct],
     external_variables: dict[str, Any],
     workflow: WorkflowType,
 ) -> list[dict[str, Any]]:
-    """Run the OLCI processing of a level with `process-any`, then request the quicklooks of the generated products."""
-    products = await process_any(
-        env_args=env_args,
+    """Run the OLCI processing of a level, then request the quicklooks of the generated products."""
+    products = await call_dpr_flow(
+        env=env_args,
+        settings=settings,
         input_products=input_products,
         external_variables=external_variables,
-        processing_id=OLCI_PROCESSING_IDS[level],
         workflow=workflow,
     )
     emit_olci_quicklook_event(level, env_args.owner_id, products)

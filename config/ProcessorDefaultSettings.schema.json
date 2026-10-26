@@ -1,6 +1,6 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "Prefect variable <processor_identifier>-default-setting format",
+    "title": "Prefect variable <processing_id>-default-setting format",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -79,6 +79,13 @@
                     "collection_name": {
                         "type": "string",
                         "minLength": 1
+                    },
+                    "selected_assets": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "minLength": 1
+                        }
                     }
                 }
             }
@@ -90,8 +97,7 @@
                 "additionalProperties": false,
                 "required": [
                     "name",
-                    "product_type",
-                    "collection_name"
+                    "product_type"
                 ],
                 "properties": {
                     "name": {
@@ -107,6 +113,22 @@
                         "minLength": 1
                     }
                 }
+            }
+        },
+        "cadip_collections": {
+            "description": "Level-0: CADIP collections where to find the sessions to stage",
+            "type": "array",
+            "items": {
+                "type": "string",
+                "minLength": 1
+            }
+        },
+        "input_collections": {
+            "description": "Catalog collections where the input products are searched, e.g. the sessions of the Level-0",
+            "type": "array",
+            "items": {
+                "type": "string",
+                "minLength": 1
             }
         }
     },

@@ -21,8 +21,12 @@ from prefect import flow
 from pydantic import Field
 
 from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, WorkflowType
+from rs_workflows.on_demand.common.product_processing import (
+    FlowInputItem,
+    process_catalog_product,
+)
 from rs_workflows.on_demand.sentinel3.s3_processing_utils import process_olci
-from rs_workflows.process_any_flow import FlowInputItem, process_catalog_product
+from rs_workflows.utils.dpr import ProcessingId, ProcessorSettings
 
 OLCEFR_PRODUCT_TYPE = "S03OLCEFR"
 OLCEFR_DEFAULT_BASE_NAME = "S03OLCEFR"
@@ -39,6 +43,7 @@ class FlowInputS3l2olci(FlowInputItem):
 
 async def process_s3l2olci_product(
     env_args: FlowEnvArgs,
+    settings: ProcessorSettings,
     item_id: str,
     collection_name: str,
     properties: dict[str, Any],
@@ -51,6 +56,7 @@ async def process_s3l2olci_product(
 
     Args:
         env_args: Flow environment arguments.
+        settings: Default settings of the S3 L2 OLCI processing.
         item_id: STAC item identifier of the S03OLCEFR product.
         collection_name: Collection of the S03OLCEFR product.
         properties: STAC item properties of the S03OLCEFR product (`start_datetime`, `end_datetime`).
@@ -62,7 +68,7 @@ async def process_s3l2olci_product(
     """
     input_products = [FlowInputProduct(name=olcefr_base_name, item_id=item_id, collection_name=collection_name)]
     external_variables = {"start_datetime": properties["start_datetime"], "end_datetime": properties["end_datetime"]}
-    return await process_olci("l2", env_args, input_products, external_variables, workflow)
+    return await process_olci("l2", env_args, settings, input_products, external_variables, workflow)
 
 
 @flow(name="process-s3-l2-olci-ondemand")
@@ -76,15 +82,17 @@ async def process_s3l2olci_ondemand(
     # Process ON DEMAND S3 L2 OLCI
 
     This flow is in charge to prepare the S3 L2 OLCI processing by computing all the needed inputs.
-    Then it forwards to `process-any` with workflow set to "on-demand" ("systematic" if `force_systematic` is set).
+    Then it runs the processor with workflow set to "on-demand" ("systematic" if `force_systematic` is set).
 
     ---
     ## Workflow Steps
 
-    1. *compute input products* — Single `S03OLCEFR` item get from parameters call.
-    2. *compute external variables* — external variables are extracted from the first item properties.
-    3. *start the processing* — calls the flow `process-any`
-    4. *request the quicklooks* — emits the `rs-python.s3-l2.quicklook-inputs-ready` event with the generated products.
+    1. *load the settings* — reads the `s3l2olci-default-setting` Prefect variable and checks that the Dask clusters
+       are running.
+    2. *compute input products* — Single `S03OLCEFR` item get from parameters call.
+    3. *compute external variables* — external variables are extracted from the first item properties.
+    4. *start the processing* — calls the flow `process-generic`, then emits the events of the generated products.
+    5. *request the quicklooks* — emits the `rs-python.s3-l2.quicklook-inputs-ready` event with the generated products.
     ---
     ## Parameters
     Parameter | Type | Default | Description |
@@ -100,5 +108,6 @@ async def process_s3l2olci_ondemand(
         env_args,
         single_input_product,
         force_systematic,
+        ProcessingId.S3_OLCI_L2,
         partial(process_s3l2olci_product, olcefr_base_name=olcefr_base_name),
     )

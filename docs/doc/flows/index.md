@@ -15,9 +15,9 @@ To learn more about Prefect, see the [Prefect documentation](https://docs.prefec
 
 The search and staging flows bring the products of the external stations into the catalog. The processing flows
 generate new products from them with the DPR processors, through the generic flow `process-generic`, which also
-stages the auxiliary files (ADFs) they need. The flows based on `process-any`, such as the Sentinel-3 OLCI flows,
-read their settings from a Prefect variable per processor. An event is emitted for each generated product, and in
-systematic processing the Sentinel-3 flows are chained automatically by Prefect automations, see
+stages the auxiliary files (ADFs) they need. The processing flows read their settings from a Prefect variable per
+processing. An event is emitted for each generated product, and in
+systematic processing the Level-0 and Sentinel-3 flows are chained automatically by Prefect automations, see
 [Systematic processing](../advanced/systematic-processing.md). The conversion flows convert the legacy products and
 auxiliary files to Zarr, and the operation flows maintain the platform.
 
@@ -28,7 +28,7 @@ auxiliary files to Zarr, and the operation flows maintain the platform.
 | Search | `search-cadip`, `search-aux`, `search-prip`, `search-catalog`, `search-earthdatahub` | [Common flows](common-flows.md#search-flows) |
 | Staging | `stage-generic`, `stage-cadip-with-options`, `stage-cadip-latest`, `stage-cadip-selection`, `stage-aux`, `stage-aux-cql2`, `stage-prip` | [Common flows](common-flows.md#staging-flows) |
 | Conversion | `convert-adf`, `convert-adf-group`, `convert-adf-scheduled`, `import-adf-from-obs`, `convert-safe` | [Common flows](common-flows.md#conversion-flows) |
-| Generic processing | `process-generic`, `process-any` | [Customise the DPR processing](../advanced/customise-dpr-flow.md) |
+| Generic processing | `process-generic` | [Customise the DPR processing](../advanced/customise-dpr-flow.md) |
 | Level-0 processing | `process-l0`, `process-s1-l0`, `process-s3-l0` | [Level-0 flows](level0-flows.md) |
 | Sentinel-1 processing | `process-s1-l0`, `process-s1-ard-reference`, `process-s1-ard` | [Sentinel-1 flows](sentinel1-flows.md) |
 | Sentinel-2 processing | | [Sentinel-2 flows](sentinel2-flows.md) |
@@ -60,8 +60,8 @@ deployments delivered by default are:
 | Process Generic | `process-generic` | all, processing | integrated |
 | Process L0 | `process-l0` | l0, processing, s1, s2, s3 | integrated |
 | Process S1 L0 | `process-s1-l0` | l0, processing, s1 | integrated |
-| Process S1 ARD Reference | `process-s1-ard-reference` | l1, processing, s1, ard | integrated |
-| Process S1 ARD | `process-s1-ard` | l1, processing, s1, ard | integrated |
+| Process S1 ARD Reference | `process-s1-ard-reference` | ard, processing, s1 | integrated |
+| Process S1 ARD | `process-s1-ard` | ard, processing, s1 | integrated |
 | Process S3 L0 | `process-s3-l0` | l0, processing, s3 | integrated |
 | Process S3 L1 OLCI | `process-s3-l1-olci-ondemand` | l1, processing, s3, olci | integrated |
 | Process S3 L1 OLCI Systematic | `process-s3-l1-olci-systematic` | l1, processing, s3, olci, systematic | integrated |
@@ -104,8 +104,8 @@ Most flows take an `env` parameter (`FlowEnvArgs`), with:
 | `called_by` | Free text to trace who or what called the flow. |
 | `calling_span` | Internal: OpenTelemetry span of the calling flow, to link the traces. |
 
-The processing flows of a mission read their default parameters from a Prefect variable, so they can be run with
-very few parameters, see [Customise the DPR processing](../advanced/customise-dpr-flow.md#default-settings-of-the-processing-flows).
+The processing flows read their default parameters from a Prefect variable, so they can be run with very few
+parameters, see [Customise the DPR processing](../advanced/customise-dpr-flow.md#default-settings-of-the-processing-flows).
 
 ## Artifacts
 

@@ -16,12 +16,10 @@
 
 from typing import Any
 
-from prefect import flow, task
+from prefect import flow
 
-from rs_workflows.flow_utils import FlowInputProduct, WorkflowType
-from rs_workflows.on_demand.common.events import emit_product_generated_events
-from rs_workflows.on_demand.common.l0_last_steps import process_l0_last_steps
-from rs_workflows.on_demand.common.types import Level0FlowParams
+from rs_workflows.flow_utils import FlowEnvArgs
+from rs_workflows.on_demand.common.l0_last_steps import process_staged_session
 
 S3_L0_RESULT_STORAGE = "local-file-system/s3-processing-shared-results"
 
@@ -34,47 +32,22 @@ S3_L0_RESULT_STORAGE = "local-file-system/s3-processing-shared-results"
 )
 async def process_s3l0(
     session: str,
-    flow_params: Level0FlowParams | None = None,
+    env_args: FlowEnvArgs,
+    force_systematic: bool = False,
     verbose: bool = False,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | None:
     """
-    Sentinel-3 L0 processing.
+    Sentinel-3 L0 processing, with the settings of the `s3l0-default-setting` Prefect variable.
     The session should have been staged before.
 
     A `product.<product type>.generated` event is emitted for each generated product. When the workflow is
-    systematic, it starts the next processing of the chain.
+    systematic (`force_systematic`, set by the automation that starts `process-l0` after the staging of the session),
+    it starts the next processing of the chain, e.g. the OLCI Level-1 processing of the S03OLCL0_ products.
+
+    Args:
+        session: Identifier of the session.
+        env_args: Flow environment arguments.
+        force_systematic: Run the processing as a systematic one.
+        verbose: not used yet.
     """
-
-    # Resolve values from the s3-l0-default-setting Prefect variable before
-    # using them to build the DPR input. Explicit flow parameters still win.
-    resolved_flow_params = await (flow_params or Level0FlowParams()).resolve("3")
-
-    input_products = [
-        FlowInputProduct(
-            name="S3ACADUS",
-            item_id=session,
-            collection_name=resolved_flow_params.session_collection,
-        ),
-    ]
-    products = await process_l0_last_steps(
-        mission="3",
-        session=session,
-        flow_params=resolved_flow_params,
-        input_products=input_products,
-        verbose=verbose,
-    )
-    # Events of a systematic workflow start the next processing of the chain (e.g. the OLCI Level-1 processing of
-    # the S03OLCL0_ products)
-    emit_product_generated_events(
-        resolved_flow_params.owner_identifier,
-        products,
-        WorkflowType(resolved_flow_params.workflow),
-    )
-
-    return products
-
-
-@task(name="process-s3-l0")
-async def process_s3l0_task(*args, **kwargs) -> list[dict[str, Any]]:
-    """See: dpr_processing"""
-    return await process_s3l0.fn(*args, **kwargs)
+    return await process_staged_session("3", session, env_args, force_systematic, verbose)

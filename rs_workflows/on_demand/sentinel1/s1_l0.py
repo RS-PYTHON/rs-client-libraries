@@ -14,40 +14,34 @@
 
 """sentinel 1 Level-0 processing."""
 
-from prefect import flow, task
+from typing import Any
 
-from rs_workflows.flow_utils import (
-    FlowInputProduct,
-)
-from rs_workflows.on_demand.common.l0_last_steps import process_l0_last_steps
-from rs_workflows.on_demand.common.types import Level0FlowParams
+from prefect import flow
+
+from rs_workflows.flow_utils import FlowEnvArgs
+from rs_workflows.on_demand.common.l0_last_steps import process_staged_session
 
 
-@flow(name="process-s1-l0")
-async def process_s1l0(session: str, flow_params: Level0FlowParams, verbose: bool = False):
+@flow(name="process-s1-l0", flow_run_name="s1-l0-{session}")
+async def process_s1l0(
+    session: str,
+    env_args: FlowEnvArgs,
+    force_systematic: bool = False,
+    verbose: bool = False,
+) -> list[dict[str, Any]] | None:
     """
-    Sentinel-1 L0 processing.
+    Sentinel-1 L0 processing, with the settings of the `s1l0-default-setting` Prefect variable.
     The session should have been staged before.
+
+    A `product.<product type>.generated` event is emitted for each generated product, related to the workflow of
+    the processing: systematic with `force_systematic`, set by the automation that starts `process-l0` after the
+    staging of the session.
+
+    Args:
+        session: Identifier of the session.
+        env_args: Flow environment arguments.
+        force_systematic: Run the processing as a systematic one, so that the automations start the next processing
+            of the chain from the events of the generated products.
+        verbose: not used yet.
     """
-
-    input_products = [
-        FlowInputProduct(
-            name="S1CADUS",
-            item_id=session,
-            collection_name=flow_params.session_collection,
-        ),
-    ]
-
-    await process_l0_last_steps(
-        mission="1",
-        session=session,
-        flow_params=flow_params,
-        input_products=input_products,
-        verbose=verbose,
-    )
-
-
-@task(name="process-s1-l0")
-async def process_s1l0_task(*args, **kwargs) -> None:
-    """See: dpr_processing"""
-    return await process_s1l0.fn(*args, **kwargs)
+    return await process_staged_session("1", session, env_args, force_systematic, verbose)

@@ -47,25 +47,27 @@ def emit_product_generated_events(
     flow_run_id = str(runtime.flow_run.id or "unknown")
     workflow_name = WorkflowType(workflow).value
     for product in products:
-        product_type = product["properties"]["product:type"]
+        product_type = product["properties"].get("product:type")
+        if not product_type:
+            logger.warning(f"⚠️ No event emitted for product '{product['id']}' without product type")
+            continue
         event_name = product_generated_event_name(product_type)
+        related = [
+            {
+                "prefect.resource.id": workflow_name,
+                "prefect.resource.role": "workflow",
+            },
+            {"prefect.resource.id": "prefect.tag.processing", "prefect.resource.role": "tag"},
+        ]
+        if platform := product["properties"].get("platform"):
+            related.append({"prefect.resource.id": f"prefect.tag.{platform}", "prefect.resource.role": "tag"})
         event = emit_event(
             event=event_name,
             resource={
                 "prefect.resource.id": f"prefect.flow-run.{flow_run_id}",
                 "prefect.resource.name": product_type,
             },
-            related=[
-                {
-                    "prefect.resource.id": workflow_name,
-                    "prefect.resource.role": "workflow",
-                },
-                {"prefect.resource.id": "prefect.tag.processing", "prefect.resource.role": "tag"},
-                {
-                    "prefect.resource.id": f"prefect.tag.{product['properties']['platform']}",
-                    "prefect.resource.role": "tag",
-                },
-            ],
+            related=related,
             payload={
                 "owner_id": owner_id,
                 "product": {

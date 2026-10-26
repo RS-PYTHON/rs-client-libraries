@@ -177,7 +177,7 @@
         }
     },
     {
-        "name": "LatestIncludedWithSatellite",
+        "name": "LatestValCoverWithSatellite",
         "parameters": [
             "product_type",
             "satellite",
@@ -224,14 +224,14 @@
                             {
                                 "interval": [
                                     {
-                                        "op": "+",
+                                        "op": "-",
                                         "args": [
                                             "{start_datetime}",
                                             "{dTa}"
                                         ]
                                     },
                                     {
-                                        "op": "-",
+                                        "op": "+",
                                         "args": [
                                             "{end_datetime}",
                                             "{dTb}"

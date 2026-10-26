@@ -100,6 +100,26 @@ def test_emit_product_generated_events_without_flow_run(mocker):
     }
 
 
+def test_emit_product_generated_events_without_platform_or_product_type(mocker):
+    """A product without platform has no platform tag, and no event is emitted for a product without product type."""
+    emit_event = mocker.patch.object(events, "emit_event")
+    logger = mocker.patch.object(events, "get_logger").return_value
+    without_platform = _product("S01SIWNRB", "nrb-item")
+    del without_platform["properties"]["platform"]
+    without_product_type = _product("REFERENCE_DB", "reference-db-item")
+    del without_product_type["properties"]["product:type"]
+
+    events.emit_product_generated_events("owner", [without_platform, without_product_type], WorkflowType.ON_DEMAND)
+
+    emit_event.assert_called_once()
+    assert emit_event.call_args.kwargs["event"] == "product.S01SIWNRB.generated"
+    assert emit_event.call_args.kwargs["related"] == [
+        {"prefect.resource.id": "on-demand", "prefect.resource.role": "workflow"},
+        {"prefect.resource.id": "prefect.tag.processing", "prefect.resource.role": "tag"},
+    ]
+    logger.warning.assert_called_once_with("⚠️ No event emitted for product 'reference-db-item' without product type")
+
+
 def test_emit_olci_quicklook_event_without_products(mocker):
     """No quicklook is requested when no product was generated."""
     emit_event = mocker.patch.object(s3_processing_utils, "emit_event")

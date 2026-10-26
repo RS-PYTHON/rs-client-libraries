@@ -28,14 +28,21 @@ from rs_workflows.adf_flow import substitute_values
 from rs_workflows.catalog_flow import catalog_search_task
 from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, WorkflowType
 from rs_workflows.on_demand.adf.convert_adf_set import compute_cql2
+from rs_workflows.on_demand.common.product_processing import (
+    FlowInputItem,
+    process_catalog_product,
+)
 from rs_workflows.on_demand.sentinel3.s3_processing_utils import process_olci
-from rs_workflows.process_any_flow import FlowInputItem, process_catalog_product
+from rs_workflows.utils.dpr import ProcessingId, ProcessorSettings
 from rs_workflows.utils.prefect import get_logger
 
 OLCL0_PRODUCT_TYPE: str = "S03OLCL0_"
 NATL0_PRODUCT_TYPE: str = "S03NATL0_"
 OLCL0_DEFAULT_BASE_NAME: str = "S3OLCIL0_"
 NAVL0_DEFAULT_BASE_NAME: str = "S3NAVL0_"
+# Margins (dTa, dTb) in seconds of the LatestValCoverWithSatellite policy used to search the products around the given
+# product: negative, to reduce the interval and accept a small jitter between the dates of consecutive products
+COVER_MARGIN: int = -2
 
 
 class FlowInputS3l1olci(FlowInputItem):
@@ -57,7 +64,7 @@ async def get_latest_product_covering_interval(
 ) -> ItemCollection | None:
     """Search the catalog for the latest product of a type and satellite that covers the given interval."""
     cql2_filter = substitute_values(
-        compute_cql2("LatestIncludedWithSatellite", 2, 2, satellite),
+        compute_cql2("LatestValCoverWithSatellite", COVER_MARGIN, COVER_MARGIN, satellite),
         {
             "start_datetime": strftime_millis(interval_begin_datetime),
             "end_datetime": strftime_millis(interval_end_datetime),
@@ -123,6 +130,7 @@ async def compute_s3l1olci_inputs(
 
 async def process_s3l1olci_product(
     env_args: FlowEnvArgs,
+    settings: ProcessorSettings,
     item_id: str,
     collection_name: str,
     properties: dict[str, Any],
@@ -136,6 +144,7 @@ async def process_s3l1olci_product(
 
     Args:
         env_args: Flow environment arguments.
+        settings: Default settings of the S3 L1 OLCI processing.
         item_id: STAC item identifier of the S03OLCL0_ product.
         collection_name: Collection of the S03OLCL0_ product.
         properties: STAC item properties of the S03OLCL0_ product (`platform`, `start_datetime`, `end_datetime`).
@@ -160,7 +169,7 @@ async def process_s3l1olci_product(
         navl0_base_name,
     )
     external_variables = {"start_datetime": start_datetime, "end_datetime": end_datetime, "satellite": satellite}
-    return await process_olci("l1", env_args, input_products, external_variables, workflow)
+    return await process_olci("l1", env_args, settings, input_products, external_variables, workflow)
 
 
 @flow(name="process-s3-l1-olci-ondemand")
@@ -175,18 +184,20 @@ async def process_s3l1olci_ondemand(
     # Process ON DEMAND S3 L1 OLCI
 
     This flow is in charge to prepare the S3 L1 OLCI processing by computing all the needed inputs.
-    Then it forwards to `process-any` with workflow set to "on-demand" ("systematic" if `force_systematic` is set).
+    Then it runs the processor with workflow set to "on-demand" ("systematic" if `force_systematic` is set).
 
     ---
     ## Workflow Steps
 
-    1. *compute input products* — retrieve the stac items `S3OLCIL0_` from rs-catalog.
+    1. *load the settings* — reads the `s3l1olci-default-setting` Prefect variable and checks that the Dask clusters
+       are running.
+    2. *compute input products* — retrieve the stac items `S3OLCIL0_` from rs-catalog.
        The first one is retrieve from `item_id` and `collection_name` parameters.
        The other ones are get by requesting contiguous period on the rs-catalog.
        They can be one or two in this case, plus the `S3NAVL0_` item of the same period.
-    2. *compute external variables* — external variables are extracted from the first item properties.
-    3. *start the processing* — calls the flow `process-any`
-    4. *request the quicklooks* — emits the `rs-python.s3-l1.quicklook-inputs-ready` event with the generated products.
+    3. *compute external variables* — external variables are extracted from the first item properties.
+    4. *start the processing* — calls the flow `process-generic`, then emits the events of the generated products.
+    5. *request the quicklooks* — emits the `rs-python.s3-l1.quicklook-inputs-ready` event with the generated products.
     ---
     ## Parameters
     Parameter | Type | Default | Description |
@@ -205,5 +216,6 @@ async def process_s3l1olci_ondemand(
         env_args,
         single_input_product,
         force_systematic,
+        ProcessingId.S3_OLCI_L1,
         partial(process_s3l1olci_product, olcil0_base_name=olcil0_base_name, navl0_base_name=navl0_base_name),
     )
