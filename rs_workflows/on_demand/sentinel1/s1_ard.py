@@ -16,48 +16,26 @@
 
 import re
 from datetime import date, datetime
-from typing import Any, Self
+from typing import Literal
 
 from prefect import flow, get_run_logger, task
-from pydantic import Field
 from pystac import Item, ItemCollection
 
+from rs_client.ogcapi.dpr_client import DprPipeline
 from rs_workflows.flow_utils import (
     FlowEnv,
     FlowEnvArgs,
     FlowInputProduct,
+    WorkflowType,
 )
-from rs_workflows.on_demand.common.types import ProcessingFlowParams
 from rs_workflows.utils.catalog import get_catalog_items
-from rs_workflows.utils.dpr import call_dpr_flow
+from rs_workflows.utils.dpr import ProcessingId, call_dpr_flow, load_processor_settings
 
+# Pipelines of the nominal on-demand flow
+S1ArdPipeline = Literal["SLC__1_CSL__1", "SLC__1_GSL__1", "SLC__1_NRB__1"]
 
-class Level1ArdFlowParams(ProcessingFlowParams):
-    """
-    Parameters to override default Prefect variable 'sx-l1ard-default-setting'..
-
-    There is no need to set all of them.
-    Only the ones you want to override from default settings.
-    optional type not used.
-    """
-
-    input_collections: list[str] = Field(
-        default=["s01sewslc", "s01siwslc", "s01ssmslc"],
-        title="Input Collections",
-        description="List of Catalog collection names containing the Input products.",
-        json_schema_extra={"order": 4},
-    )
-
-    def _resolve_specific(self, settings: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "input_collections": self.input_collections or settings.get("input_collections", ""),
-        }
-
-    async def resolve(self, mission: str) -> Self:
-        """
-        Merge data from Prefect variable and parameters called.
-        """
-        return await super()._resolve(mission, "1ard")
+# Catalog collections of the S1 SLC products, when not given by the `input_collections` of the settings
+DEFAULT_INPUT_COLLECTIONS = ["s01sewslc", "s01siwslc", "s01ssmslc"]
 
 
 # Example to retrieve April 2026 S1 SLC (IW) products from CDSE in Toulouse area:
@@ -153,18 +131,21 @@ async def _do_process_s1ard(
     slcs: list[str],
     reference_date: date | None,
     edh_api_key: str,
-    flow_params: Level1ArdFlowParams,
+    env_args: FlowEnvArgs,
+    pipeline: str | None,
     verbose: bool = False,  # pylint: disable=unused-argument
 ):
     """
-    Sentinel-1 ARD processing (common function for reference pipeline and nominal on-demand flow).
+    Sentinel-1 ARD processing (common function for reference pipeline and nominal on-demand flow), with the settings
+    of the `s1ard-default-setting` Prefect variable.
 
     Args:
         slcs (list[str]): STAC item identifiers of S1 SLC input products, already converted to zarr.
         A single item for the reference pipeline.
         reference_date (date | None): Date of the master (reference) SLC. Set to None for reference pipeline
         edh_api_key: Destination Earth / EarthDataHub standard API key used to access Copernicus DEM
-        flow_params (Level1ArdFlowParams): Flow parameters
+        env_args (FlowEnvArgs): Flow environment arguments
+        pipeline (str | None): Pipeline to run, or None to run the pipeline of the settings
         verbose (bool, optional): not used yet. Defaults to False.
     """
     logger = get_run_logger()
@@ -172,16 +153,18 @@ async def _do_process_s1ard(
     if not _check_slcs(slcs, reference_date):
         return
 
-    # Resolve parameters
+    # Read the settings and check the Dask clusters before searching the SLCs
+    settings = await load_processor_settings(ProcessingId.S1_ARD)
+    pipeline = pipeline or settings.pipeline
+    input_collections = settings.input_collections or DEFAULT_INPUT_COLLECTIONS
     mission = "1"
-    p = await flow_params.resolve(mission)
-    flow_env = FlowEnv(FlowEnvArgs(owner_id=p.owner_identifier))
+    flow_env = FlowEnv(env_args)
     suffix = "-reference" if not reference_date else ""
     # start_span is a context manager (decorated with _agnosticcontextmanager), not detected by sonar
     with flow_env.start_span(__name__, f"sentinel{mission}-level1ard-processing{suffix}"):  # NOSONAR
-        item_collection: ItemCollection | None = await get_catalog_items(flow_env, slcs, p.input_collections)
+        item_collection: ItemCollection | None = await get_catalog_items(flow_env, slcs, input_collections)
         if not item_collection or len(item_collection) == 0:
-            logger.error(f"❌ The processing cannot be launched, no items found for {slcs} in {p.input_collections}")
+            logger.error(f"❌ The processing cannot be launched, no items found for {slcs} in {input_collections}")
             return
 
         instrument_mode = _get_instrument_mode(item_collection.items)
@@ -192,32 +175,25 @@ async def _do_process_s1ard(
             FlowInputProduct(
                 name="slcs",
                 item_id=slc,
-                collection_name=_get_slc_collection(slc, p.input_collections),
+                collection_name=_get_slc_collection(slc, input_collections),
             )
             for slc in slcs
         ]
 
         # Call DPR flow
         await call_dpr_flow(
-            FlowEnvArgs(owner_id=p.owner_identifier),
+            env_args,
+            settings=settings,
             input_products=input_products,
             external_variables=_build_external_variables(
                 instrument_mode,
                 slcs,
                 reference_date,
                 edh_api_key,
-                p.pipeline,
+                pipeline,
             ),
-            dask_cluster_label=p.dask_cluster_label,
-            processor_name=p.processor_name,
-            processor_version=p.processor_version,
-            pipeline=p.pipeline,
-            unit=p.unit,
-            priority=p.priority,
-            processing_mode=p.processing_mode,
-            workflow=p.workflow,
-            generated_product_to_collection_identifier=p.generated_product_to_collection_identifier or [],
-            auxiliary_product_to_collection_identifier=p.auxiliary_product_to_collection_identifier or [],
+            workflow=WorkflowType.ON_DEMAND,
+            pipeline=pipeline,
             dask_task_timeout=3000,
             temporary_folder=TEMPORARY_FOLDER,
             temporary_shared=True,
@@ -229,7 +205,8 @@ async def process_s1ard(
     slcs: list[str],
     reference_date: date,
     edh_api_key: str,
-    flow_params: Level1ArdFlowParams,
+    env_args: FlowEnvArgs,
+    pipeline: S1ArdPipeline | None = None,
     verbose: bool = False,
 ):
     """
@@ -239,6 +216,8 @@ async def process_s1ard(
             slcs: STAC item identifiers of S1 SLC input products, already converted to zarr.
             reference_date: Date of the master (reference) SLC
             edh_api_key: Destination Earth / EarthDataHub standard API key used to access Copernicus DEM
+            env_args: Flow environment arguments
+            pipeline: Pipeline to run (default: the pipeline of the `s1ard-default-setting` Prefect variable)
     """
 
     # Specific data used for tests:
@@ -248,11 +227,11 @@ async def process_s1ard(
 
     # https://earthdatahub.destine.eu/api/stac/v1/collections/copernicus-dem/items/GLO-30
 
-    await _do_process_s1ard(slcs, reference_date, edh_api_key, flow_params, verbose)
+    await _do_process_s1ard(slcs, reference_date, edh_api_key, env_args, pipeline, verbose)
 
 
 @flow(name="process-s1-ard-reference")
-async def process_s1ard_reference(slc: str, edh_api_key: str, flow_params: Level1ArdFlowParams, verbose: bool = False):
+async def process_s1ard_reference(slc: str, edh_api_key: str, env_args: FlowEnvArgs, verbose: bool = False):
     """
     Sentinel-1 ARD processing reference pipeline.
     This flow must be run once to generate the REFERENCE_DB used in on-demand S1 ARD processing flow.
@@ -260,8 +239,9 @@ async def process_s1ard_reference(slc: str, edh_api_key: str, flow_params: Level
         Args:
             slc: STAC item identifier of S1 master SLC input product, already converted to zarr.
             edh_api_key: Destination Earth / EarthDataHub standard API key used to access Copernicus DEM
+            env_args: Flow environment arguments
     """
-    await _do_process_s1ard([slc], None, edh_api_key, flow_params, verbose)
+    await _do_process_s1ard([slc], None, edh_api_key, env_args, DprPipeline.S1ARD_REF.value, verbose)
 
 
 @task(name="process sentinel-1 level-1-ard")
