@@ -43,6 +43,7 @@ from rs_workflows.payload_generator import (  # load_store_params_from_config,
     wildcard_match,
 )
 from rs_workflows.payload_template import (
+    AdfConfig,
     GeneralConfiguration,
     InputProduct,
     IOConfig,
@@ -54,6 +55,33 @@ from rs_workflows.payload_template import (
 
 
 # build_workflow_step
+@pytest.mark.parametrize("selected_adfs", [[], [AdfConfig(id="fpo", path="s3://bucket/fpo")]])
+def test_output_lineage_optional_adf(selected_adfs):
+    """Only selected optional ADFs contribute to downstream output lineage."""
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="s3://bucket/input", engine="cadu")],
+            output_products=[OutputProduct(id="final", path="s3://bucket/output", engine="cpm_zarr")],
+            adfs=selected_adfs,
+        ),
+        workflow=[
+            WorkflowStep(
+                name="S1L0Processor.1",
+                inputs={"input": "cadus"},
+                adfs={"fpo": "fpo"},
+                outputs={"output": "raw"},
+            ),
+            WorkflowStep(
+                name="next.1",
+                inputs={"input": "S1L0Processor.1.raw"},
+                outputs={"output": "final"},
+            ),
+        ],
+    )
+
+    assert build_output_lineage(payload) == {"final": {"cadus"} | {adf.id for adf in selected_adfs}}
+
+
 def test_build_workflow_step_valid(sample_unit):
     """
     Test that a valid unit dictionary is correctly transformed into a WorkflowStep.

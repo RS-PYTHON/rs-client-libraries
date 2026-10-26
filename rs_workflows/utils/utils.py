@@ -442,9 +442,10 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
                 )
 
         for adf_reference in (step.adfs or {}).values():
-            if adf_reference not in adf_ids:
-                raise ValueError(f"Workflow ADF '{adf_reference}' from step '{step.name}' is missing from payload io")
-            sources.add(adf_reference)
+            # Workflow steps retain optional ADF references even when selection
+            # found no file. Only selected ADFs contribute to output lineage.
+            if adf_reference in adf_ids:
+                sources.add(adf_reference)
 
         resolving.remove(output_reference)
         resolved[output_reference] = sources
