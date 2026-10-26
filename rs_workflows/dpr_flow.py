@@ -53,6 +53,26 @@ def s3_list(s3_prefix: str):
     return [f"s3://{s3_bucket.bucket_name}/{obj.key}" for obj in objects.filter(Prefix=prefix.rstrip("/") + "/")]
 
 
+def find_zarr_zip(zattrs_s3_location: str) -> str | None:
+    """Return the S3 path of the ``<PRODUCT_NAME>.zarr.zip`` stored next to a Zarr product, if it exists.
+
+    Args:
+        zattrs_s3_location: S3 path of the product root ``.zattrs`` file.
+
+    Returns:
+        The S3 path of the zip file, or None if the zip is not present.
+    """
+    zip_s3_path = zattrs_s3_location.removesuffix("/.zattrs") + ".zip"
+    if not zip_s3_path.endswith(".zarr.zip"):
+        return None
+
+    s3_bucket, key = prefect_utils.get_s3_bucket(zip_s3_path)
+    objects = s3_bucket._get_bucket_resource().objects  # pylint: disable=protected-access
+    if any(obj.key == key for obj in objects.filter(Prefix=key)):
+        return zip_s3_path
+    return None
+
+
 def extract_products_and_zattrs(files: list[str], base_path: str, *, zarr_v3: bool = True):
     """Extract product names and their corresponding .zattrs file paths.
 
@@ -135,6 +155,7 @@ def create_stac_item(
     s3_data_location,
     product_name: str,
     dpr_processor: str,
+    zarr_zip_href: str | None = None,
 ) -> Item:
     """
     Create a list of STAC Items from EOPF features and processing payload metadata.
@@ -149,6 +170,8 @@ def create_stac_item(
         s3_data_location (str): Base S3 path where output products are stored.
         product_name (str): Product name
         dpr_processor (str): DPR processor name
+        zarr_zip_href (str | None): S3 path of the associated .zarr.zip product, if any.
+            When set, an additional asset is added to the item.
 
     Returns:
         list[Item]: List of constructed STAC Item objects.
@@ -246,12 +269,21 @@ def create_stac_item(
             # },
         )
 
+    assets = {product_name: build_asset(s3_data_location, product_name)}
+    if zarr_zip_href:
+        assets[f"{product_name}.zip"] = Asset(
+            href=zarr_zip_href,
+            title=f"{product_name}.zip",
+            media_type="application/zip",
+            roles=["data"],
+        )
+
     item = build_item(
         eopf_feature,
         eopf_origin_datetime,
         product_name,
         dpr_processor,
-        assets={product_name: build_asset(s3_data_location, product_name)},
+        assets=assets,
     )
     return item
 
@@ -399,7 +431,17 @@ def update_eopf_assets(
         eopf_item["properties"].update(acquisition_station_properties)
 
         # Build STAC items
-        stac_item = create_stac_item(eopf_origin_datetime, eopf_item, zattrs_s3_location, product_name, dpr_processor)
+        zarr_zip_href = find_zarr_zip(zattrs_s3_location)
+        if zarr_zip_href:
+            logger.info(f"Found zarr.zip associated with product {product_name}: {zarr_zip_href}")
+        stac_item = create_stac_item(
+            eopf_origin_datetime,
+            eopf_item,
+            zattrs_s3_location,
+            product_name,
+            dpr_processor,
+            zarr_zip_href,
+        )
 
         items_metadata.append(
             DprProcessedItemMetadata(
