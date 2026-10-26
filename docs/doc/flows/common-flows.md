@@ -53,11 +53,11 @@ processors.
 
 | Flow | Parameters | Description |
 |---|---|---|
-| `convert-adf` | `adf_input`: ADF type, time interval, satellite or CQL2 filter, collections mapping | Stage the legacy auxiliary files needed to build an ADF of the given type, convert them to Zarr, store the result in the object storage and publish it in the catalog. |
+| `convert-adf` | `adf_input`: ADF type, time interval, satellite or CQL2 filter, collections mapping | Stage the legacy auxiliary files needed to build an ADF of the given type, convert them to Zarr, store the result in the object storage and publish it in the catalog. The Sentinel-3 OLCI and SLSTR ADF types are supported, and the orbit files (`S00__ADF_FROAX`, `S00__ADF_FPOAX`, `S00__ADF_OSFAX`) of Sentinel-1, 2 and 3: the `satellite` is mandatory for the latter, as the legacy product type depends on its mission. |
 | `convert-adf-group` | `period_start_datetime`, `period_end_datetime`, `configuration`, `owner` | Convert a set of ADF types over a period: the past part of the period is converted immediately, the future part is scheduled with `convert-adf-scheduled`. A sample configuration is given in [convert-aux-sample.json](https://github.com/RS-PYTHON/rs-client-libraries/blob/develop/rs_workflows/on_demand/adf/config/convert-aux-sample.json). |
 | `convert-adf-scheduled` | `adf_type`, `cql2_filter_without_date`, `period`, `auxiliary_product_to_collection_identifier` | Convert the ADFs of the last period, started by a schedule. |
 | `import-adf-from-obs` | `configuration`, `owner`, `obs_id`, `rehearsal_mode` | Import ADF files already in Zarr format from an object storage bucket into the catalog. |
-| `convert-safe` | `conversion_input` | Stage a legacy SAFE product, convert it to its EOPF Zarr counterpart with the `conv_safe_zarr` process of [rs-dpr-service](https://github.com/RS-PYTHON/rs-dpr-service/blob/develop/docs/doc/index.md), and publish it. |
+| `convert-safe` | `conversion_input`, including the output `zarr_format` (`2` by default, or `3`) | Stage a legacy SAFE product, convert it to its EOPF Zarr counterpart with the `conv_safe_zarr` process of [rs-dpr-service](https://github.com/RS-PYTHON/rs-dpr-service/blob/develop/docs/doc/index.md), and publish it. |
 
 ![ADF conversion](../../images/aux-conversion.svg)
 
@@ -79,5 +79,14 @@ users (`operator-osam`, `operator-quota`), whose Prefect blocks must be initiali
 ## Benchmarking
 
 The `benchmark-processor` flow (`processor_name`, `processor_version`, `scenario_name`) reads its settings from the
-`benchmarking-<processor_name>-settings` Prefect variable and publishes the `benchmarking-result` artifact. Its
-implementation is a mockup.
+`benchmarking-<processor_name>-settings` Prefect variable, which gives the `workflow_type` and, for each scenario and
+processor version, the parameters of a [DPR processing](../advanced/customise-dpr-flow.md#parameters-of-process-generic)
+(Dask cluster, pipeline, priority, input products, generated and auxiliary products mappings, processing mode and
+external variables). It:
+
+1. checks that the input products are in the catalog of the owner,
+2. empties the collections of the generated and auxiliary products in the object storage: for safety, all their names
+   must start with `benchmark`,
+3. runs the DPR processing of the scenario and measures its duration,
+4. publishes the `benchmarking-result` artifact, with the parameters, the settings, and the status and duration of the
+   run. The flow fails if the processing failed.
