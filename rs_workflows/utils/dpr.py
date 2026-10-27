@@ -135,9 +135,8 @@ async def generate_payload_path(owner_id: str) -> str:
 
     This function retrieves the storage configuration from a Prefect variable
     and searches for the first shared-disk configuration that has a valid
-    name and absolute path and uses the `CREATE_OVERWRITE` opening mode. The
-    resulting shared-disk path is combined with the owner identifier and the
-    current timestamp to create a unique payload path.
+    name and absolute path. The resulting shared-disk path is combined with the
+    owner identifier and the current timestamp to create a unique payload path.
     TODO: How to retrieve the shared disk related to an organization, and not
     the first one found in the Prefect variable?
 
@@ -152,8 +151,7 @@ async def generate_payload_path(owner_id: str) -> str:
 
     Raises:
         RuntimeError: If the Prefect variable cannot be retrieved or does not
-            contain a suitable shared-disk configuration with an absolute path
-            and `CREATE_OVERWRITE` opening mode.
+            contain a suitable shared-disk configuration with an absolute path.
     """
     if KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT:
         try:
@@ -170,9 +168,6 @@ async def generate_payload_path(owner_id: str) -> str:
             if entry.get("kind") != "shared_disk":
                 continue
             if not entry.get("name") or not entry.get("absolute_path"):
-                continue
-            opening_mode = entry.get("opening_mode")
-            if opening_mode is None or opening_mode.upper() != "CREATE_OVERWRITE":
                 continue
             shared_disk_path = entry.get("absolute_path")
             break

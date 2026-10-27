@@ -240,7 +240,7 @@ delivered with rs-client-libraries (see
   },
   "storage_configuration": [
     {
-      "name": "s3", "kind": "obs", "opening_mode": "CREATE_OVERWRITE",
+      "name": "s3", "kind": "obs",
       "storage_options": {"key": "${S3_ACCESSKEY}", "secret": "${S3_SECRETKEY}",
                           "endpoint_url": "${S3_ENDPOINT}", "region_name": "${S3_REGION}"}
     },
@@ -249,7 +249,7 @@ delivered with rs-client-libraries (see
       "storage_options": {"key": "${S3_DEMS1_ACCESSKEY}", "secret": "${S3_DEMS1_SECRETKEY}",
                           "endpoint_url": "${S3_DEMS1_ENDPOINT}", "region_name": "${S3_DEMS1_REGION}"}
     },
-    {"name": "shared-disk", "kind": "shared_disk", "opening_mode": "CREATE_OVERWRITE", "absolute_path": "/mnt/share/",
+    {"name": "shared-disk", "kind": "shared_disk", "absolute_path": "/mnt/share/",
      "autoclean": true}
   ]
 }

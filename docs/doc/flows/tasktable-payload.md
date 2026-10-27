@@ -22,7 +22,7 @@ A task table contains the following sections:
 | `tasktable` | Name and version of the task table, and of the specification it follows. |
 | `external_variables` | Variables given by the orchestrator, used in the queries, e.g. `start_datetime`, `end_datetime`, `satellite`. |
 | `units` | The processing units: name, Python `module`, minimum resources (`resources_min`: Dask workers, CPU, RAM, disk), and the lists of `input_products`, `input_adfs` and `output_products`. Each input or output has a `mode` (`always`, `nrt`, `ntc`, `reprocessing`, `subs`) and a `mandatory` flag. |
-| `io` | The details of each input, ADF and output: type (`filename`, `folder`, `regex`), store type (`zarr`, `safe`, `cadu`...), store parameters. For the ADFs, the ordered `alternatives` to find them, each one with a `query` and a `timeout_seconds`. |
+| `io` | The details of each input, ADF and output, in the `input`, `adfs` and `output` lists: `type` (`file`, `folder`, `regex`) and `engine` (`cpm_zarr`, `cpm_safe`, `cadu`, `s3_cache`). For the ADFs, the ordered `alternatives` to find them, each one with a `query` and a `timeout_seconds`. |
 | `queries` | The named queries used by the alternatives: their parameters and the STAC search request (with a [CQL2](https://docs.ogc.org/is/21-065r2/21-065r2.html) filter) to find the files. |
 | `pipelines` | The pipelines: ordered `steps`, each one running a unit, with the origin of its inputs (`pipeline_input` or the output of a previous step) and the target of its outputs (`pipeline_output` or `pipeline_internal`). |
 
@@ -41,10 +41,10 @@ For example, an excerpt of the Sentinel-3 OLCI Level-1 task table:
       {"name": "ECMWA", "mode": "ntc", "mandatory": true}, "..."],
     "output_products": [{"name": "S03OLCEFR", "mode": "always", "mandatory": false}, "..."]
   }],
-  "io": [{
+  "io": {"adfs": [{
     "name": "FRO",
-    "type": "filename",
-    "store_type": "zarr",
+    "type": "file",
+    "engine": "cpm_zarr",
     "alternatives": [
       {"order": 1, "timeout_seconds": 180, "query": {"name": "LatestValCover", "parameters": {
         "product_type": "AX___FRO_AX", "satellite": "{external_variable.satellite}",
@@ -53,7 +53,7 @@ For example, an excerpt of the Sentinel-3 OLCI Level-1 task table:
       {"order": 2, "timeout_seconds": 180, "query": {"name": "LatestValCover", "parameters": {
         "product_type": "AX___FPO_AX", "...": "..."}}}
     ]
-  }, "..."],
+  }, "..."], "...": "..."},
   "queries": [{
     "name": "LatestValCover",
     "parameters": ["product_type", "satellite", "start_datetime", "end_datetime", "dTa", "dTb"],
@@ -87,8 +87,8 @@ Its main sections are:
 |---|---|
 | `general_configuration` | General options, e.g. the logging level. |
 | `workflow` | The processing units to run, in order: module, class, inputs, ADFs and outputs of each one. |
-| `I/O` | The location and format of the `input_products`, `adfs` and `output_products`: S3 paths with their credentials, shared or local disk paths. |
-| `dask_context` | The Dask cluster to use (filled by rs-dpr-service). |
+| `io` | The location and format of the `input_products`, `adfs` and `output_products`: S3 paths with their credentials, shared or local disk paths. |
+| `context_managers`, `dask_config` | The Dask cluster to use, as a `DaskContext` context manager (filled by rs-dpr-service), and the Dask configuration. |
 | `logging`, `config`, `secret`, `eoqc` | Optional configuration files and quality control. |
 
 ```yaml
@@ -108,23 +108,25 @@ workflow:
     # ...
   outputs:
     S03OLCEFR: S03OLCEFR
-I/O:
+io:
   input_products:
   - id: S3OLCIL0_1
     path: s3://<bucket>/<owner>/<collection>/<product>.zarr
-    store_type: zarr
-    store_params:
+    type: file
+    engine: cpm_zarr
+    reader_params:
       storage_options: {key: "...", secret: "...", client_kwargs: {endpoint_url: "...", region_name: "..."}}
   adfs:
   - id: FRO
     path: s3://<bucket>/<owner>/<aux-collection>/<adf>.zarr
-    store_params: {}
+    adf_params: {}
   output_products:
   - id: S03OLCEFR
     path: s3://<bucket>/<owner>/<output-collection>/
     type: folder
-    store_type: zarr
-    opening_mode: CREATE_OVERWRITE
+    engine: cpm_zarr
+    writer_params:
+      mode: w
 ```
 
 The payload is published as the `dpr-payload` [Prefect artifact](index.md#artifacts) of each run (without the
@@ -195,8 +197,8 @@ The payload is assembled from:
 | Logging level, processing options | The flow parameters. |
 
 The payload is written in the `<absolute_path>/<owner>/<timestamp>` folder of the first `shared_disk` storage of the
-[storage configuration](../advanced/customise-dpr-flow.md#storage-configuration) whose `opening_mode` is
-`CREATE_OVERWRITE`: this disk is mounted both on the Prefect workers and on the Dask workers. Then the processor is
+[storage configuration](../advanced/customise-dpr-flow.md#storage-configuration): this disk is mounted both on the Prefect
+workers and on the Dask workers. Then the processor is
 run by rs-dpr-service on the Dask cluster, and the payload file is deleted at the end of the run.
 When it is completed, the flow creates the STAC items of the generated products, with `derived_from` links to their
 inputs and ADFs, and publishes them in the catalog collections given by the
