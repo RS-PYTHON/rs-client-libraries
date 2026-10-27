@@ -525,6 +525,36 @@ def test_stream_logs_reconnection(mocker, dpr_client: DprClient):
     mock_logger.info.assert_any_call("INFO:test:log")
 
 
+class BrokenMockResponse(MockResponse):
+    """Mock for a requests.Response whose stream ends prematurely"""
+
+    def iter_lines(self):
+        """Yield the lines then raise a connection error"""
+        yield from self.lines
+        raise ConnectionError("Response ended prematurely")
+
+
+def test_stream_logs_resumes_from_last_event_id(mocker, dpr_client: DprClient):
+    """Test stream_logs keeps the received logs and resumes from the last event ID after a stream error."""
+    mock_logger = mocker.Mock()
+    mock_get = mocker.patch.object(dpr_client.http_session, "get")
+    mocker.patch("time.sleep")
+    mocker.patch.object(dpr_client, "get_job_info", return_value={"status": "running"})
+
+    mock_get.side_effect = [
+        BrokenMockResponse(status_code=200, lines=[b"id: 0", b"data: INFO:test:first log", b""]),
+        MockResponse(status_code=200, lines=[b"id: 1", b"data: INFO:test:second log", b""]),
+    ]
+
+    dpr_client.stream_logs("http://test/jobs/123/logs", mock_logger)
+
+    assert mock_get.call_count == 2
+    assert "Last-Event-ID" not in mock_get.call_args_list[0].kwargs["headers"]
+    assert mock_get.call_args_list[1].kwargs["headers"]["Last-Event-ID"] == "0"
+    mock_logger.info.assert_any_call("INFO:test:first log")
+    mock_logger.info.assert_any_call("INFO:test:second log")
+
+
 def test_stream_logs_404_not_found(mocker, dpr_client: DprClient):
     """Test stream_logs cleanly exits on HTTP 404."""
     mock_logger = mocker.Mock()
