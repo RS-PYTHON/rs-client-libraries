@@ -84,10 +84,6 @@
                             "kind": {
                                 "const": "obs"
                             },
-                            "opening_mode": {
-                                "type": "string",
-                                "minLength": 1
-                            },
                             "storage_options": {
                                 "type": "object",
                                 "required": [
@@ -132,10 +128,6 @@
                             },
                             "absolute_path": {
                                 "type": "string"
-                            },
-                            "opening_mode": {
-                                "type": "string",
-                                "minLength": 1
                             },
                             "autoclean": {
                                 "type": "boolean"
