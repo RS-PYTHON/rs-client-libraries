@@ -243,6 +243,7 @@ def test_generate_payload_success(
 
     # Use the input model's actual defaults, as when Prefect omits these options.
     staging_input = DprProcessIn.model_construct(**staging_options)
+    mock_dpr_process_in.dask_task_timeout = 7200
     staging_keys = (
         "triggering__stage_s3_outputs",
         "triggering__stage_s3_temporary_prefix",
@@ -306,6 +307,21 @@ def test_generate_payload_success(
         dpr_process_in=mock_dpr_process_in,
     )
     assert payload.logging == expected_logging
+    general_configuration = payload.general_configuration.dump()
+    if processor_name == DprProcessor.S1L0:
+        assert all(key not in general_configuration for key in staging_keys)
+        assert general_configuration["triggering__wait_before_exit"] == 5
+        assert general_configuration["triggering__use_default_filename"] is False
+        assert general_configuration["triggering__validate_run"] is True
+        assert general_configuration["triggering__validate_mode"] == "NONE"
+        assert general_configuration["dask_utils__timeout"] == 3600
+    else:
+        assert {key: general_configuration[key] for key in staging_keys} == expected_staging
+        assert general_configuration["triggering__wait_before_exit"] == 10
+        assert "triggering__use_default_filename" not in general_configuration
+        assert "triggering__validate_run" not in general_configuration
+        assert "triggering__validate_mode" not in general_configuration
+        assert general_configuration["dask_utils__timeout"] == mock_dpr_process_in.dask_task_timeout
     assert any(
         adf.id == "adf_l0cfg" and adf.path == f"/opt/dask-l0/{processor_name.value[:2]}_adf_l0cfg.json"
         for adf in payload.io.adfs
