@@ -839,7 +839,6 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
         if hasattr(dpr_process_in.processor_name, "value")
         else dpr_process_in.processor_name
     )
-    is_s1l0_processor = processor_name == DprProcessor.S1L0.value
     is_olci_processor = processor_name in (DprProcessor.S3L1OLCI.value, DprProcessor.S3L2OLCI.value)
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (stories 800/1050)
@@ -848,22 +847,13 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
             logging__level=dpr_process_in.env.logging_level.value,
             triggering__use_basic_logging=triggering__use_basic_logging,
             triggering__temporary_shared=dpr_process_in.temporary_shared,
-            triggering__stage_s3_outputs=None if is_s1l0_processor else dpr_process_in.triggering__stage_s3_outputs,
-            triggering__stage_s3_temporary_prefix=(
-                None if is_s1l0_processor else dpr_process_in.triggering__stage_s3_temporary_prefix
-            ),
-            triggering__stage_s3_outputs_min_size=(
-                None if is_s1l0_processor else dpr_process_in.triggering__stage_s3_outputs_min_size
-            ),
-            triggering__stage_s3_memory_fit_safety_ratio=(
-                None if is_s1l0_processor else dpr_process_in.triggering__stage_s3_memory_fit_safety_ratio
-            ),
+            triggering__stage_s3_outputs=dpr_process_in.triggering__stage_s3_outputs,
+            triggering__stage_s3_temporary_prefix=dpr_process_in.triggering__stage_s3_temporary_prefix,
+            triggering__stage_s3_outputs_min_size=dpr_process_in.triggering__stage_s3_outputs_min_size,
+            triggering__stage_s3_memory_fit_safety_ratio=dpr_process_in.triggering__stage_s3_memory_fit_safety_ratio,
             triggering__use_datatree=True if is_olci_processor else None,
-            triggering__use_default_filename=False if is_s1l0_processor else (True if is_olci_processor else None),
-            triggering__wait_before_exit=5 if is_s1l0_processor else 10,
-            triggering__validate_run=True if is_s1l0_processor else None,
-            triggering__validate_mode="NONE" if is_s1l0_processor else None,
-            dask_utils__timeout=3600 if is_s1l0_processor else dpr_process_in.dask_task_timeout,
+            triggering__use_default_filename=True if is_olci_processor else None,
+            dask_utils__timeout=dpr_process_in.dask_task_timeout,
             temporary__folder=dpr_process_in.temporary_folder,
             temporary__folder_s3_secret=temp_folder_s3_secret,
         ),
