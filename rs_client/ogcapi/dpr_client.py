@@ -301,16 +301,21 @@ class DprClient(OgcApiClient):
                 )
                 logger.info(f"Connected to log stream from {url}")
                 if response.status_code == 200:
+                    logger.info("Status code = 200")
                     for line in response.iter_lines():
+                        logger.info("Entered in for")
                         if line:
+                            logger.info(f"line = {line}")
                             decoded = line.decode("utf-8")
                             if decoded.startswith("id:"):
                                 last_event_id = decoded[3:].strip()
                             elif decoded.startswith("data: "):
                                 log_line = decoded[6:]
                                 if log_start_pattern.match(log_line):
+                                    logger.info(f"flush_log = {buffer}")
                                     flush_log(buffer)
                                 buffer.append(log_line)
+                                logger.info(f"buffer append = {buffer}")
                     flush_log(buffer)
 
                     # if iter_lines completes without raising an exception, it means the server
