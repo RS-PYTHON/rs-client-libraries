@@ -299,6 +299,7 @@ class DprClient(OgcApiClient):
                     **{**self.apikey_headers, "headers": headers},
                     timeout=86400,
                 )
+                logger.info(f"Connected to log stream from {url}")
                 if response.status_code == 200:
                     for line in response.iter_lines():
                         if line:
@@ -314,6 +315,7 @@ class DprClient(OgcApiClient):
 
                     # if iter_lines completes without raising an exception, it means the server
                     # cleanly closed the connection (which it does when the job finishes).
+                    logger.info("Break from logs")
                     break
                 if response.status_code == 404:
                     logger.warning("Log stream endpoint returned 404 Not Found for job. Stopping stream logs.")
