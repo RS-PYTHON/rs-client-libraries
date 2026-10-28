@@ -14,6 +14,7 @@
 
 """Prefect flows and tasks for on-demand SAFE -zarr conversion."""
 
+import asyncio
 import os
 from typing import Any, cast
 from urllib.parse import urlparse
@@ -138,7 +139,8 @@ async def safe_conversion_task(
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
         logger.info(f"Triggering SAFE conversion with payload: {payload}")
         job_status = dpr_client.run_conv_safe_zarr(payload, cluster_info)
-        conversion_result = dpr_client.wait_for_job(job_status, logger, "SAFE conversion")
+        # Run the blocking log streaming in a thread to keep the event loop (and Prefect log shipping) responsive
+        conversion_result = await asyncio.to_thread(dpr_client.wait_for_job, job_status, logger, "SAFE conversion")
         logger.info(f"SAFE conversion completed with result: {conversion_result}")
         # The generic DPR client annotation is list[dict], but conv_safe_zarr returns one result dictionary.
         return cast(dict[str, Any], conversion_result)
