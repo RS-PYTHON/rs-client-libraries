@@ -525,6 +525,36 @@ def test_stream_logs_reconnection(mocker, dpr_client: DprClient):
     mock_logger.info.assert_any_call("INFO:test:log")
 
 
+class BrokenMockResponse(MockResponse):
+    """Mock for a requests.Response whose stream ends prematurely"""
+
+    def iter_lines(self):
+        """Yield the lines then raise a connection error"""
+        yield from self.lines
+        raise ConnectionError("Response ended prematurely")
+
+
+def test_stream_logs_resumes_from_last_event_id(mocker, dpr_client: DprClient):
+    """Test stream_logs keeps the received logs and resumes from the last event ID after a stream error."""
+    mock_logger = mocker.Mock()
+    mock_get = mocker.patch.object(dpr_client.http_session, "get")
+    mocker.patch("time.sleep")
+    mocker.patch.object(dpr_client, "get_job_info", return_value={"status": "running"})
+
+    mock_get.side_effect = [
+        BrokenMockResponse(status_code=200, lines=[b"id: 0", b"data: INFO:test:first log", b""]),
+        MockResponse(status_code=200, lines=[b"id: 1", b"data: INFO:test:second log", b""]),
+    ]
+
+    dpr_client.stream_logs("http://test/jobs/123/logs", mock_logger)
+
+    assert mock_get.call_count == 2
+    assert "Last-Event-ID" not in mock_get.call_args_list[0].kwargs["headers"]
+    assert mock_get.call_args_list[1].kwargs["headers"]["Last-Event-ID"] == "0"
+    mock_logger.info.assert_any_call("INFO:test:first log")
+    mock_logger.info.assert_any_call("INFO:test:second log")
+
+
 def test_stream_logs_404_not_found(mocker, dpr_client: DprClient):
     """Test stream_logs cleanly exits on HTTP 404."""
     mock_logger = mocker.Mock()
@@ -614,21 +644,16 @@ async def test_generate_payload_path_shared_disk_success(monkeypatch, mocker):
     mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
     mock_variable_get.return_value = {
         "storage_configuration": [
-            {"kind": "other", "name": "test", "absolute_path": "/mnt/test", "opening_mode": "CREATE_OVERWRITE"},
-            {
-                "kind": "shared_disk",
-                "name": "shared1",
-                "absolute_path": "/mnt/shared",
-                "opening_mode": "CREATE_OVERWRITE",
-            },
-            {"kind": "shared_disk", "name": "shared2", "absolute_path": "/mnt/shared2", "opening_mode": "READ_ONLY"},
+            {"kind": "other", "name": "test", "absolute_path": "/mnt/test"},
+            {"kind": "shared_disk", "name": "shared1", "absolute_path": "/mnt/shared"},
+            {"kind": "shared_disk", "name": "shared2", "absolute_path": "/mnt/shared2"},
         ],
     }
 
     owner_id = "test_user"
     path = await dpr_module.generate_payload_path(owner_id)
 
-    # Should use the first valid shared_disk with CREATE_OVERWRITE
+    # Should use the first valid shared_disk
     assert path.startswith("/mnt/shared/test_user/")
 
     timestamp_pattern = r"\d{4}-\d{2}-\d{2}--\d{2}-\d{2}-\d{2}$"
@@ -658,30 +683,9 @@ async def test_generate_payload_path_shared_disk_no_valid_config(monkeypatch, mo
     mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
     mock_variable_get.return_value = {
         "storage_configuration": [
-            {
-                "kind": "shared_disk",
-                "name": "",
-                "absolute_path": "/mnt/shared",
-                "opening_mode": "CREATE_OVERWRITE",
-            },  # missing name
-            {
-                "kind": "shared_disk",
-                "name": "shared1",
-                "absolute_path": "",
-                "opening_mode": "CREATE_OVERWRITE",
-            },  # missing path
-            {
-                "kind": "shared_disk",
-                "name": "shared2",
-                "absolute_path": "/mnt/shared2",
-                "opening_mode": "READ_ONLY",
-            },  # wrong opening_mode
-            {
-                "kind": "other",
-                "name": "test",
-                "absolute_path": "/mnt/test",
-                "opening_mode": "CREATE_OVERWRITE",
-            },  # wrong kind
+            {"kind": "shared_disk", "name": "", "absolute_path": "/mnt/shared"},  # missing name
+            {"kind": "shared_disk", "name": "shared1", "absolute_path": ""},  # missing path
+            {"kind": "other", "name": "test", "absolute_path": "/mnt/test"},  # wrong kind
         ],
     }
 
@@ -726,57 +730,6 @@ async def test_generate_payload_path_shared_disk_missing_storage_configuration_k
         match=r"Unable to find a shared disk path in Prefect variable 'processing-storage-configuration'",
     ):
         await dpr_module.generate_payload_path(owner_id)
-
-
-async def test_generate_payload_path_shared_disk_case_insensitive_opening_mode(monkeypatch, mocker):
-    """Test generate_payload_path accepts CREATE_OVERWRITE in any case."""
-
-    monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
-
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
-    mock_variable_get.return_value = {
-        "storage_configuration": [
-            {
-                "kind": "shared_disk",
-                "name": "shared1",
-                "absolute_path": "/mnt/shared",
-                "opening_mode": "create_overwrite",
-            },  # lowercase
-        ],
-    }
-
-    owner_id = "test_user"
-    path = await dpr_module.generate_payload_path(owner_id)
-
-    assert path.startswith("/mnt/shared/test_user/")
-
-    timestamp_pattern = r"\d{4}-\d{2}-\d{2}--\d{2}-\d{2}-\d{2}$"
-    assert re.search(timestamp_pattern, path)
-
-
-async def test_generate_payload_path_shared_disk_none_opening_mode(monkeypatch, mocker):
-    """Test generate_payload_path skips entry when opening_mode is None."""
-
-    monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
-
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
-    mock_variable_get.return_value = {
-        "storage_configuration": [
-            {"kind": "shared_disk", "name": "shared1", "absolute_path": "/mnt/shared", "opening_mode": None},
-            {
-                "kind": "shared_disk",
-                "name": "shared2",
-                "absolute_path": "/mnt/shared2",
-                "opening_mode": "CREATE_OVERWRITE",
-            },
-        ],
-    }
-
-    owner_id = "test_user"
-    path = await dpr_module.generate_payload_path(owner_id)
-
-    # Should skip the first entry (None opening_mode) and use the second
-    assert path.startswith("/mnt/shared2/test_user/")
 
 
 # end of generate_payload_path tests

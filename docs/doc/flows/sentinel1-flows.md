@@ -5,11 +5,11 @@ RS-Python is:
 
 | Processing | How to run it | Processor (rs-dpr-service process) |
 |---|---|---|
-| Level-0 | `process-l0` or `process-s1-l0` flows, see [Level-0 flows](level0-flows.md). The session is the only input product (`S1CADUS`). | `s1_l0` |
+| Level-0 | `process-l0` or `process-s1-l0` flows, see [Level-0 flows](level0-flows.md). The session is the only input product (`S1CADUS`). In systematic processing, it is started automatically after the staging of the session, see [Systematic processing](../advanced/systematic-processing.md). | `s1_l0` |
 | Analysis Ready Data (ARD) | `process-s1-ard-reference` then `process-s1-ard` flows, see [Analysis Ready Data](#analysis-ready-data-ard). They can also be run with the `process-generic` flow, with the `s1_ard` processor and one of the pipelines of its task table, see [Customise the DPR processing](../advanced/customise-dpr-flow.md). | `s1_ard` |
 
-The default settings of the Sentinel-1 flows are read from the `s1-processing-default-setting` Prefect variable
-(`l0` section for the Level-0, `l1ard` section for the ARD), see
+The default settings of the Sentinel-1 flows are read from the `s1l0-default-setting` (Level-0) and
+`s1ard-default-setting` (ARD) Prefect variables, see
 [Customise the DPR processing](../advanced/customise-dpr-flow.md#default-settings-of-the-processing-flows).
 
 The task tables of these processors, with their pipelines, inputs and auxiliary files, are in the
@@ -37,11 +37,11 @@ The flows are:
 
 | Flow | Parameters | Description |
 |---|---|---|
-| `process-s1-ard-reference` | `slc`, `edh_api_key`, `flow_params`, `verbose` | Run once on a master SLC to generate the `REFERENCE_DB` used by the nominal flow, with the `ARD_REFERENCE_PIPELINE` pipeline. |
-| `process-s1-ard` | `slcs`, `reference_date`, `edh_api_key`, `flow_params`, `verbose` | Nominal on-demand ARD processing of several SLCs, `reference_date` being the date of the master SLC, with the pipeline given in `flow_params` or in the default settings (`SLC__1_CSL__1`, `SLC__1_GSL__1` or `SLC__1_NRB__1`). |
+| `process-s1-ard-reference` | `slc`, `edh_api_key`, `env_args`, `verbose` | Run once on a master SLC to generate the `REFERENCE_DB` used by the nominal flow, with the `ARD_REFERENCE_PIPELINE` pipeline. |
+| `process-s1-ard` | `slcs`, `reference_date`, `edh_api_key`, `env_args`, `pipeline`, `verbose` | Nominal on-demand ARD processing of several SLCs, `reference_date` being the date of the master SLC, with the given `pipeline` (`SLC__1_CSL__1`, `SLC__1_GSL__1` or `SLC__1_NRB__1`), or by default the pipeline of the settings. |
 
-- `slc` and `slcs` are STAC item identifiers of the SLC products, searched in the `input_collections` of
-  `flow_params` (default: `s01sewslc`, `s01siwslc`, `s01ssmslc`). All the SLCs must share the same
+- `slc` and `slcs` are STAC item identifiers of the SLC products, searched in the `input_collections` of the
+  settings (default: `s01sewslc`, `s01siwslc`, `s01ssmslc`). All the SLCs must share the same
   `sar:instrument_mode`, which is given to the processor as the `instrument_mode` external variable.
 - `reference_date` is required when several SLCs are given. For the `SLC__1_NRB__1` pipeline with a single SLC, it
   is deduced from the SLC identifier, to select the `S2_TILES` auxiliary file.

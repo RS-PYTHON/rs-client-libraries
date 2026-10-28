@@ -12,29 +12,48 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared configuration, product mapping and event helpers for Sentinel-3 processing."""
+"""Code shared by the Sentinel-3 OLCI processing flows."""
 
-from collections.abc import Awaitable
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
+from prefect import runtime
 from prefect.events import emit_event
-from prefect.variables import Variable
-from pydantic import BaseModel, Field
 
-from rs_workflows.on_demand.common.types import S3_PROCESSING_CONFIGURATION
+from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, WorkflowType
+from rs_workflows.utils.dpr import ProcessorSettings, call_dpr_flow
 from rs_workflows.utils.prefect import get_logger
+
+
+async def process_olci(
+    level: Literal["l1", "l2"],
+    env_args: FlowEnvArgs,
+    settings: ProcessorSettings,
+    input_products: list[FlowInputProduct],
+    external_variables: dict[str, Any],
+    workflow: WorkflowType,
+) -> list[dict[str, Any]]:
+    """Run the OLCI processing of a level, then request the quicklooks of the generated products."""
+    products = await call_dpr_flow(
+        env=env_args,
+        settings=settings,
+        input_products=input_products,
+        external_variables=external_variables,
+        workflow=workflow,
+    )
+    emit_olci_quicklook_event(level, env_args.owner_id, products)
+    return products
 
 
 def emit_olci_quicklook_event(
     level: Literal["l1", "l2"],
     owner_id: str,
     products: list[dict[str, Any]],
-    flow_run_id: str,
 ) -> None:
-    """Request quicklooks for published OLCI products, linked to their processing flow run."""
+    """Request quicklooks for published OLCI products, linked to the current flow run."""
     if not products:
         return
 
+    flow_run_id = str(runtime.flow_run.id or "unknown")
     event_name = f"rs-python.s3-{level}.quicklook-inputs-ready"
     event = emit_event(
         event=event_name,
@@ -68,70 +87,3 @@ def emit_olci_quicklook_event(
             event.id,
             len(products),
         )
-
-
-class S3ProcessingOrchestrationSettings(BaseModel):
-    """Environment-specific deployment and collection names for the S3 chain."""
-
-    cadip_staging_deployment: str = Field(min_length=1)
-    s3_l0_deployment: str = Field(min_length=1)
-    s3_l1_olci_deployment: str = Field(min_length=1)
-    cadip_collection: str = Field(min_length=1)
-    staging_catalog_collection: str = Field(min_length=1)
-    s3_l0_output_collection: str = Field(min_length=1)
-
-
-async def read_s3_orchestration_settings() -> S3ProcessingOrchestrationSettings:
-    """Load and validate the ``orchestration`` section of the unified S3 variable."""
-    raw_settings = await cast(Awaitable[Any], Variable.get(S3_PROCESSING_CONFIGURATION, default={}))
-    if not isinstance(raw_settings, dict):
-        raise ValueError(f"Prefect variable {S3_PROCESSING_CONFIGURATION!r} must contain a dictionary")
-
-    return S3ProcessingOrchestrationSettings.model_validate(raw_settings.get("orchestration"))
-
-
-def build_olci_l1_input_products(
-    l0_products: list[dict[str, Any]],
-    input_collection: str,
-) -> list[dict[str, str]]:
-    """Convert full STAC items or compact event products into OLCI L1 inputs."""
-
-    normalized_products: list[tuple[str, str]] = []
-    for product in l0_products:
-        if "id" in product and "properties" in product:
-            product_type = product["properties"]["product:type"]
-            item_id = product["id"]
-        elif len(product) == 1:
-            product_type, item_id = next(iter(product.items()))
-        else:
-            raise ValueError(
-                "Invalid L0 product: expected a STAC item or a single {product_type: item_id} entry",
-            )
-        if not isinstance(product_type, str) or not isinstance(item_id, str):
-            raise ValueError("Invalid L0 product: product type and item ID must be strings")
-        normalized_products.append((product_type, item_id))
-
-    olci_item_ids = [item_id for product_type, item_id in normalized_products if product_type == "S03OLCL0_"]
-    nav_item_ids = [item_id for product_type, item_id in normalized_products if product_type == "S03NATL0_"]
-
-    if len(olci_item_ids) < 3:
-        raise ValueError(f"Expected at least 3 S03OLCL0_ products from L0, found {len(olci_item_ids)}")
-    if not nav_item_ids:
-        raise ValueError("Expected at least 1 S03NATL0_ product from L0, found 0")
-
-    input_products = [
-        {
-            "name": f"S3OLCIL0_{index}",
-            "item_id": item_id,
-            "collection_name": input_collection,
-        }
-        for index, item_id in enumerate(olci_item_ids[:3], start=1)
-    ]
-    input_products.append(
-        {
-            "name": "S3NAVL0_1",
-            "item_id": nav_item_ids[0],
-            "collection_name": input_collection,
-        },
-    )
-    return input_products

@@ -27,6 +27,7 @@ from rs_workflows.dpr_flow import (
     compute_eopf_origin_datetime,
     create_stac_item,
     extract_products_and_zattrs,
+    find_zarr_zip,
     read_zattrs_sync,
     run_processor,
     s3_list,
@@ -302,6 +303,42 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
         # search for RSPY-280 in the dpr_flow.py file
         # extra_fields=mocker.ANY,
     )
+
+
+def test_create_stac_item_adds_zarr_zip_asset():
+    """An additional application/zip asset is added when a zarr.zip href is given."""
+    feature = {"geometry": None, "bbox": None, "properties": {"datetime": "2024-01-01T00:00:00"}}
+    item = create_stac_item(
+        eopf_origin_datetime=None,
+        eopf_feature=feature,
+        s3_data_location="s3://b/out/P.zarr/.zattrs",
+        product_name="P.zarr",
+        dpr_processor=DprProcessor.S1L0,
+        zarr_zip_href="s3://b/out/P.zarr.zip",
+    )
+    assert item.assets["P.zarr"].href == "s3://b/out/P.zarr"
+    zip_asset = item.assets["P.zarr.zip"]
+    assert zip_asset.href == "s3://b/out/P.zarr.zip"
+    assert zip_asset.media_type == "application/zip"
+    assert zip_asset.roles == ["data"]
+
+
+@pytest.mark.parametrize("existing_keys, expected", [(["out/P.zarr.zip"], "s3://b/out/P.zarr.zip"), ([], None)])
+def test_find_zarr_zip(mocker, existing_keys, expected):
+    """The zip is detected only if present next to the zarr product."""
+    bucket = mocker.Mock()
+    objs = [mocker.Mock(key=k) for k in existing_keys]
+    bucket._get_bucket_resource.return_value.objects.filter.return_value = objs  # pylint: disable=protected-access
+    mocker.patch("rs_workflows.dpr_flow.prefect_utils.get_s3_bucket", return_value=(bucket, "out/P.zarr.zip"))
+
+    assert find_zarr_zip("s3://b/out/P.zarr/.zattrs") == expected
+
+
+def test_find_zarr_zip_ignores_non_zarr_product(mocker):
+    """No lookup is done when the product is not a .zarr."""
+    get_bucket = mocker.patch("rs_workflows.dpr_flow.prefect_utils.get_s3_bucket")
+    assert find_zarr_zip("s3://b/out/P.safe/.zattrs") is None
+    get_bucket.assert_not_called()
 
 
 def test_create_stac_item_uses_created_when_datetime_is_null():

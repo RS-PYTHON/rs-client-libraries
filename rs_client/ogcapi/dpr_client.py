@@ -277,6 +277,11 @@ class DprClient(OgcApiClient):
                 return True
             return False
 
+        # ID of the last SSE event received, sent back to the server when reconnecting so that
+        # it resumes the log stream from there (no lost or duplicated logs)
+        last_event_id: str | None = None
+        buffer: list[str] = []
+
         while True:  # pylint: disable=too-many-nested-blocks
             if is_job_finished():
                 break
@@ -285,13 +290,22 @@ class DprClient(OgcApiClient):
                 # 86400 seconds (24h) timeout for the long running stream
                 # maybe we should configure this timeout from user's input?
                 logger.info(f"Connecting to log stream from {url}")
-                response = self.http_session.get(url, stream=True, **self.apikey_headers, timeout=86400)
+                headers = dict(self.apikey_headers.get("headers") or {})
+                if last_event_id is not None:
+                    headers["Last-Event-ID"] = last_event_id
+                response = self.http_session.get(
+                    url,
+                    stream=True,
+                    **{**self.apikey_headers, "headers": headers},
+                    timeout=86400,
+                )
                 if response.status_code == 200:
-                    buffer: list[str] = []
                     for line in response.iter_lines():
                         if line:
                             decoded = line.decode("utf-8")
-                            if decoded.startswith("data: "):
+                            if decoded.startswith("id:"):
+                                last_event_id = decoded[3:].strip()
+                            elif decoded.startswith("data: "):
                                 log_line = decoded[6:]
                                 if log_start_pattern.match(log_line):
                                     flush_log(buffer)
@@ -307,6 +321,8 @@ class DprClient(OgcApiClient):
                 logger.warning(f"Failed to connect to stream (status {response.status_code}). Retrying in 1 second")
                 time.sleep(1)
             except Exception as e:  # pylint: disable=broad-exception-caught
+                # Don't lose the logs received before the error
+                flush_log(buffer)
                 logger.warning(f"Failed to stream logs ({e}). Reconnecting in 1 second")
                 time.sleep(1)
 

@@ -56,6 +56,14 @@ class WorkflowType(str, Enum):
     ON_DEMAND = "on-demand"
     SYSTEMATIC = "systematic"
 
+    @classmethod
+    def of_run(cls, force_systematic: bool) -> "WorkflowType":
+        """
+        Workflow of a run started by a user (on-demand), or by an automation of the systematic processing
+        (`force_systematic`): the automations start the next processing of the chain only from a systematic one.
+        """
+        return cls.SYSTEMATIC if force_systematic else cls.ON_DEMAND
+
 
 class ProcessingMode(str, Enum):
     """
