@@ -17,11 +17,12 @@
 import os
 from urllib.parse import quote_plus
 
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from sqlalchemy import create_engine
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.operation.quota_monitoring_db_models import Base
+from rs_workflows.utils.prefect import get_logger
 
 DB_NAME = "s3_quota"
 
@@ -37,7 +38,7 @@ def create_schema(db_url: str):
     Args:
         engine (sqlalchemy.engine.Engine): SQLAlchemy database engine connected to the target database.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     engine = create_engine(db_url)
     logger.info("Call the engine to create the table for quota monitoring")
     Base.metadata.create_all(engine)
@@ -61,7 +62,7 @@ async def init_quota_monitoring_database(env: FlowEnvArgs = FlowEnvArgs(owner_id
         POSTGRES_PORT (str): PostgreSQL port.
 
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)

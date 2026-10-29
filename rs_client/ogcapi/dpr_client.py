@@ -58,7 +58,10 @@ class DprPipeline(str, Enum):
     # String value = resource name in the rs-dpr-service
     S1L0FULL = "s1_l0_full"
     S3L0FULL = "s3_l0_full"
-    S1ARDFULL = "s1_ard_full"
+    S1ARD_CSL = "SLC__1_CSL__1"
+    S1ARD_GSL = "SLC__1_GSL__1"
+    S1ARD_NRB = "SLC__1_NRB__1"
+    S1ARD_REF = "ARD_REFERENCE_PIPELINE"
     S3L1OLCIFULL = "ol1_eo"
     S3L2OLCIFULL = "ol2_fr"
 
@@ -423,20 +426,21 @@ class DprClient(OgcApiClient):
             payload = yaml.safe_load(contents)
 
             # We need to create the output S3 folder with a dummy file before running DPR
-            for output_product in payload["I/O"]["output_products"]:
+            for output_product in payload["io"]["output_products"]:
                 s3_output_dir = output_product["path"]
                 s3_empty_file = f"{s3_output_dir}/.empty"
                 self.logger.info(f"Write empty file: {self.logger.level} {s3_empty_file!r}")
                 await prefect_utils.s3_upload_empty_file(s3_empty_file)
 
             # Change the dask authentication for local mode (used in old demos, could be removed)
-            try:
-                cluster_config = payload["dask_context"]["cluster_config"]
-                if self.local_mode:
-                    cluster_config["auth"] = cluster_config["auth_local_mode"]
-                del cluster_config["auth_local_mode"]
-            except KeyError:
-                pass
+            for manager in payload["context_managers"]:
+                try:
+                    cluster_config = manager["parameters"]["cluster_config"]
+                    if self.local_mode:
+                        cluster_config["auth"] = cluster_config["auth_local_mode"]
+                    del cluster_config["auth_local_mode"]
+                except KeyError:
+                    pass
 
             # yaml to str conversion
             contents = yaml.dump(payload, default_flow_style=False, sort_keys=False)

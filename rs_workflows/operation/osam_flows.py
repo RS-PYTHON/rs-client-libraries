@@ -18,11 +18,12 @@ import json
 import os
 
 import requests
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
 from prefect.context import TaskRunContext
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
+from rs_workflows.utils.prefect import get_logger
 
 
 class OSAMUserNotFoundError(Exception):
@@ -81,7 +82,7 @@ async def create_rights_artifact(rights: dict, username: str) -> None:
 ```json
 {pretty_json}
 """
-    logger = get_run_logger()
+    logger = get_logger()
     artifact_key_name: str = "obs-rights"
     await acreate_markdown_artifact(
         key=artifact_key_name,

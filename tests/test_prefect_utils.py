@@ -17,10 +17,12 @@
 import getpass
 import os
 import socket
+import tempfile
 from contextlib import suppress
 from importlib import reload
 from unittest.mock import AsyncMock, Mock, mock_open, patch
 
+import anyio
 import pytest
 import requests
 import responses
@@ -333,3 +335,136 @@ async def test_s3_read_bytes_reads_in_memory(mocker):
 
     assert result == b"file contents"
     mock_bucket.aread_path.assert_awaited_once_with("key")
+
+
+async def test_upload_payload_bytes_local_path():
+    """Test upload_payload_bytes writes to local file path."""
+    # Create a temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".yaml") as tmp:
+        tmp_path = tmp.name
+
+    try:
+        test_data = b"test yaml content\n"
+        await prefect_utils.upload_payload_bytes(test_data, tmp_path)
+        assert os.path.exists(tmp_path)
+        async with await anyio.open_file(tmp_path, "rb") as f:
+            assert await f.read() == test_data
+    finally:
+        # Cleanup
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+async def test_upload_payload_bytes_s3_path():
+    """Test upload_payload_bytes routes to s3_upload_bytes for S3 paths."""
+
+    # Mock s3_upload_bytes
+    with patch("rs_common.prefect_utils.s3_upload_bytes", new=AsyncMock(return_value="s3://bucket/key")) as mock_s3:
+        test_data = b"test data"
+        await prefect_utils.upload_payload_bytes(test_data, "s3://bucket/key")
+        mock_s3.assert_awaited_once_with(test_data, "s3://bucket/key")
+
+
+async def test_delete_payload_file_local_path():
+    """Test delete_payload_file removes local file."""
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".yaml") as tmp:
+        tmp_path = tmp.name
+
+    try:
+        # Create the file first
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write("test content")
+        assert os.path.exists(tmp_path)
+
+        # Delete the file
+        prefect_utils.delete_payload_file(tmp_path)
+        assert not os.path.exists(tmp_path)
+    finally:
+        # Note: file already deleted, but we try to clean up anyway
+        pass
+
+
+async def test_delete_payload_file_missing_local_path():
+    """Test delete_payload_file handles missing local file gracefully."""
+
+    # Should not raise FileNotFoundError
+    prefect_utils.delete_payload_file("/nonexistent/path.yaml")
+    # If we get here without exception, the test passes
+
+
+async def test_delete_payload_file_s3_path():
+    """Test delete_payload_file routes to s3_delete for S3 paths."""
+
+    # Mock s3_delete
+    with patch("rs_common.prefect_utils.s3_delete") as mock_s3:
+        prefect_utils.delete_payload_file("s3://bucket/key")
+        mock_s3.assert_called_once_with("s3://bucket/key", log=False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("max_concurrency", [1, 2, 16])
+async def test_s3_upload_dir_bounded(tmp_path, mocker, max_concurrency):
+    """Upload every file once, preserving relative keys and upload options."""
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "first.bin").write_bytes(b"first")
+    (tmp_path / "nested" / "second.bin").write_bytes(b"second")
+    bucket = Mock(bucket_name="test-bucket")
+    bucket._join_bucket_folder.return_value = "base/output"  # pylint: disable=protected-access
+    client = bucket.credentials.get_s3_client.return_value
+    mocker.patch.object(prefect_utils, "get_s3_bucket", return_value=(bucket, "output"))
+
+    result = await prefect_utils.s3_upload_dir(
+        tmp_path,
+        "s3://test-bucket/output",
+        max_concurrency=max_concurrency,
+        ExtraArgs={"ContentType": "application/octet-stream"},
+    )
+
+    assert result == "output"
+    assert client.upload_file.call_count == 2
+    for relative in ("first.bin", "nested/second.bin"):
+        client.upload_file.assert_any_call(
+            Filename=str(tmp_path / relative),
+            Bucket="test-bucket",
+            Key=f"base/output/{relative}",
+            ExtraArgs={"ContentType": "application/octet-stream"},
+        )
+    bucket.aupload_from_folder.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_s3_upload_dir_bounded_empty(tmp_path, mocker):
+    """Empty folders, including nested empty directories, need no S3 client."""
+    (tmp_path / "empty").mkdir()
+    bucket = Mock()
+    mocker.patch.object(prefect_utils, "get_s3_bucket", return_value=(bucket, "output"))
+
+    assert await prefect_utils.s3_upload_dir(tmp_path, "s3://bucket/output", max_concurrency=2) == "output"
+    bucket.credentials.get_s3_client.assert_not_called()
+    bucket.aupload_from_folder.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("max_concurrency", [0, -1])
+async def test_s3_upload_dir_invalid_concurrency(tmp_path, mocker, max_concurrency):
+    """Reject nonpositive worker counts before accessing S3."""
+    bucket = Mock()
+    mocker.patch.object(prefect_utils, "get_s3_bucket", return_value=(bucket, "output"))
+
+    with pytest.raises(ValueError, match="max_concurrency must be greater than zero"):
+        await prefect_utils.s3_upload_dir(tmp_path, "s3://bucket/output", max_concurrency=max_concurrency)
+    bucket.credentials.get_s3_client.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_s3_upload_dir_bounded_failure(tmp_path, mocker):
+    """An S3 upload failure must propagate to the normalization caller."""
+    (tmp_path / "payload").write_bytes(b"payload")
+    bucket = Mock(bucket_name="test-bucket")
+    bucket._join_bucket_folder.return_value = "output"  # pylint: disable=protected-access
+    bucket.credentials.get_s3_client.return_value.upload_file.side_effect = RuntimeError("S3 upload failed")
+    mocker.patch.object(prefect_utils, "get_s3_bucket", return_value=(bucket, "output"))
+
+    with pytest.raises(RuntimeError, match="S3 upload failed"):
+        await prefect_utils.s3_upload_dir(tmp_path, "s3://test-bucket/output", max_concurrency=2)

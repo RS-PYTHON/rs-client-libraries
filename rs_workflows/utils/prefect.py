@@ -12,13 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Utilities for working with Prefect variables."""
+"""Utilities for working with Prefect (run logger and variables)."""
 
+import inspect
+import logging
 from collections.abc import Awaitable
 from typing import Any, cast
 
 from prefect import get_run_logger
+from prefect.exceptions import MissingContextError
 from prefect.variables import Variable
+
+
+def get_logger(name: str | None = None) -> logging.Logger | logging.LoggerAdapter:
+    """
+    Return the Prefect run logger when called from a Prefect flow or task run,
+    otherwise a standard logger (e.g. when the workflow code is used outside of Prefect).
+
+    Args:
+        name: name of the standard logger. Default: module name of the caller.
+    """
+    try:
+        return get_run_logger()
+    except MissingContextError:
+        if name is None:
+            frame = inspect.currentframe()
+            name = frame.f_back.f_globals.get("__name__", "rspy") if frame and frame.f_back else "rspy"
+        return logging.getLogger(name)
 
 
 def _deep_merge(value: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
@@ -44,7 +64,7 @@ def _contains_updates(value: dict[str, Any], updates: dict[str, Any]) -> bool:
 
 async def update_prefect_variable(variable_name: str, updates: dict[str, Any]) -> dict[str, Any]:
     """Merge updates into a Prefect variable and verify that they were persisted."""
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info("Reading current Prefect variable %s", variable_name)
 
     raw_value = await cast(Awaitable[Any], Variable.get(variable_name, default={}))

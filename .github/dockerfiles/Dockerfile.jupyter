@@ -22,8 +22,8 @@
 # ghcr.io/rs-python/jupyter/rs-client-libraries/local
 #
 
-ARG PYTHON_VERSION=3.13.12
-ARG JUPYTER_HUB_VERSION=5.4.3
+ARG PYTHON_VERSION=3.13.16
+ARG JUPYTER_HUB_VERSION=5.5.1
 ARG BASE_TAG=xxx
 
 FROM "ghcr.io/rs-python/quay.io/jupyter/base-notebook:${BASE_TAG}"

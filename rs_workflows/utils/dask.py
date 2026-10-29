@@ -19,8 +19,10 @@ import os
 
 from dask_gateway import Gateway
 from dask_gateway.auth import JupyterHubAuth
-from prefect import get_run_logger, task
+from prefect import task
 from prefect.artifacts import acreate_markdown_artifact
+
+from rs_workflows.utils.prefect import get_logger
 
 
 @task(name="Check dask cluster status")
@@ -29,7 +31,7 @@ async def is_dask_cluster_running(dask_cluster_label: str) -> bool:
     Retrieve dask cluster status.
     """
     result = False
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Connect to the dask gateway
     gateway = Gateway(

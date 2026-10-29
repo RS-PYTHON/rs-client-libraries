@@ -32,8 +32,8 @@ from rs_workflows.utils import stac as stac_utils
 def mock_auxip_logger(monkeypatch, mocker):
     """Replace Prefect run logger with a plain mock."""
     logger = mocker.Mock()
-    monkeypatch.setattr(aux_flow, "get_run_logger", lambda: logger)
-    monkeypatch.setattr(stac_utils, "get_run_logger", lambda: logger)
+    monkeypatch.setattr(aux_flow, "get_logger", lambda: logger)
+    monkeypatch.setattr(stac_utils, "get_logger", lambda: logger)
     return logger
 
 

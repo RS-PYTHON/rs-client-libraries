@@ -99,7 +99,7 @@ def test_get_href_service(
 
 def test_resolve_collection_generated_product(mocker):
     """Check resolve_collection works with a list of FlowGeneratedProduct instances."""
-    mocker.patch("rs_workflows.catalog_flow.get_run_logger")
+    mocker.patch("rs_workflows.catalog_flow.get_logger")
 
     input_collections: list[FlowGeneratedProduct] = [
         FlowGeneratedProduct(name="product_name_1", product_type="product_type_1", collection_name="collection_1"),

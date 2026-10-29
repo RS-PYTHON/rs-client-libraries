@@ -20,17 +20,18 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import Enum
+from typing import Literal
 
 from opentelemetry import trace
 from opentelemetry.trace import Span, SpanContext
 from opentelemetry.util._decorator import _agnosticcontextmanager
-from prefect import get_run_logger
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pystac import Item
 
 from rs_client.ogcapi.dpr_client import DprPipeline, DprProcessor
 from rs_client.rs_client import RsClient
 from rs_common import init_opentelemetry, prefect_utils
+from rs_workflows.utils.prefect import get_logger
 
 ARCHIVE_SUFFIXES = (".zip", ".tar", ".tgz", ".tar.gz")
 DEFAULT_ROOT_LOGGING_LEVEL = os.getenv("PREFECT_LOGGING_ROOT_LEVEL", "INFO")
@@ -54,6 +55,14 @@ class WorkflowType(str, Enum):
     BENCHMARKING = "benchmarking"
     ON_DEMAND = "on-demand"
     SYSTEMATIC = "systematic"
+
+    @classmethod
+    def of_run(cls, force_systematic: bool) -> "WorkflowType":
+        """
+        Workflow of a run started by a user (on-demand), or by an automation of the systematic processing
+        (`force_systematic`): the automations start the next processing of the chain only from a systematic one.
+        """
+        return cls.SYSTEMATIC if force_systematic else cls.ON_DEMAND
 
 
 class ProcessingMode(str, Enum):
@@ -96,7 +105,10 @@ class AdfType(str, Enum):
 
     S00__ADF_ECMWA = "S00__ADF_ECMWA"
     S00__ADF_ECMWF = "S00__ADF_ECMWF"
+    S00__ADF_FPOAX = "S00__ADF_FPOAX"
+    S00__ADF_FROAX = "S00__ADF_FROAX"
     S00__ADF_GETAS = "S00__ADF_GETAS"
+    S00__ADF_OSFAX = "S00__ADF_OSFAX"
     S00__ADF_WATER = "S00__ADF_WATER"
     S03_ADF_OLCAL = "S03_ADF_OLCAL"
     S03_ADF_OLEOP = "S03_ADF_OLEOP"
@@ -105,6 +117,22 @@ class AdfType(str, Enum):
     S03_ADF_OLPRG = "S03_ADF_OLPRG"
     S03_ADF_OLRAC = "S03_ADF_OLRAC"
     S03_ADF_OLSPC = "S03_ADF_OLSPC"
+    S03_ADF_OLPPP = "S03_ADF_OLPPP"
+    S03_ADF_OLPCP = "S03_ADF_OLPCP"
+    S03_ADF_OLCLP = "S03_ADF_OLCLP"
+    S03_ADF_OLWVP = "S03_ADF_OLWVP"
+    S03_ADF_OLVGP = "S03_ADF_OLVGP"
+    S03_ADF_SL1PP = "S03_ADF_SL1PP"
+    S03_ADF_SLADJ = "S03_ADF_SLADJ"
+    S03_ADF_SLANC = "S03_ADF_SLANC"
+    S03_ADF_SLCDP = "S03_ADF_SLCDP"
+    S03_ADF_SLCLO = "S03_ADF_SLCLO"
+    S03_ADF_SLCLP = "S03_ADF_SLCLP"
+    S03_ADF_SLGEC = "S03_ADF_SLGEC"
+    S03_ADF_SLGEO = "S03_ADF_SLGEO"
+    S03_ADF_SLVIC = "S03_ADF_SLVIC"
+    S03_ADF_TIRCD = "S03_ADF_TIRCD"
+    S03_ADF_VSWCD = "S03_ADF_VSWCD"
 
 
 class LoggingLevel(str, Enum):
@@ -190,7 +218,7 @@ class FlowEnv:
         logging.getLogger("prefect.flow_runs").setLevel(self.logging_level)
         logging.getLogger("prefect.task_runs").setLevel(self.logging_level)
 
-        logger = get_run_logger()
+        logger = get_logger()
         logger.info("Initializing FlowEnv with args: %r", args)
 
         # Deserialize the calling span, if any
@@ -208,7 +236,7 @@ class FlowEnv:
             rs_server_href=os.getenv("RSPY_WEBSITE"),
             rs_server_api_key=os.getenv("RSPY_APIKEY"),
             owner_id=self.owner_id,
-            logger=get_run_logger(),  # type: ignore
+            logger=get_logger(),  # type: ignore
         )
 
     def serialize(self) -> FlowEnvArgs:
@@ -397,7 +425,7 @@ class DprProcessIn(BaseModel):
 
     s3_payload_file: str = Field(
         title="S3 Payload File",
-        description="S3 path where the processor payload (JSON) will be written for execution.",
+        description="S3 or local path where the processor payload will be written for execution.",
     )
 
     pipeline: str | DprPipeline | None = Field(
@@ -557,7 +585,8 @@ class AdfProcessIn(BaseModel):
     satellite: str | SentinelSatellite | None = Field(
         default=None,
         title="Satellite",
-        description="Satellite identifier used in certain queries. Can be a string or SentinelSatellite enum.",
+        description="Satellite identifier used in certain queries. Can be a string or SentinelSatellite enum. "
+        "Mandatory for the mission-dependent ADF types (orbit files).",
     )
     cql2_filter: dict | None = Field(
         default=None,
@@ -611,10 +640,11 @@ class RetryConfig(BaseModel):
 
 class ConversionIn(BaseModel):
     """
-    Input parameters for executing the 'on_demand_conversion' flow.
+    Input parameters for the 'convert-safe' Prefect flow, implemented by 'on_demand_conversion'.
 
-    This model defines all the configuration needed to run an on-demand conversion flow,
-    including input datasets, generated outputs, and scheduling parameters.
+    Defines the configuration needed to convert a legacy SAFE product to its EOPF (Zarr)
+    counterpart on demand, including the input product, output collection, Dask cluster,
+    and output Zarr format.
     """
 
     env: FlowEnvArgs = Field(
@@ -631,10 +661,6 @@ class ConversionIn(BaseModel):
             "Generated product. Specifies a name, the product type, and the collection where the output will be stored."
         ),
     )
-    owner_id: str = Field(
-        title="Owner ID",
-        description="User/owner ID necessary to retrieve the user info from the right Prefect block.",
-    )
     dask_cluster_label: str = Field(
         title="Dask Cluster Label",
         description="Label of the Dask cluster to use for SAFE conversion.",
@@ -644,9 +670,13 @@ class ConversionIn(BaseModel):
         title="Dask Cluster Instance",
         description="Optional Dask cluster instance ID used by the DPR conversion service.",
     )
-
     selected_assets: list[str] | None = Field(
         default=None,
         title="Selected Assets",
         description=("Set of selected asset keys to stage. If not provided, all assets will be converted"),
+    )
+    zarr_format: Literal[2, 3] = Field(
+        default=2,
+        title="Zarr format (default: 2)",
+        description="Output Zarr format. Defaults to 2 when omitted. ",
     )

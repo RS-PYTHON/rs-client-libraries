@@ -21,8 +21,10 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 import requests
-from prefect import flow, get_run_logger
+from prefect import flow
 from prefect.settings import PREFECT_API_URL
+
+from rs_workflows.utils.prefect import get_logger
 
 
 @flow(name="cleanup-offline-workers")
@@ -49,7 +51,7 @@ def cleanup_offline_workers(
         becomes eligible for deletion.
     """
 
-    logger = get_run_logger()
+    logger = get_logger()
 
     work_pools = [pool.strip() for pool in work_pools_csv.split(",") if pool.strip()]
 

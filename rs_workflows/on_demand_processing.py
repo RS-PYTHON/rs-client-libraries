@@ -20,12 +20,16 @@ import json
 import os
 import re
 from copy import deepcopy
+from os import path as osp
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
+from uuid import uuid4
 
+import jsonschema
 import yaml
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
+from prefect.futures import PrefectFuture
 from pystac import Item, ItemCollection
 
 from rs_client.ogcapi.dpr_client import ClusterInfo
@@ -44,9 +48,17 @@ from rs_workflows.flow_utils import (
 from rs_workflows.payload_builder import (
     build_cql2_json,
     build_unit_list,
-    extract_external_modules,
+    get_io_entries,
+    replace_external_variables,
 )
-from rs_workflows.payload_generator import generate_payload, resolve_stac_input_path
+from rs_workflows.payload_generator import (
+    fetch_csv_from_endpoint,
+    find_s3_output_bucket,
+    generate_payload,
+    resolve_stac_input_path,
+)
+from rs_workflows.payload_template import PayloadSchema
+from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import (
     build_output_lineage,
     get_archived_item_indexes,
@@ -54,6 +66,8 @@ from rs_workflows.utils.utils import (
 )
 
 SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
+
+TASK_TABLE_SCHEMA = osp.realpath(osp.join(osp.dirname(__file__), "../config/TaskTable.schema.json"))
 
 
 def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
@@ -67,7 +81,7 @@ def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
     return f"Dask cluster dashboard URL: {dashboard_url}"
 
 
-def _select_aux_collection_and_source(
+def select_aux_collection_and_source(
     dpr_input: DprProcessIn,
     product_type: str,
 ) -> tuple[str, AuxiliarySource, list[str] | None]:
@@ -106,6 +120,37 @@ def _select_aux_collection_and_source(
     )
 
 
+def render_aux_cql2(
+    alternative: dict[str, Any],
+    task_table: dict[str, Any],
+    specific_input_product: tuple[str | None, Item | None] = (None, None),
+) -> tuple[dict, dict[str, Any]]:
+    """
+    Render the STAC/CQL2 request of one ADFS alternative from the task table queries.
+
+    Placeholders such as ``{input_name.property}`` are resolved from the properties of the
+    STAC item of the specific input product (ADFS multiplicity 'one_per_input').
+
+    Returns:
+        tuple[dict, dict]: the rendered STAC/CQL2 request and the resolved query parameters.
+    """
+    name = alternative["query"]["name"]
+    specific_input_name, stac_item = specific_input_product
+    parameters = {
+        k: (
+            stac_item.properties.get(m.group(2), v)
+            if stac_item
+            and isinstance(v, str)
+            and (m := SPECIFIC_INPUT_PATTERN.match(v))
+            and m.group(1) == specific_input_name
+            else v
+        )
+        for k, v in deepcopy(alternative["query"]["parameters"]).items()
+    }
+    query = next(q for q in task_table["queries"] if q["name"] == name)
+    return build_cql2_json(query, parameters), parameters
+
+
 async def _build_aux_request(
     alternative,
     input_adfs,
@@ -125,23 +170,9 @@ async def _build_aux_request(
     The returned tuple contains everything needed by the staging call:
     ``(aux_cql2, collection, timeout, source, selected_assets)``.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
-    name = alternative["query"]["name"]
-    specific_input_name, stac_item = specific_input_product
-    parameters = {
-        k: (
-            stac_item.properties.get(m.group(2), v)
-            if stac_item
-            and isinstance(v, str)
-            and (m := SPECIFIC_INPUT_PATTERN.match(v))
-            and m.group(1) == specific_input_name
-            else v
-        )
-        for k, v in deepcopy(alternative["query"]["parameters"]).items()
-    }
-    query = next(q for q in task_table["queries"] if q["name"] == name)
-    aux_cql2 = build_cql2_json(query, parameters)
+    aux_cql2, parameters = render_aux_cql2(alternative, task_table, specific_input_product)
 
     md = "# AUX CQL2 filter \n\n```json\n" + json.dumps(aux_cql2, indent=2) + "\n```"
     artifact_key_name: str = "aux-cql2-filter"
@@ -149,8 +180,8 @@ async def _build_aux_request(
     logger.info(f"📌 Artifact named '{artifact_key_name}' has been linked to this flow.")
 
     product_type = parameters.get("product_type", "*")
-    collection, source, selected_assets = _select_aux_collection_and_source(dpr_input, product_type)
-    get_run_logger().info(
+    collection, source, selected_assets = select_aux_collection_and_source(dpr_input, product_type)
+    get_logger().info(
         f"🚧 Prepared AUX request for input {input_adfs['name']} "
         f"using source {source} and collection {collection}:🧹 {aux_cql2}",
     )
@@ -171,7 +202,7 @@ async def _normalize_archived_aux_items(item_collection: ItemCollection, dpr_inp
     If no archived assets are present, the original collection is returned
     unchanged.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     archived_indexes = get_archived_item_indexes(item_collection)
 
     if not archived_indexes:
@@ -227,7 +258,7 @@ async def _stage_input_adfs_alternative(
     no item collection for the current alternative, allowing the caller to try
     the next alternative in order.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     aux_cql2, collection, timeout, source, selected_assets = await _build_aux_request(
         alternative,
         input_adfs,
@@ -278,7 +309,7 @@ async def process_input_adfs(
     specific_input_product: tuple[str | None, Item | None] = (None, None),
     staging_retries: int = 3,
     staging_retry_delay: int = 60,
-) -> tuple[str, str, tuple[bool, ItemCollection]]:
+) -> tuple[str, str, tuple[bool, ItemCollection]] | None:
     """
     Stage the ADFS inputs described in the task table for one processing unit input.
 
@@ -297,14 +328,15 @@ async def process_input_adfs(
     Returns:
         tuple[str, str, tuple[bool, ItemCollection]]:
             The input ADFS name and type together with the original staging status/item
-            collection tuple shape expected by downstream code.
+            collection tuple shape expected by downstream code, or None if no alternative returned
+            staged data for a non-mandatory ADFS.
 
     Raises:
         RuntimeError:
-            If no alternative returns staged data, or if the task table content
+            If no alternative returns staged data for a mandatory ADFS, or if the task table content
             cannot be read as expected.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"🚧 Starting processing input ADFS for {input_adfs}")
     try:
         # For each "alternative" ( get it following the "order" )
@@ -321,6 +353,9 @@ async def process_input_adfs(
             if result is not None:
                 return result
 
+        if not input_adfs.get("mandatory", True):
+            logger.warning(f"⚠️ Searching for optional adfs input {input_adfs['name']} did not return any result")
+            return None
         raise RuntimeError(f"Searching for adfs input {input_adfs['name']} did not return any result")
 
     except KeyError as kerr:
@@ -329,16 +364,24 @@ async def process_input_adfs(
         ) from kerr
 
 
-def _resolve_specific_input_product_stac_items(
+def resolve_specific_input_product_stac_items(
     input_adfs: dict[str, Any],
     task_table: dict[str, Any],
     unit: dict[str, Any],
     provided_input_products: list[FlowInputProduct],
     rs_client: RsClient,
 ) -> tuple[str, list[Item]] | tuple[None, list[None]]:
-    input_adfs_io = search_by_name(task_table["io"], input_adfs["name"])
-    if input_adfs_io.get("multiplicity", None) == "one_per_input":
-        logger = get_run_logger()
+    """
+    Resolve the STAC items of the input products an ADFS depends on, for the ADFS multiplicity 'one_per_input'.
+
+    Returns:
+        The name of the referenced input product and the STAC items of the provided input products matching
+        its regex. If the ADFS multiplicity is not 'one_per_input', (None, [None]) is returned so the ADFS
+        is staged once.
+    """
+    input_adfs_io = search_by_name(get_io_entries(task_table, "adfs"), input_adfs["name"])
+    if input_adfs_io.get("folder_multiplicity", None) == "one_per_input":
+        logger = get_logger()
         input_product_names: set[str] = {product["name"] for product in unit["input_products"]}
         referenced_input_product_names = {
             match.group(1)
@@ -355,8 +398,11 @@ def _resolve_specific_input_product_stac_items(
             )
         referenced_input_product_name = next(iter(referenced_input_product_names))
         logger.info(f"ADFS multiplicity 'one_per_input' refers to input '{referenced_input_product_name}'")
-        input_product_io: dict[str, Any] = search_by_name(task_table["io"], referenced_input_product_name)
-        input_product_regex: str = input_product_io.get("store_params", {}).get("regex", None)
+        input_product_io: dict[str, Any] = search_by_name(
+            get_io_entries(task_table, "input"),
+            referenced_input_product_name,
+        )
+        input_product_regex: str = input_product_io.get("reader_params", {}).get("regex", None)
         if not input_product_regex:
             logger.warning(
                 f"⚠️ Input product '{referenced_input_product_name}' should define a regex "
@@ -399,7 +445,7 @@ async def dpr_processing(
         dpr_input: Input parameters for executing this flow
         retry_config: Staging retry config
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"Starting the DPR processing flow with processor: {dpr_input.processor_name}")
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(dpr_input.env)
@@ -419,9 +465,6 @@ async def dpr_processing(
             cluster_info,
         )
 
-        # A lineage source is either a staged ADF item or an input STAC self link.
-        source_items: dict[str, list[Item | str]] = {}
-
         # Persist the full task table as a Prefect artifact for later investigation.
         md = "# Task table\n\n```json\n" + json.dumps(task_table, indent=2) + "\n```"
         artifact_key_name: str = "dpr-task-table"
@@ -430,79 +473,16 @@ async def dpr_processing(
         # Log the public Dask dashboard URL when the flow input provides the cluster instance.
         logger.info(build_dask_dashboard_url_message(cluster_info.cluster_instance))
 
-        processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
-        unit_list = build_unit_list(
-            tasktable=task_table,
-            pipeline=dpr_input.pipeline,
-            unit=dpr_input.unit,
-            processing_mode=processing_mode,
-            external_variables={
-                "start_datetime": dpr_input.start_datetime,
-                "end_datetime": dpr_input.end_datetime,
-                "reference_date": dpr_input.reference_date,
-                "instrument_mode": dpr_input.instrument_mode,
-                "satellite": dpr_input.satellite,
-            },
-        )
-
-        tasks = []
-        for unit in unit_list:
-            # For each input_adfs element computed on STEP 1
-            for input_adfs in unit["input_adfs"]:
-                # For each specific input in case of multiplicity=one_per_input
-                specific_input_name, product_stac_items = _resolve_specific_input_product_stac_items(
-                    input_adfs,
-                    task_table,
-                    unit,
-                    dpr_input.input_products,
-                    flow_env.rs_client,
-                )
-                for specific_input_product_stac_item in product_stac_items:
-                    if specific_input_product_stac_item:
-                        logger.info(
-                            f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product_stac_item}",
-                        )
-                    tasks.append(
-                        process_input_adfs.submit(
-                            input_adfs,
-                            dpr_input,
-                            task_table,
-                            (specific_input_name, specific_input_product_stac_item),
-                            retry_config.staging_retries,
-                            retry_config.staging_retry_delay,
-                        ),
-                    )
-
-        try:
-            aux_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [t.result() for t in tasks]
-        except (RuntimeError, KeyError) as err:
-            raise err
-        # Set of ADFS. Each tuple includes the adfs name, type and the s3/https storage path
-        adfs: set[tuple[str, str, str]] = set()
-        for name, adf_type, (status, item_collection) in aux_items:
-            for item in item_collection.items:
-                source_items.setdefault(name, []).append(item)
-
-                if status:
-                    asset = next(iter(item.assets.values()))
-                    logger.info(f"ADFS '{name}' of type '{adf_type}': {asset.href}")
-                    adfs.add((name, adf_type, asset.href))
-                else:
-                    raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
-
-        # Get optional list of external_modules
-        external_modules = extract_external_modules(task_table)
-
-        # generate the dpr payload file
-        task_future = generate_payload.submit(
+        # Build and generate the payload file
+        payload_task, source_items = build_and_generate_payload(
+            logger,
             flow_env,
-            unit_list,
-            list(adfs),
+            task_table,
             dpr_input,
-            external_modules=external_modules,
+            retry_config,
         )
-        # get the payload generation result
-        generated_payload_res = task_future.result()
+        generated_payload_res = payload_task.result()
+
         # Build lineage from the exact workflow that will be executed.
         lineage = build_output_lineage(generated_payload_res)
         # Reuse links resolved during payload generation; do not query the catalog again.
@@ -530,9 +510,9 @@ async def dpr_processing(
         # the payload file to upload to S3. here, the secrets are revealed
         generated_payload_res_with_secrets = generated_payload_res.dump(reveal_secrets=True)
         yaml_str = yaml.dump(generated_payload_res_with_secrets, default_flow_style=False, sort_keys=False)
-        # upload the config payload contents straight to S3, without a temporary file
+        # upload the config payload contents to S3 or local file, without a temporary file
         logger.info(f"Writing the payload to file :\n {dpr_input.s3_payload_file}")
-        await prefect_utils.s3_upload_bytes(yaml_str.encode("utf-8"), dpr_input.s3_payload_file)
+        await prefect_utils.upload_payload_bytes(yaml_str.encode("utf-8"), dpr_input.s3_payload_file)
 
         # Run the DPR processor
         processed_items = run_processor.submit(
@@ -542,12 +522,13 @@ async def dpr_processing(
             cluster_info,
             dpr_input.s3_payload_file,
             dpr_input.input_products,
-            wait_for=[task_future],
+            wait_for=[payload_task],
         )
         try:
             processed_items.result()
         finally:
-            prefect_utils.s3_delete(dpr_input.s3_payload_file)
+            logger.info("Deleting payload file")
+            prefect_utils.delete_payload_file(dpr_input.s3_payload_file)
 
         processed = processed_items.result()
 
@@ -587,3 +568,117 @@ async def dpr_processing(
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
         published_items = published.result()  # type: ignore[unused-coroutine]
         return published_items
+
+
+def build_and_generate_payload(
+    logger,
+    flow_env: FlowEnv,
+    task_table: dict[str, Any],
+    dpr_input: DprProcessIn,
+    retry_config: RetryConfig,
+) -> tuple[PrefectFuture[PayloadSchema], dict[str, list[Item | str]]]:  # (payload, source_items)
+    """Build and generate the payload file and the lineage source items"""
+
+    # Validate tasktable contents against json schema
+    with open(TASK_TABLE_SCHEMA, encoding="utf-8") as opened:
+        schema = json.load(opened)
+    jsonschema.validate(instance=task_table, schema=schema)
+
+    # Dictionary of external variables values from flow's input
+    external_variables = {
+        "start_datetime": dpr_input.start_datetime,
+        "end_datetime": dpr_input.end_datetime,
+        "reference_date": dpr_input.reference_date,
+        "instrument_mode": dpr_input.instrument_mode,
+        "satellite": dpr_input.satellite,
+    }
+
+    # Replace configured external variables from the task table with the input parameters
+    task_table = replace_external_variables(task_table, external_variables)
+
+    processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
+    unit_list = build_unit_list(
+        tasktable=task_table,
+        pipeline=dpr_input.pipeline,
+        unit=dpr_input.unit,
+        processing_mode=processing_mode,
+    )
+
+    tasks = []
+    for unit in unit_list:
+        # For each input_adfs element computed on STEP 1
+        for input_adfs in unit["input_adfs"]:
+            # HACK for S1-ARD: REFERENCE_DB is not staged, see below
+            if input_adfs["name"] == "REFERENCE_DB":
+                continue
+            # For each specific input in case of multiplicity=one_per_input
+            specific_input_name, product_stac_items = resolve_specific_input_product_stac_items(
+                input_adfs,
+                task_table,
+                unit,
+                dpr_input.input_products,
+                flow_env.rs_client,
+            )
+            for specific_input_product_stac_item in product_stac_items:
+                if specific_input_product_stac_item:
+                    logger.info(
+                        f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product_stac_item}",
+                    )
+                tasks.append(
+                    process_input_adfs.submit(
+                        input_adfs,
+                        dpr_input,
+                        task_table,
+                        (specific_input_name, specific_input_product_stac_item),
+                        retry_config.staging_retries,
+                        retry_config.staging_retry_delay,
+                    ),
+                )
+
+    try:
+        aux_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [
+            result for t in tasks if (result := t.result()) is not None
+        ]
+    except (RuntimeError, KeyError) as err:
+        raise err
+
+    # A lineage source is either a staged ADF item or an input STAC self link.
+    source_items: dict[str, list[Item | str]] = {}
+
+    # Set of ADFS. Each tuple includes the adfs name, type and the s3/https storage path
+    adfs: set[tuple[str, str, str]] = set()
+    for name, adf_type, (status, item_collection) in aux_items:
+        for item in item_collection.items:
+            source_items.setdefault(name, []).append(item)
+
+            if status:
+                asset = next(iter(item.assets.values()))
+                logger.info(f"ADFS '{name}' of type '{adf_type}': {asset.href}")
+                adfs.add((name, adf_type, asset.href))
+            else:
+                raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
+
+    # HACK for S1-ARD: the reference pipeline writes the REFERENCE_DB in a new s3 folder
+    if dpr_input.pipeline == "ARD_REFERENCE_PIPELINE":
+        logger.warning(f"ARD HACK FOR PIPELINE {dpr_input.pipeline}")
+        owner_id: str = dpr_input.env.owner_id
+        output_collection = "s1-ard-reference-db"
+        adf_type = "ARD_REFERENCE_DB"
+        bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
+        bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, adf_type)
+        ref_db_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
+        logger.warning(f"ARD REFERENCE_DB: {ref_db_path}")
+        # adf_type is not 'folder' on purpose, so that the path is not truncated by build_adfs
+        adfs.add(("REFERENCE_DB", adf_type, ref_db_path))
+
+    # generate the dpr payload file
+    return (
+        generate_payload.submit(
+            flow_env,
+            unit_list,
+            list(adfs),
+            dpr_input,
+            external_modules=task_table.get("external_modules"),
+        ),
+        source_items,
+    )

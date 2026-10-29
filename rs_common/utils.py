@@ -152,7 +152,7 @@ def _is_safe_extract_path(extract_to: Path, member_name: str) -> bool:
 
 def extract_zip(zip_path: Path, extract_to: Path):
     """Extract a ZIP archive into the target directory."""
-    logger = get_run_logger()
+    logger = _get_logger()
     logger.info(f"Extracting ZIP: {zip_path} -> {extract_to}")
 
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
@@ -162,7 +162,10 @@ def extract_zip(zip_path: Path, extract_to: Path):
                 logger.warning(f"Skipping unsafe ZIP member: {name}")
                 continue
             destination = (extract_to / name.replace("\\", "/")).resolve()
-            logger.info(f"Extracting zip entry: {destination}")
+            # Archives containing Zarr stores may have tens of thousands of
+            # chunks. Logging every member at INFO makes Prefect log shipping
+            # substantially slower than extraction itself.
+            logger.debug(f"Extracting zip entry: {destination}")
             if name.endswith("/"):
                 destination.mkdir(parents=True, exist_ok=True)
             else:
@@ -179,7 +182,7 @@ def extract_tar(file_path: Path, extract_to: Path) -> tuple[int, list[str]]:
     Returns:
         Tuple[int, List[str]]: (count of extracted files, list of extracted file paths)
     """
-    logger = get_run_logger()
+    logger = _get_logger()
     logger.info(f"Extracting TAR archive: {file_path} -> {extract_to}")
 
     extracted_files: list[str] = []
@@ -251,7 +254,7 @@ def get_upload_prefix(asset_href: str, asset_name: str) -> str:
 
 def _extract_nested_archive(full_path: Path) -> bool:
     """Extract a nested TAR-compatible archive and delete it on success."""
-    logger = get_run_logger()
+    logger = _get_logger()
     logger.info(f"Found nested archive: {full_path}")
     extracted_members, _ = extract_tar(full_path, full_path.parent)
     if not extracted_members:
@@ -263,7 +266,7 @@ def _extract_nested_archive(full_path: Path) -> bool:
 
 def recursive_extract(folder: Path) -> int:
     """Extract nested TAR-compatible archives found anywhere under ``folder``."""
-    logger = get_run_logger()
+    logger = _get_logger()
     extracted_count = 0
     extracted = True
 
@@ -289,7 +292,7 @@ def normalize_extract_dir(extract_dir: Path) -> Path:
     If the extraction produced a single top-level directory, descend into it to
     avoid creating an unnecessary extra folder level in S3.
     """
-    logger = get_run_logger()
+    logger = _get_logger()
     root_items = list(extract_dir.iterdir())
 
     if len(root_items) != 1:

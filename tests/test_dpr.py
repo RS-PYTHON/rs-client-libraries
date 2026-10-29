@@ -15,13 +15,17 @@
 """Test rs-client-libraries dpr functions"""
 
 import getpass
+import re
 import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 import responses
+import yaml
 from starlette import status
 
+import rs_workflows.utils.dpr as dpr_module
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprClient, DprProcessor
 from rs_client.rs_client import RsClient
 from rs_workflows.dpr_flow import run_processor
@@ -80,71 +84,80 @@ async def test_update_configuration(mocker, dpr_client: DprClient, local_mode):
     """Test DprClient.update_configuration"""
 
     payload_contents = """
-store_params:
-    storage_options:
-    key: ${S3_ACCESSKEY_CLUSTER}
-    secret: ${S3_SECRETKEY_CLUSTER}
-    client_kwargs:
-        endpoint_url: ${S3_ENDPOINT_CLUSTER}
-        region_name: ${S3_REGION_CLUSTER}
+reader_params:
+  storage_options:
+  key: ${S3_ACCESSKEY_CLUSTER}
+  secret: ${S3_SECRETKEY_CLUSTER}
+  client_kwargs:
+    endpoint_url: ${S3_ENDPOINT_CLUSTER}
+    region_name: ${S3_REGION_CLUSTER}
 
-dask_context:
-  cluster_type: gateway
-  cluster_config:
-    address: ${DASK_GATEWAY_ADDRESS}
-    reuse_cluster: ${DASK_CLUSTER_INSTANCE}
-    auth:
-      type: jupyterhub
-      api_token: ${JUPYTERHUB_API_TOKEN}
-    auth_local_mode: # auth for local mode
-      type: basic
-      username: ${LOCAL_DASK_USERNAME}
-      password: ${LOCAL_DASK_PASSWORD}
+context_managers:
+  - module: eopf.dask_utils.dask_context_manager
+    context_manager: DaskContext
+    parameters:
+      cluster_type: gateway
+      cluster_config:
+        address: ${DASK_GATEWAY_ADDRESS}
+        reuse_cluster: ${DASK_CLUSTER_INSTANCE}
+        auth:
+          type: jupyterhub
+          api_token: ${JUPYTERHUB_API_TOKEN}
+        auth_local_mode: # auth for local mode
+          type: basic
+          username: ${LOCAL_DASK_USERNAME}
+          password: ${LOCAL_DASK_PASSWORD}
 
-I/O:
+io:
   output_products:
   - path: s3://bucket/output
 """
 
     expected_results_local = """
-store_params:
+reader_params:
   storage_options: null
   key: ${access_key}
   secret: ${secret_key}
   client_kwargs:
     endpoint_url: ${host_bucket}
     region_name: ${bucket_location}
-dask_context:
-  cluster_type: gateway
-  cluster_config:
-    address: address-value
-    reuse_cluster: instance-value
-    auth:
-      type: basic
-      username: ${LOCAL_DASK_USERNAME}
-      password: ${LOCAL_DASK_PASSWORD}
-I/O:
+context_managers:
+  - module: eopf.dask_utils.dask_context_manager
+    context_manager: DaskContext
+    parameters:
+      cluster_type: gateway
+      cluster_config:
+        address: address-value
+        reuse_cluster: instance-value
+        auth:
+          type: basic
+          username: ${LOCAL_DASK_USERNAME}
+          password: ${LOCAL_DASK_PASSWORD}
+io:
   output_products:
   - path: s3://bucket/output
 """
 
     expected_results_cluster = """
-store_params:
+reader_params:
   storage_options: null
   key: ${S3_ACCESSKEY}
   secret: ${S3_SECRETKEY}
   client_kwargs:
     endpoint_url: ${S3_ENDPOINT}
     region_name: ${S3_REGION}
-dask_context:
-  cluster_type: gateway
-  cluster_config:
-    address: address-value
-    reuse_cluster: instance-value
-    auth:
-      type: jupyterhub
-      api_token: ${JUPYTERHUB_API_TOKEN}
-I/O:
+context_managers:
+  - module: eopf.dask_utils.dask_context_manager
+    context_manager: DaskContext
+    parameters:
+      cluster_type: gateway
+      cluster_config:
+        address: address-value
+        reuse_cluster: instance-value
+        auth:
+          type: jupyterhub
+          api_token: ${JUPYTERHUB_API_TOKEN}
+io:
   output_products:
   - path: s3://bucket/output
 """
@@ -179,7 +192,9 @@ I/O:
         )
 
     mock_s3_upload_empty.assert_awaited_with("s3://bucket/output/.empty")
-    assert uploaded_contents.strip() == (expected_results_local if local_mode else expected_results_cluster).strip()
+    assert yaml.safe_load(uploaded_contents) == yaml.safe_load(
+        expected_results_local if local_mode else expected_results_cluster,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +217,7 @@ def _setup_run_processor_mocks(mocker):
     Patch all run_processor dependencies unrelated to paths_to_delete so that
     the function can complete without real S3/DPR infrastructure.
     """
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch("rs_workflows.dpr_flow.record_performance_indicators")
     mocker.patch("rs_workflows.dpr_flow.update_eopf_assets", return_value=[])
 
@@ -218,6 +233,77 @@ def _setup_run_processor_mocks(mocker):
         "rs_workflows.dpr_flow.prefect_utils.s3_download_dir",
         new_callable=AsyncMock,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "is_local_path, log_exists",
+    [
+        pytest.param(True, True, id="local-log"),
+        pytest.param(True, False, id="local-log-missing"),
+        pytest.param(False, True, id="s3-log"),
+        pytest.param(False, False, id="s3-log-missing"),
+    ],
+)
+async def test_run_processor_reads_processor_logs(mocker, tmp_path, is_local_path, log_exists):
+    """Read and dispatch processor logs from local and downloaded report folders."""
+    _setup_run_processor_mocks(mocker)
+    mock_logger = mocker.Mock()
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mock_logger)
+    mock_download_dir = mocker.patch(
+        "rs_workflows.dpr_flow.prefect_utils.s3_download_dir",
+        new_callable=AsyncMock,
+    )
+
+    if is_local_path:
+        s3_payload_run = str(tmp_path / "payload.yaml")
+        log_file = tmp_path / "reports" / "payload.processor.log"
+        if log_exists:
+            log_file.parent.mkdir()
+            log_file.write_text(
+                "2026-04-17 11:56:08 - processor - ERROR - processor reported an error\n",
+                encoding="utf-8",
+            )
+    else:
+        s3_payload_run = "s3://bucket/payload.yaml"
+        if log_exists:
+
+            async def download_reports(s3_dir, local_dir):
+                """Populate the temporary report directory as an S3 download would."""
+                assert s3_dir == "s3://bucket"
+                report_dir = Path(local_dir) / "reports"
+                report_dir.mkdir()
+                (report_dir / "payload.processor.log").write_text(
+                    "2026-04-17 11:56:08 - processor - ERROR - processor reported an error\n",
+                    encoding="utf-8",
+                )
+
+            mock_download_dir.side_effect = download_reports
+
+    payload = mocker.Mock()
+    payload.io.output_products = []
+
+    await run_processor.fn(
+        env=mocker.Mock(),
+        processor="s3_l0",
+        payload=payload,
+        cluster_info=CLUSTER_INFO,
+        s3_payload_run=s3_payload_run,
+        input_products=[],
+    )
+
+    if is_local_path:
+        mock_download_dir.assert_not_awaited()
+        if log_exists:
+            mock_logger.error.assert_called_once_with("processor reported an error")
+        else:
+            mock_logger.info.assert_any_call(f"No processor log file was found at: {str(log_file)!r}")
+    else:
+        mock_download_dir.assert_awaited_once()
+        if log_exists:
+            mock_logger.error.assert_called_once_with("processor reported an error")
+        else:
+            mock_logger.info.assert_any_call("No processor log file was uploaded under: 's3://bucket'")
 
 
 @pytest.mark.asyncio
@@ -495,4 +581,126 @@ def test_stream_logs_stops_when_job_status_check_fails(mocker, dpr_client: DprCl
 
 
 # end of rs-dpr-service logs streaming tests
+# ---------------------------------------------------------------------------
+
+
+# generate_payload_path tests
+# ---------------------------------------------------------------------------
+
+
+async def test_generate_payload_path_hardcoded(monkeypatch):
+    """Test generate_payload_path returns the hardcoded S3 path when k8s namespace flag is False."""
+
+    # Ensure the flag is False (default)
+    monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", False)
+
+    owner_id = "test_user"
+    path = await dpr_module.generate_payload_path(owner_id)
+
+    # Check format: s3://prip-rs-playground/{owner_id}/YYYY-MM-DD--HH-MM-SS
+    assert path.startswith("s3://prip-rs-playground/test_user/")
+    # Verify timestamp format YYYY-MM-DD--HH-MM-SS
+    timestamp_pattern = r"\d{4}-\d{2}-\d{2}--\d{2}-\d{2}-\d{2}$"
+    assert re.search(timestamp_pattern, path)
+
+
+async def test_generate_payload_path_shared_disk_success(monkeypatch, mocker):
+    """Test generate_payload_path returns shared disk path when config is valid."""
+
+    # Enable the shared disk path branch
+    monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
+
+    # Mock Prefect Variable.get to return a valid storage configuration
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
+    mock_variable_get.return_value = {
+        "storage_configuration": [
+            {"kind": "other", "name": "test", "absolute_path": "/mnt/test"},
+            {"kind": "shared_disk", "name": "shared1", "absolute_path": "/mnt/shared"},
+            {"kind": "shared_disk", "name": "shared2", "absolute_path": "/mnt/shared2"},
+        ],
+    }
+
+    owner_id = "test_user"
+    path = await dpr_module.generate_payload_path(owner_id)
+
+    # Should use the first valid shared_disk
+    assert path.startswith("/mnt/shared/test_user/")
+
+    timestamp_pattern = r"\d{4}-\d{2}-\d{2}--\d{2}-\d{2}-\d{2}$"
+    assert re.search(timestamp_pattern, path)
+
+
+async def test_generate_payload_path_shared_disk_variable_error(monkeypatch, mocker):
+    """Test generate_payload_path raises RuntimeError when Prefect variable cannot be retrieved."""
+
+    monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
+
+    # Mock Variable.get to raise an exception
+    mocker.patch.object(dpr_module.Variable, "get", side_effect=Exception("Variable not found"))
+
+    owner_id = "test_user"
+
+    with pytest.raises(RuntimeError, match=r"Unable to load Prefect variable 'processing-storage-configuration'"):
+        await dpr_module.generate_payload_path(owner_id)
+
+
+async def test_generate_payload_path_shared_disk_no_valid_config(monkeypatch, mocker):
+    """Test generate_payload_path raises RuntimeError when no valid shared_disk config found."""
+
+    monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
+
+    # Mock Variable.get to return config without valid shared_disk entries
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
+    mock_variable_get.return_value = {
+        "storage_configuration": [
+            {"kind": "shared_disk", "name": "", "absolute_path": "/mnt/shared"},  # missing name
+            {"kind": "shared_disk", "name": "shared1", "absolute_path": ""},  # missing path
+            {"kind": "other", "name": "test", "absolute_path": "/mnt/test"},  # wrong kind
+        ],
+    }
+
+    owner_id = "test_user"
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"Unable to find a shared disk path in Prefect variable 'processing-storage-configuration'",
+    ):
+        await dpr_module.generate_payload_path(owner_id)
+
+
+async def test_generate_payload_path_shared_disk_empty_config(monkeypatch, mocker):
+    """Test generate_payload_path raises RuntimeError when storage_configuration is empty."""
+
+    monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
+
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
+    mock_variable_get.return_value = {"storage_configuration": []}
+
+    owner_id = "test_user"
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"Unable to find a shared disk path in Prefect variable 'processing-storage-configuration'",
+    ):
+        await dpr_module.generate_payload_path(owner_id)
+
+
+async def test_generate_payload_path_shared_disk_missing_storage_configuration_key(monkeypatch, mocker):
+    """Test generate_payload_path raises RuntimeError when storage_configuration key is missing."""
+
+    monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
+
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
+    mock_variable_get.return_value = {}  # missing storage_configuration key
+
+    owner_id = "test_user"
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"Unable to find a shared disk path in Prefect variable 'processing-storage-configuration'",
+    ):
+        await dpr_module.generate_payload_path(owner_id)
+
+
+# end of generate_payload_path tests
 # ---------------------------------------------------------------------------

@@ -92,7 +92,7 @@ class OlciQuicklookTests:
         flow_env = mocker.patch.object(common, "FlowEnv").return_value
         catalog = flow_env.rs_client.get_catalog_client.return_value
         catalog.get_item.return_value = item
-        mocker.patch.object(common, "get_run_logger")
+        mocker.patch.object(common, "get_logger")
         for name, value in {
             "S3_ACCESSKEY": "testing",
             "S3_SECRETKEY": "testing",

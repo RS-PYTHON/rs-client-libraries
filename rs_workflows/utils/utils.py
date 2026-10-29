@@ -19,11 +19,12 @@ import os
 import re
 import shutil
 import tempfile
+import time
 from os.path import commonprefix
 from pathlib import Path
 from typing import Any
 
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from pystac import Item, ItemCollection
 
 from rs_common.prefect_utils import s3_delete, s3_download_file, s3_upload_dir
@@ -37,6 +38,7 @@ from rs_common.utils import (
 )
 from rs_workflows.flow_utils import ARCHIVE_SUFFIXES
 from rs_workflows.payload_template import PayloadSchema, WorkflowStep
+from rs_workflows.utils.prefect import get_logger
 
 
 def search_by_name(values: list[dict[str, Any]], name: str) -> Any:
@@ -230,7 +232,7 @@ async def download_and_extract_assets_task(
         extract_to: Local directory where assets should be extracted.
         asset: Optional asset name to download. When omitted, all assets are downloaded.
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     for item in _normalize_stac_items(items):
         for asset_name, item_asset in item.assets.items():
@@ -295,13 +297,17 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
 
     The function returns the new S3 prefix pointing to the extracted content.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info(f"Processing asset: {asset_href}")
 
     if not asset_name.lower().endswith(ARCHIVE_SUFFIXES):
         raise ValueError(f"Unsupported archive type for asset '{asset_name}'")
 
     is_zip = asset_name.lower().endswith(".zip")
+    upload_concurrency = int(os.getenv("RS_S3_UPLOAD_CONCURRENCY", "16"))
+    if upload_concurrency < 1:
+        raise ValueError("RS_S3_UPLOAD_CONCURRENCY must be greater than zero")
+    total_started = time.perf_counter()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_dir = Path(tmp_dir)  # type: ignore
@@ -312,40 +318,68 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
 
         # 1. Download
         logger.info(f"Downloading {asset_href} -> {archive_local}")
+        stage_started = time.perf_counter()
         await s3_download_file(asset_href, archive_local)
+        archive_size = archive_local.stat().st_size if archive_local.exists() else 0
+        logger.info(
+            "Downloaded archive (%.2f MiB) in %.2fs",
+            archive_size / (1024 * 1024),
+            time.perf_counter() - stage_started,
+        )
 
-        # 2. Remove the original archive before publishing the extracted content.
-        logger.info(f"Deleting original archive from S3: {asset_href}")
-        s3_delete(asset_href)
-
-        # 3. Extract the main archive first.
+        # 2. Extract the main archive off the async event loop.
+        stage_started = time.perf_counter()
         if is_zip:
-            extract_zip(archive_local, extract_dir)
+            await asyncio.to_thread(extract_zip, archive_local, extract_dir)
         else:
-            extract_tar(archive_local, extract_dir)
+            await asyncio.to_thread(extract_tar, archive_local, extract_dir)
 
-        # 4. Some AUXIP deliveries contain nested TAR/TGZ/TAR.GZ payloads.
-        nested_archives = recursive_extract(extract_dir)
-        logger.info(f"Nested extraction complete, processed {nested_archives} archive(s)")
+        # 3. Some AUXIP deliveries contain nested TAR/TGZ/TAR.GZ payloads.
+        nested_archives = await asyncio.to_thread(recursive_extract, extract_dir)
+        logger.info(
+            "Extraction completed in %.2fs; processed %d nested archive(s)",
+            time.perf_counter() - stage_started,
+            nested_archives,
+        )
 
-        # 5. Pick the most appropriate directory root for the upload step.
+        # 4. Pick the most appropriate directory root for the upload step.
         upload_dir = normalize_extract_dir(extract_dir)
         logger.info(f"Selected upload root: {upload_dir}")
 
-        # 6. Upload the extracted payload back to the original S3 prefix.
+        extracted_files = await asyncio.to_thread(lambda: [path for path in upload_dir.rglob("*") if path.is_file()])
+        extracted_size = await asyncio.to_thread(lambda: sum(path.stat().st_size for path in extracted_files))
+        logger.info(
+            "Extracted payload contains %d files (%.2f MiB)",
+            len(extracted_files),
+            extracted_size / (1024 * 1024),
+        )
+
+        # 5. Upload the extracted payload back to the original S3 prefix.
         prefix = get_upload_prefix(asset_href, asset_name)
         if use_extension:
             prefix = prefix.rstrip("/") + f"{upload_dir.suffix}/"  # .SAFE or .SEN3 for example
         logger.info(f"Uploading to prefix: {prefix}")
 
-        await s3_upload_dir(upload_dir, prefix)
+        stage_started = time.perf_counter()
+        await s3_upload_dir(upload_dir, prefix, max_concurrency=upload_concurrency)
+        logger.info(
+            "Uploaded %d files in %.2fs using concurrency=%d",
+            len(extracted_files),
+            time.perf_counter() - stage_started,
+            upload_concurrency,
+        )
+
+        # Delete only after extraction and upload have both succeeded. This
+        # keeps the source archive available when normalization fails midway.
+        logger.info(f"Deleting original archive from S3 after successful upload: {asset_href}")
+        await asyncio.to_thread(s3_delete, asset_href)
+        logger.info("Asset normalization completed in %.2fs", time.perf_counter() - total_started)
 
         if prefix.rstrip("/").lower().endswith(".zarr"):
             zarr_href = prefix.rstrip("/")
             logger.info(f"Returning normalized Zarr store href: {zarr_href}")
             return zarr_href
 
-        extracted_files = [path for path in upload_dir.rglob("*") if path.is_file()]
         if not extracted_files:
             logger.info(f"No extracted files found, returning normalized folder prefix: {prefix}")
             return prefix
@@ -365,7 +399,7 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
 @flow(name="Asset unzip and decompress")
 async def asset_unzip_decompress(stac_item: Item, use_extension: bool = False) -> Item:
     """Prefect flow used to unzip and decompress catalog store assets."""
-    logger = get_run_logger()
+    logger = get_logger()
     updated_assets = {}
 
     for asset_name, asset in stac_item.assets.items():
@@ -397,7 +431,7 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
     """
 
     if payload.io is None:
-        raise ValueError("Payload I/O configuration is missing")
+        raise ValueError("Payload io configuration is missing")
 
     workflow = payload.workflow or []
     input_ids = {input_product.id for input_product in payload.io.input_products}
@@ -442,7 +476,7 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
 
         for adf_reference in (step.adfs or {}).values():
             if adf_reference not in adf_ids:
-                raise ValueError(f"Workflow ADF '{adf_reference}' from step '{step.name}' is missing from payload I/O")
+                raise ValueError(f"Workflow ADF '{adf_reference}' from step '{step.name}' is missing from payload io")
             sources.add(adf_reference)
 
         resolving.remove(output_reference)

@@ -30,7 +30,7 @@ from rs_workflows.utils import utils as workflow_utils
 def mock_workflow_utils_logger(monkeypatch, mocker):
     """Replace Prefect run logger with a plain mock."""
     logger = mocker.Mock()
-    monkeypatch.setattr(workflow_utils, "get_run_logger", lambda: logger)
+    monkeypatch.setattr(workflow_utils, "get_logger", lambda: logger)
     return logger
 
 
@@ -278,6 +278,28 @@ async def test_process_asset_rejects_unsupported_extension(mock_workflow_utils_l
     """Test unsupported archive extensions are rejected."""
     with pytest.raises(ValueError, match="Unsupported archive type"):
         await workflow_utils.process_asset("s3://bucket/path/data.raw", "data.raw")
+
+
+@pytest.mark.asyncio
+async def test_process_asset_keeps_source_archive_when_upload_fails(monkeypatch, mock_workflow_utils_logger):
+    """The source archive remains available when publishing extracted files fails."""
+    delete_mock = MagicMock()
+
+    def fake_extract_zip(_zip_path, extract_to):
+        (Path(extract_to) / "chunk").write_text("content")
+
+    monkeypatch.setattr(workflow_utils, "s3_download_file", AsyncMock())
+    monkeypatch.setattr(workflow_utils, "s3_delete", delete_mock)
+    monkeypatch.setattr(workflow_utils, "extract_zip", fake_extract_zip)
+    monkeypatch.setattr(workflow_utils, "recursive_extract", MagicMock(return_value=0))
+    monkeypatch.setattr(workflow_utils, "normalize_extract_dir", MagicMock(side_effect=lambda path: path))
+    monkeypatch.setattr(workflow_utils, "s3_upload_dir", AsyncMock(side_effect=RuntimeError("upload failed")))
+    monkeypatch.setattr(workflow_utils, "get_upload_prefix", MagicMock(return_value="s3://bucket/path/"))
+
+    with pytest.raises(RuntimeError, match="upload failed"):
+        await workflow_utils.process_asset("s3://bucket/path/data.zip", "data.zip")
+
+    delete_mock.assert_not_called()
 
 
 @pytest.mark.asyncio

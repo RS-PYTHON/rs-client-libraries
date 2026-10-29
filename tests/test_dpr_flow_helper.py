@@ -18,6 +18,7 @@ import json
 import typing
 
 import pytest
+from pystac import Item
 
 from rs_client.ogcapi import dpr_client
 from rs_client.ogcapi.dpr_client import ClusterInfo, DprProcessor
@@ -26,6 +27,7 @@ from rs_workflows.dpr_flow import (
     compute_eopf_origin_datetime,
     create_stac_item,
     extract_products_and_zattrs,
+    find_zarr_zip,
     read_zattrs_sync,
     run_processor,
     s3_list,
@@ -303,6 +305,66 @@ def test_create_stac_items_builds_items_with_assets_and_eopf_metadata(mocker):
     )
 
 
+def test_create_stac_item_adds_zarr_zip_asset():
+    """An additional application/zip asset is added when a zarr.zip href is given."""
+    feature = {"geometry": None, "bbox": None, "properties": {"datetime": "2024-01-01T00:00:00"}}
+    item = create_stac_item(
+        eopf_origin_datetime=None,
+        eopf_feature=feature,
+        s3_data_location="s3://b/out/P.zarr/.zattrs",
+        product_name="P.zarr",
+        dpr_processor=DprProcessor.S1L0,
+        zarr_zip_href="s3://b/out/P.zarr.zip",
+    )
+    assert item.assets["P.zarr"].href == "s3://b/out/P.zarr"
+    zip_asset = item.assets["P.zarr.zip"]
+    assert zip_asset.href == "s3://b/out/P.zarr.zip"
+    assert zip_asset.media_type == "application/zip"
+    assert zip_asset.roles == ["data"]
+
+
+@pytest.mark.parametrize("existing_keys, expected", [(["out/P.zarr.zip"], "s3://b/out/P.zarr.zip"), ([], None)])
+def test_find_zarr_zip(mocker, existing_keys, expected):
+    """The zip is detected only if present next to the zarr product."""
+    bucket = mocker.Mock()
+    objs = [mocker.Mock(key=k) for k in existing_keys]
+    bucket._get_bucket_resource.return_value.objects.filter.return_value = objs  # pylint: disable=protected-access
+    mocker.patch("rs_workflows.dpr_flow.prefect_utils.get_s3_bucket", return_value=(bucket, "out/P.zarr.zip"))
+
+    assert find_zarr_zip("s3://b/out/P.zarr/.zattrs") == expected
+
+
+def test_find_zarr_zip_ignores_non_zarr_product(mocker):
+    """No lookup is done when the product is not a .zarr."""
+    get_bucket = mocker.patch("rs_workflows.dpr_flow.prefect_utils.get_s3_bucket")
+    assert find_zarr_zip("s3://b/out/P.safe/.zattrs") is None
+    get_bucket.assert_not_called()
+
+
+def test_create_stac_item_uses_created_when_datetime_is_null():
+    """Use the created timestamp as the STAC datetime when the source is null."""
+    eopf_feature = {
+        "id": "feature_1",
+        "geometry": None,
+        "bbox": None,
+        "properties": {
+            "datetime": None,
+            "created": "2024-01-01T00:00:00",
+        },
+    }
+
+    item = create_stac_item(
+        eopf_origin_datetime=None,
+        eopf_feature=eopf_feature,
+        s3_data_location="s3://my-bucket/output/feature_1.zarr",
+        product_name="feature_1",
+        dpr_processor=DprProcessor.S1L0,
+    )
+
+    assert item.datetime == datetime.datetime(2024, 1, 1)
+    assert item.properties["datetime"] == "2024-01-01T00:00:00"
+
+
 @typing.no_type_check
 def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
     """
@@ -317,7 +379,7 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
     - Returns the STAC items and the list of product types
     """
     env = mocker.Mock()
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
 
     s3_path, expected_items = mocked_processor_output
 
@@ -345,13 +407,23 @@ def test_update_eopf_assets_happy_path(mocker, mocked_processor_output):
         assert asset.output_product_id == "dummy_prod_id"
 
 
+def test_update_eopf_assets_raises_on_missing_io_config(mocker):
+    """Raise a clear error if the payload has no I/O configuration."""
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
+    payload = mocker.Mock()
+    payload.io = None
+
+    with pytest.raises(RuntimeError, match="Payload io configuration is missing"):
+        update_eopf_assets.fn(mocker.Mock(), [], payload, DprProcessor.S1L0)
+
+
 def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
     """
     Verify that update_eopf_assets raises RuntimeError when a .zattrs file
     cannot be read (e.g., read_zattrs_sync returns None).
     """
     env = mocker.Mock()
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
 
     # Mock extract_products_and_zattrs to return one product
     mocker.patch(
@@ -366,6 +438,8 @@ def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
         return_value="2024-01-10T12:00:00",
     )
 
+    mocker.patch("rs_workflows.dpr_flow.get_input_product_items", return_value=[])
+
     # Mock read_zattrs_sync to return None, triggering the error
     mocker.patch("rs_workflows.dpr_flow.read_zattrs_sync", return_value=None)
 
@@ -375,10 +449,32 @@ def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
     with pytest.raises(RuntimeError, match="Could not read .zattrs file s3://bucket/prod1/.zattrs. Exiting."):
         update_eopf_assets.fn(
             env=env,
-            input_products=[{"input": ("id", "coll")}],
+            input_products=[FlowInputProduct(name="input", item_id="id", collection_name="coll")],
             payload=payload,
             dpr_processor=DprProcessor.S1L0,
         )
+
+
+@pytest.mark.parametrize(
+    "zattrs_data",
+    [
+        pytest.param({"other_metadata": {}}, id="missing-stac-discovery"),
+        pytest.param({"stac_discovery": {}}, id="missing-properties"),
+    ],
+)
+def test_update_eopf_assets_raises_on_missing_discovery_properties(mocker, zattrs_data):
+    """Reject output metadata without the required EOPF discovery properties."""
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://bucket/output/prod/.zattrs"])
+    mocker.patch("rs_workflows.dpr_flow.read_zattrs_sync", return_value=zattrs_data)
+    payload = mocker.Mock()
+    payload.io.output_products = [mocker.Mock(id="output", path="s3://bucket/output")]
+
+    with pytest.raises(
+        RuntimeError,
+        match="does not contain EOPF discovery metadata",
+    ):
+        update_eopf_assets.fn(mocker.Mock(), [], payload, DprProcessor.S1L0)
 
 
 def test_update_eopf_assets_skips_non_final_products(mocker):
@@ -392,7 +488,8 @@ def test_update_eopf_assets_skips_non_final_products(mocker):
         "rs_workflows.dpr_flow.compute_eopf_origin_datetime",
         return_value="2024-01-10T12:00:00",
     )
-    input_products = [{"id": "input_1"}]
+    mocker.patch("rs_workflows.dpr_flow.get_input_product_items", return_value=[])
+    input_products = [FlowInputProduct(name="input", item_id="input_1", collection_name="inputs")]
 
     # Mock only final products (non-final products are already filtered by run_processor)
     mock_prod_final = mocker.Mock(path="s3://out/final", final_product=True)
@@ -401,7 +498,7 @@ def test_update_eopf_assets_skips_non_final_products(mocker):
     payload.io.output_products = [mock_prod_final]  # Only final products
 
     # Mock s3_list and extract to return something for the final product
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mock_s3_list = mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://out/final/prod/.zattrs"])
 
     mocker.patch(
@@ -455,7 +552,7 @@ async def test_run_processor_filters_non_final_products(
     # env = mocker.Mock()
     processor = "s3_l0"
     s3_payload_run = f"s3://{MOCKED_BUCKET}/payload.yaml"
-    input_products = [{"id": "input1"}]
+    input_products = [FlowInputProduct(name="input", item_id="input1", collection_name="inputs")]
 
     # Create mock products: 2 final, 1 non-final
     mock_prod_final_1 = mocker.Mock(id="product_final_1", path="s3://out/final1", final_product=True)
@@ -469,7 +566,7 @@ async def test_run_processor_filters_non_final_products(
 
     # Mock Prefect logger
     mock_logger = mocker.Mock()
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mock_logger)
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mock_logger)
 
     # Spy DPR client
     spy_run_process = mocker.spy(dpr_client.DprClient, "run_process")
@@ -540,14 +637,14 @@ async def test_run_processor_raises_on_missing_io_config(mocker):
     processor = "s3_l0"
     cluster_info = mocker.Mock()
     s3_payload_run = "s3://bucket/payload.json"
-    input_products = [{"id": "input1"}]
+    input_products = [FlowInputProduct(name="input", item_id="input1", collection_name="inputs")]
 
     # Create payload with None io
     payload = mocker.Mock()
     payload.io = None
 
     # Mock Prefect logger
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger")
+    mocker.patch("rs_workflows.dpr_flow.get_logger")
 
     # Mock FlowEnv
     mock_flow_env = mocker.Mock()
@@ -558,7 +655,7 @@ async def test_run_processor_raises_on_missing_io_config(mocker):
     mocker.patch("rs_workflows.dpr_flow.FlowEnv", return_value=mock_flow_env)
 
     # Verify ValueError is raised
-    with pytest.raises(ValueError, match="Payload I/O configuration is missing"):
+    with pytest.raises(ValueError, match="Payload io configuration is missing"):
         await run_processor.fn(
             env=env,
             processor=processor,
@@ -599,7 +696,7 @@ def test_compute_eopf_origin_datetime_single_item(mocker):
     mock_future = mocker.Mock()
     mock_future.result.return_value = mock_item
 
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch(
         "rs_workflows.dpr_flow.catalog_flow.get_item.submit",
         return_value=mock_future,
@@ -636,7 +733,7 @@ def test_compute_eopf_origin_datetime_multiple_items_returns_max(mocker):
     future_2 = mocker.Mock()
     future_2.result.return_value = item_2
 
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch(
         "rs_workflows.dpr_flow.catalog_flow.get_item.submit",
         side_effect=[future_1, future_2],
@@ -652,7 +749,7 @@ def test_compute_eopf_origin_datetime_raises_on_missing_item(mocker):
     input item cannot be found in the catalog.
     """
     env = mocker.Mock()
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
 
     # Mock catalog_flow.get_item.submit to return a future whose result() is None
     mock_future = mocker.Mock()
@@ -674,7 +771,7 @@ def test_compute_eopf_origin_datetime_raises_on_empty_input(mocker):
     input_products is empty.
     """
     env = mocker.Mock()
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
 
     with pytest.raises(RuntimeError, match="No valid input products found to compute eopf:origin_datetime"):
         compute_eopf_origin_datetime(env, [])
@@ -691,7 +788,7 @@ def test_compute_eopf_origin_datetime_raises_on_catalog_error(mocker):
     input_products = [FlowInputProduct(name="input", item_id="CADU_FAIL", collection_name="COLLECTION_FAIL")]
 
     mocker.patch(
-        "rs_workflows.dpr_flow.get_run_logger",
+        "rs_workflows.dpr_flow.get_logger",
         return_value=mocker.Mock(),
     )
 
@@ -726,7 +823,7 @@ def test_no_eopf_origin_datetime(mocker):
     mock_future = mocker.Mock()
     mock_future.result.return_value = mock_item
 
-    mocker.patch("rs_workflows.dpr_flow.get_run_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch(
         "rs_workflows.dpr_flow.catalog_flow.get_item.submit",
         return_value=mock_future,
@@ -826,3 +923,126 @@ def test_clean_paths_warns_on_rmtree_exception(mocker, tmp_path):
     warning_msg = mock_logger.warning.call_args[0][0]
     assert "Autoclean failed" in warning_msg
     assert str(dir_a) in warning_msg
+
+
+@pytest.mark.parametrize("processor", ["s1_l0", "s3_l0", "s3_l1_olci", "s3_l2_olci", "mockup"])
+@pytest.mark.parametrize("station_properties", [{}, {"sat:acquisition_station": "SGS"}])
+def test_update_eopf_assets_propagates_acquisition_station(mocker, processor, station_properties):
+    """Every output inherits the input station, across processing levels."""
+    env = mocker.Mock()
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
+    payload = mocker.Mock()
+    payload.io.output_products = [mocker.Mock(id="output", path="s3://out")]
+    mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://out/a/.zattrs", "s3://out/b/.zattrs"])
+    mocker.patch(
+        "rs_workflows.dpr_flow.read_zattrs_sync",
+        side_effect=lambda _: {
+            "stac_discovery": {
+                "properties": {"datetime": "2024-01-10T12:00:00Z", "product:type": "test"},
+            },
+        },
+    )
+    input_item = Item(
+        id="source",
+        geometry=None,
+        bbox=None,
+        datetime=datetime.datetime(2024, 1, 10, tzinfo=datetime.UTC),
+        properties={"eopf:origin_datetime": "2024-01-10T12:00:00Z", **station_properties},
+    )
+    future = mocker.Mock()
+    future.result.return_value = input_item
+    stationless_future = mocker.Mock()
+    stationless_future.result.return_value = Item(
+        id="stationless",
+        geometry=None,
+        bbox=None,
+        datetime=input_item.datetime,
+        properties={"eopf:origin_datetime": "2024-01-10T12:00:00Z"},
+    )
+    get_item = mocker.patch(
+        "rs_workflows.dpr_flow.catalog_flow.get_item.submit",
+        side_effect=[stationless_future, future, stationless_future, future],
+    )
+    stationless_product = FlowInputProduct(name="other", item_id="stationless", collection_name="inputs")
+    input_product = FlowInputProduct(name="source", item_id="source", collection_name="inputs")
+
+    for _ in range(2):
+        outputs = update_eopf_assets.fn(env, [stationless_product, input_product], payload, processor)
+        assert len(outputs) == 2
+        for output in outputs:
+            properties = output.stac_item.to_dict()["properties"]
+            if station_properties:
+                assert properties["sat:acquisition_station"] == "SGS"
+            else:
+                assert "sat:acquisition_station" not in properties
+        # Feed a generated product into the next processing step.
+        future.result.return_value = outputs[0].stac_item
+
+    assert get_item.call_count == 4
+    future.result.assert_has_calls([mocker.call(), mocker.call()])
+
+
+@pytest.mark.parametrize("has_inputs", [False, True])
+def test_update_eopf_assets_without_outputs_does_not_fetch_inputs(mocker, has_inputs):
+    """No catalog lookups are needed when there are no generated products."""
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
+    payload = mocker.Mock()
+    payload.io.output_products = []
+    get_item = mocker.patch("rs_workflows.dpr_flow.catalog_flow.get_item.submit")
+    inputs = [FlowInputProduct(name="source", item_id="source", collection_name="inputs")] if has_inputs else []
+
+    assert update_eopf_assets.fn(mocker.Mock(), inputs, payload, "s3_l0") == []
+    get_item.assert_not_called()
+
+
+@pytest.mark.parametrize("container", ["", "products/"])
+def test_extract_olci_zarr_v3_metadata(container):
+    """Prefer v3 metadata per product and ignore nested array/group metadata."""
+    base = "s3://bucket/output"
+    product = f"{base}/{container}product"
+    files = [f"{product}/.zattrs", f"{product}/zarr.json", f"{product}/measurements/zarr.json"]
+    assert extract_products_and_zattrs(files, base, zarr_v3=True) == [("product", f"{product}/zarr.json")]
+    assert extract_products_and_zattrs(files, base) == [("product", f"{product}/zarr.json")]
+    assert extract_products_and_zattrs(files, base, zarr_v3=False) == [("product", f"{product}/.zattrs")]
+    assert extract_products_and_zattrs(files, product, zarr_v3=True) == [("product", f"{product}/zarr.json")]
+
+
+@pytest.mark.parametrize("processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI, DprProcessor.S1L0, "mockup"])
+@pytest.mark.parametrize("metadata_name", ["zarr.json", ".zattrs"])
+def test_update_zarr_assets(mocker, processor, metadata_name):
+    """Publish discovery metadata from both Zarr formats for every processor."""
+    attributes = {
+        "stac_discovery": {
+            "properties": {"product:type": "S03OLCEFR", "datetime": "2025-06-12T02:12:12Z"},
+            "geometry": None,
+            "bbox": None,
+        },
+    }
+    metadata = (
+        attributes if metadata_name == ".zattrs" else {"zarr_format": 3, "node_type": "group", "attributes": attributes}
+    )
+    mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
+    mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=[f"s3://bucket/output/product/{metadata_name}"])
+    mocker.patch("rs_workflows.dpr_flow.prefect_utils.s3_read_bytes", return_value=json.dumps(metadata).encode())
+    payload = mocker.Mock()
+    payload.io.output_products = [mocker.Mock(id="olci", path="s3://bucket/output")]
+    result = update_eopf_assets.fn(mocker.Mock(), [], payload, processor)
+    assert len(result) == 1
+    assert result[0].product_type == "S03OLCEFR"
+    assert result[0].output_product_id == "olci"
+    assert result[0].stac_item.assets["product"].href == "s3://bucket/output/product"
+
+
+@pytest.mark.parametrize("processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI])
+def test_olci_bands_are_published_on_zarr_asset(processor):
+    """STAC 1.1 forbids bands in Item properties; preserve them on the asset."""
+    bands = [{"name": "oa01", "eo:center_wavelength": 0.4}]
+    feature = {
+        "properties": {"datetime": "2025-06-12T02:12:12Z", "bands": bands},
+        "geometry": None,
+        "bbox": None,
+    }
+    item = create_stac_item(None, feature, "s3://bucket/product/zarr.json", "product", processor)
+    published = item.to_dict()
+    assert "bands" not in published["properties"]
+    assert published["assets"]["product"]["bands"] == bands

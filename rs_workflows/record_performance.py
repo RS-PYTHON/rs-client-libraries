@@ -20,12 +20,13 @@ import sys
 from datetime import datetime
 from importlib.metadata import version  # pylint: disable = unused-import # noqa: F401
 
-from prefect import get_run_logger, runtime, task
+from prefect import runtime, task
 from sqlalchemy import MetaData, Table, create_engine, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 
 from rs_workflows.payload_template import PayloadSchema
+from rs_workflows.utils.prefect import get_logger
 
 
 def get_db_session():
@@ -56,7 +57,7 @@ def resolve_param(param_value, runtime_key, default):
 def get_flow_run_id(prefect_flow_id: str) -> int | None:
     """Return id from flow_run table for given prefect_flow_id."""
 
-    logger = get_run_logger()
+    logger = get_logger()
     db, engine = get_db_session()
     try:
         logger.info(f"Connecting to DB with engine: {engine}")
@@ -97,7 +98,7 @@ def get_pi_category_id(eopf_type: str) -> int | None:
         "S02L2A": 10,    # Level-2A Sentinel-2
         "S03NRT": 12     # All NRT Sentinel-3
     """
-    logger = get_run_logger()
+    logger = get_logger()
     db, engine = get_db_session()
 
     try:
@@ -158,7 +159,7 @@ def record_flow_run(
 ):
     """Insert or update a record in flow_run table and return the DB id."""
 
-    logger = get_run_logger()
+    logger = get_logger()
     metadata = MetaData()
     db, engine = get_db_session()
     flow_run = Table("flow_run", metadata, autoload_with=engine)
@@ -259,7 +260,7 @@ def record_product_realised(flow_run_id, stac_items):
           is used as a fallback.
         - The `pi_category_id` is derived from the product type using `get_pi_category_id()`.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     metadata = MetaData()
     db, engine = get_db_session()
     product_realised = Table("product_realised", metadata, autoload_with=engine)
@@ -371,7 +372,7 @@ def record_product_expected(flow_run_id: str, dpr_processor_name, payload, eopf_
         - Duplicate entries for the same `(flow_run_id, eopf_type)` are not reinserted.
     """
 
-    logger = get_run_logger()
+    logger = get_logger()
     logger.debug(
         "Starting record_product_expected: "
         f"flow_run_id={flow_run_id!r}, dpr_processor_name={dpr_processor_name!r}, "
@@ -564,7 +565,7 @@ def validate_products(flow_run_id: str):
         - All changes are committed at the end; a rollback occurs on any exception.
     """
 
-    logger = get_run_logger()
+    logger = get_logger()
     metadata = MetaData()
     db, engine = get_db_session()
 
@@ -739,7 +740,7 @@ def update_timeliness_fields(flow_run_id):
           maintaining idempotence.
     """
 
-    logger = get_run_logger()
+    logger = get_logger()
     metadata = MetaData()
     db, engine = get_db_session()
     pi_category = Table("pi_category", metadata, autoload_with=engine)
@@ -805,7 +806,7 @@ def record_performance_indicators(
     eopf_types=None,
 ):
     """Main task that orchestrates DB recording for flow_run and product_realised."""
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info("Starting record_performance_indicators")
 
     db, _ = get_db_session()

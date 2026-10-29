@@ -13,140 +13,97 @@
 ' limitations under the License.
 
 @startuml python-rs-client
-
-Class RsClient {
-- rs_server_api_key : UUID
-- rs_server_href : str
-- owner_id : str
-==
-+ __init__ (api_key:UUID, href: str, owner_id:str)
-+ get_catalog_client() -> CatalogClient
-+ get_cadip_client() -> CadipClient
-+ get_auxip_client() -> AuxipClient
-+ get_staging_client() -> StagingClient
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam class {
+  BackgroundColor #E0F2F1
+  BorderColor #00796B
+  ArrowColor #00796B
 }
+hide empty members
 
-Class StacBase {
-- rs_server_api_key : UUID
-- rs_server_href : str
-- owner_id : str
-- stac_href: str
-- ps_client: pystac_client.Client
-==
-+ __init__ (api_key:UUID, href:str, owner_id:str, stac_href:str)
-+ get_landing() -> dict
-+ get_collections() -> Iterator[pystac.Collection]
-+ get_collection(collection_id:str) -> pystac.Collection
-+ get_items(collection_id:str, items_ids:[str]) -> Iterator[pystac.Item]
-+ get_items(collection_id:str, items_id:str) -> pystac.Item
-+ get_queryables()-> dict
-+ get_collection_queryables(collection_id:str) -> dict
-+ search (method:str = "POST",
-        max_items: int = None,
-        limit: int = None,
-        ids: IDsLike = None,
-        collections: CollectionsLike = None,
-        bbox: BBoxLike = None,
-        intersects: IntersectsLike = None,
-        datetime: DatetimeLike = None,
-        query: QueryLike = None,
-        filter: FilterLike = None,
-        filter_lang: FilterLangLike = None,
-        sortby: SortbyLike = None,
-        fields: FieldsLike = None)  -> pystac.ItemCollection
+package rs_client {
+  class RsClient {
+    + get_auxip_client()
+    + get_cadip_client()
+    + get_prip_client()
+    + get_catalog_client()
+    + get_cdse_client()
+    + get_earthdatahub_client()
+    + get_staging_client()
+    + get_dpr_client()
+    + get_osam_client()
+  }
+  package stac {
+    class StacBase {
+      + get_landing()
+      + get_collections()
+      + get_collection()
+      + get_items()
+      + get_item()
+      + get_queryables()
+      + search()
+    }
+    class AuxipClient
+    class CadipClient
+    class PripClient
+    class CatalogClient {
+      + add_collection()
+      + update_collection()
+      + remove_collection()
+      + add_item()
+      + update_item()
+      + patch_item()
+      + remove_item()
+    }
+    class CdseClient
+    class EarthDataHubClient
+  }
+  package ogcapi {
+    class OgcApiClient {
+      + get_processes()
+      + get_process()
+      + get_jobs()
+      + get_job_info()
+      + delete_job()
+      + wait_for_job()
+    }
+    class StagingClient {
+      + run_staging()
+      + wait_for_jobs()
+    }
+    class DprClient {
+      + run_process()
+      + stream_logs()
+    }
+  }
+  class OsamClient {
+    + get_credentials()
+  }
 }
-
-Class AuxipClient {
-- rs_server_api_key : UUID
-- rs_server_href : str
-- owner_id : str
-- stac_href : str
-==
-+ __init__ (api_key:UUID, href:str, owner_id:str, stac_href:str)
-}
-
-Class CadipClient {
-- rs_server_api_key : UUID
-- rs_server_href : str
-- owner_id : str
-- stac_href : str
-==
-+ __init__ (api_key:UUID, href:str, owner_id:str, stac_href:str)
-}
-
-Class CatalogClient {
-- rs_server_api_key : UUID
-- rs_server_href : str
-- owner_id : str
-==
-+ __init__ (api_key:UUID, href:str, owner_id:str, stac_href:str)
-add_collection(collection: pystac.Collection,
-        add_public_license: bool,
-        owner_id: str,
-        timeout: int,
-    ) -> Response:
-remove_collection(collection_id: str,
-        owner_id: str,
-        timeout: int,
-    ) -> Response:
-add_item(collection_id: str,
-        item: pystac.Item,
-        owner_id: str,
-        timeout: int,
-    ) -> Response
-remove_item(collection_id: str,
-        item_id: str,
-        owner_id: str,
-        timeout: int,
-    ) -> Response:
-}
-
-Class StagingClient {
-- rs_server_api_key : UUID
-- rs_server_href : str
-- owner_id : str
-==
-+ __init__ (api_key:UUID, href:str, owner_id:str, stac_href:str)
-add_collection(collection: pystac.Collection,
-        add_public_license: bool,
-        owner_id: str,
-        timeout: int,
-    ) -> Response:
-remove_collection(collection_id: str,
-        owner_id: str,
-        timeout: int,
-    ) -> Response:
-add_item(collection_id: str,
-        item: pystac.Item,
-        owner_id: str,
-        timeout: int,
-    ) -> Response
-remove_item(collection_id: str,
-        item_id: str,
-        owner_id: str,
-        timeout: int,
-    ) -> Response:
-}
-
-Class pystac_client {
-
-}
-
-Class StacApiIO {
- - headers:[Dict[str, str]] = [["API-KEY", "myKey"]]
+package pystac_client {
+  class Client
+  class StacApiIO
 }
 
 RsClient <|-- StacBase
-RsClient <|-- StagingClient
-StacBase <|-- CadipClient
-StacBase <|-- CatalogClient
+RsClient <|-- OgcApiClient
+RsClient <|-- OsamClient
 StacBase <|-- AuxipClient
-StacBase "1" *-- "1" pystac_client
-pystac_client "1" *-- "1"  StacApiIO
+StacBase <|-- CadipClient
+StacBase <|-- PripClient
+StacBase <|-- CatalogClient
+StacBase <|-- CdseClient
+StacBase <|-- EarthDataHubClient
+OgcApiClient <|-- StagingClient
+OgcApiClient <|-- DprClient
+StacBase "1" *-- "1" Client : ps_client
+Client "1" *-- "1" StacApiIO : stac_io
 
-note bottom
-`StacApiIO` object is used for I/O requests.
-For RS project, we will inject the API-KEY in the x-api-key HTTP header.
+note bottom of StacApiIO
+  Used for the HTTP requests of pystac-client.
+  RS-Python injects the API key in its
+  x-api-key header, or the OAuth2 cookie
+  in its session.
 end note
-
 @enduml

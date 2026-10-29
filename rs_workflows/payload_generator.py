@@ -23,7 +23,7 @@ from urllib.parse import urlparse, urlunparse
 from uuid import uuid4
 
 import requests
-from prefect import get_run_logger, task
+from prefect import task
 from prefect.blocks.system import Secret
 from pydantic import SecretStr
 from pystac import Item
@@ -40,13 +40,13 @@ from rs_workflows.payload_template import (
     GeneralConfiguration,
     InputProduct,
     IOConfig,
-    LoggingConfig,
     OutputProduct,
     PayloadSchema,
     StoreParams,
     WorkflowStep,
 )
 from rs_workflows.storage_configuration import StorageConfig
+from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import get_common_and_relative_paths, search_by_name
 
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
@@ -241,7 +241,7 @@ def find_s3_output_bucket(
     """
     fallback_bucket = None
     fallback_bucket_owner_only = None
-    logger = get_run_logger()
+    logger = get_logger()
 
     for row in config_rows:
         # the expiration_delay (the fourth field) is not used
@@ -392,11 +392,7 @@ def build_input_products(
             if stac_item is not None:
                 source_item_href = stac_item.get_self_href()
 
-            opening_mode = None
             if kind in ("shared_disk", "local_disk"):
-                disk_config = storage_configuration.get_disk_storage(store_name)
-                if disk_config:
-                    opening_mode = disk_config.get("opening_mode")
                 store_params = None
 
             inputs.append(
@@ -404,14 +400,13 @@ def build_input_products(
                     id=mapping["name"],
                     path=stac_item_path,
                     # TODO: The value for this field in the tasktable (from where the unit is built) should be
-                    # set to 'filename' for the s1 l0 processor, otherwise the processor fails to start.
+                    # set to 'file' for the s1 l0 processor, otherwise the processor fails to start.
                     # Verify in the rs-dpr-service tasktable (config/TaskTable_S1_L0_generated_by_rs_python_v1.json)
-                    # that in the io section, the type field for input_products (S1ACADUS) is set to 'filename'.
+                    # that in the io section, the type field for input_products (S1ACADUS) is set to 'file'.
                     # To be fixed in future iterations !
-                    type=mapping.get("type", "filename"),
-                    store_type=mapping["store_type"],
-                    store_params=store_params,
-                    opening_mode=opening_mode,
+                    type=mapping.get("type", "file"),
+                    engine=mapping["engine"],
+                    reader_params=store_params,
                     source_item_hrefs=[source_item_href] if source_item_href else [],
                 ),
             )
@@ -446,8 +441,8 @@ def build_input_products(
                     id=mapping["name"],
                     path=common_folder,
                     type=mapping.get("type", "regex"),
-                    store_type=mapping["store_type"],
-                    store_params=store_params,
+                    engine=mapping["engine"],
+                    reader_params=store_params,
                     source_item_hrefs=source_item_hrefs,
                 ),
             )
@@ -487,7 +482,7 @@ def build_output_products(
 
     outputs = []
     processed_products = set()
-    logger = get_run_logger()
+    logger = get_logger()
 
     mapping_lookup = {p.name: p for p in dpr_process_in.generated_product_to_collection_identifier}
 
@@ -530,7 +525,6 @@ def build_output_products(
         # Determine the output path based on the storage kind
         kind = storage_configuration.get_storage_kind(store_name)
         store_params = deepcopy(storage_configuration.get_store_params(store_name))
-        opening_mode = mapping.get("opening_mode", "CREATE")
         autoclean = None
 
         if kind == "obs":
@@ -540,7 +534,6 @@ def build_output_products(
             disk_config = storage_configuration.get_disk_storage(store_name)
             if disk_config and disk_config.get("path"):
                 output_path = disk_config["path"]
-                opening_mode = disk_config.get("opening_mode", opening_mode)
                 autoclean = disk_config.get("autoclean", False)
             else:
                 raise RuntimeError(
@@ -551,14 +544,21 @@ def build_output_products(
         else:
             raise RuntimeError(f"Unknown storage kind '{kind}' for output product '{product_name}'")
 
+        # Default to write mode, allowing explicit task table settings to override it.
+        extra_fields = {"mode": "w", **(mapping.get("writer_params") or {})}
+        if not store_params:
+            store_params = StoreParams(**extra_fields)
+        else:
+            for key, value in extra_fields.items():
+                setattr(store_params, key, value)
+
         outputs.append(
             OutputProduct(
                 id=mapping["name"],
                 path=output_path,
-                store_type=mapping["store_type"],
-                store_params=store_params,
-                type=mapping.get("type", "filename"),
-                opening_mode=opening_mode,
+                engine=mapping["engine"],
+                writer_params=store_params,
+                type=mapping.get("type", "file"),
                 final_product=mapping.get("final_product", True),
                 autoclean=autoclean,
             ),
@@ -591,10 +591,9 @@ def get_io(
     Args:
         unit (dict): Workflow unit definition containing I/O product configurations.
         dpr_process_in (DprProcessIn): DPR input configuration containing product mappings.
-        store_params (StoreParams): S3 storage configuration and credentials. TODO ! as
-        written in the comment from story 800, point 3: About the storage_configuration : for the time being,
-        just consider s3 configuration. No credential should be revealed. It is up to CPM to resolve secret.
         flow_env (FlowEnv): Environment context holding execution metadata.
+        storage_configuration: storage configuration info.
+        bucket_configuration: list[list[str]]: Parsed S3 bucket configuration entries.
 
     Returns:
         tuple[list[InputProduct], list[OutputProduct]]:
@@ -656,7 +655,7 @@ def build_adfs(
                 path = SecretStr(
                     path.replace(DATA_EDH_DOMAIN, f"edh:{dpr_process_in.edh_api_key}@api.earthdatahub.destine.eu"),
                 )
-            result.append(AdfConfig(id=adfs_id, path=path, store_params=store_params))
+            result.append(AdfConfig(id=adfs_id, path=path, adf_params=store_params))
         elif isinstance(store_params, StoreParams):
             # Advanced case where several adfs share the same id (i.e. several files)
             adfs_paths = [p for p, _ in adfs_entries]
@@ -670,7 +669,7 @@ def build_adfs(
                     id=adfs_id,
                     path=common_folder,
                     # type="regex", # Unsupported by CPM but it feels needed here for S1ARD
-                    store_params=store_params,
+                    adf_params=store_params,
                 ),
             )
         else:
@@ -713,7 +712,7 @@ def generate_payload(  # pylint: disable=unused-argument
     """
 
     # TODO: should be moved to dpr_client.py and it should call dpr_client.py::update_configuration
-    logger = get_run_logger()
+    logger = get_logger()
     # Init flow environment and opentelemetry span
     # flow_env = FlowEnv(dpr_process_in.env)
     # with flow_env.start_span(__name__, "generate-payload"):
@@ -729,6 +728,46 @@ def generate_payload(  # pylint: disable=unused-argument
     logger.info("Loading bucket configuration from rs-osam endpoint")
     bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
 
+    return build_payload(
+        flow_env,
+        unit_list,
+        adfs,
+        dpr_process_in,
+        storage_configuration,
+        bucket_configuration,
+        external_modules=external_modules,
+    )
+
+
+def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
+    flow_env: FlowEnv,
+    unit_list: list[dict],
+    adfs: list[tuple[str, str, str]],
+    dpr_process_in: DprProcessIn,
+    storage_configuration: StorageConfig,
+    bucket_configuration: list[list[str]],
+    external_modules: list[dict[str, str]] | None = None,
+) -> PayloadSchema:
+    """
+    Builds the payload schema from already loaded storage and bucket configurations.
+
+    This function does not depend on a Prefect run context, so it can be called outside
+    of Prefect (see scripts/generate_payload_standalone.py).
+
+    Args:
+        flow_env (FlowEnv): any object providing the 'owner_id' and 'rs_client' attributes
+            (the rs_client is only used to retrieve the input products STAC items from the catalog).
+        unit_list (list[dict]): List of workflow unit definitions.
+        adfs (list[tuple[str, str, str]]): List of (adfs name, adfs type, storage path) tuples.
+        dpr_process_in (DprProcessIn): DPR input process definition.
+        storage_configuration (StorageConfig): Storage configuration.
+        bucket_configuration (list[list[str]]): Output bucket configuration rows.
+        external_modules: Optional list of external modules.
+
+    Returns:
+        PayloadSchema: the generated payload.
+    """
+    logger = get_logger()
     logger.info("Building workflow and I/O sections")
     workflow_steps = []
     io_config = IOConfig()
@@ -752,16 +791,22 @@ def generate_payload(  # pylint: disable=unused-argument
     logger.info("Building ADFs section")
     io_config.adfs = build_adfs(storage_configuration, adfs, dpr_process_in)
 
-    # Add the logging config for l0 and s1 / s3 configurations. These configurations
+    # Sort lists by ids
+    for _type in "input_products", "output_products", "adfs":
+        getattr(io_config, _type).sort(key=lambda product: product.id)
+
+    # Add the logging and config files for l0 and s1 / s3 configurations. These configurations
     # are hardcoded in the l0 eopf dask worker image. The path where these files are stored is given
     # by the env var PAYLOAD_CONFIG_FILES
+    triggering__use_basic_logging = True
     logging = None
-    config = None
+    adf_l0cfg = ""
     if dpr_process_in.processor_name in (DprProcessor.S1L0, DprProcessor.S3L0):
+        triggering__use_basic_logging = False
         logging = ["/opt/dask-l0/logging_config.yaml"]
         match dpr_process_in.processor_name:
             case DprProcessor.S1L0:
-                config = ["/opt/dask-l0/s1_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
+                adf_l0cfg = "/opt/dask-l0/s1_adf_l0cfg.json"
                 # TODO: this section is temporary, should be removed when the S1 L0 processor doesn't need it anymore
                 # the processor doesn't start without these parameters
                 for workflow_step in workflow_steps:
@@ -775,19 +820,13 @@ def generate_payload(  # pylint: disable=unused-argument
                     else:
                         workflow_step.parameters = extra_parameters
             case DprProcessor.S3L0:
-                config = ["/opt/dask-l0/s3_default_configuration.yaml", "/opt/dask-l0/cadu_configuration.yaml"]
-                # TODO: this section is temporary, should be removed when the S3 L0 processor doesn't need it anymore
-                # the processor doesn't start without these parameters
-                for workflow_step in workflow_steps:
-                    extra_parameters = {
-                        "temporary_path": "./S3_D_TDS_1/output/tmp",
-                        "acquisition_report_output_path": "./S3_D_TDS_1/output/default/Report/",
-                        "ignore_output": "S03CACHE",
-                    }
-                    if workflow_step.parameters:
-                        workflow_step.parameters.update(extra_parameters)
-                    else:
-                        workflow_step.parameters = extra_parameters
+                adf_l0cfg = "/opt/dask-l0/s3_adf_l0cfg.json"
+
+    # Save the config file only for L0 processors that define it.
+    if adf_l0cfg:
+        io_config.adfs.append(AdfConfig(id="adf_l0cfg", path=adf_l0cfg))
+        for workflow_step in workflow_steps:
+            workflow_step.adfs["adf_l0cfg"] = "adf_l0cfg"
 
     # Build the full payload using the schema
     # NOTE: The dask context is not built here, it will be updated by the dpr_service
@@ -804,7 +843,9 @@ def generate_payload(  # pylint: disable=unused-argument
     payload = PayloadSchema(
         # add some default params, as stated in a comment from jira (stories 800/1050)
         general_configuration=GeneralConfiguration(
-            logging=LoggingConfig(level=dpr_process_in.env.logging_level.value),
+            logging__progress_level=dpr_process_in.env.logging_level.value,
+            logging__level=dpr_process_in.env.logging_level.value,
+            triggering__use_basic_logging=triggering__use_basic_logging,
             triggering__temporary_shared=dpr_process_in.temporary_shared,
             triggering__stage_s3_outputs=dpr_process_in.triggering__stage_s3_outputs,
             triggering__stage_s3_temporary_prefix=dpr_process_in.triggering__stage_s3_temporary_prefix,
@@ -819,10 +860,9 @@ def generate_payload(  # pylint: disable=unused-argument
         external_modules=external_modules,
         workflow=workflow_steps,
         io=io_config,  # type: ignore
-        # The dask_context section is built in the dpr_service
-        # dask_context=dask_context,
+        # The dask context_managers section is built in the dpr_service
+        # context_managers=context_managers,
         logging=logging,
-        config=config,
         secret=["secrets.json"] if temp_folder_s3_secret else None,
     )
     logger.debug(f"Generated payload: \n {payload}")

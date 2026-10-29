@@ -17,12 +17,13 @@
 import os
 from urllib.parse import quote_plus
 
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.pi_db_models import Base, PiCategory
+from rs_workflows.utils.prefect import get_logger
 
 PI_CATEGORY_DATA = [
     ("S1", "L0-SEG-NRT", "Segments EW, IW, SM with timeliness NRT & PT", 1800),
@@ -58,7 +59,7 @@ def create_schema(db_url: str):
     Args:
         engine (sqlalchemy.engine.Engine): SQLAlchemy database engine connected to the target database.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     engine = create_engine(db_url)
     logger.info("Call the create_all")
     Base.metadata.create_all(engine)
@@ -116,7 +117,7 @@ async def init_pi_database(env: FlowEnvArgs):
         3. Create database schema via `create_schema` task.
         4. Insert default PI categories via `insert_pi_categories` task.
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)

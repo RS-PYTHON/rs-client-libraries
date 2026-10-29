@@ -14,6 +14,38 @@
 
 """Common code for the pytests."""
 
+from unittest.mock import MagicMock
+
+from rs_workflows.utils.dpr import ProcessorSettings
+
+# Default settings of a processing, as read from its <processing_id>-default-setting Prefect variable
+PROCESSOR_SETTINGS = {
+    "processor": {"name": "s3_l1olci", "version": "1.0"},
+    "pipeline": "ol1_eo",
+    "priority": "high",
+    "processing_mode": ["nrt"],
+    "dask_cluster_name": "dask-processing",
+    "auxiliary_product_to_collection_identifier": [
+        {"product_type": "AX___OSF_AX", "collection_name": "ax___osf_ax"},
+        {"source": "catalog", "product_type": "ADF_OLCAL", "collection_name": "adf-olci"},
+    ],
+    "generated_product_to_collection_identifier": [
+        {"name": "S03OLCEFR", "product_type": "S03OLCEFR", "collection_name": "s03olcefr"},
+    ],
+}
+
+
+def processor_settings(**updates) -> ProcessorSettings:
+    """Default settings of a processing, with the given updates."""
+    return ProcessorSettings.model_validate(PROCESSOR_SETTINGS | updates)
+
+
+def flow_env_mock() -> MagicMock:
+    """A FlowEnv mock whose start_span can be used as a context manager."""
+    flow_env = MagicMock()
+    flow_env.start_span.return_value.__enter__.return_value = MagicMock()
+    return flow_env
+
 
 def json_landing_page(href: str, user_collection: str, service="catalog", conforms_to=True):
     """Return the catalog landing page."""

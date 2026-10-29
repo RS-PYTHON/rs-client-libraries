@@ -23,7 +23,6 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 import pytest
 import pytest_responses  # pylint: disable=unused-import # noqa: F401 # used to avoid adding @responses.activate
 import responses
-from prefect.variables import Variable
 from pystac import Asset, Item, ItemCollection
 from starlette import status
 
@@ -55,9 +54,6 @@ from tests.conftest import (
 from tests.test_utils import setup_worklow_test_env
 
 CONFIG_DIR = Path(__file__).parent / "resources"
-
-# Prefect variable name for the storage configuration
-STORAGE_CONFIG = "processing-storage-configuration"
 
 
 ##################
@@ -106,21 +102,6 @@ def mock_record_performance_indicators(mocker):
     mocker.patch("rs_workflows.dpr_flow.record_performance_indicators", fake_task, create=True)
 
     return fake_task
-
-
-#####################################
-# Mock Prefect blocks and variables #
-#####################################
-
-
-@pytest.fixture(name="storage_configuration")
-def _storage_configuration():
-    """Set prefect variable that contains the storage configuration"""
-    path = Path(__file__).parent.parent / "config" / "storage_configuration.json"
-    with open(path, encoding="utf-8") as f:
-        Variable.set(STORAGE_CONFIG, json.load(f), overwrite=True)
-    yield
-    Variable.unset(STORAGE_CONFIG)
 
 
 #############
@@ -358,7 +339,8 @@ async def test_normalize_archived_auxip_items_wraps_catalog_update_errors(mocker
         )
 
 
-def test_resolve_specific_input_product_stac_items_nominal(mocker):
+@pytest.mark.parametrize("named_io", [False, True])
+def test_resolve_specific_input_product_stac_items_nominal(mocker, named_io):
     """
     Nominal case:
     - multiplicity = one_per_input
@@ -369,7 +351,7 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
     # --- Mock logger ---
     mock_logger = MagicMock()
     mocker.patch(
-        "rs_workflows.on_demand_processing.get_run_logger",
+        "rs_workflows.on_demand_processing.get_logger",
         return_value=mock_logger,
     )
 
@@ -393,35 +375,46 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
     }
 
     # --- Task table ---
-    task_table = {
-        "io": [
-            {
-                "name": "ADFS_INPUT",
-                "multiplicity": "one_per_input",
-                "alternatives": [
-                    {
-                        "order": 1,
-                        "timeout_seconds": 0,
-                        "query": {
-                            "name": "LatestValCover",
-                            "parameters": {
-                                "product_type": "SOMETHING",
-                                "start_datetime": "{S1CADUS.start_datetime}",
-                                "end_datetime": "{S1CADUS.end_datetime}",
-                                "satellite": "{S1CADUS.platform}",
-                                "dTa": 0,
-                                "dTb": 0,
+    task_table: dict[str, typing.Any] = {
+        "io": {
+            "adfs": [
+                {
+                    "name": "ADFS_INPUT",
+                    "folder_multiplicity": "one_per_input",
+                    "alternatives": [
+                        {
+                            "order": 1,
+                            "timeout_seconds": 0,
+                            "query": {
+                                "name": "LatestValCover",
+                                "parameters": {
+                                    "product_type": "SOMETHING",
+                                    "start_datetime": "{S1CADUS.start_datetime}",
+                                    "end_datetime": "{S1CADUS.end_datetime}",
+                                    "satellite": "{S1CADUS.platform}",
+                                    "dTa": 0,
+                                    "dTb": 0,
+                                },
                             },
                         },
-                    },
-                ],
-            },
-            {
-                "name": "S1CADUS",
-                "store_params": {"regex": r".*item\d"},
-            },
-        ],
+                    ],
+                },
+            ],
+            "input": [
+                {
+                    "name": "S1CADUS",
+                    "reader_params": {"regex": r".*item\d"},
+                },
+            ],
+        },
     }
+
+    if named_io:
+        task_table["io"] = {
+            entry["name"]: {key: value for key, value in entry.items() if key != "name"}
+            for entries in task_table["io"].values()
+            for entry in entries
+        }
 
     # --- Unit config ---
     unit = {
@@ -437,14 +430,12 @@ def test_resolve_specific_input_product_stac_items_nominal(mocker):
     ]
 
     # --- Call ---
-    ref_name, items = (
-        on_demand_processing._resolve_specific_input_product_stac_items(  # pylint:disable=protected-access
-            input_adfs,
-            task_table,
-            unit,
-            provided_input_products,
-            mock_rs_client,
-        )
+    ref_name, items = on_demand_processing.resolve_specific_input_product_stac_items(
+        input_adfs,
+        task_table,
+        unit,
+        provided_input_products,
+        mock_rs_client,
     )
 
     # --- Assertions ---
@@ -477,7 +468,7 @@ async def test_dpr_processing_raises_on_unstaged_adf(
                 datetime=datetime.now(),
             )
             it.add_asset("data", Asset(href=f"s3://{MOCKED_BUCKET}/unstaged1.bin"))
-            return ("ADFS_NAME", "filename", (False, ItemCollection([it])))
+            return ("ADFS_NAME", "file", (False, ItemCollection([it])))
 
     class ProcessInputAdfsTaskFailMock(Mock):
         """Mock of process_input_adfs to force status=False in the flow."""
@@ -646,3 +637,41 @@ async def test_publish_skips_when_no_matching_output_collection(
         await catalog_flow.publish.fn(env, catalog_collection_identifier, items)
         spy_add_item.assert_not_called()
     assert "Could not find a collection to publish the stac_item from" in str(error.value.__cause__)
+
+
+@pytest.mark.parametrize("mandatory", [False, True])
+async def test_process_input_adfs_without_result(mocker, mandatory):
+    """When no alternative returns staged data, an optional ADFS is skipped and a mandatory one raises."""
+    mocker.patch("rs_workflows.on_demand_processing.get_logger", return_value=MagicMock())
+    mocker.patch.object(on_demand_processing, "_stage_input_adfs_alternative", new=AsyncMock(return_value=None))
+    input_adfs = {"name": "ETAD", "mandatory": mandatory, "alternatives": [{"order": 1}]}
+
+    if mandatory:
+        with pytest.raises(RuntimeError, match="did not return any result"):
+            await on_demand_processing.process_input_adfs.fn(input_adfs, MagicMock(), {})
+    else:
+        assert await on_demand_processing.process_input_adfs.fn(input_adfs, MagicMock(), {}) is None
+
+
+def test_build_and_generate_payload_skips_reference_db(mocker):
+    """The S1-ARD REFERENCE_DB input ADFS is never staged."""
+    mocker.patch.object(on_demand_processing.jsonschema, "validate")
+    mocker.patch.object(on_demand_processing, "replace_external_variables", side_effect=lambda tt, _: tt)
+    unit_list = [{"input_adfs": [{"name": "REFERENCE_DB"}]}]
+    mocker.patch.object(on_demand_processing, "build_unit_list", return_value=unit_list)
+    process_mock = mocker.patch.object(on_demand_processing, "process_input_adfs")
+    generate_mock = mocker.patch.object(on_demand_processing, "generate_payload")
+
+    dpr_input = MagicMock(pipeline="SLC__1_NRB__1", processing_mode=None)
+    _, source_items = on_demand_processing.build_and_generate_payload(
+        MagicMock(),
+        MagicMock(),
+        {},
+        dpr_input,
+        MagicMock(),
+    )
+
+    process_mock.submit.assert_not_called()
+    generate_mock.submit.assert_called_once()
+    assert generate_mock.submit.call_args.args[2] == []
+    assert not source_items

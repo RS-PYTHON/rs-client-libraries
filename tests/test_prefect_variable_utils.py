@@ -21,7 +21,7 @@ from rs_workflows.utils import prefect as prefect_utils
 
 async def test_update_prefect_variable_merges_and_verifies(mocker):
     """Existing fields are preserved while requested fields are updated."""
-    mocker.patch.object(prefect_utils, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(prefect_utils, "get_logger", return_value=MagicMock())
     stored_value = {
         "common": {"owner_identifier": "opadeanu"},
         "l0": {"processor_name": "S3-L0", "finished": "old"},

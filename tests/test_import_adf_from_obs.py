@@ -211,7 +211,7 @@ async def test_import_items_rehearsal_mode(mock_flow_env, mock_s3_client, sample
             with patch("rs_workflows.on_demand.adf.import_adf_from_obs.fetch_csv_from_endpoint") as mock_fetch_csv:
                 mock_fetch_csv.return_value = [["*", "*", "*", "*", "test-bucket"]]
 
-                with patch("rs_workflows.on_demand.adf.import_adf_from_obs.get_run_logger") as mock_get_logger:
+                with patch("rs_workflows.on_demand.adf.import_adf_from_obs.get_logger") as mock_get_logger:
                     mock_logger = MagicMock()
                     mock_get_logger.return_value = mock_logger
 

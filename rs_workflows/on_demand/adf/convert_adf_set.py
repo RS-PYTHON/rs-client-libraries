@@ -21,7 +21,7 @@ from collections.abc import Awaitable
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
-from prefect import flow, get_run_logger, runtime, task
+from prefect import flow, runtime, task
 from prefect.client.orchestration import get_client
 from prefect.runner.storage import GitRepository
 from prefect.runtime import flow_run
@@ -29,6 +29,7 @@ from prefect.runtime import flow_run
 from rs_common.utils import strftime_millis
 from rs_workflows.adf_flow import adf_conversion_task, substitute_values
 from rs_workflows.flow_utils import AdfProcessIn, AuxiliaryProductMapping, FlowEnvArgs
+from rs_workflows.utils.prefect import get_logger
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 CQL2_FILTERS_PATH = os.path.join(script_dir, "config", "cql2-queries.json")
@@ -101,7 +102,7 @@ async def convert_adf_group(
       > account for input data.
     ---
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Check input chronology
     if period_start_datetime >= period_end_datetime:
@@ -180,7 +181,7 @@ async def convert_adf_group(
 
 def compute_cql2(cql2_query_name: str, dta: int, dtb: int, satellite: str | None) -> dict:
     """Compute the CQL2 filter content by reading the configuration file and substituting the values."""
-    logger = get_run_logger()
+    logger = get_logger()
 
     try:
         # Read the file and load its content into a variable
@@ -227,7 +228,7 @@ async def past_adf_conversion(
     sub-periods of length `period_in_hours` and running the conversion flow on each of them.
     If `period_in_hours` is equal to 0, then the conversion is run on the whole period at once.
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info("🧹 Computing cql2_filter without start_datetime and end_datetime...")
     cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb, satellite)
 
@@ -304,7 +305,7 @@ async def schedule_adf_conversion(
      - stop: end datetime of the period to convert.
 
     """
-    logger = get_run_logger()
+    logger = get_logger()
     logger.info("🧹 Computing cql2_filter without start_datetime and end_datetime...")
     cql2_filter_without_date = compute_cql2(cql2_query_name, dta, dtb, satellite)
 
@@ -363,7 +364,7 @@ async def schedule_conversion_flow(
 ) -> None:
     """Schedule the conversion flow with the given parameters and scheduling rule."""
 
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Retrieve the name of the workpool, GitHub URL and Branch
     work_pool_name: str | None = None
@@ -420,7 +421,7 @@ async def adf_conversion_scheduled(
     Flow to convert ADF data for a scheduled period. The period is defined by the scheduling rule of the flow and
     the `period` parameter, which defines the length of the period to convert starting from the flow run start time.
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     decoded_period: timedelta = timedelta(seconds=int(period))
 

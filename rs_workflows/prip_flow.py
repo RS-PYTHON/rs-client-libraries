@@ -16,13 +16,14 @@
 
 import datetime
 
-from prefect import flow, get_run_logger, task
+from prefect import flow, task
 from pystac import ItemCollection
 
 from rs_client.stac.prip_client import PripClient
 from rs_common.utils import create_valcover_filter
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, RetryConfig
 from rs_workflows.staging_flow import staging_task
+from rs_workflows.utils.prefect import get_logger
 
 
 @flow(name="search-prip")
@@ -41,7 +42,7 @@ async def search(
         prip_collection: PRIP ollection identifier (to know the station)
         error_if_empty: Raise a ValueError if the results are empty.
     """
-    logger = get_run_logger()
+    logger = get_logger()
 
     # Init flow environment and opentelemetry span
     flow_env = FlowEnv(env)

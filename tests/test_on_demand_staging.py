@@ -66,7 +66,7 @@ async def test_create_result_artifact_builds_markdown_and_link(mocker):
     link_mock = AsyncMock()
     mocker.patch.object(staging, "acreate_markdown_artifact", markdown_mock)
     mocker.patch.object(staging, "acreate_link_artifact", link_mock)
-    mocker.patch.object(staging, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(staging, "get_logger", return_value=MagicMock())
 
     await create_result_artifact.fn("SESSION_42", timedelta(seconds=90))
 
@@ -88,7 +88,7 @@ async def test_cadip_session_stage_returns_status_for_host(mocker):
     staging_client.run_staging.return_value = "job-status"
     staging_client.wait_for_jobs.return_value = {"cadip.example.com": {"status": "successful"}}
     mocker.patch.object(staging, "FlowEnv", return_value=flow_env)
-    mocker.patch.object(staging, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(staging, "get_logger", return_value=MagicMock())
 
     result = await cadip_session_stage.fn(
         FlowEnvArgs(owner_id="owner"),
@@ -109,7 +109,7 @@ async def test_cadip_session_stage_missing_status_returns_empty(mocker):
     staging_client = flow_env.rs_client.get_staging_client.return_value
     staging_client.wait_for_jobs.return_value = {"cadip.example.com": {}}
     mocker.patch.object(staging, "FlowEnv", return_value=flow_env)
-    mocker.patch.object(staging, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(staging, "get_logger", return_value=MagicMock())
 
     result = await cadip_session_stage.fn(
         FlowEnvArgs(owner_id="owner"),
@@ -124,7 +124,7 @@ async def test_cadip_session_stage_missing_status_returns_empty(mocker):
 # --------------------------------------------------------------------------- #
 def _patch_stage_session_common(mocker, status):
     """Patch the collaborators used by stage_session_common; return its mocks."""
-    mocker.patch.object(staging, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(staging, "get_logger", return_value=MagicMock())
     check_mock = mocker.patch.object(staging, "check_and_create_collection", new=AsyncMock())
 
     stage_mock = mocker.patch.object(staging, "cadip_session_stage")
@@ -177,7 +177,7 @@ async def test_stage_latest_session_raises_when_no_session(mocker):
     """When no session is found, the flow raises ValueError."""
     flow_env = _flow_env_mock()
     mocker.patch.object(staging, "FlowEnv", return_value=flow_env)
-    mocker.patch.object(staging, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(staging, "get_logger", return_value=MagicMock())
     search_mock = mocker.patch.object(staging, "cadip_session_search")
     search_mock.submit.return_value.result.return_value = []
 
@@ -189,7 +189,7 @@ async def test_stage_latest_session_stages_found_session(mocker):
     """The latest session found is forwarded to stage_session_common."""
     flow_env = _flow_env_mock()
     mocker.patch.object(staging, "FlowEnv", return_value=flow_env)
-    mocker.patch.object(staging, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(staging, "get_logger", return_value=MagicMock())
     search_mock = mocker.patch.object(staging, "cadip_session_search")
     search_mock.submit.return_value.result.return_value = [MagicMock(id="SESSION_42")]
     stage_common = mocker.patch.object(staging, "stage_session_common", new=AsyncMock())
@@ -203,7 +203,7 @@ async def test_stage_latest_session_verbose_pushes_report(mocker):
     """In verbose mode a ReportManager report is pushed at the end."""
     flow_env = _flow_env_mock()
     mocker.patch.object(staging, "FlowEnv", return_value=flow_env)
-    mocker.patch.object(staging, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(staging, "get_logger", return_value=MagicMock())
     search_mock = mocker.patch.object(staging, "cadip_session_search")
     search_mock.submit.return_value.result.return_value = [MagicMock(id="SESSION_42")]
     mocker.patch.object(staging, "stage_session_common", new=AsyncMock())
@@ -225,7 +225,7 @@ async def test_stage_selected_session_raises_when_no_session(mocker):
     """stage_selected_session raises ValueError when no session is found."""
     flow_env = _flow_env_mock()
     mocker.patch.object(staging, "FlowEnv", return_value=flow_env)
-    mocker.patch.object(staging, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(staging, "get_logger", return_value=MagicMock())
     search_mock = mocker.patch.object(staging, "cadip_session_search")
     search_mock.submit.return_value.result.return_value = None
 
@@ -237,7 +237,7 @@ async def test_stage_selected_session_stages_user_choice(mocker):
     """stage_selected_session builds the session list, pauses for input, then stages the choice."""
     flow_env = _flow_env_mock()
     mocker.patch.object(staging, "FlowEnv", return_value=flow_env)
-    mocker.patch.object(staging, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(staging, "get_logger", return_value=MagicMock())
 
     published, orbit = "2023-01-01T00:00:00Z", 123
     item = MagicMock(id="SESSION_42")
@@ -261,7 +261,7 @@ async def test_stage_latest_session_verbose_no_session_reports_failure(mocker):
     """In verbose mode, a missing session records a failed step before raising."""
     flow_env = _flow_env_mock()
     mocker.patch.object(staging, "FlowEnv", return_value=flow_env)
-    mocker.patch.object(staging, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(staging, "get_logger", return_value=MagicMock())
     search_mock = mocker.patch.object(staging, "cadip_session_search")
     search_mock.submit.return_value.result.return_value = []
     report_instance = MagicMock()
@@ -278,7 +278,7 @@ async def test_stage_latest_session_none_id_does_not_stage(mocker):
     """A found session with a None id is not staged and is reported as missing."""
     flow_env = _flow_env_mock()
     mocker.patch.object(staging, "FlowEnv", return_value=flow_env)
-    mocker.patch.object(staging, "get_run_logger", return_value=MagicMock())
+    mocker.patch.object(staging, "get_logger", return_value=MagicMock())
     search_mock = mocker.patch.object(staging, "cadip_session_search")
     search_mock.submit.return_value.result.return_value = [MagicMock(id=None)]
     stage_common = mocker.patch.object(staging, "stage_session_common", new=AsyncMock())
