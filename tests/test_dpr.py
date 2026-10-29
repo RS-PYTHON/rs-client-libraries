@@ -473,7 +473,7 @@ class MockResponse:
 
 
 def test_stream_logs_nominal(mocker, dpr_client: DprClient):
-    """Test standard streaming with multiple log formats and continuation lines."""
+    """Test streaming of the rs-dpr-service logs: several logs per event, multi-line logs and log levels."""
     mock_logger = mocker.Mock()
     mock_get = mocker.patch.object(dpr_client.http_session, "get")
 
@@ -484,23 +484,62 @@ def test_stream_logs_nominal(mocker, dpr_client: DprClient):
     mock_get.return_value = MockResponse(
         status_code=200,
         lines=[
-            b"data: 2026-07-06 09:28:09 - eopf.dask_utils - INFO - A standard log",
-            b"data: 2026-07-06 09:28:10 - eopf.dask_utils - WARNING - A warning log",
-            b"data: INFO:eopf.trigger:Another format log",
-            b"data:  continuation line",
-            b"data: ERROR:eopf:Error line",
+            b"retry: 1000",
+            b": connected",
+            b"",
+            # rs-dpr-service own log
+            b"id: 0",
+            b"data: 2026-10-28 08:29:04,338 - rs_dpr_service.dask.call_dask - DEBUG - Call 'ProcessorCaller.run'",
+            b"",
+            # rs-dpr-service own multi-line log
+            b"id: 1",
+            b"data: 2026-10-28 08:29:07,100 - rs_dpr_service.dask.call_dask - DEBUG - Python package versions:",
+            b"data: [",
+            b'data:   "affine==2.4.0"',
+            b"data: ]",
+            b"",
+            # Raw EOPF output: several logs in a single event
+            b"id: 2",
+            b"data: 2026-10-28 08:29:14,634 - l0.s3.s3_l0_processor - INFO - Reading ADF",
+            b"data: 2026-10-28 08:29:14,635 - l0.s3.s3_l0_processor - WARNING - Unable to get dump granule position",
+            b"data: Traceback (most recent call last):",
+            b"",
             b": keepalive",
+            b"",
+            # Continuation of the previous log, in a new event: keeps the previous level
+            b"id: 3",
+            b'data:   File "x.py", line 1',
+            b"data: 2026-10-28 08:29:15,000 - l0.s3.s3_l0_processor - ERROR - Error log",
             b"data: CRITICAL:eopf:Critical line",
+            # Log with an empty message, the message is on the next line
+            b"data: 2026-10-28 08:29:16,000 - l0.cadu_processing.cadu_reader - INFO -",
+            b"data: Workflow execution report",
         ],
     )
 
     dpr_client.stream_logs("http://test/jobs/123/logs", mock_logger)
 
-    mock_logger.info.assert_any_call("2026-07-06 09:28:09 - eopf.dask_utils - INFO - A standard log")
-    mock_logger.warning.assert_any_call("2026-07-06 09:28:10 - eopf.dask_utils - WARNING - A warning log")
-    mock_logger.info.assert_any_call("INFO:eopf.trigger:Another format log\n continuation line")
-    mock_logger.error.assert_any_call("ERROR:eopf:Error line")
-    mock_logger.error.assert_any_call("CRITICAL:eopf:Critical line")
+    mock_logger.debug.assert_any_call(
+        "2026-10-28 08:29:04,338 - rs_dpr_service.dask.call_dask - DEBUG - Call 'ProcessorCaller.run'",
+    )
+    mock_logger.debug.assert_any_call(
+        "2026-10-28 08:29:07,100 - rs_dpr_service.dask.call_dask - DEBUG - Python package versions:\n"
+        '[\n  "affine==2.4.0"\n]',
+    )
+    assert [call.args[0] for call in mock_logger.info.call_args_list] == [
+        "Connecting to log stream from http://test/jobs/123/logs",
+        "2026-10-28 08:29:14,634 - l0.s3.s3_l0_processor - INFO - Reading ADF",
+        "2026-10-28 08:29:16,000 - l0.cadu_processing.cadu_reader - INFO -\nWorkflow execution report",
+    ]
+    assert [call.args[0] for call in mock_logger.warning.call_args_list] == [
+        "2026-10-28 08:29:14,635 - l0.s3.s3_l0_processor - WARNING - Unable to get dump granule position\n"
+        "Traceback (most recent call last):",
+        '  File "x.py", line 1',
+    ]
+    assert [call.args[0] for call in mock_logger.error.call_args_list] == [
+        "2026-10-28 08:29:15,000 - l0.s3.s3_l0_processor - ERROR - Error log",
+        "CRITICAL:eopf:Critical line",
+    ]
 
 
 def test_stream_logs_reconnection(mocker, dpr_client: DprClient):
@@ -532,6 +571,29 @@ class BrokenMockResponse(MockResponse):
         """Yield the lines then raise a connection error"""
         yield from self.lines
         raise ConnectionError("Response ended prematurely")
+
+
+def test_stream_logs_emits_each_event_in_real_time(mocker, dpr_client: DprClient):
+    """Test each log is emitted as soon as its SSE event ends, not when the stream closes."""
+    mock_logger = mocker.Mock()
+    mocker.patch.object(dpr_client, "get_job_info", return_value={"status": "running"})
+    logged_before_next_event = []
+
+    class LiveMockResponse(MockResponse):
+        """Mock response checking what was logged while the stream is still open"""
+
+        def iter_lines(self):
+            """Yield two events and check the first one is logged before the second one is sent"""
+            yield from [b"id: 0", b"data: 2026-10-28 08:29:04,338 - x - INFO - first log", b""]
+            logged_before_next_event.extend(call.args[0] for call in mock_logger.info.call_args_list)
+            yield from [b"id: 1", b"data: 2026-10-28 08:29:05,338 - x - INFO - second log", b""]
+
+    mocker.patch.object(dpr_client.http_session, "get", return_value=LiveMockResponse())
+
+    dpr_client.stream_logs("http://test/jobs/123/logs", mock_logger)
+
+    assert "2026-10-28 08:29:04,338 - x - INFO - first log" in logged_before_next_event
+    mock_logger.info.assert_any_call("2026-10-28 08:29:05,338 - x - INFO - second log")
 
 
 def test_stream_logs_resumes_from_last_event_id(mocker, dpr_client: DprClient):

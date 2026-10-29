@@ -223,12 +223,13 @@ class DprClient(OgcApiClient):
             TODO: check the comment from except Exception in is_job_finished function. Maybe we
             should stop the reconnection in case of general exception ?
         """
-        # regex to match start of log line (YYYY-MM-DD HH:MM:SS - LEVEL - or LEVEL:)
-        log_start_pattern = re.compile(
-            r"^(?:\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\s-|(?:INFO|WARNING|ERROR|DEBUG|CRITICAL):)",
-        )
-        # regex to extract log level
-        level_pattern = re.compile(r"(?: - |^)(INFO|WARNING|ERROR|DEBUG|CRITICAL)(?: - |:)")
+        # The rs-dpr-service sends every log with a "YYYY-MM-DD HH:MM:SS,mmm - logger - LEVEL - " prefix.
+        # (at least, this should be happening). One SSE event may contain several logs (raw EOPF output),
+        # and a log may span several lines. A line containing a log level starts a new log. The level
+        # can end the line if the log message is empty
+        level_pattern = re.compile(r"(?: - |^)(INFO|WARNING|ERROR|DEBUG|CRITICAL)(?: -(?: |$)|:)")
+        # level of the last flushed log, used for continuation lines received in a new SSE event
+        last_level = "INFO"
 
         def flush_log(buffer: list[str]) -> None:
             """
@@ -237,11 +238,13 @@ class DprClient(OgcApiClient):
             Args:
                 buffer (list[str]): Buffer of log lines to flush.
             """
+            nonlocal last_level
             if not buffer:
                 return
             full_message = "\n".join(buffer)
             match = level_pattern.search(buffer[0])
-            level = match.group(1) if match else "INFO"
+            level = match.group(1) if match else last_level
+            last_level = level
 
             if level == "DEBUG":
                 logger.debug(full_message)
@@ -299,28 +302,26 @@ class DprClient(OgcApiClient):
                     **{**self.apikey_headers, "headers": headers},
                     timeout=86400,
                 )
-                logger.info(f"Connected to log stream from {url}")
                 if response.status_code == 200:
-                    logger.info("Status code = 200")
                     for line in response.iter_lines():
-                        logger.info("Entered in for")
-                        if line:
-                            logger.info(f"line = {line}")
-                            decoded = line.decode("utf-8")
-                            if decoded.startswith("id:"):
-                                last_event_id = decoded[3:].strip()
-                            elif decoded.startswith("data: "):
-                                log_line = decoded[6:]
-                                if log_start_pattern.match(log_line):
-                                    logger.info(f"flush_log = {buffer}")
-                                    flush_log(buffer)
-                                buffer.append(log_line)
-                                logger.info(f"buffer append = {buffer}")
+                        decoded = line.decode("utf-8")
+                        if not decoded:
+                            # An empty line ends the SSE event: one event = one (maybe multi-line) log record
+                            flush_log(buffer)
+                        elif decoded.startswith("id:"):
+                            last_event_id = decoded[3:].strip()
+                        elif decoded.startswith("data:"):
+                            log_line = decoded[5:]
+                            # The SSE spec strips a single leading space after "data:"
+                            log_line = log_line[1:] if log_line.startswith(" ") else log_line
+                            # A new log starts: send the previous one
+                            if level_pattern.search(log_line):
+                                flush_log(buffer)
+                            buffer.append(log_line)
                     flush_log(buffer)
 
                     # if iter_lines completes without raising an exception, it means the server
                     # cleanly closed the connection (which it does when the job finishes).
-                    logger.info("Break from logs")
                     break
                 if response.status_code == 404:
                     logger.warning("Log stream endpoint returned 404 Not Found for job. Stopping stream logs.")
