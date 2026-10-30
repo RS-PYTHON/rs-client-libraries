@@ -14,6 +14,7 @@
 
 """DPR flow implementation"""
 
+import asyncio
 import datetime
 import json
 import shutil
@@ -613,7 +614,9 @@ async def run_processor(
             s3_report_dir=s3_payload_dir,
         )
         try:
-            dpr_client.wait_for_job(job_status, logger, f"{processor!r} processor")
+            # wait_for_job() streams the DPR logs with blocking I/O: run it in a thread so the event loop stays
+            # free and Prefect can ship the logs to the API in real time instead of in one burst at the end.
+            await asyncio.to_thread(dpr_client.wait_for_job, job_status, logger, f"{processor!r} processor")
         finally:
             logger.info(f"Processor execution time: {str(timedelta(seconds=time.time() - start_time))}")
             if is_local_path:
