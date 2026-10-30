@@ -48,8 +48,6 @@ L0_FLOWS = {"1": process_s1l0, "3": process_s3l0}
 async def process_l0(
     session: str,
     env_args: FlowEnvArgs,
-    force_systematic: bool = False,
-    verbose: bool = False,
 ) -> list[dict[str, Any]] | None:
     """
     This is the generic l0 processing flow, started by the systematic processing after the staging of a session.
@@ -59,13 +57,12 @@ async def process_l0(
 
     Args:
         session: Identifier of the session.
-        env_args: Flow environment arguments.
-        force_systematic: Run the processing as a systematic one, so that the automations start the next processing
-            of the chain from the events of the generated products.
-        verbose: not used yet.
+        env_args: Flow environment arguments. Its `process` field sets `force_systematic` (run the processing as a
+            systematic one, so that the automations start the next processing of the chain from the events of the
+            generated products) and `verbose` (not used yet).
     """
     logger = get_logger()
-    logger.info(f"Mode verbose is set to {verbose}")
+    logger.info(f"Mode verbose is set to {env_args.process.verbose}")
 
     # Check session name format
     pattern = re.compile(r"^S[123]._")
@@ -119,6 +116,4 @@ async def process_l0(
         return await L0_FLOWS[mission](
             session=session,
             env_args=env_args,
-            force_systematic=force_systematic,
-            verbose=verbose,
         )

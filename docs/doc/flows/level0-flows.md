@@ -5,16 +5,16 @@ Level-0 processors.
 
 | Flow | Parameters | Description |
 |---|---|---|
-| `process-l0` | `session`, `env_args`, `force_systematic`, `verbose` | Generic entry point for all the missions, started by the systematic processing after the staging of a session: checks the session, stages it if needed, then runs the Level-0 flow of the mission (`process-s1-l0` or `process-s3-l0`) as a sub-flow. |
-| `process-s1-l0` | `session`, `env_args`, `force_systematic`, `verbose` | Sentinel-1 Level-0 processing of a session already staged, see [Sentinel-1 flows](sentinel1-flows.md). |
-| `process-s3-l0` | `session`, `env_args`, `force_systematic`, `verbose` | Sentinel-3 Level-0 processing of a session already staged, see [Sentinel-3 flows](sentinel3-flows.md). |
+| `process-l0` | `session`, `env_args` | Generic entry point for all the missions, started by the systematic processing after the staging of a session: checks the session, stages it if needed, then runs the Level-0 flow of the mission (`process-s1-l0` or `process-s3-l0`) as a sub-flow. |
+| `process-s1-l0` | `session`, `env_args` | Sentinel-1 Level-0 processing of a session already staged, see [Sentinel-1 flows](sentinel1-flows.md). |
+| `process-s3-l0` | `session`, `env_args` | Sentinel-3 Level-0 processing of a session already staged, see [Sentinel-3 flows](sentinel3-flows.md). |
 
 The parameters of a run are the `session`, e.g. `S3A_20260807020505053186`, and the owner of the products
-(`env_args`). The other parameters are read from the default settings of the Level-0 processing of the mission, in
+(`env_args`, whose `process` field also sets `force_systematic` and `verbose`). The other parameters are read from the default settings of the Level-0 processing of the mission, in
 the `s1l0-default-setting` or `s3l0-default-setting` Prefect variable (see
 [Customise the DPR processing](../advanced/customise-dpr-flow.md#default-settings-of-the-processing-flows)).
-With `force_systematic`, the workflow of the processing is `systematic`: the events of the generated products start
-the next processing of the chain. In systematic processing, `process-l0` is started with `force_systematic` by an
+With `env_args.process.force_systematic`, the workflow of the processing is `systematic`: the events of the generated products start
+the next processing of the chain. In systematic processing, `process-l0` is started with `process.force_systematic` by an
 automation after the staging of each session, see [Systematic processing](../advanced/systematic-processing.md).
 
 ## Steps of `process-l0`

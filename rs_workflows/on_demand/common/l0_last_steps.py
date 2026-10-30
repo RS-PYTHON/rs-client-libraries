@@ -52,12 +52,10 @@ async def process_staged_session(
     mission: str,
     session: str,
     env_args: FlowEnvArgs,
-    force_systematic: bool,
-    verbose: bool,
 ) -> list[dict[str, Any]] | None:
     """
     Level-0 processing of a session already staged in the catalog: read the settings of the processing of the
-    mission, then run the final processing steps.
+    mission, then run the final processing steps. The workflow and the verbosity are read from `env_args.process`.
 
     Returns:
         The STAC items of the generated products, or None if the session is not in the catalog.
@@ -68,8 +66,8 @@ async def process_staged_session(
         session=session,
         env_args=env_args,
         settings=settings,
-        workflow=WorkflowType.of_run(force_systematic),
-        verbose=verbose,
+        workflow=WorkflowType.of_run(env_args.process.force_systematic),
+        verbose=env_args.process.verbose,
     )
 
 

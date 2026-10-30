@@ -19,7 +19,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, WorkflowType
+from rs_workflows.flow_utils import (
+    FlowEnvArgs,
+    FlowEnvProcess,
+    FlowInputProduct,
+    WorkflowType,
+)
 from rs_workflows.on_demand.common import l0, l0_last_steps
 from rs_workflows.on_demand.sentinel1 import s1_l0
 from rs_workflows.on_demand.sentinel3 import s3_l0
@@ -118,7 +123,8 @@ async def test_process_l0_raises_when_session_not_published(mocker):
 async def test_process_l0_runs_the_s1_flow_for_a_session_found_in_catalog(mocker, force_systematic):
     """A published S1 session in the catalog is processed by the S1 Level-0 flow, systematic when forced."""
     mocks = _patch_l0(mocker, item=MagicMock())
-    result = await l0.process_l0.fn(S1_SESSION, ENV_ARGS, force_systematic=force_systematic)
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=force_systematic))
+    result = await l0.process_l0.fn(S1_SESSION, env_args)
     assert result == ["s1-product"]
     mocks["load_settings"].assert_awaited_once_with(ProcessingId.S1_L0)
     mocks["get_item"].assert_awaited_once()
@@ -126,9 +132,7 @@ async def test_process_l0_runs_the_s1_flow_for_a_session_found_in_catalog(mocker
     mocks["stage"].assert_not_awaited()
     mocks["s1_flow"].assert_awaited_once_with(
         session=S1_SESSION,
-        env_args=ENV_ARGS,
-        force_systematic=force_systematic,
-        verbose=False,
+        env_args=env_args,
     )
     mocks["s3_flow"].assert_not_awaited()
 
@@ -137,16 +141,15 @@ async def test_process_l0_stages_then_runs_the_s3_flow(mocker):
     """An S3 session absent from the catalog is staged from the CADIP collections of the settings, then processed
     by the S3 Level-0 flow."""
     mocks = _patch_l0(mocker, item=None, station="s3_sgs", staged=True)
-    result = await l0.process_l0.fn(S3_SESSION, ENV_ARGS, force_systematic=True)
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=True))
+    result = await l0.process_l0.fn(S3_SESSION, env_args)
     assert result == ["s3-product"]
     mocks["load_settings"].assert_awaited_once_with(ProcessingId.S3_L0)
     assert mocks["get_station"].call_args.args[1:] == (S3_SESSION, ["sgs"])
     mocks["stage"].assert_awaited_once()
     mocks["s3_flow"].assert_awaited_once_with(
         session=S3_SESSION,
-        env_args=ENV_ARGS,
-        force_systematic=True,
-        verbose=False,
+        env_args=env_args,
     )
     mocks["s1_flow"].assert_not_awaited()
 
@@ -178,14 +181,15 @@ async def test_process_staged_session(mocker, mission, processing_id, force_syst
     )
     last_steps = mocker.patch.object(l0_last_steps, "process_l0_last_steps", new=AsyncMock(return_value=["product"]))
 
-    result = await l0_last_steps.process_staged_session(mission, "session", ENV_ARGS, force_systematic, True)
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=force_systematic, verbose=True))
+    result = await l0_last_steps.process_staged_session(mission, "session", env_args)
 
     assert result == ["product"]
     load_settings.assert_awaited_once_with(processing_id)
     last_steps.assert_awaited_once_with(
         mission=mission,
         session="session",
-        env_args=ENV_ARGS,
+        env_args=env_args,
         settings=SETTINGS,
         workflow=workflow,
         verbose=True,
@@ -265,7 +269,9 @@ async def test_process_mission_l0(mocker, module, mission):
     process = mocker.patch.object(module, "process_staged_session", new=AsyncMock(return_value=["product"]))
     flow = s1_l0.process_s1l0 if module is s1_l0 else s3_l0.process_s3l0
 
-    result = await flow.fn("session", ENV_ARGS, force_systematic=True)
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=True))
+
+    result = await flow.fn("session", env_args)
 
     assert result == ["product"]
-    process.assert_awaited_once_with(mission, "session", ENV_ARGS, True, False)
+    process.assert_awaited_once_with(mission, "session", env_args)
