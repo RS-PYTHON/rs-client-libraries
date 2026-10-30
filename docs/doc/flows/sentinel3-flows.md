@@ -19,10 +19,10 @@ flowchart LR
 
 | Flow | Parameters | Description | Processor |
 |---|---|---|---|
-| `process-s3-l0` | `session`, `env_args`, `force_systematic`, `verbose` | Level-0 processing of a session already staged (see also `process-l0` in [Level-0 flows](level0-flows.md)). Emits a `product.<product type>.generated` event for each generated product, that starts the OLCI Level-1 processing when the workflow is `systematic` (`force_systematic`, set by the automation that runs `process-l0` after the staging of the session). | `s3_l0` |
-| `process-s3-l1-olci-ondemand` | `env_args`, `single_input_product` (`item_id`, `collection_name`, `s03olcl0_` by default), `force_systematic`, `olcil0_base_name`, `navl0_base_name` | OLCI Level-1 processing of an `S03OLCL0_` product, run by a user. | `s3_l1olci` |
+| `process-s3-l0` | `session`, `env_args` | Level-0 processing of a session already staged (see also `process-l0` in [Level-0 flows](level0-flows.md)). Emits a `product.<product type>.generated` event for each generated product, that starts the OLCI Level-1 processing when the workflow is `systematic` (`force_systematic`, set by the automation that runs `process-l0` after the staging of the session). | `s3_l0` |
+| `process-s3-l1-olci-ondemand` | `env_args`, `single_input_product` (`item_id`, `collection_name`, `s03olcl0_` by default), `olcil0_base_name`, `navl0_base_name` | OLCI Level-1 processing of an `S03OLCL0_` product, run by a user. | `s3_l1olci` |
 | `process-s3-l1-olci-systematic` | `payload` | OLCI Level-1 processing of the `S03OLCL0_` product of a `product.S03OLCL0_.generated` event, run by an automation. | `s3_l1olci` |
-| `process-s3-l2-olci-ondemand` | `env_args`, `single_input_product` (`item_id`, `collection_name`, `s03olcefr` by default), `force_systematic`, `olcefr_base_name` | OLCI Level-2 processing of an `S03OLCEFR` product, run by a user. | `s3_l2olci` |
+| `process-s3-l2-olci-ondemand` | `env_args`, `single_input_product` (`item_id`, `collection_name`, `s03olcefr` by default), `olcefr_base_name` | OLCI Level-2 processing of an `S03OLCEFR` product, run by a user. | `s3_l2olci` |
 | `process-s3-l2-olci-systematic` | `payload` | OLCI Level-2 processing of the `S03OLCEFR` product of a `product.S03OLCEFR.generated` event, run by an automation. | `s3_l2olci` |
 | `generate-s3-l1-olci-quicklooks` | `owner_id`, `published_items` | Generate an RGB quicklook of each Level-1 product, as a JPEG image and a georeferenced [Cloud Optimized GeoTIFF](https://cogeo.org/), upload them next to the product and add them as `thumbnail` assets of its STAC item. | |
 | `generate-s3-l2-olci-quicklooks` | `owner_id`, `published_items` | Same for the Level-2 products. | |
@@ -45,9 +45,9 @@ processing has:
 
 All the flows emit a `product.<product type>.generated` event for each generated product, related to the
 `workflow` of the processing, but the automations only start the next processing for the events of a `systematic`
-workflow. The `force_systematic` parameter of the on-demand flows chooses what is produced from the given product:
+workflow. The `process.force_systematic` field of `env_args` of the on-demand flows chooses what is produced from the given product:
 
-| `force_systematic` | Workflow | Result of `process-s3-l1-olci-ondemand` |
+| `env_args.process.force_systematic` | Workflow | Result of `process-s3-l1-olci-ondemand` |
 |---|---|---|
 | `false` (default) | `on-demand` | Only the Level-1 products. |
 | `true` | `systematic` | The Level-1 products, then automatically the Level-2 products of each generated `S03OLCEFR` product. |

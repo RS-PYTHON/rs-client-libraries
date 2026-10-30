@@ -18,7 +18,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from rs_workflows.flow_utils import FlowEnvArgs, WorkflowType
+from rs_workflows.flow_utils import (
+    FlowEnvArgs,
+    FlowEnvProcess,
+    WorkflowType,
+    WriteEngine,
+)
 from rs_workflows.on_demand.common import product_processing
 from rs_workflows.on_demand.common.product_processing import FlowInputItem
 from rs_workflows.utils.dpr import ProcessingId
@@ -37,6 +42,28 @@ SETTINGS = processor_settings()
 def test_workflow_of_run(force_systematic, workflow):
     """A run is on-demand, unless the systematic processing is forced."""
     assert WorkflowType.of_run(force_systematic) == workflow
+
+
+def test_flow_env_process_defaults_and_nesting():
+    """The process options have defaults, and are parsed from the nested `process` of the flow environment."""
+    assert FlowEnvArgs(owner_id="owner").process == FlowEnvProcess()
+    assert FlowEnvProcess().force_systematic is False
+    assert FlowEnvProcess().verbose is False
+    args = FlowEnvArgs.model_validate(
+        {
+            "owner_id": "owner",
+            "process": {
+                "write_engine": "fast_zarr",
+                "use_obstore": True,
+                "triggering__stage_s3_upload_max_concurrency": 4,
+                "force_systematic": True,
+            },
+        },
+    )
+    assert args.process.write_engine == WriteEngine.FAST_ZARR
+    assert args.process.use_obstore is True
+    assert args.process.triggering__stage_s3_upload_max_concurrency == 4
+    assert args.process.force_systematic is True
 
 
 def _patch(mocker, item):
@@ -62,10 +89,11 @@ async def test_process_catalog_product(mocker, force_systematic, workflow):
     load_settings, flow_env, get_item = _patch(mocker, MagicMock(properties=PROPERTIES))
     process_product = AsyncMock(return_value=PUBLISHED_ITEMS)
 
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=force_systematic))
+
     result = await product_processing.process_catalog_product(
-        ENV_ARGS,
+        env_args,
         FlowInputItem(item_id="olcl0-item", collection_name="s03olcl0_"),
-        force_systematic,
         ProcessingId.S3_OLCI_L1,
         process_product,
     )
@@ -73,7 +101,7 @@ async def test_process_catalog_product(mocker, force_systematic, workflow):
     assert result == PUBLISHED_ITEMS
     load_settings.assert_awaited_once_with(ProcessingId.S3_OLCI_L1)
     get_item.assert_awaited_once_with(flow_env, "olcl0-item", ["s03olcl0_"])
-    process_product.assert_awaited_once_with(ENV_ARGS, SETTINGS, "olcl0-item", "s03olcl0_", PROPERTIES, workflow)
+    process_product.assert_awaited_once_with(env_args, SETTINGS, "olcl0-item", "s03olcl0_", PROPERTIES, workflow)
 
 
 async def test_process_catalog_product_checks_the_settings_first(mocker):
@@ -89,7 +117,6 @@ async def test_process_catalog_product_checks_the_settings_first(mocker):
         await product_processing.process_catalog_product(
             ENV_ARGS,
             FlowInputItem(item_id="olcl0-item", collection_name="s03olcl0_"),
-            False,
             ProcessingId.S3_OLCI_L1,
             AsyncMock(),
         )
@@ -106,7 +133,6 @@ async def test_process_catalog_product_fails_without_the_product(mocker):
         await product_processing.process_catalog_product(
             ENV_ARGS,
             FlowInputItem(item_id="olcl0-item", collection_name="s03olcl0_"),
-            False,
             ProcessingId.S3_OLCI_L1,
             process_product,
         )

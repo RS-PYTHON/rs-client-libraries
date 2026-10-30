@@ -103,6 +103,7 @@ Most flows take an `env` parameter (`FlowEnvArgs`), with:
 | `logging_level` | Logging level of the flow, its tasks and the EOPF processors (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 | `called_by` | Free text to trace who or what called the flow. |
 | `calling_span` | Internal: OpenTelemetry span of the calling flow, to link the traces. |
+| `process` | Options of the flows that run a processor (`FlowEnvProcess`): `write_engine` (`cpm_zarr` by default, or `fast_zarr`), `use_obstore`, `triggering__stage_s3_upload_max_concurrency`, `force_systematic` (run as a systematic processing, so that the automations start the next processing of the chain) and `verbose` (not used yet). |
 
 The processing flows read their default parameters from a Prefect variable, so they can be run with very few
 parameters, see [Customise the DPR processing](../advanced/customise-dpr-flow.md#default-settings-of-the-processing-flows).

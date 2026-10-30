@@ -37,8 +37,8 @@ The flows are:
 
 | Flow | Parameters | Description |
 |---|---|---|
-| `process-s1-ard-reference` | `slc`, `edh_api_key`, `env_args`, `verbose` | Run once on a master SLC to generate the `REFERENCE_DB` used by the nominal flow, with the `ARD_REFERENCE_PIPELINE` pipeline. |
-| `process-s1-ard` | `slcs`, `reference_date`, `edh_api_key`, `env_args`, `pipeline`, `verbose` | Nominal on-demand ARD processing of several SLCs, `reference_date` being the date of the master SLC, with the given `pipeline` (`SLC__1_CSL__1`, `SLC__1_GSL__1` or `SLC__1_NRB__1`), or by default the pipeline of the settings. |
+| `process-s1-ard-reference` | `slc`, `edh_api_key`, `env_args` | Run once on a master SLC to generate the `REFERENCE_DB` used by the nominal flow, with the `ARD_REFERENCE_PIPELINE` pipeline. |
+| `process-s1-ard` | `slcs`, `reference_date`, `edh_api_key`, `env_args`, `pipeline` | Nominal on-demand ARD processing of several SLCs, `reference_date` being the date of the master SLC, with the given `pipeline` (`SLC__1_CSL__1`, `SLC__1_GSL__1` or `SLC__1_NRB__1`), or by default the pipeline of the settings. |
 
 - `slc` and `slcs` are STAC item identifiers of the SLC products, searched in the `input_collections` of the
   settings (default: `s01sewslc`, `s01siwslc`, `s01ssmslc`). All the SLCs must share the same

@@ -50,7 +50,6 @@ ProductProcessing = Callable[
 async def process_catalog_product(
     env_args: FlowEnvArgs,
     input_item: FlowInputItem,
-    force_systematic: bool,
     processing_id: ProcessingId,
     process_product: ProductProcessing,
 ) -> list[dict[str, Any]]:
@@ -58,10 +57,9 @@ async def process_catalog_product(
     Process on demand a product read from the catalog.
 
     Args:
-        env_args: Flow environment arguments.
+        env_args: Flow environment arguments. Its `process.force_systematic` runs the processing as a systematic one,
+            so that the automations start the next processing of the chain from the events of the generated products.
         input_item: STAC item identifier and collection of the product.
-        force_systematic: Run the processing as a systematic one, so that the automations start the next processing
-            of the chain from the events of the generated products.
         processing_id: Identifier of the processing, to read its default settings.
         process_product: Processing of the product.
 
@@ -82,7 +80,7 @@ async def process_catalog_product(
             input_item.item_id,
             input_item.collection_name,
             item.properties,
-            WorkflowType.of_run(force_systematic),
+            WorkflowType.of_run(env_args.process.force_systematic),
         )
 
 
