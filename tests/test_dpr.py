@@ -577,7 +577,7 @@ def test_stream_logs_emits_each_event_in_real_time(mocker, dpr_client: DprClient
     """Test each log is emitted as soon as its SSE event ends, not when the stream closes."""
     mock_logger = mocker.Mock()
     mocker.patch.object(dpr_client, "get_job_info", return_value={"status": "running"})
-    logged_before_next_event = []
+    logged_before_next_event: list[str] = []
 
     class LiveMockResponse(MockResponse):
         """Mock response checking what was logged while the stream is still open"""
