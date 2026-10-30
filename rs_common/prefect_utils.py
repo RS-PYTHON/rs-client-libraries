@@ -552,6 +552,7 @@ async def s3_upload_empty_file(
 async def s3_upload_dir(
     from_folder: str | Path,
     s3_path: str,
+    max_concurrency: int | None = None,
     **upload_kwargs: dict[str, Any],
 ) -> str | None:
     """
@@ -561,7 +562,55 @@ async def s3_upload_dir(
     """
     s3_bucket, to_path = get_s3_bucket(s3_path)
     logger.debug(f"Uploading folder {from_folder} to {s3_path}")
-    return await s3_bucket.aupload_from_folder(from_folder, to_path, **upload_kwargs)
+
+    # Keep the Prefect implementation as the default for backwards
+    # compatibility. The bounded implementation is useful for Zarr stores:
+    # it avoids one INFO log per chunk and prevents creating an unbounded
+    # number of upload coroutines at once.
+    if max_concurrency is None:
+        return await s3_bucket.aupload_from_folder(from_folder, to_path, **upload_kwargs)
+    if max_concurrency < 1:
+        raise ValueError("max_concurrency must be greater than zero")
+
+    source = Path(from_folder)
+    files = [path for path in source.rglob("*") if path.is_file()]
+    if not files:
+        logger.warning(f"No files were uploaded from {str(source)!r}.")
+        return to_path
+
+    bucket_folder = s3_bucket._join_bucket_folder(to_path)  # pylint: disable=protected-access
+    client = s3_bucket.credentials.get_s3_client()
+    queue: asyncio.Queue[Path] = asyncio.Queue()
+    for path in files:
+        queue.put_nowait(path)
+
+    async def upload_worker() -> None:
+        while True:
+            try:
+                from_path = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+
+            bucket_path = (Path(bucket_folder) / from_path.relative_to(source)).as_posix()
+            await asyncio.to_thread(
+                client.upload_file,
+                Filename=str(from_path),
+                Bucket=s3_bucket.bucket_name,
+                Key=bucket_path,
+                **upload_kwargs,
+            )
+
+    worker_count = min(max_concurrency, len(files))
+    await asyncio.gather(*(upload_worker() for _ in range(worker_count)))
+    logger.info(
+        "Uploaded %d files from %r to bucket %r path %r with concurrency=%d",
+        len(files),
+        str(source),
+        s3_bucket.bucket_name,
+        bucket_folder,
+        worker_count,
+    )
+    return to_path
 
 
 @sync_compatible

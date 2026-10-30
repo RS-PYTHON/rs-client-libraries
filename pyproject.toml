@@ -63,9 +63,11 @@ openapi-core = ">=0.23.1"
 click = "8.4.1"
 prefect = { version = "3.8.7", extras = ["aws"] }
 prefect-aws = ">=0.7.7"
-# prefect 3.8.x server is incompatible with fastapi >= 0.155 (Body(min_items=...) removed),
-# prefect >= 3.9.0 caps fastapi < 0.151. Remove this pin when prefect supports newer fastapi.
-fastapi = "<0.155"
+# prefect 3.8.x server is incompatible with fastapi >= 0.151 (explicit JSON null no longer
+# replaced by the Body default: 422 on /filter, /count, /paginate... routes),
+# see https://github.com/PrefectHQ/prefect/pull/23478. prefect >= 3.9.0 caps fastapi < 0.151 itself.
+# Remove this pin when prefect supports newer fastapi.
+fastapi = "<0.151"
 # importlib_metadata required with prefect < 3.7.2 see https://github.com/PrefectHQ/prefect/pull/22012
 importlib_metadata = ">=7.0"
 requests = "^2.32.4"
