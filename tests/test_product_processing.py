@@ -49,6 +49,10 @@ def test_flow_env_process_defaults_and_nesting():
     assert FlowEnvArgs(owner_id="owner").process == FlowEnvProcess()
     assert FlowEnvProcess().force_systematic is False
     assert FlowEnvProcess().verbose is False
+    # The options of the payload are not set by default, so that the task table and the CPM defaults are used
+    assert FlowEnvProcess().write_engine is None
+    assert FlowEnvProcess().use_obstore is None
+    assert FlowEnvProcess().triggering__stage_s3_upload_max_concurrency is None
     args = FlowEnvArgs.model_validate(
         {
             "owner_id": "owner",
@@ -64,6 +68,14 @@ def test_flow_env_process_defaults_and_nesting():
     assert args.process.use_obstore is True
     assert args.process.triggering__stage_s3_upload_max_concurrency == 4
     assert args.process.force_systematic is True
+
+
+def test_flow_env_process_rejects_invalid_options():
+    """The write engine must be a known one and the upload concurrency a positive number."""
+    with pytest.raises(ValueError):
+        FlowEnvProcess(write_engine="unknown_zarr")
+    with pytest.raises(ValueError):
+        FlowEnvProcess(triggering__stage_s3_upload_max_concurrency=0)
 
 
 def _patch(mocker, item):
