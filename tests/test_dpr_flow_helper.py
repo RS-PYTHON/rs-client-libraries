@@ -14,10 +14,10 @@
 """test of helper functions for dpr_flow.py"""
 
 import datetime
-import json
 import typing
 
 import pytest
+import zarr
 from pystac import Item
 
 from rs_client.ogcapi import dpr_client
@@ -28,7 +28,6 @@ from rs_workflows.dpr_flow import (
     create_stac_item,
     extract_products_and_zattrs,
     find_zarr_zip,
-    read_zattrs_sync,
     run_processor,
     s3_list,
     update_eopf_assets,
@@ -83,29 +82,6 @@ def test_s3_list_returns_full_s3_paths(mocker):
     ]
 
     mock_objects.filter.assert_called_once_with(Prefix="some/prefix/")
-
-
-def test_read_zattrs_sync_reads_and_parses_json(mocker):
-    """
-    Verify that read_zattrs_sync reads the .zattrs bytes straight from S3 (no temp file)
-    and returns the parsed JSON.
-    """
-    zattrs_path = "s3://my-bucket/product_a/.zattrs"
-
-    fake_json_data = {
-        "foo": "bar",
-        "answer": 42,
-    }
-
-    mock_read = mocker.patch(
-        "rs_workflows.dpr_flow.prefect_utils.s3_read_bytes",
-        return_value=json.dumps(fake_json_data).encode("utf-8"),
-    )
-
-    result = read_zattrs_sync(zattrs_path)
-
-    assert result == fake_json_data
-    mock_read.assert_called_once_with(zattrs_path, _sync=True)
 
 
 def test_extract_products_and_zattrs():
@@ -323,15 +299,20 @@ def test_create_stac_item_adds_zarr_zip_asset():
     assert zip_asset.roles == ["data"]
 
 
+@pytest.mark.parametrize("metadata_suffix", ["/.zattrs", "/zarr.json", ""])
 @pytest.mark.parametrize("existing_keys, expected", [(["out/P.zarr.zip"], "s3://b/out/P.zarr.zip"), ([], None)])
-def test_find_zarr_zip(mocker, existing_keys, expected):
-    """The zip is detected only if present next to the zarr product."""
+def test_find_zarr_zip(mocker, existing_keys, expected, metadata_suffix):
+    """The zip is detected only if present next to the zarr (v2 or v3) product."""
     bucket = mocker.Mock()
     objs = [mocker.Mock(key=k) for k in existing_keys]
     bucket._get_bucket_resource.return_value.objects.filter.return_value = objs  # pylint: disable=protected-access
-    mocker.patch("rs_workflows.dpr_flow.prefect_utils.get_s3_bucket", return_value=(bucket, "out/P.zarr.zip"))
+    get_bucket = mocker.patch(
+        "rs_workflows.dpr_flow.prefect_utils.get_s3_bucket",
+        return_value=(bucket, "out/P.zarr.zip"),
+    )
 
-    assert find_zarr_zip("s3://b/out/P.zarr/.zattrs") == expected
+    assert find_zarr_zip(f"s3://b/out/P.zarr{metadata_suffix}") == expected
+    get_bucket.assert_called_once_with("s3://b/out/P.zarr.zip")
 
 
 def test_find_zarr_zip_ignores_non_zarr_product(mocker):
@@ -419,8 +400,8 @@ def test_update_eopf_assets_raises_on_missing_io_config(mocker):
 
 def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
     """
-    Verify that update_eopf_assets raises RuntimeError when a .zattrs file
-    cannot be read (e.g., read_zattrs_sync returns None).
+    Verify that update_eopf_assets raises RuntimeError when the Zarr product
+    metadata cannot be read (e.g., the Zarr group does not exist).
     """
     env = mocker.Mock()
     mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
@@ -440,13 +421,13 @@ def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
 
     mocker.patch("rs_workflows.dpr_flow.get_input_product_items", return_value=[])
 
-    # Mock read_zattrs_sync to return None, triggering the error
-    mocker.patch("rs_workflows.dpr_flow.read_zattrs_sync", return_value=None)
+    # Mock read_zarr_attributes to fail, triggering the error
+    mocker.patch("rs_workflows.dpr_flow.read_zarr_attributes", side_effect=FileNotFoundError("not found"))
 
     payload = mocker.Mock()
     payload.io.output_products = [mocker.Mock(path="s3://bucket/path")]
 
-    with pytest.raises(RuntimeError, match="Could not read .zattrs file s3://bucket/prod1/.zattrs. Exiting."):
+    with pytest.raises(RuntimeError, match="Could not read Zarr metadata from s3://bucket/prod1. Exiting."):
         update_eopf_assets.fn(
             env=env,
             input_products=[FlowInputProduct(name="input", item_id="id", collection_name="coll")],
@@ -466,7 +447,7 @@ def test_update_eopf_assets_raises_on_missing_discovery_properties(mocker, zattr
     """Reject output metadata without the required EOPF discovery properties."""
     mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://bucket/output/prod/.zattrs"])
-    mocker.patch("rs_workflows.dpr_flow.read_zattrs_sync", return_value=zattrs_data)
+    mocker.patch("rs_workflows.dpr_flow.read_zarr_attributes", return_value=zattrs_data)
     payload = mocker.Mock()
     payload.io.output_products = [mocker.Mock(id="output", path="s3://bucket/output")]
 
@@ -507,7 +488,7 @@ def test_update_eopf_assets_skips_non_final_products(mocker):
     )
 
     mocker.patch(
-        "rs_workflows.dpr_flow.read_zattrs_sync",
+        "rs_workflows.dpr_flow.read_zarr_attributes",
         return_value={
             "stac_discovery": {
                 "id": "item1",
@@ -935,7 +916,7 @@ def test_update_eopf_assets_propagates_acquisition_station(mocker, processor, st
     payload.io.output_products = [mocker.Mock(id="output", path="s3://out")]
     mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://out/a/.zattrs", "s3://out/b/.zattrs"])
     mocker.patch(
-        "rs_workflows.dpr_flow.read_zattrs_sync",
+        "rs_workflows.dpr_flow.read_zarr_attributes",
         side_effect=lambda _: {
             "stac_discovery": {
                 "properties": {"datetime": "2024-01-10T12:00:00Z", "product:type": "test"},
@@ -1008,9 +989,9 @@ def test_extract_olci_zarr_v3_metadata(container):
 
 
 @pytest.mark.parametrize("processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI, DprProcessor.S1L0, "mockup"])
-@pytest.mark.parametrize("metadata_name", ["zarr.json", ".zattrs"])
-def test_update_zarr_assets(mocker, processor, metadata_name):
-    """Publish discovery metadata from both Zarr formats for every processor."""
+@pytest.mark.parametrize("zarr_format", [2, 3])
+def test_update_zarr_assets(mocker, tmp_path, processor, zarr_format):
+    """Publish discovery metadata from both Zarr formats for every processor, read with the zarr library."""
     attributes = {
         "stac_discovery": {
             "properties": {"product:type": "S03OLCEFR", "datetime": "2025-06-12T02:12:12Z"},
@@ -1018,19 +999,26 @@ def test_update_zarr_assets(mocker, processor, metadata_name):
             "bbox": None,
         },
     }
-    metadata = (
-        attributes if metadata_name == ".zattrs" else {"zarr_format": 3, "node_type": "group", "attributes": attributes}
-    )
+    output = tmp_path / "output"
+    product = output / "product"
+    group = zarr.open_group(str(product), mode="w", zarr_format=zarr_format)
+    group.attrs.update(attributes)
+    group.create_group("measurements")
+    metadata_name = ".zattrs" if zarr_format == 2 else "zarr.json"
+    assert (product / metadata_name).is_file()
+
     mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
-    mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=[f"s3://bucket/output/product/{metadata_name}"])
-    mocker.patch("rs_workflows.dpr_flow.prefect_utils.s3_read_bytes", return_value=json.dumps(metadata).encode())
+    mocker.patch(
+        "rs_workflows.dpr_flow.s3_list",
+        return_value=[str(path) for path in sorted(output.rglob("*")) if path.is_file()],
+    )
     payload = mocker.Mock()
-    payload.io.output_products = [mocker.Mock(id="olci", path="s3://bucket/output")]
+    payload.io.output_products = [mocker.Mock(id="olci", path=str(output))]
     result = update_eopf_assets.fn(mocker.Mock(), [], payload, processor)
     assert len(result) == 1
     assert result[0].product_type == "S03OLCEFR"
     assert result[0].output_product_id == "olci"
-    assert result[0].stac_item.assets["product"].href == "s3://bucket/output/product"
+    assert result[0].stac_item.assets["product"].href == str(product)
 
 
 @pytest.mark.parametrize("processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI])
