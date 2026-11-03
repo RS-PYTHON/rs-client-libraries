@@ -20,6 +20,8 @@ from urllib.parse import urlparse
 
 import zarr
 
+from rs_workflows.utils.prefect import get_logger
+
 # Group-level metadata files: "zarr.json" for Zarr v3, ".zattrs"/".zgroup" for Zarr v2.
 ZARR_METADATA_FILES = ("zarr.json", ".zattrs", ".zgroup")
 
@@ -71,4 +73,6 @@ def read_zarr_attributes(zarr_location: str) -> dict[str, Any]:
     Args:
         zarr_location: Local path or S3 URI of the Zarr store root (or of one of its root metadata files).
     """
+    logger = get_logger()
+    logger.info("===== COUCOU DE ZARR UTILS =====")
     return dict(open_zarr_group(zarr_location).attrs)
