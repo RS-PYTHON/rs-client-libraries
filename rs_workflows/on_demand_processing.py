@@ -217,7 +217,20 @@ async def _normalize_archived_aux_items(item_collection: ItemCollection, dpr_inp
         )
         tasks.append(aux_flow.aux_unzip_decompress_task.submit(aux_item))
 
-    results = [task.result() for task in tasks]
+    results = []
+    for idx, normalization_task in zip(archived_indexes, tasks):
+        item_id = item_collection.items[idx].id
+        try:
+            normalized_item = normalization_task.result()
+        except Exception:
+            logger.exception("AUX normalization task failed: item=%s", item_id)
+            raise
+        logger.info(
+            "AUX normalization task completed: item=%s assets=%s",
+            item_id,
+            {name: asset.href for name, asset in normalized_item.assets.items()},
+        )
+        results.append(normalized_item)
 
     try:
         flow_env = FlowEnv(dpr_input.env)
@@ -225,12 +238,32 @@ async def _normalize_archived_aux_items(item_collection: ItemCollection, dpr_inp
         for idx, new_item in zip(archived_indexes, results):
             logger.debug(f"Results after processing ADFS assets: {new_item.to_dict()}")  # type: ignore
             item_collection.items[idx] = new_item
-            catalog_client.update_item(new_item)  # type: ignore[arg-type]
+            logger.info(
+                "Updating catalog after AUX normalization: item=%s collection=%s assets=%s",
+                new_item.id,
+                new_item.collection_id,
+                {name: asset.href for name, asset in new_item.assets.items()},
+            )
+            try:
+                catalog_client.update_item(new_item)  # type: ignore[arg-type]
+            except Exception as err:
+                response = getattr(err, "response", None)
+                logger.exception(
+                    "Catalog update failed after AUX normalization: item=%s collection=%s "
+                    "assets=%s status=%s response=%s",
+                    new_item.id,
+                    new_item.collection_id,
+                    {name: asset.href for name, asset in new_item.assets.items()},
+                    getattr(response, "status_code", None),
+                    getattr(response, "text", None),
+                )
+                raise
+            logger.info("Catalog update completed after AUX normalization: item=%s", new_item.id)
     except Exception as err:
         raise RuntimeError(
             "Error while trying to update the item collection with the uncompressed/unzipped items. "
-            "This error is likely due to a failure in the aux_unzip_decompress_task. "
-            "Check previous logs for more details.",
+            "Normalization tasks returned successfully; catalog persistence failed. "
+            "Check previous logs for asset hrefs and the catalog response.",
         ) from err
 
     return item_collection
