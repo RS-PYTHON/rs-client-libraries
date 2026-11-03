@@ -99,6 +99,22 @@ def test_build_workflow_step_valid(sample_unit):
     assert step.parameters == {"testparam": "testvalue"}
 
 
+@pytest.mark.parametrize(
+    ("selected", "expected"),
+    [
+        ({"output1"}, {"*.tif": "output1"}),
+        ({"output2"}, {"output2": "output2"}),
+        (set(), None),
+        ({"unknown"}, None),
+    ],
+)
+def test_build_workflow_step_selected_outputs(sample_unit, selected, expected):
+    """Only selected names are mapped, preserving task table regexes."""
+    step = build_workflow_step(sample_unit, selected)
+
+    assert step.outputs == expected
+
+
 def test_build_workflow_step_missing_key_raises():
     """
     Test that missing required keys in the unit (e.g., 'name') raise a clear ValueError.

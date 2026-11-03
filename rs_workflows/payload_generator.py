@@ -57,7 +57,7 @@ DATA_EDH_DOMAIN = "data.earthdatahub.destine.eu"
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
 
-def build_workflow_step(unit):
+def build_workflow_step(unit, selected_output_names: set[str] | None = None):
     """
     Constructs a WorkflowStep instance from a unit configuration dictionary.
 
@@ -73,6 +73,8 @@ def build_workflow_step(unit):
                 - "input_products" (list[dict], optional): List of input product mappings.
                 - "input_adfs" (list[dict], optional): List of auxiliary data files.
                 - "output_products" (list[dict], optional): List of output product mappings.
+        selected_output_names (set[str] | None): Output names selected by collection mappings.
+            If provided, only these outputs are included in the step.
 
     Returns:
         WorkflowStep: A fully initialized workflow step object.
@@ -97,6 +99,8 @@ def build_workflow_step(unit):
     outputs: dict[str, str] = {}
     for output_product in unit.get("output_products", []):
         if isinstance(output_product, dict) and "name" in output_product:
+            if selected_output_names is not None and output_product["name"] not in selected_output_names:
+                continue
             left_part = output_product["regex"] if "regex" in output_product else output_product["name"]
             right_part = output_product["name"]  # ==> "*pdf" : "name"
             # if "origin" in output_product and "pipeline_output" not in output_product["origin"]:
@@ -766,9 +770,10 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     logger.info("Building workflow and I/O sections")
     workflow_steps = []
     io_config = IOConfig()
+    selected_output_names = {product.name for product in dpr_process_in.generated_product_to_collection_identifier}
     for unit in unit_list:
         try:
-            workflow_steps.append(build_workflow_step(unit))
+            workflow_steps.append(build_workflow_step(unit, selected_output_names))
             input_products, output_products = get_io(
                 unit,
                 dpr_process_in,
