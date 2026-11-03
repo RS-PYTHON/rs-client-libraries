@@ -15,7 +15,6 @@
 """DPR flow implementation"""
 
 import datetime
-import json
 import shutil
 import tempfile
 import time
@@ -43,6 +42,7 @@ from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
 from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import parse_logs
+from rs_workflows.utils.zarr_utils import get_zarr_root, read_zarr_attributes
 
 
 def s3_list(s3_prefix: str):
@@ -53,16 +53,17 @@ def s3_list(s3_prefix: str):
     return [f"s3://{s3_bucket.bucket_name}/{obj.key}" for obj in objects.filter(Prefix=prefix.rstrip("/") + "/")]
 
 
-def find_zarr_zip(zattrs_s3_location: str) -> str | None:
+def find_zarr_zip(zarr_location: str) -> str | None:
     """Return the S3 path of the ``<PRODUCT_NAME>.zarr.zip`` stored next to a Zarr product, if it exists.
 
     Args:
-        zattrs_s3_location: S3 path of the product root ``.zattrs`` file.
+        zarr_location: S3 path of the Zarr product root, or of its root metadata file
+            (``.zattrs`` for Zarr v2, ``zarr.json`` for Zarr v3).
 
     Returns:
         The S3 path of the zip file, or None if the zip is not present.
     """
-    zip_s3_path = zattrs_s3_location.removesuffix("/.zattrs") + ".zip"
+    zip_s3_path = get_zarr_root(zarr_location) + ".zip"
     if not zip_s3_path.endswith(".zarr.zip"):
         return None
 
@@ -74,11 +75,14 @@ def find_zarr_zip(zattrs_s3_location: str) -> str | None:
 
 
 def extract_products_and_zattrs(files: list[str], base_path: str, *, zarr_v3: bool = True):
-    """Extract product names and their corresponding .zattrs file paths.
+    """Extract product names and their corresponding Zarr root metadata file paths.
 
-    With ``zarr_v3=True``, also discover zarr.json and prefer it per product.
+    The Zarr products are discovered from their root metadata file: ``.zattrs`` for
+    Zarr v2 and, with ``zarr_v3=True``, also ``zarr.json`` for Zarr v3 (preferred per
+    product). The metadata themselves are then read with the zarr library, see
+    ``rs_workflows.utils.zarr_utils.read_zarr_attributes``.
 
-    Filters a list of file paths to find .zattrs files located under product
+    Filters a list of file paths to find metadata files located under product
     directories within a base path, following one of these structures:
     base_path/.zattrs
     base_path/product_name/.zattrs
@@ -142,11 +146,6 @@ def extract_products_and_zattrs(files: list[str], base_path: str, *, zarr_v3: bo
                 dirs_and_attrs[product_dirname] = file
 
     return list(dirs_and_attrs.items())
-
-
-def read_zattrs_sync(path: str):
-    """Read a `.zattrs` file from S3 synchronously and return the parsed JSON, in memory."""
-    return json.loads(prefect_utils.s3_read_bytes(path, _sync=True))  # type: ignore
 
 
 def create_stac_item(
@@ -259,7 +258,7 @@ def create_stac_item(
             Asset: A STAC Asset configured for EOPF output products.
         """
         return Asset(
-            href=path.rsplit("/", maxsplit=1)[0] if path.endswith(("/.zattrs", "/zarr.json")) else path,
+            href=get_zarr_root(path),
             title=product_name,
             media_type="application/vnd+zarr",
             roles=["data", "metadata"],
@@ -321,12 +320,12 @@ def update_eopf_assets(
 
     This Prefect task processes output products from a DPR (Data Processing Request)
     workflow, extracts EOPF (Earth Observation Processing Framework) metadata from
-    .zattrs files, and generates STAC (SpatioTemporal Asset Catalog) items for
-    each discovered product.
+    the Zarr (v2 or v3) root group attributes, and generates STAC (SpatioTemporal
+    Asset Catalog) items for each discovered product.
 
     Workflow:
-        1. Lists all .zattrs files in the output product paths
-        2. Reads and validates EOPF discovery metadata from each .zattrs file
+        1. Lists the Zarr products (.zattrs or zarr.json root metadata) in the output product paths
+        2. Reads and validates EOPF discovery metadata from each Zarr root group with the zarr library
         3. Extracts product type information
         4. Creates corresponding STAC items for catalog registration
 
@@ -334,24 +333,24 @@ def update_eopf_assets(
         env: Environment configuration object containing runtime settings.
         input_products: Source product references (excluding auxiliary inputs).
         payload: PayloadSchema object containing I/O configuration, including
-            output_product paths to scan for .zattrs files.
+            output_product paths to scan for Zarr products.
         dpr_processor: str
             DPR processor name
 
     Returns:
         A list of DprProcessedItemMetadata objects, each containing:
             - stac_item (Item): STAC item created from EOPF metadata.
-            - product_type (str): Product type extracted from the .zattrs file.
+            - product_type (str): Product type extracted from the Zarr root attributes.
             - output_product_id (str): The ID of the original output product.
 
     Raises:
-        RuntimeError: If any .zattrs file cannot be read or does not contain
+        RuntimeError: If any Zarr product metadata cannot be read or does not contain
             required EOPF discovery metadata (stac_discovery.properties).
 
     Notes:
-        - Requires .zattrs files to follow EOPF metadata conventions
-        - Each .zattrs file must contain stac_discovery.properties.product:type
-        - Uses S3 storage backend (via s3_list and read_zattrs_sync functions)
+        - Requires Zarr root attributes to follow EOPF metadata conventions
+        - Each Zarr root group must contain stac_discovery.properties.product:type
+        - Uses S3 storage backend (via s3_list and read_zarr_attributes functions)
     """
     logger = get_logger()
     logger.info("Starting EOPF asset update.")
@@ -406,21 +405,21 @@ def update_eopf_assets(
 
     items_metadata = []
     for product_name, zattrs_s3_location, output_product_id in zattrs_list:
-        logger.info(f"Product = {product_name} | zattrs = {zattrs_s3_location}")
-        # Read metadata
-        zattrs_data = read_zattrs_sync(zattrs_s3_location)
-        if not zattrs_data:
-            logger.error(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
-            raise RuntimeError(f"Could not read .zattrs file {zattrs_s3_location}. Exiting.")
-        # Zarr v3 stores root attributes inside "attributes" for every processor.
-        # Legacy .zattrs files contain those attributes directly.
-        zattrs_data = zattrs_data.get("attributes", zattrs_data)
+        # The discovered metadata file (.zattrs or zarr.json) identifies the Zarr product root.
+        zarr_s3_location = get_zarr_root(zattrs_s3_location)
+        logger.info(f"Product = {product_name} | zarr = {zarr_s3_location}")
+        # Read the root group attributes, whatever the Zarr format (v2 or v3).
+        try:
+            zattrs_data = read_zarr_attributes(zarr_s3_location)
+        except Exception as err:
+            logger.error(f"Could not read Zarr metadata from {zarr_s3_location}: {err}. Exiting.")
+            raise RuntimeError(f"Could not read Zarr metadata from {zarr_s3_location}. Exiting.") from err
         logger.debug(f"DPR processor attributes {zattrs_data}")
 
         # Extract EOPF info
         if "stac_discovery" not in zattrs_data or "properties" not in zattrs_data["stac_discovery"]:
-            logger.error(f".zattrs file {zattrs_s3_location} does not contain EOPF discovery metadata. Exiting.")
-            raise RuntimeError(f".zattrs file {zattrs_s3_location} does not contain EOPF discovery metadata. Exiting.")
+            logger.error(f"Zarr product {zarr_s3_location} does not contain EOPF discovery metadata. Exiting.")
+            raise RuntimeError(f"Zarr product {zarr_s3_location} does not contain EOPF discovery metadata. Exiting.")
 
         product_type = zattrs_data["stac_discovery"]["properties"].get("product:type", None)
         logger.info(f"Extracted EOPF product type: {product_type}")
@@ -431,13 +430,13 @@ def update_eopf_assets(
         eopf_item["properties"].update(acquisition_station_properties)
 
         # Build STAC items
-        zarr_zip_href = find_zarr_zip(zattrs_s3_location)
+        zarr_zip_href = find_zarr_zip(zarr_s3_location)
         if zarr_zip_href:
             logger.info(f"Found zarr.zip associated with product {product_name}: {zarr_zip_href}")
         stac_item = create_stac_item(
             eopf_origin_datetime,
             eopf_item,
-            zattrs_s3_location,
+            zarr_s3_location,
             product_name,
             dpr_processor,
             zarr_zip_href,

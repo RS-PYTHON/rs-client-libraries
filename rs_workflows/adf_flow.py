@@ -47,6 +47,7 @@ from rs_workflows.payload_generator import (
 )
 from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import download_and_extract_assets_task
+from rs_workflows.utils.zarr_utils import read_zarr_attributes
 
 # Path to the conversion scripts
 ADF_ECMWA_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWA.py"
@@ -378,7 +379,8 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     """
     Create a STAC Item from a generated ZARR directory or JSON file.
 
-    For ZARR directories, metadata is read from .zattrs or zarr.json.
+    For ZARR directories, metadata is read from the root group attributes
+    (.zattrs for Zarr v2, zarr.json for Zarr v3) with the zarr library.
     For JSON files, the file itself is the metadata and the item ID is
     taken from stac_discovery.id when present, otherwise it is derived
     from the filename (minus the .json extension).
@@ -388,20 +390,14 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
 
     if is_json_product:
         logger.info(f"Creating STAC item from JSON file: {zarr_path}")
-        metadata_path = zarr_path
+        with open(zarr_path, encoding="utf-8") as f:
+            metadata = json.load(f)
     else:
         logger.info(f"Creating STAC item from ZARR: {zarr_path}")
-        # read .zattrs for global attributes
-        metadata_path = zarr_path / ".zattrs"
-        if not metadata_path.exists():
-            # try zarr.json if .zattrs doesn't exist
-            metadata_path = zarr_path / "zarr.json"
-
-    if not metadata_path.exists():
-        raise RuntimeError(f"Metadata file (.zattrs or zarr.json) not found in {zarr_path}")
-
-    with open(metadata_path, encoding="utf-8") as f:
-        metadata = json.load(f)
+        try:
+            metadata = read_zarr_attributes(str(zarr_path))
+        except Exception as err:
+            raise RuntimeError(f"Could not read Zarr (v2 or v3) group metadata from {zarr_path}: {err}") from err
 
     stac_discovery = metadata.get("stac_discovery") if isinstance(metadata.get("stac_discovery"), dict) else {}
     stac_metadata = stac_discovery if is_json_product and stac_discovery else metadata
