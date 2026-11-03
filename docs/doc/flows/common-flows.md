@@ -61,6 +61,45 @@ processors.
 
 ![ADF conversion](../../images/aux-conversion.svg)
 
+### Sentinel-1 calibration ADF
+
+Use `adf_type: S01__ADF_CALIB` to request legacy `AUX_CAL` products from ADGS
+(`source: auxip`) and produce `ADF_CALIB` Zarr products for Sentinel-1 L0 processing.
+For example, pass these fields in `AdfProcessIn`, together with the usual `env`
+and search time interval (or a custom `cql2_filter`):
+
+```json
+{
+  "adf_type": "S01__ADF_CALIB",
+  "auxiliary_product_to_collection_identifier": [
+    {"product_type": "AUX_CAL", "collection_name": "S1_AUX", "source": "auxip"},
+    {"product_type": "ADF_CALIB", "collection_name": "S1_ADF"}
+  ]
+}
+```
+
+Staging, archive extraction, upload and catalog publication use the existing flow.
+Conversion itself runs **locally**, without the upstream S3-to-S3 CLI: the adapter
+in `rs_workflows/adf_conversion/S01__ADF_CALIB.py` calls `save_aux_cal_xml_to_zarr`
+from the vendored `aux_file_conversion.py`. Runtime dependencies are `dpath`,
+NumPy, xarray (with `DataTree`) and Zarr, installed with this library.
+
+The helper is copied unchanged from
+[S1 L1 ADF converter](https://gitlab.eopf.copernicus.eu/S1/s1-l1-adf-converter/s1-l1-adf-converter),
+revision `e5dae104384562dcd662e7cf749d45b286ed9e87` (Apache-2.0, Copyright 2026 B-Open).
+It preserves the upstream calibration groups, complex elevation antenna patterns,
+angular coordinates and calibration constants. Output names follow the upstream
+convention, e.g. `S01A_ADF_CALIB_V20190228T092500_G20240327T102320.zarr`.
+
+The flow supplies staged STAC items to the adapter through the temporary
+`WORK/aux_cal_items.json` file. The adapter matches each extracted SAFE to its
+staged item ID or asset filename, preserves the ADGS `start_datetime` and
+`end_datetime`, and adds root metadata for catalog publication. Missing or
+ambiguous metadata and unsupported legacy calibration data fail explicitly;
+no validity end date is invented. For a standalone local run, supply that same
+metadata file, set `ADF_OUTPUT`, and invoke the adapter with the input directory
+and `--working_dir`.
+
 ## Operation flows
 
 These flows are run by the operators, from the `monitoring-k8s-pool` work pool. They run on behalf of technical

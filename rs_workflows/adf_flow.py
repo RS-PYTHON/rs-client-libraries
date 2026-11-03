@@ -53,6 +53,7 @@ ADF_ECMWA_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECM
 ADF_ECMWF_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWF.py"
 ADF_GETAS_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_GETAS.py"
 ADF_WATER_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_WATER.py"
+ADF_CALIB_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S01__ADF_CALIB.py"
 
 # Sentinel value indicating the stb_convert_products tool should be used
 STB_CONVERT_PRODUCTS = "stb_convert_products"
@@ -141,6 +142,11 @@ S03_STB_ADF_TYPE_CONFIG: dict[str, S03StbAdfConfig] = {
 
 
 ADF_TYPE_CONFIG: dict[str, AdfConversionConfig] = {
+    AdfType.S01__ADF_CALIB: AdfConversionConfig(
+        required_types=["AUX_CAL"],
+        generated_prod_type="ADF_CALIB",
+        script_path=ADF_CALIB_SCRIPT_PATH,
+    ),
     # We need AX___MA1_AX and AX___MA2_AX for S00__ADF_ECMWA.
     # AX___MA2_AX is not used anymore in S00__ADF_ECMWA.py. Add it back here if the script uses it again.
     AdfType.S00__ADF_ECMWA: AdfConversionConfig(
@@ -403,6 +409,9 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     with open(metadata_path, encoding="utf-8") as f:
         metadata = json.load(f)
 
+    if not is_json_product and metadata_path.name == "zarr.json":
+        metadata = metadata.get("attributes", {})
+
     stac_discovery = metadata.get("stac_discovery") if isinstance(metadata.get("stac_discovery"), dict) else {}
     stac_metadata = stac_discovery if is_json_product and stac_discovery else metadata
 
@@ -646,6 +655,13 @@ async def adf_conversion(adf_input: AdfProcessIn):
 
             # 2. Download and unzip assets locally
             await download_and_extract_assets_task(staged_items, input_dir)  # type: ignore[arg-type]
+
+            if adf_input.adf_type == AdfType.S01__ADF_CALIB:
+                # The upstream helper converts calibration data only; retain ADGS validity metadata.
+                (work_dir / "aux_cal_items.json").write_text(
+                    json.dumps([item.to_dict() for item in staged_items]),
+                    encoding="utf-8",
+                )  # type: ignore[arg-type]
 
             # 3. Call the conversion tool
             try:
