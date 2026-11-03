@@ -1153,7 +1153,10 @@ def test_build_output_products_error_no_storage(
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
 
-def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_process_in, mock_store_params, mocker):
+@pytest.mark.parametrize("mandatory", [True, None])
+def test_build_output_products_missing_relation_raises(
+    sample_unit, mock_dpr_process_in, mock_store_params, mocker, mandatory,
+):
     """
     Test that build_output_products raises an error if an output product
     defined in the unit is missing from dpr_process_in.generated_product_to_collection_identifier.
@@ -1162,6 +1165,10 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
     mock_storage.get_storage_kind.return_value = "obs"
+    if mandatory is not None:
+        sample_unit["output_products"][1]["mandatory"] = mandatory
+    else:
+        sample_unit["output_products"][1].pop("mandatory", None)
 
     # sample_unit has "output1" and "output2"
     # We provide only "output1" in generated_product_to_collection_identifier, so "output2" should trigger the error
@@ -1181,6 +1188,29 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
         match="Missing mapping in generated_product_to_collection_identifier for task table entry 'output2'",
     ):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+@pytest.mark.parametrize("selected", [False, True])
+def test_build_output_products_optional_mapping(sample_unit, mock_dpr_process_in, mock_store_params, mocker, selected):
+    """Optional outputs are written only when a collection mapping is supplied."""
+    sample_unit["output_products"][1]["mandatory"] = False
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
+    ]
+    if selected:
+        mock_dpr_process_in.generated_product_to_collection_identifier.append(
+            FlowGeneratedProduct(name="output2", product_type="output2_type", collection_name="OUT_COLL"),
+        )
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+
+    outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert [output.id for output in outputs] == (["output1", "output2"] if selected else ["output1"])
+    assert mock_storage.get_storage_for_specific_product.call_count == len(outputs)
 
 
 def test_build_output_products_extra_mapping_is_ignored(sample_unit, mock_dpr_process_in, mock_store_params, mocker):

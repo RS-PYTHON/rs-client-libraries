@@ -481,7 +481,6 @@ def build_output_products(
     """
 
     outputs = []
-    processed_products = set()
     logger = get_logger()
 
     mapping_lookup = {p.name: p for p in dpr_process_in.generated_product_to_collection_identifier}
@@ -494,12 +493,14 @@ def build_output_products(
 
         # Fails ONLY if required mapping is missing
         if not output_product:
+            if mapping.get("mandatory", True) is False:
+                logger.info(f"Skipping optional output without collection mapping: {product_name}")
+                continue
             raise RuntimeError(
                 f"Missing mapping in generated_product_to_collection_identifier for task table entry '{product_name}'",
             )
 
         product_type = output_product.product_type
-        processed_products.add(product_name)
         output_collection = (
             output_product.collection_name if output_product.collection_name is not None else product_type
         )
@@ -563,12 +564,6 @@ def build_output_products(
                 autoclean=autoclean,
             ),
         )
-
-    # ensure that all keys from unit["output_products"] are present into
-    # dpr_process_in.generated_product_to_collection_identifier
-    for unit_output in unit.get("output_products", []):
-        if unit_output["name"] not in processed_products:
-            raise RuntimeError(f"Couldn't find any relation for output product '{unit_output['name']}'")
 
     return outputs
 
