@@ -1171,7 +1171,11 @@ def test_build_output_products_error_no_storage(
 
 @pytest.mark.parametrize("mandatory", [True, None])
 def test_build_output_products_missing_relation_raises(
-    sample_unit, mock_dpr_process_in, mock_store_params, mocker, mandatory,
+    sample_unit,
+    mock_dpr_process_in,
+    mock_store_params,
+    mocker,
+    mandatory,
 ):
     """
     Test that build_output_products raises an error if an output product
