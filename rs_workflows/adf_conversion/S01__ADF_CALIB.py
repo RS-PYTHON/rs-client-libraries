@@ -24,6 +24,8 @@ from pathlib import Path
 import zarr
 from aux_file_conversion import save_aux_cal_xml_to_zarr
 
+logger = logging.getLogger(__name__)
+
 SAFE_NAME = re.compile(
     r"S1(?P<platform>[A-D])_AUX_CAL_V(?P<validity>\d{8}T\d{6})_G(?P<generation>\d{8}T\d{6})\.SAFE",
     re.IGNORECASE,
@@ -41,7 +43,11 @@ def product_name(name: str) -> str:
 
 def convert_products(data_dir: Path, output_dir: Path, working_dir: Path) -> list[Path]:
     """Convert each extracted SAFE and retain the corresponding staged item's validity."""
-    items = json.loads((working_dir / "aux_cal_items.json").read_text(encoding="utf-8"))
+    logger.info(f"Starting AUX_CAL conversion: input={data_dir}, output={output_dir}, working_dir={working_dir}")
+    metadata_path = working_dir / "aux_cal_items.json"
+    logger.info(f"Loading staged AUX_CAL metadata from {metadata_path}")
+    items = json.loads(metadata_path.read_text(encoding="utf-8"))
+    logger.info(f"Loaded {len(items)} staged AUX_CAL items")
     source_items: dict[str, dict] = {}
     for item in items:
         names = [item["id"], *(Path(asset["href"]).name for asset in item["assets"].values())]
@@ -56,9 +62,11 @@ def convert_products(data_dir: Path, output_dir: Path, working_dir: Path) -> lis
     xml_files = sorted(data_dir.rglob("*-aux-cal.xml"))
     if not xml_files:
         raise ValueError(f"No AUX_CAL data XML files found in {data_dir}")
+    logger.info(f"Found {len(xml_files)} AUX_CAL data XML files in {data_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
     products: list[Path] = []
-    for xml_path in xml_files:
+    for index, xml_path in enumerate(xml_files, start=1):
+        logger.info(f"Processing AUX_CAL product {index}/{len(xml_files)}: {xml_path}")
         safe_dir = xml_path.parent.parent
         match = SAFE_NAME.fullmatch(safe_dir.name)
         if match is None:
@@ -69,12 +77,18 @@ def convert_products(data_dir: Path, output_dir: Path, working_dir: Path) -> lis
         properties = source["properties"]
         if not properties.get("start_datetime") or not properties.get("end_datetime"):
             raise ValueError(f"Staged AUX_CAL item {source['id']} must have start_datetime and end_datetime")
+        logger.info(
+            f"Matched staged item {source['id']} with validity "
+            f"{properties['start_datetime']} to {properties['end_datetime']}",
+        )
 
         item_id = f"S01{match['platform'].upper()}_ADF_CALIB" f"_V{match['validity']}_G{match['generation']}"
         output_path = output_dir / f"{item_id}.zarr"
         if output_path.exists():
             raise FileExistsError(f"Duplicate AUX_CAL output: {output_path}")
+        logger.info(f"Converting {xml_path} to {output_path}")
         save_aux_cal_xml_to_zarr(str(xml_path), str(output_path))
+        logger.info(f"Writing catalog metadata to {output_path}")
         zarr.open_group(str(output_path), mode="a").attrs.update(
             {
                 "id": item_id,
@@ -88,6 +102,8 @@ def convert_products(data_dir: Path, output_dir: Path, working_dir: Path) -> lis
             },
         )
         products.append(output_path)
+        logger.info(f"Completed AUX_CAL product {index}/{len(xml_files)}: {output_path}")
+    logger.info(f"AUX_CAL conversion complete: generated {len(products)} products in {output_dir}")
     return products
 
 
