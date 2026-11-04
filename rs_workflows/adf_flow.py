@@ -438,7 +438,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
             end_dt_str = end_dt_str or id_datetimes[1]
             logger.info(f"Extracted start/end datetimes from item_id: {id_datetimes[0]} / {id_datetimes[1]}")
         else:
-            msg = f"Could not extract datetimes from metadata properties or from item_id {item_id_logs}"
+            msg = f"Could not extract datetimes from metadata properties or from item_id '{item_id_logs}'"
             logger.error(msg)
             raise RuntimeError(msg)
 
