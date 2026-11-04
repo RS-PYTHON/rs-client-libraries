@@ -426,11 +426,12 @@ def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
 
     payload = mocker.Mock()
     payload.io.output_products = [mocker.Mock(path="s3://bucket/path")]
+    test_input_products = [FlowInputProduct(name="input", item_id="id", collection_name="coll")]
 
     with pytest.raises(RuntimeError, match="Could not read Zarr metadata from s3://bucket/prod1. Exiting."):
         update_eopf_assets.fn(
             env=env,
-            input_products=[FlowInputProduct(name="input", item_id="id", collection_name="coll")],
+            input_products=test_input_products,
             payload=payload,
             dpr_processor=DprProcessor.S1L0,
         )
