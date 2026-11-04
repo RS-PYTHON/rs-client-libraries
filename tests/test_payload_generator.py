@@ -1247,8 +1247,8 @@ def test_build_output_products_all_optional_outputs_unselected(mock_dpr_process_
 
     outputs = build_output_products(unit, mock_dpr_process_in, storage, "test-owner", [])
 
-    assert outputs == []
-    assert storage.mock_calls == []
+    assert not outputs
+    assert not storage.mock_calls
     logger.info.assert_any_call("Skipping optional output without collection mapping: optional_output")
 
 
