@@ -419,7 +419,11 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
         item_id = stac_discovery.get("id") or zarr_path.stem
     else:
         item_id = metadata.get("id", zarr_path.stem)
-    logger.info(f"Setting item_id to {item_id}")
+
+    # Safe version of the item_id str, to prevent code injection through logs (needed by SonarQube)
+    item_id_logs = str(item_id).replace("\r", "\\r").replace("\n", "\\n")
+
+    logger.info(f"Setting item_id to {item_id_logs}")
 
     # extract start/end datetime for pystac.Item validation.
     # try to find them in the metadata, but if they are not present, try to take them from the
@@ -434,7 +438,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
             end_dt_str = end_dt_str or id_datetimes[1]
             logger.info(f"Extracted start/end datetimes from item_id: {id_datetimes[0]} / {id_datetimes[1]}")
         else:
-            msg = f"Could not extract datetimes from metadata properties or from item_id {str(item_id)}"
+            msg = f"Could not extract datetimes from metadata properties or from item_id {item_id_logs}"
             logger.error(msg)
             raise RuntimeError(msg)
 
