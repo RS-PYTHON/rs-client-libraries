@@ -657,7 +657,8 @@ async def adf_conversion(adf_input: AdfProcessIn):
             await download_and_extract_assets_task(staged_items, input_dir)  # type: ignore[arg-type]
 
             if adf_input.adf_type == AdfType.S01__ADF_CALIB:
-                # The upstream helper converts calibration data only; retain ADGS validity metadata.
+                # The upstream helper (save_aux_cal_xml_to_zarr function) used in S01__ADF_CALIB.py
+                # converts calibration data only, so retain ADGS validity metadata.
                 (work_dir / "aux_cal_items.json").write_text(
                     json.dumps([item.to_dict() for item in staged_items]),
                     encoding="utf-8",
@@ -666,8 +667,9 @@ async def adf_conversion(adf_input: AdfProcessIn):
             # 3. Call the conversion tool
             try:
                 # STB_CONVERT_PRODUCTS is only used for S03 types, which have exactly one required type.
-                # The other conversion scripts (S00__ADF_*) may have multiple required types, but they
-                # don't use the --map flag, so we only need the first (and only) required type here.
+                # The other conversion scripts (S00__ADF_* and S01__ADF_CALIB) may have multiple required
+                # types, but they don't use the --map flag, so we only need the first (and only) required
+                # type here.
                 legacy_product_type = required_types[0] if required_types else None
                 zarr_product_paths = run_adf_script(
                     script_path,

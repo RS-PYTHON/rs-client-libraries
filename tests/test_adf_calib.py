@@ -26,7 +26,12 @@ import xarray as xr
 from pystac import Asset, Item, ItemCollection
 
 from rs_workflows import adf_flow
-from rs_workflows.flow_utils import AdfProcessIn, AdfType, AuxiliaryProductMapping, FlowEnvArgs
+from rs_workflows.flow_utils import (
+    AdfProcessIn,
+    AdfType,
+    AuxiliaryProductMapping,
+    FlowEnvArgs,
+)
 
 SAFE_NAME = "S1A_AUX_CAL_V20190228T092500_G20240327T102320.SAFE"
 PRODUCT_ID = "S01A_ADF_CALIB_V20190228T092500_G20240327T102320"
