@@ -483,6 +483,9 @@ def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in
     mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
 
     mock_dpr_process_in.processor_name = "MOCKUP"
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="S03OLCL0_", product_type="S03OLCL0_"),
+    ]
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[mockup_unit],
@@ -491,6 +494,8 @@ def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in
     )
     assert isinstance(payload, PayloadSchema)
     assert any(step.module == "l0.s1.mockup_processor" for step in (payload.workflow or []))
+    assert payload.workflow is not None
+    assert payload.workflow[0].outputs == {"S03OLCL0_": "S03OLCL0_"}
     # make mypy happy with the follwing 3 asserts ....
     assert payload.io is not None
     assert payload.io.input_products is not None
@@ -1169,7 +1174,7 @@ def test_build_output_products_error_no_storage(
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
 
-@pytest.mark.parametrize("mandatory", [True, None])
+@pytest.mark.parametrize("mandatory", [True, None, 0, "false"])
 def test_build_output_products_missing_relation_raises(
     sample_unit,
     mock_dpr_process_in,
@@ -1231,6 +1236,20 @@ def test_build_output_products_optional_mapping(sample_unit, mock_dpr_process_in
 
     assert [output.id for output in outputs] == (["output1", "output2"] if selected else ["output1"])
     assert mock_storage.get_storage_for_specific_product.call_count == len(outputs)
+
+
+def test_build_output_products_all_optional_outputs_unselected(mock_dpr_process_in, mocker):
+    """Unselected optional outputs are logged and skipped before storage resolution."""
+    unit = {"output_products": [{"name": "optional_output", "mandatory": False}]}
+    mock_dpr_process_in.generated_product_to_collection_identifier = []
+    storage = MagicMock()
+    logger = mocker.patch("rs_workflows.payload_generator.get_logger").return_value
+
+    outputs = build_output_products(unit, mock_dpr_process_in, storage, "test-owner", [])
+
+    assert outputs == []
+    assert storage.mock_calls == []
+    logger.info.assert_any_call("Skipping optional output without collection mapping: optional_output")
 
 
 def test_build_output_products_extra_mapping_is_ignored(sample_unit, mock_dpr_process_in, mock_store_params, mocker):
