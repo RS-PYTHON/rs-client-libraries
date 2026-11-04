@@ -57,6 +57,40 @@ DATA_EDH_DOMAIN = "data.earthdatahub.destine.eu"
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
 
+def _build_workflow_inputs(unit: dict) -> dict[str, str]:
+    """Map unit inputs to pipeline inputs or upstream workflow outputs."""
+    inputs: dict[str, str] = {}
+    for input_product in unit.get("input_products", []):
+        if isinstance(input_product, dict) and "origin" in input_product and "name" in input_product:
+            if "pipeline_input" in input_product["origin"]:
+                inputs[input_product["name"]] = input_product["name"]
+            else:
+                inputs[input_product["name"]] = input_product["origin"]
+    return inputs
+
+
+def _build_workflow_adfs(unit: dict) -> dict[str, str]:
+    """Map named auxiliary data files to their payload identifiers."""
+    adfs: dict[str, str] = {}
+    for input_adf in unit.get("input_adfs", []):
+        if isinstance(input_adf, dict) and "name" in input_adf:
+            adfs[input_adf["name"]] = input_adf["name"]
+    return adfs
+
+
+def _build_workflow_outputs(unit: dict, selected_output_names: set[str] | None) -> dict[str, str]:
+    """Map selected unit outputs, preserving task table regexes."""
+    outputs: dict[str, str] = {}
+    for output_product in unit.get("output_products", []):
+        if isinstance(output_product, dict) and "name" in output_product:
+            if selected_output_names is not None and output_product["name"] not in selected_output_names:
+                continue
+            left_part = output_product["regex"] if "regex" in output_product else output_product["name"]
+            right_part = output_product["name"]
+            outputs[left_part] = right_part
+    return outputs
+
+
 def build_workflow_step(unit, selected_output_names: set[str] | None = None):
     """
     Constructs a WorkflowStep instance from a unit configuration dictionary.
@@ -82,30 +116,9 @@ def build_workflow_step(unit, selected_output_names: set[str] | None = None):
     Raises:
         ValueError: If a required key is missing from the provided unit dictionary.
     """
-    # get inputs
-    inputs: dict[str, str] = {}
-    for input_product in unit.get("input_products", []):
-        if isinstance(input_product, dict) and "origin" in input_product and "name" in input_product:
-            if "pipeline_input" in input_product["origin"]:
-                inputs[input_product["name"]] = input_product["name"]
-            else:
-                inputs[input_product["name"]] = input_product["origin"]
-    # get adfs
-    adfs: dict[str, str] = {}
-    for input_adf in unit.get("input_adfs", []):
-        if isinstance(input_adf, dict) and "name" in input_adf:
-            adfs[input_adf["name"]] = input_adf["name"]
-    # get outputs
-    outputs: dict[str, str] = {}
-    for output_product in unit.get("output_products", []):
-        if isinstance(output_product, dict) and "name" in output_product:
-            if selected_output_names is not None and output_product["name"] not in selected_output_names:
-                continue
-            left_part = output_product["regex"] if "regex" in output_product else output_product["name"]
-            right_part = output_product["name"]  # ==> "*pdf" : "name"
-            # if "origin" in output_product and "pipeline_output" not in output_product["origin"]:
-            #     right_part = output_product["origin"]
-            outputs[left_part] = right_part
+    inputs = _build_workflow_inputs(unit)
+    adfs = _build_workflow_adfs(unit)
+    outputs = _build_workflow_outputs(unit, selected_output_names)
     try:
         return WorkflowStep(  # type: ignore
             name=unit["name"],
