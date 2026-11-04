@@ -43,8 +43,8 @@ pytestmark = pytest.mark.filterwarnings(
 )
 
 
-@pytest.fixture
-def calibration_input(tmp_path, monkeypatch):
+@pytest.fixture(name="calibration_input")
+def fixture_calibration_input(tmp_path, monkeypatch):
     """Create a small, real calibration XML and staged product metadata."""
     monkeypatch.setattr(adf_flow, "get_logger", MagicMock())
     input_dir = tmp_path / "INPUT"
