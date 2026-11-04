@@ -359,12 +359,6 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
         if use_extension:
             prefix = prefix.rstrip("/") + f"{upload_dir.suffix}/"  # .SAFE or .SEN3 for example
         logger.info(f"Uploading to prefix: {prefix}")
-        logger.info(
-            "Normalization upload: source=%s target=%s sample_relative_keys=%s",
-            asset_href,
-            prefix,
-            [path.relative_to(upload_dir).as_posix() for path in extracted_files[:10]],
-        )
 
         stage_started = time.perf_counter()
         await s3_upload_dir(upload_dir, prefix, max_concurrency=upload_concurrency)
@@ -412,21 +406,7 @@ async def asset_unzip_decompress(stac_item: Item, use_extension: bool = False) -
         # After normalisation (unzip / decompress) the href is changed with the new s3 path.
         # Therefore asset name should also be updated for supported archive types.
         if asset_name.lower().endswith(ARCHIVE_SUFFIXES):
-            original_href = asset.href
-            logger.info(
-                "Normalizing asset: item=%s asset=%s source=%s",
-                stac_item.id,
-                asset_name,
-                original_href,
-            )
             new_href = await process_asset(asset.href, asset_name, use_extension)
-            logger.info(
-                "Asset normalization completed: item=%s asset=%s source=%s normalized_href=%s",
-                stac_item.id,
-                asset_name,
-                original_href,
-                new_href,
-            )
             asset.href = new_href
             updated_assets[strip_archive_suffix(asset_name)] = asset
         else:
