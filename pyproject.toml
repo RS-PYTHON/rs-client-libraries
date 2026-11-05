@@ -82,6 +82,9 @@ aiohttp = "^3.14.3"
 antimeridian = "^0.4.7"
 pyproj = "^3.7.2"
 zarr = ">=3,<4"
+dpath = "^2.2.0"
+numpy = ">=1.26"
+xarray = ">=2025.3.1"
 
 [tool.poetry.group.dev]
 optional = true
@@ -108,9 +111,7 @@ pytest-responses = "^0.5.1"
 moto = "^5.1.22"
 # Dependencies of the standalone rs_workflows/adf_conversion scripts, required to
 # unit-test them (tests/test_adf_util.py, tests/test_adf_cop_dem_utils.py).
-numpy = ">=1.26"
 pandas = ">=2.2"
-xarray = ">=2024.9.0"
 matplotlib = ">=3.9.0"
 
 [tool.poetry.group.demo.dependencies] # to run the demo notebooks
@@ -133,7 +134,7 @@ build-backend = "poetry_dynamic_versioning.backend"
 [tool.black]
 line-length = 120
 # rs_workflows/adf_conversion is third-party code vendored from the ESA EOPF
-# project (https://gitlab.eopf.copernicus.eu/cpm/adf-auxiliary-data-file); it is
+# projects (CPM ADF auxiliary-data-file and S1 L1 ADF converter); it is
 # kept as-is and excluded from our QA tooling.
 extend-exclude = 'rs_workflows/adf_conversion/'
 
