@@ -405,8 +405,8 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
         except Exception as err:
             raise RuntimeError(f"Could not read Zarr (v2 or v3) group metadata from {zarr_path}: {err}") from err
 
-    if not is_json_product and metadata_path.name == "zarr.json":
-        metadata = metadata.get("attributes", {})
+    # if not is_json_product and metadata_path.name == "zarr.json":
+    #     metadata = metadata.get("attributes", {})
 
     stac_discovery = metadata.get("stac_discovery") if isinstance(metadata.get("stac_discovery"), dict) else {}
     stac_metadata = stac_discovery if is_json_product and stac_discovery else metadata
