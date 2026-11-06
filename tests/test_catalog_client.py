@@ -105,6 +105,47 @@ def test_get_items_catalog_client(
     assert items
 
 
+def test_get_items_by_ids_of_another_owner(
+    mocked_stac_catalog_get_collection,  # pylint: disable=unused-argument
+):
+    """
+    Get items by IDs from the collection of another owner than the API key user (e.g. 'copernicus').
+    The items must be read from the collection /items endpoint, that contains the owner. A /search request
+    would contain only the collection identifier returned by the catalog, without the owner, so the catalog
+    would search the collection of the API key user.
+    """
+    catalog: CatalogClient = RsClient(MOCKED_RSPY_WEBSITE, RS_SERVER_API_KEY, OWNER_ID).get_catalog_client()
+    item = Item(
+        id="item1",
+        geometry=None,
+        bbox=None,
+        datetime=datetime(2026, 1, 1),
+        properties={},
+        collection="S1_L1",
+    )
+    responses.get(
+        url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/toto:S1_L1/items/item1",
+        json=item.to_dict(),
+        status=200,
+    )
+    # An item that can't be read is skipped, with a warning
+    responses.get(
+        url=f"{MOCKED_RSPY_WEBSITE}/catalog/collections/toto:S1_L1/items/item2",
+        json={"code": "InternalServerError", "description": "Internal server error"},
+        status=500,
+    )
+    # What the catalog returns to a search without the collection owner
+    responses.get(
+        url=f"{MOCKED_RSPY_WEBSITE}/catalog/search",
+        json={"code": "NotFound", "description": "Collection S1_L1 not found."},
+        status=404,
+    )
+
+    # The mocked collection belongs to 'toto', not to the default owner of the client
+    items = list(catalog.get_items("S1_L1", ["item1", "item2"], owner_id="toto"))
+    assert [i.id for i in items] == ["item1"]
+
+
 def test_create_new_collection_catalog_client():  # pylint: disable=missing-function-docstring
     spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
     date_strings = ["2000-02-01T00:00:00Z", "2000-02-12T00:00:00Z"]

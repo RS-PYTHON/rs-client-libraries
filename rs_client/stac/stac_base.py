@@ -261,24 +261,20 @@ class StacBase(RsClient):
         if items_ids:
             self.logger.info(f"🔍 Retrieving specific items from collection '{collection_id}'.")
 
-            try:
-                return collection.get_items(*items_ids)
+            # Fetch the items one by one from the collection /items/{item_id} endpoint. Don't call
+            # collection.get_items(*items_ids): it searches /search?collections=<collection.id>, but the catalog
+            # collection.id has no owner, so the catalog would search the collection of the API key user instead
+            # of the requested owner.
+            def iter_items():
+                for item_id in items_ids:
+                    try:
+                        item = collection.get_item(item_id)
+                        if item:
+                            yield item
+                    except (APIError, requests.HTTPError, STACError, ValueError, TypeError) as exc:
+                        self.logger.warning("Failed to retrieve item '%s': %s", item_id, exc)
 
-            # Avoid pystac-client fallback through /search ; fetch items one by one.
-            # collection.get_items(*ids) internally triggers a search request.
-            except (APIError, requests.HTTPError, STACError, ValueError, TypeError) as exc:
-                self.logger.debug("❌ Direct retrieval failed, fallback to per-item: %s", exc)
-
-                def iter_items():
-                    for item_id in items_ids:
-                        try:
-                            item = collection.get_item(item_id)
-                            if item:
-                                yield item
-                        except (APIError, requests.HTTPError, STACError, ValueError, TypeError) as new_exc:
-                            self.logger.warning("Failed to retrieve item '%s': %s", item_id, new_exc)
-
-                return iter_items()
+            return iter_items()
 
         # Retrieve all items
         self.logger.info(f"Retrieving all items from collection '{collection_id}'.")
