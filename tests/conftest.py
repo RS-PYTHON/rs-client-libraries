@@ -1060,6 +1060,22 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
     }
 
     mocked_s3.create_bucket(Bucket=RSPY_CATALOG_BUCKET)
+
+    # The zarr library reads S3 through s3fs/aiobotocore, which is not intercepted by the moto
+    # in-process mock, so read the mocked Zarr v2 groups from the mocked S3 with boto3 instead.
+    def is_mocked_zarr_group(zarr_location: str) -> bool:
+        """Return True if the mocked S3 location contains a Zarr v2 group."""
+        bucket, _, key = zarr_location.removeprefix("s3://").partition("/")
+        return mocked_s3.list_objects_v2(Bucket=bucket, Prefix=f"{key}/.zgroup").get("KeyCount", 0) > 0
+
+    def read_mocked_zarr_attributes(zarr_location: str) -> dict:
+        """Read the Zarr v2 root attributes from the mocked S3."""
+        bucket, _, key = zarr_location.removeprefix("s3://").partition("/")
+        return json.loads(mocked_s3.get_object(Bucket=bucket, Key=f"{key}/.zattrs")["Body"].read())
+
+    mocker.patch("rs_workflows.dpr_flow.is_zarr_group", side_effect=is_mocked_zarr_group)
+    mocker.patch("rs_workflows.dpr_flow.read_zarr_attributes", side_effect=read_mocked_zarr_attributes)
+
     expected_items = {}
     base_s3_path = f"{OWNER_ID}/OUTPUT_NTC_COLLECTION"
 
@@ -1068,19 +1084,20 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
         product_uuid = fixed_uuids[0]
         product_s3_path = f"{base_s3_path}/{product_uuid}"
 
-        # upload .zattrs file to both locations to support both old and new tests
-        # 1. New nested location (for test_dpr_processing)
-        mocked_s3.put_object(
-            Body=json.dumps(zattrs_data),
-            Bucket=RSPY_CATALOG_BUCKET,
-            Key=f"{product_s3_path}/{product_name}/.zattrs",
-        )
-        # 2. Old flat location (for test_update_eopf_assets_happy_path)
-        mocked_s3.put_object(
-            Body=json.dumps(zattrs_data),
-            Bucket=RSPY_CATALOG_BUCKET,
-            Key=f"{base_s3_path}/{product_name}/.zattrs",
-        )
+        # upload the Zarr v2 group metadata (.zgroup + .zattrs) to both locations to support both old and new tests
+        for product_dir in (f"{product_s3_path}/{product_name}", f"{base_s3_path}/{product_name}"):
+            # 1. New nested location (for test_dpr_processing)
+            # 2. Old flat location (for test_update_eopf_assets_happy_path)
+            mocked_s3.put_object(
+                Body=json.dumps({"zarr_format": 2}),
+                Bucket=RSPY_CATALOG_BUCKET,
+                Key=f"{product_dir}/.zgroup",
+            )
+            mocked_s3.put_object(
+                Body=json.dumps(zattrs_data),
+                Bucket=RSPY_CATALOG_BUCKET,
+                Key=f"{product_dir}/.zattrs",
+            )
 
         # build the item that we expect to be passed to
         # catalog_client.CatalogClient.add_item
