@@ -94,7 +94,8 @@ async def load_processor_settings(processing_id: ProcessingId) -> ProcessorSetti
     against their JSON schema, and check that the Dask clusters of the processing are running.
 
     The flows call it first, before searching their inputs in the catalog or the external stations, so that a
-    configuration error or an unavailable Dask cluster is reported as soon as possible.
+    configuration error or an unavailable Dask cluster is reported as soon as possible. But they must create their
+    `FlowEnv` before, as it reads the Prefect blocks into the env vars needed to connect to the Dask gateway.
 
     Args:
         processing_id: Identifier of the processing.
