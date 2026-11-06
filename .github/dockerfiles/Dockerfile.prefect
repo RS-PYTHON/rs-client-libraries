@@ -19,8 +19,8 @@
 # ghcr.io/rs-python/prefect/rs-client-libraries/k8s
 #
 
-ARG PYTHON_VERSION=3.13.16
-ARG PREFECT_TAG=3.8.7
+ARG PYTHON_VERSION=3.13.18
+ARG PREFECT_TAG=3.9.1
 
 # K8S image suffix: -k8s or empty
 ARG K8S_IMAGE=xxx
@@ -48,6 +48,9 @@ RUN pip install -U pip && \
         scikit-image \
         matplotlib \
         rasterio \
+        fsspec \
+        dpath \
+        pydantic \
         sentineltoolbox \
         "zarr>=3,<4" \
     && layer-cleanup.sh
