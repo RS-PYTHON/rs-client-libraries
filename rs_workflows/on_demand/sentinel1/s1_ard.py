@@ -57,16 +57,17 @@ def _get_slc_collection(slc: str, input_collections: list[str]) -> str:
     Args:
         slc (str): STAC item identifier of the S1 SLC product, e.g. S1C_IW_SLC__1SDV_...
         input_collections (list[str]): Catalog collection names containing the S1 SLC products,
-        e.g. s01sewslc, s01siwslc, s01ssmslc.
+        e.g. s01sewslc, s01siwslc, s01ssmslc, or s1-l1-ew-slc, s1-l1-iw-slc, s1-l1-sm-slc for the legacy SLCs.
 
     Returns:
-        str: The collection matching the instrument mode (IW, EW, or SM for S1..S6 stripmap modes),
-        or the first collection if no match is found.
+        str: The collection whose name ends with the instrument mode (IW, EW, or SM for S1..S6 stripmap modes)
+        followed by "slc", with an optional "-" or "_" separator, or the first collection if no match is found.
     """
     match = re.match(r"^S1[A-Z]_(IW|EW|S[1-6])_", slc)
     if match:
         mode = "sm" if match.group(1).startswith("S") else match.group(1).lower()
-        collection = next((c for c in input_collections if c.lower().endswith(f"{mode}slc")), None)
+        mode_regex = re.compile(rf"{mode}[-_]?slc$", re.IGNORECASE)
+        collection = next((c for c in input_collections if mode_regex.search(c)), None)
         if collection:
             return collection
     return input_collections[0]

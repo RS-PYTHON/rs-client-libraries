@@ -76,6 +76,20 @@ def test_get_slc_collection(slc, expected):
     assert s1_ard._get_slc_collection(slc, COLLECTIONS) == expected
 
 
+@pytest.mark.parametrize(
+    "slc,expected",
+    [
+        (SLC_IW_1, "s1-l1-iw-slc"),
+        ("S1A_EW_SLC__1SDH_20260408T174632_20260408T174659_007128_00E6F6_E998", "s1-l1-ew-slc"),
+        ("S1D_S3_SLC__1SDV_20260408T174632_20260408T174659_007128_00E6F6_E998", "s1-l1-sm-slc"),
+    ],
+)
+def test_get_slc_collection_with_separators(slc, expected):
+    """The collection names can have a separator before 'slc', e.g. the legacy SLC collections."""
+    collections = ["s1-l1-ew-slc", "s1-l1-iw-slc", "s1-l1-sm-slc"]
+    assert s1_ard._get_slc_collection(slc, collections) == expected
+
+
 def test_get_slc_collection_falls_back_on_first_collection():
     """When no collection matches the instrument mode, the first collection is used."""
     assert s1_ard._get_slc_collection(SLC_IW_1, ["my_collection"]) == "my_collection"
