@@ -24,7 +24,13 @@ import pytest
 from rs_workflows.flow_utils import FlowEnvArgs, WorkflowType
 from rs_workflows.on_demand.sentinel1 import s1_ard
 from rs_workflows.utils.dpr import ProcessingId
-from tests.common import flow_env_mock, processor_settings
+from tests.common import (
+    DASK_ENV_VARS,
+    PROCESSOR_SETTINGS,
+    flow_env_mock,
+    patch_dask_env_read_by_flow_env,
+    processor_settings,
+)
 
 COLLECTIONS = s1_ard.DEFAULT_INPUT_COLLECTIONS
 SLC_IW_1 = "S1C_IW_SLC__1SDV_20260408T174632_20260408T174659_007128_00E6F6_E998"
@@ -170,6 +176,26 @@ async def test_process_s1ard_reference(mocker):
     kwargs = dpr_mock.call_args.kwargs
     assert kwargs["external_variables"] == {"instrument_mode": "EW", "edh_api_key": "key"}
     assert kwargs["pipeline"] == "ARD_REFERENCE_PIPELINE"
+
+
+async def test_process_s1ard_reads_the_prefect_blocks_before_checking_the_dask_clusters(mocker, monkeypatch):
+    """Non-regression: the FlowEnv, that reads the Dask gateway env vars from the Prefect blocks, is created before
+    the settings are loaded and the Dask clusters are checked, instead of failing with
+    KeyError('DASK_GATEWAY_ADDRESS')."""
+    dpr_mock = _patch(mocker, _items("IW", "IW"))
+    flow_env_class, gateway = patch_dask_env_read_by_flow_env(
+        mocker,
+        monkeypatch,
+        s1_ard,
+        PROCESSOR_SETTINGS | {"processor": {"name": "s1_ard", "version": "1.0"}, "pipeline": "SLC__1_NRB__1"},
+    )
+
+    await s1_ard.process_s1ard.fn([SLC_IW_1, SLC_IW_2], date(2026, 4, 8), "key", ENV_ARGS)
+
+    flow_env_class.assert_called_once_with(ENV_ARGS)
+    assert gateway.call_args.kwargs["address"] == DASK_ENV_VARS["DASK_GATEWAY_ADDRESS"]
+    dpr_mock.assert_awaited_once()
+    assert dpr_mock.call_args.kwargs["settings"] == SETTINGS
 
 
 async def test_process_s1ard_tasks(mocker):

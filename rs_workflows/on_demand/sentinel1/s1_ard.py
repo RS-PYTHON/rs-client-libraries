@@ -151,12 +151,14 @@ async def _do_process_s1ard(
     if not _check_slcs(slcs, reference_date):
         return
 
+    # Read the Prefect blocks into env vars (e.g. DASK_GATEWAY_ADDRESS), needed to check the Dask clusters
+    flow_env = FlowEnv(env_args)
+
     # Read the settings and check the Dask clusters before searching the SLCs
     settings = await load_processor_settings(ProcessingId.S1_ARD)
     pipeline = pipeline or settings.pipeline
     input_collections = settings.input_collections or DEFAULT_INPUT_COLLECTIONS
     mission = "1"
-    flow_env = FlowEnv(env_args)
     suffix = "-reference" if not reference_date else ""
     # start_span is a context manager (decorated with _agnosticcontextmanager), not detected by sonar
     with flow_env.start_span(__name__, f"sentinel{mission}-level1ard-processing{suffix}"):  # NOSONAR

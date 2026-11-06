@@ -60,10 +60,13 @@ async def process_staged_session(
     Returns:
         The STAC items of the generated products, or None if the session is not in the catalog.
     """
+    # Read the Prefect blocks into env vars (e.g. DASK_GATEWAY_ADDRESS), needed to check the Dask clusters
+    flow_env = FlowEnv(env_args)
     settings = await load_processor_settings(L0_PROCESSINGS[mission][0])
     return await process_l0_last_steps(
         mission=mission,
         session=session,
+        flow_env=flow_env,
         env_args=env_args,
         settings=settings,
         workflow=WorkflowType.of_run(env_args.process.force_systematic),
@@ -74,6 +77,7 @@ async def process_staged_session(
 async def process_l0_last_steps(
     mission: str,
     session: str,
+    flow_env: FlowEnv,
     env_args: FlowEnvArgs,
     settings: ProcessorSettings,
     workflow: WorkflowType,
@@ -92,7 +96,6 @@ async def process_l0_last_steps(
     logger.info(f"Starting L0 last steps: mission={mission!r}, session={session!r}, verbose={verbose!r}")
     session_collections = get_session_collections(settings)
 
-    flow_env = FlowEnv(env_args)
     with flow_env.start_span(__name__, f"sentinel{mission}-level0-processing"):
         logger.info(f"Looking up catalog session: session={session!r}, collections={session_collections!r}")
         item_session: Item | None = await get_single_catalog_item(flow_env, session, session_collections)
