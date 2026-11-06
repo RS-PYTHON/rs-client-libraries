@@ -43,6 +43,7 @@ from rs_workflows.payload_generator import (  # load_store_params_from_config,
     wildcard_match,
 )
 from rs_workflows.payload_template import (
+    AdfConfig,
     GeneralConfiguration,
     InputProduct,
     IOConfig,
@@ -54,6 +55,33 @@ from rs_workflows.payload_template import (
 
 
 # build_workflow_step
+@pytest.mark.parametrize("selected_adfs", [[], [AdfConfig(id="fpo", path="s3://bucket/fpo")]])
+def test_output_lineage_optional_adf(selected_adfs):
+    """Only selected optional ADFs contribute to downstream output lineage."""
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="s3://bucket/input", engine="cadu")],
+            output_products=[OutputProduct(id="final", path="s3://bucket/output", engine="cpm_zarr")],
+            adfs=selected_adfs,
+        ),
+        workflow=[
+            WorkflowStep(
+                name="S1L0Processor.1",
+                inputs={"input": "cadus"},
+                adfs={"fpo": "fpo"},
+                outputs={"output": "raw"},
+            ),
+            WorkflowStep(
+                name="next.1",
+                inputs={"input": "S1L0Processor.1.raw"},
+                outputs={"output": "final"},
+            ),
+        ],
+    )
+
+    assert build_output_lineage(payload) == {"final": {"cadus"} | {adf.id for adf in selected_adfs}}
+
+
 def test_build_workflow_step_valid(sample_unit):
     """
     Test that a valid unit dictionary is correctly transformed into a WorkflowStep.
@@ -69,6 +97,22 @@ def test_build_workflow_step_valid(sample_unit):
     assert step.outputs == {"*.tif": "output1", "output2": "output2"}
     assert step.processing_unit == "unit1"
     assert step.parameters == {"testparam": "testvalue"}
+
+
+@pytest.mark.parametrize(
+    ("selected", "expected"),
+    [
+        ({"output1"}, {"*.tif": "output1"}),
+        ({"output2"}, {"output2": "output2"}),
+        (set(), None),
+        ({"unknown"}, None),
+    ],
+)
+def test_build_workflow_step_selected_outputs(sample_unit, selected, expected):
+    """Only selected names are mapped, preserving task table regexes."""
+    step = build_workflow_step(sample_unit, selected)
+
+    assert step.outputs == expected
 
 
 def test_build_workflow_step_missing_key_raises():
@@ -439,6 +483,9 @@ def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in
     mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
 
     mock_dpr_process_in.processor_name = "MOCKUP"
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="S03OLCL0_", product_type="S03OLCL0_"),
+    ]
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[mockup_unit],
@@ -447,6 +494,8 @@ def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in
     )
     assert isinstance(payload, PayloadSchema)
     assert any(step.module == "l0.s1.mockup_processor" for step in (payload.workflow or []))
+    assert payload.workflow is not None
+    assert payload.workflow[0].outputs == {"S03OLCL0_": "S03OLCL0_"}
     # make mypy happy with the follwing 3 asserts ....
     assert payload.io is not None
     assert payload.io.input_products is not None
@@ -1125,7 +1174,14 @@ def test_build_output_products_error_no_storage(
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
 
-def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_process_in, mock_store_params, mocker):
+@pytest.mark.parametrize("mandatory", [True, None, 0, "false"])
+def test_build_output_products_missing_relation_raises(
+    sample_unit,
+    mock_dpr_process_in,
+    mock_store_params,
+    mocker,
+    mandatory,
+):
     """
     Test that build_output_products raises an error if an output product
     defined in the unit is missing from dpr_process_in.generated_product_to_collection_identifier.
@@ -1134,6 +1190,10 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
     mock_storage.get_storage_kind.return_value = "obs"
+    if mandatory is not None:
+        sample_unit["output_products"][1]["mandatory"] = mandatory
+    else:
+        sample_unit["output_products"][1].pop("mandatory", None)
 
     # sample_unit has "output1" and "output2"
     # We provide only "output1" in generated_product_to_collection_identifier, so "output2" should trigger the error
@@ -1153,6 +1213,43 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
         match="Missing mapping in generated_product_to_collection_identifier for task table entry 'output2'",
     ):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+@pytest.mark.parametrize("selected", [False, True])
+def test_build_output_products_optional_mapping(sample_unit, mock_dpr_process_in, mock_store_params, mocker, selected):
+    """Optional outputs are written only when a collection mapping is supplied."""
+    sample_unit["output_products"][1]["mandatory"] = False
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
+    ]
+    if selected:
+        mock_dpr_process_in.generated_product_to_collection_identifier.append(
+            FlowGeneratedProduct(name="output2", product_type="output2_type", collection_name="OUT_COLL"),
+        )
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+
+    outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert [output.id for output in outputs] == (["output1", "output2"] if selected else ["output1"])
+    assert mock_storage.get_storage_for_specific_product.call_count == len(outputs)
+
+
+def test_build_output_products_all_optional_outputs_unselected(mock_dpr_process_in, mocker):
+    """Unselected optional outputs are logged and skipped before storage resolution."""
+    unit = {"output_products": [{"name": "optional_output", "mandatory": False}]}
+    mock_dpr_process_in.generated_product_to_collection_identifier = []
+    storage = MagicMock()
+    logger = mocker.patch("rs_workflows.payload_generator.get_logger").return_value
+
+    outputs = build_output_products(unit, mock_dpr_process_in, storage, "test-owner", [])
+
+    assert not outputs
+    assert not storage.mock_calls
+    logger.info.assert_any_call("Skipping optional output without collection mapping: optional_output")
 
 
 def test_build_output_products_extra_mapping_is_ignored(sample_unit, mock_dpr_process_in, mock_store_params, mocker):
