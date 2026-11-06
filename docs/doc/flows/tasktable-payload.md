@@ -195,6 +195,7 @@ The payload is assembled from:
 | Paths of the output products | The bucket given by the [bucket configuration](https://github.com/RS-PYTHON/rs-documentation/blob/develop/docs/administration/update-rs-server.md#object-storage-buckets-and-data-lifecycle) for the owner, collection and product type of each output (`generated_product_to_collection_identifier` parameter). |
 | Storage of each input, ADF and output (S3, shared disk, local disk) and the credentials | The [storage configuration](../advanced/customise-dpr-flow.md#storage-configuration). |
 | Logging level, processing options | The flow parameters. |
+| Engine and upload options of the zarr outputs | The `process` field of `env_args`, see [below](#options-of-the-processing-in-the-payload). |
 
 The payload is written in the `<absolute_path>/<owner>/<timestamp>` folder of the first `shared_disk` storage of the
 [storage configuration](../advanced/customise-dpr-flow.md#storage-configuration): this disk is mounted both on the Prefect
@@ -203,6 +204,36 @@ run by rs-dpr-service on the Dask cluster, and the payload file is deleted at th
 When it is completed, the flow creates the STAC items of the generated products, with `derived_from` links to their
 inputs and ADFs, and publishes them in the catalog collections given by the
 `generated_product_to_collection_identifier` parameter.
+
+### Options of the processing in the payload
+
+The `process` field of the `env_args` parameter ([`FlowEnvProcess`](index.md#common-parameters)) sets the options of
+the [EOPF CPM](https://cpm.pages.eopf.copernicus.eu/eopf-cpm/main/processor-orchestration-guide/triggering-payload-reference.html)
+that write the output products. An option that is not set (the default) is not written in the payload, so the task
+table and the CPM defaults apply.
+
+| Option | Payload section | Effect |
+|---|---|---|
+| `write_engine` (`cpm_zarr` or `fast_zarr`) | `engine` of each entry of `io.output_products` | Replaces the writer of the task table. Only the outputs written with a zarr writer (`cpm_zarr`, `fast_zarr`) are changed. |
+| `use_obstore` (`true` or `false`) | `writer_params.use_obstore` of each entry of `io.output_products` | Uploads the zarr with obstore (`true`) or fsspec (`false`). It has priority over the `writer_params` of the task table, and is only set for the outputs written with a zarr writer. |
+| `triggering__stage_s3_upload_max_concurrency` (integer, at least 1) | `general_configuration.triggering__stage_s3_upload_max_concurrency` | Maximum number of files uploaded concurrently to S3 when the outputs are staged (`triggering__stage_s3_outputs`). `1` is a single recursive fsspec upload. |
+
+For example, with `write_engine: fast_zarr`, `use_obstore: true` and `triggering__stage_s3_upload_max_concurrency: 64`:
+
+```yaml
+general_configuration:
+  triggering__stage_s3_upload_max_concurrency: 64
+  # ...
+io:
+  output_products:
+  - id: S03OLCEFR
+    path: s3://<bucket>/<owner>/<output-collection>/
+    type: folder
+    engine: fast_zarr
+    writer_params:
+      mode: w
+      use_obstore: true
+```
 
 ## Auxiliary data selection policies
 

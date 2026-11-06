@@ -33,21 +33,18 @@ S3_L0_RESULT_STORAGE = "local-file-system/s3-processing-shared-results"
 async def process_s3l0(
     session: str,
     env_args: FlowEnvArgs,
-    force_systematic: bool = False,
-    verbose: bool = False,
 ) -> list[dict[str, Any]] | None:
     """
     Sentinel-3 L0 processing, with the settings of the `s3l0-default-setting` Prefect variable.
     The session should have been staged before.
 
     A `product.<product type>.generated` event is emitted for each generated product. When the workflow is
-    systematic (`force_systematic`, set by the automation that starts `process-l0` after the staging of the session),
+    systematic (`env_args.process.force_systematic`, set by the automation that starts `process-l0` after the staging of the session),
     it starts the next processing of the chain, e.g. the OLCI Level-1 processing of the S03OLCL0_ products.
 
     Args:
         session: Identifier of the session.
-        env_args: Flow environment arguments.
-        force_systematic: Run the processing as a systematic one.
-        verbose: not used yet.
+        env_args: Flow environment arguments. Its `process` field sets `force_systematic` (run the processing as a
+            systematic one) and `verbose` (not used yet).
     """
-    return await process_staged_session("3", session, env_args, force_systematic, verbose)
+    return await process_staged_session("3", session, env_args)

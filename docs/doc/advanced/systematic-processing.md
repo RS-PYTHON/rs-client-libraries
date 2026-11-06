@@ -39,13 +39,13 @@ sequenceDiagram
 
 | Automation | Trigger | Action |
 |---|---|---|
-| CADIP staging completed -> L0 | A flow run of the `Stage Cadip` deployment is completed. | Run `Process L0` (`process-l0`) with the staged session, the owner of the staging and `force_systematic`: it runs `process-s1-l0` or `process-s3-l0` according to the mission of the session. |
+| CADIP staging completed -> L0 | A flow run of the `Stage Cadip` deployment is completed. | Run `Process L0` (`process-l0`) with the staged session, the owner of the staging with `process.force_systematic` set in `env_args`: it runs `process-s1-l0` or `process-s3-l0` according to the mission of the session. |
 | S03OLCL0_ generated -> S3 L1 OLCI | Event `product.S03OLCL0_.generated` of a `systematic` workflow. | Run `Process S3 L1 OLCI Systematic` (`process-s3-l1-olci-systematic`) with the payload of the event. |
 | S03OLCEFR generated -> S3 L2 OLCI | Event `product.S03OLCEFR.generated` of a `systematic` workflow. | Run `Process S3 L2 OLCI Systematic` (`process-s3-l2-olci-systematic`) with the payload of the event. |
 | S3 L1 OLCI quicklook on quicklook-inputs-ready | Event `rs-python.s3-l1.quicklook-inputs-ready`. | Run `S3L1 OLCI quicklook` with the published items of the event. |
 | S3 L2 OLCI quicklook on quicklook-inputs-ready | Event `rs-python.s3-l2.quicklook-inputs-ready`. | Run `S3L2 OLCI quicklook` with the published items of the event. |
 
-The automation runs `process-l0` with the owner (`env`) of the staging flow and `force_systematic`. The flows
+The automation runs `process-l0` with the owner (`env`) of the staging flow as `env_args`, with `process.force_systematic` set. The flows
 read their other parameters from the [default settings](customise-dpr-flow.md#default-settings-of-the-processing-flows)
 of their processing.
 
@@ -66,7 +66,7 @@ A processing flow emits a `product.<product type>.generated` event for each gene
 `rs_workflows.utils.dpr`). The event is related to the `workflow` of the processing (`on-demand`,
 `systematic`...), and the automations only match the events of a `systematic` workflow (`match_related` on the
 `workflow` role): they start the systematic flow of the next processing for this product. So an on-demand processing
-only generates its own products, unless it is run with `force_systematic`, to start the rest of the chain from a
+only generates its own products, unless it is run with `env_args.process.force_systematic`, to start the rest of the chain from a
 given product (the automation that runs `process-l0` after the staging of a session sets it).
 
 The event is also related to the flow run that generated the product, and to the `processing` and platform (e.g.
