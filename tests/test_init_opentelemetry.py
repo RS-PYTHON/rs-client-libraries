@@ -14,6 +14,7 @@
 
 """Unit tests for OpenTelemetry."""
 
+import os
 from contextlib import contextmanager
 
 import pytest
@@ -176,7 +177,19 @@ def test_instrumentation(mocker, monkeypatch):
     mocker.patch("rs_common.init_opentelemetry.INITIALIZED", False)
     monkeypatch.setenv("TEMPO_ENDPOINT", "none")
 
-    mocker.patch("rs_common.init_opentelemetry.auto_instrumentation")
+    monkeypatch.setenv("OTEL_PYTHON_DISABLED_INSTRUMENTATIONS", "my_package")
+
+    # Read the disabled instrumentations when the auto instrumentation runs
+    disabled_during_init = []
+    auto_instrumentation = mocker.patch("rs_common.init_opentelemetry.auto_instrumentation")
+    auto_instrumentation.initialize.side_effect = lambda: disabled_during_init.extend(
+        os.environ["OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"].split(","),
+    )
     mocker.patch("opentelemetry.instrumentation.instrumentor.BaseInstrumentor.instrument")
 
     init_traces(service_name="pytest")
+
+    # The custom and the asyncio instrumentations are disabled from the auto instrumentation,
+    # then the original env var is restored.
+    assert {"my_package", "aiobotocore", "botocore", "requests", "asyncio"} <= set(disabled_during_init)
+    assert os.environ["OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"] == "my_package"
