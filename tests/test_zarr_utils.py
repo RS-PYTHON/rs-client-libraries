@@ -41,22 +41,6 @@ def _zarr_store(request, tmp_path):
     return store, request.param
 
 
-@pytest.mark.parametrize(
-    "location, expected",
-    [
-        ("s3://b/out/P.zarr", "s3://b/out/P.zarr"),
-        ("s3://b/out/P.zarr/", "s3://b/out/P.zarr"),
-        ("s3://b/out/P.zarr/.zattrs", "s3://b/out/P.zarr"),
-        ("s3://b/out/P.zarr/.zgroup", "s3://b/out/P.zarr"),
-        ("s3://b/out/P.zarr/zarr.json", "s3://b/out/P.zarr"),
-        ("/local/P.zarr/zarr.json", "/local/P.zarr"),
-    ],
-)
-def test_get_zarr_root(location, expected):
-    """The Zarr root is found from the root or from any v2/v3 root metadata file."""
-    assert zarr_utils.get_zarr_root(location) == expected
-
-
 def test_get_zarr_storage_options(monkeypatch):
     """S3 stores use the workflow S3 credentials, local stores don't need any option."""
     monkeypatch.setenv("S3_ACCESSKEY", "access")
@@ -80,7 +64,7 @@ def test_open_zarr_group_passes_s3_options(monkeypatch, mocker):
     monkeypatch.setenv("S3_REGION", "region")
     open_group = mocker.patch("rs_workflows.utils.zarr_utils.zarr.open_group")
 
-    zarr_utils.open_zarr_group("s3://b/out/P.zarr/zarr.json")
+    zarr_utils.open_zarr_group("s3://b/out/P.zarr/")
 
     open_group.assert_called_once_with(
         store="s3://b/out/P.zarr",
@@ -91,15 +75,27 @@ def test_open_zarr_group_passes_s3_options(monkeypatch, mocker):
     )
 
 
-@pytest.mark.parametrize("metadata", [False, True], ids=["root", "metadata_file"])
-def test_read_zarr_attributes(zarr_store, metadata):
+def test_read_zarr_attributes(zarr_store):
     """Root attributes are read the same way from Zarr v2 and v3 stores."""
     store, zarr_format = zarr_store
-    metadata_name = ".zattrs" if zarr_format == 2 else "zarr.json"
-    location = str(store / metadata_name) if metadata else str(store)
 
-    assert zarr_utils.open_zarr_group(location).metadata.zarr_format == zarr_format
-    assert zarr_utils.read_zarr_attributes(location) == ATTRIBUTES
+    assert zarr_utils.open_zarr_group(str(store)).metadata.zarr_format == zarr_format
+    assert zarr_utils.read_zarr_attributes(str(store)) == ATTRIBUTES
+
+
+def test_is_zarr_group(zarr_store, tmp_path):
+    """Only Zarr groups are identified as Zarr stores, whatever their Zarr format."""
+    store, _ = zarr_store
+    zarr.create_array(str(tmp_path / "array.zarr"), shape=(2,), dtype="i4")
+    (tmp_path / "not_a_group").mkdir()
+    (tmp_path / "file.json").write_text("{}")
+
+    assert zarr_utils.is_zarr_group(str(store))
+    assert zarr_utils.is_zarr_group(str(store / "measurements"))
+    assert not zarr_utils.is_zarr_group(str(tmp_path / "array.zarr"))
+    assert not zarr_utils.is_zarr_group(str(tmp_path / "not_a_group"))
+    assert not zarr_utils.is_zarr_group(str(tmp_path / "file.json"))
+    assert not zarr_utils.is_zarr_group(str(tmp_path / "missing.zarr"))
 
 
 def test_read_zarr_attributes_raises_on_missing_store(tmp_path):

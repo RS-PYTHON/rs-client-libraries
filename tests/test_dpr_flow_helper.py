@@ -26,7 +26,7 @@ from rs_workflows.dpr_flow import (
     clean_paths,
     compute_eopf_origin_datetime,
     create_stac_item,
-    extract_products_and_zattrs,
+    find_zarr_stores,
     find_zarr_zip,
     run_processor,
     s3_list,
@@ -42,6 +42,11 @@ from tests.conftest import MOCKED_BUCKET, OWNER_ID
 from tests.test_utils import setup_worklow_test_env
 
 CLUSTER_INFO = ClusterInfo("", "", "", "")
+
+
+def mock_zarr_groups(mocker, *group_uris: str):
+    """Mock the zarr library detection of Zarr groups: only the given URIs are Zarr groups."""
+    return mocker.patch("rs_workflows.dpr_flow.is_zarr_group", side_effect=lambda uri: uri in group_uris)
 
 
 def test_s3_list_returns_full_s3_paths(mocker):
@@ -84,28 +89,35 @@ def test_s3_list_returns_full_s3_paths(mocker):
     mock_objects.filter.assert_called_once_with(Prefix="some/prefix/")
 
 
-def test_extract_products_and_zattrs():
+def test_find_zarr_stores(mocker):
     """
-    Verify that extract_products_and_zattrs correctly filters and extracts
-    product names and .zattrs file paths from a list of files.
+    Verify that find_zarr_stores correctly finds the product names and Zarr
+    store URIs from a list of files.
 
     The function should:
-    - Include files that are exactly two levels deep: base_path/product_name/.zattrs
-    - Exclude files that are deeper in the directory structure
-    - Exclude files that are not named .zattrs
-    - Handle various base_path formats (with/without trailing slash)
+    - Include the Zarr groups that are directly under the base path: base_path/product_name
+    - Exclude the Zarr groups that are deeper in the directory structure
+    - Exclude the directories that are not Zarr groups
     """
     base_path = "s3://my-bucket/output"
+    mock_zarr_groups(
+        mocker,
+        "s3://my-bucket/output/product_a",
+        "s3://my-bucket/output/product_b",
+        "s3://my-bucket/output/S03OLCL0_",
+        "s3://my-bucket/output/product_c/subdir",
+        "s3://my-bucket/output/product_d/deep/nested",
+    )
 
     files = [
-        # Valid .zattrs files (should be included)
+        # Valid Zarr stores (should be included)
         "s3://my-bucket/output/product_a/.zattrs",
         "s3://my-bucket/output/product_b/.zattrs",
         "s3://my-bucket/output/S03OLCL0_/.zattrs",
         # Too deep - nested subdirectories (should be excluded)
         "s3://my-bucket/output/product_c/subdir/.zattrs",
         "s3://my-bucket/output/product_d/deep/nested/.zattrs",
-        # Not .zattrs files (should be excluded)
+        # Not Zarr stores (should be excluded)
         "s3://my-bucket/output/product_e/data.json",
         "s3://my-bucket/output/product_f/metadata.xml",
         # Other files in product directories (should be excluded)
@@ -113,21 +125,28 @@ def test_extract_products_and_zattrs():
         "s3://my-bucket/output/product_b/config.yaml",
     ]
 
-    result = extract_products_and_zattrs(files, base_path)
+    result = find_zarr_stores(files, base_path)
 
-    # Should only include the three valid .zattrs files
+    # Should only include the three valid Zarr stores
     assert len(result) == 3
-    assert ("product_a", "s3://my-bucket/output/product_a/.zattrs") in result
-    assert ("product_b", "s3://my-bucket/output/product_b/.zattrs") in result
-    assert ("S03OLCL0_", "s3://my-bucket/output/S03OLCL0_/.zattrs") in result
+    assert ("product_a", "s3://my-bucket/output/product_a") in result
+    assert ("product_b", "s3://my-bucket/output/product_b") in result
+    assert ("S03OLCL0_", "s3://my-bucket/output/S03OLCL0_") in result
 
 
-def test_extract_products_and_zattrs_prefers_root_zattrs():
+def test_find_zarr_stores_prefers_root_store(mocker):
     """
-    Verify that a .zattrs file directly under the output path is treated as
-    the product metadata and nested group metadata is ignored.
+    Verify that an output path which is itself a Zarr group is treated as
+    the product store and nested groups are ignored.
     """
     base_path = "s3://my-bucket/output/product-root"
+    mock_zarr_groups(
+        mocker,
+        base_path,
+        f"{base_path}/conditions",
+        f"{base_path}/measurements",
+        f"{base_path}/quality",
+    )
 
     files = [
         "s3://my-bucket/output/product-root/.zattrs",
@@ -136,36 +155,44 @@ def test_extract_products_and_zattrs_prefers_root_zattrs():
         "s3://my-bucket/output/product-root/quality/.zattrs",
     ]
 
-    result = extract_products_and_zattrs(files, base_path)
+    result = find_zarr_stores(files, base_path)
 
-    assert result == [("product-root", "s3://my-bucket/output/product-root/.zattrs")]
+    assert result == [("product-root", "s3://my-bucket/output/product-root")]
 
 
-def test_extract_products_and_zattrs_with_trailing_slash():
+def test_find_zarr_stores_with_trailing_slash(mocker):
     """
-    Verify that extract_products_and_zattrs works correctly when base_path
+    Verify that find_zarr_stores works correctly when base_path
     has a trailing slash.
     """
     base_path = "s3://my-bucket/output/"  # Note the trailing slash
+    mock_zarr_groups(mocker, "s3://my-bucket/output/product_a", "s3://my-bucket/output/product_b")
 
     files = [
         "s3://my-bucket/output/product_a/.zattrs",
         "s3://my-bucket/output/product_b/.zattrs",
     ]
 
-    result = extract_products_and_zattrs(files, base_path)
+    result = find_zarr_stores(files, base_path)
 
     assert len(result) == 2
-    assert ("product_a", "s3://my-bucket/output/product_a/.zattrs") in result
-    assert ("product_b", "s3://my-bucket/output/product_b/.zattrs") in result
+    assert ("product_a", "s3://my-bucket/output/product_a") in result
+    assert ("product_b", "s3://my-bucket/output/product_b") in result
 
 
-def test_extract_products_and_zattrs_with_products_container():
+def test_find_zarr_stores_with_products_container(mocker):
     """
-    Verify that extract_products_and_zattrs supports outputs grouped under
-    a products container without accepting arbitrary nested .zattrs files.
+    Verify that find_zarr_stores supports outputs grouped under
+    a products container without accepting arbitrary nested Zarr groups.
     """
     base_path = "s3://my-bucket/output"
+    mock_zarr_groups(
+        mocker,
+        "s3://my-bucket/output/products/product_a",
+        "s3://my-bucket/output/products/product_b",
+        "s3://my-bucket/output/products/product_c/group",
+        "s3://my-bucket/output/product_d/subdir",
+    )
 
     files = [
         "s3://my-bucket/output/products/product_a/.zattrs",
@@ -174,52 +201,55 @@ def test_extract_products_and_zattrs_with_products_container():
         "s3://my-bucket/output/product_d/subdir/.zattrs",
     ]
 
-    result = extract_products_and_zattrs(files, base_path)
+    result = find_zarr_stores(files, base_path)
 
     assert result == [
-        ("product_a", "s3://my-bucket/output/products/product_a/.zattrs"),
-        ("product_b", "s3://my-bucket/output/products/product_b/.zattrs"),
+        ("product_a", "s3://my-bucket/output/products/product_a"),
+        ("product_b", "s3://my-bucket/output/products/product_b"),
     ]
 
 
-def test_extract_products_and_zattrs_ignores_similar_prefixes():
+def test_find_zarr_stores_ignores_similar_prefixes(mocker):
     """
     Verify that paths outside the base path are ignored even when their
     string prefix is similar to base_path.
     """
     base_path = "s3://my-bucket/output"
+    mock_zarr_groups(mocker, "s3://my-bucket/output-extra/product_a", "s3://my-bucket/output/product_b")
 
     files = [
         "s3://my-bucket/output-extra/product_a/.zattrs",
         "s3://my-bucket/output/product_b/.zattrs",
     ]
 
-    result = extract_products_and_zattrs(files, base_path)
+    result = find_zarr_stores(files, base_path)
 
-    assert result == [("product_b", "s3://my-bucket/output/product_b/.zattrs")]
+    assert result == [("product_b", "s3://my-bucket/output/product_b")]
 
 
-def test_extract_products_and_zattrs_empty_list():
+def test_find_zarr_stores_empty_list(mocker):
     """
-    Verify that extract_products_and_zattrs returns an empty list when
+    Verify that find_zarr_stores returns an empty list when
     given an empty file list.
     """
-    result = extract_products_and_zattrs([], "s3://my-bucket/output")
+    mock_zarr_groups(mocker)
+    result = find_zarr_stores([], "s3://my-bucket/output")
     assert not result
 
 
-def test_extract_products_and_zattrs_no_matches():
+def test_find_zarr_stores_no_matches(mocker):
     """
-    Verify that extract_products_and_zattrs returns an empty list when
-    no files match the expected pattern.
+    Verify that find_zarr_stores returns an empty list when
+    no Zarr group matches the expected layout.
     """
     base_path = "s3://my-bucket/output"
+    mock_zarr_groups(mocker, "s3://my-bucket/output/product_b/subdir")
     files = [
         "s3://my-bucket/output/product_a/data.json",
         "s3://my-bucket/output/product_b/subdir/.zattrs",
     ]
 
-    result = extract_products_and_zattrs(files, base_path)
+    result = find_zarr_stores(files, base_path)
     assert not result
 
 
@@ -287,7 +317,7 @@ def test_create_stac_item_adds_zarr_zip_asset():
     item = create_stac_item(
         eopf_origin_datetime=None,
         eopf_feature=feature,
-        s3_data_location="s3://b/out/P.zarr/.zattrs",
+        s3_data_location="s3://b/out/P.zarr",
         product_name="P.zarr",
         dpr_processor=DprProcessor.S1L0,
         zarr_zip_href="s3://b/out/P.zarr.zip",
@@ -299,9 +329,9 @@ def test_create_stac_item_adds_zarr_zip_asset():
     assert zip_asset.roles == ["data"]
 
 
-@pytest.mark.parametrize("metadata_suffix", ["/.zattrs", "/zarr.json", ""])
+@pytest.mark.parametrize("trailing_slash", ["/", ""])
 @pytest.mark.parametrize("existing_keys, expected", [(["out/P.zarr.zip"], "s3://b/out/P.zarr.zip"), ([], None)])
-def test_find_zarr_zip(mocker, existing_keys, expected, metadata_suffix):
+def test_find_zarr_zip(mocker, existing_keys, expected, trailing_slash):
     """The zip is detected only if present next to the zarr (v2 or v3) product."""
     bucket = mocker.Mock()
     objs = [mocker.Mock(key=k) for k in existing_keys]
@@ -311,14 +341,14 @@ def test_find_zarr_zip(mocker, existing_keys, expected, metadata_suffix):
         return_value=(bucket, "out/P.zarr.zip"),
     )
 
-    assert find_zarr_zip(f"s3://b/out/P.zarr{metadata_suffix}") == expected
+    assert find_zarr_zip(f"s3://b/out/P.zarr{trailing_slash}") == expected
     get_bucket.assert_called_once_with("s3://b/out/P.zarr.zip")
 
 
 def test_find_zarr_zip_ignores_non_zarr_product(mocker):
     """No lookup is done when the product is not a .zarr."""
     get_bucket = mocker.patch("rs_workflows.dpr_flow.prefect_utils.get_s3_bucket")
-    assert find_zarr_zip("s3://b/out/P.safe/.zattrs") is None
+    assert find_zarr_zip("s3://b/out/P.safe") is None
     get_bucket.assert_not_called()
 
 
@@ -406,10 +436,10 @@ def test_update_eopf_assets_raises_on_missing_zattrs(mocker):
     env = mocker.Mock()
     mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
 
-    # Mock extract_products_and_zattrs to return one product
+    # Mock find_zarr_stores to return one product
     mocker.patch(
-        "rs_workflows.dpr_flow.extract_products_and_zattrs",
-        return_value=[("prod1", "s3://bucket/prod1/.zattrs")],
+        "rs_workflows.dpr_flow.find_zarr_stores",
+        return_value=[("prod1", "s3://bucket/prod1")],
     )
     # Mock s3_list to avoid actual S3 calls
     mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=[])
@@ -448,6 +478,7 @@ def test_update_eopf_assets_raises_on_missing_discovery_properties(mocker, zattr
     """Reject output metadata without the required EOPF discovery properties."""
     mocker.patch("rs_workflows.dpr_flow.get_logger", return_value=mocker.Mock())
     mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://bucket/output/prod/.zattrs"])
+    mock_zarr_groups(mocker, "s3://bucket/output/prod")
     mocker.patch("rs_workflows.dpr_flow.read_zarr_attributes", return_value=zattrs_data)
     payload = mocker.Mock()
     payload.io.output_products = [mocker.Mock(id="output", path="s3://bucket/output")]
@@ -484,8 +515,8 @@ def test_update_eopf_assets_skips_non_final_products(mocker):
     mock_s3_list = mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://out/final/prod/.zattrs"])
 
     mocker.patch(
-        "rs_workflows.dpr_flow.extract_products_and_zattrs",
-        return_value=[("prod", "s3://out/final/prod/.zattrs")],
+        "rs_workflows.dpr_flow.find_zarr_stores",
+        return_value=[("prod", "s3://out/final/prod")],
     )
 
     mocker.patch(
@@ -916,6 +947,7 @@ def test_update_eopf_assets_propagates_acquisition_station(mocker, processor, st
     payload = mocker.Mock()
     payload.io.output_products = [mocker.Mock(id="output", path="s3://out")]
     mocker.patch("rs_workflows.dpr_flow.s3_list", return_value=["s3://out/a/.zattrs", "s3://out/b/.zattrs"])
+    mock_zarr_groups(mocker, "s3://out/a", "s3://out/b")
     mocker.patch(
         "rs_workflows.dpr_flow.read_zarr_attributes",
         side_effect=lambda _: {
@@ -978,15 +1010,19 @@ def test_update_eopf_assets_without_outputs_does_not_fetch_inputs(mocker, has_in
 
 
 @pytest.mark.parametrize("container", ["", "products/"])
-def test_extract_olci_zarr_v3_metadata(container):
-    """Prefer v3 metadata per product and ignore nested array/group metadata."""
-    base = "s3://bucket/output"
-    product = f"{base}/{container}product"
-    files = [f"{product}/.zattrs", f"{product}/zarr.json", f"{product}/measurements/zarr.json"]
-    assert extract_products_and_zattrs(files, base, zarr_v3=True) == [("product", f"{product}/zarr.json")]
-    assert extract_products_and_zattrs(files, base) == [("product", f"{product}/zarr.json")]
-    assert extract_products_and_zattrs(files, base, zarr_v3=False) == [("product", f"{product}/.zattrs")]
-    assert extract_products_and_zattrs(files, product, zarr_v3=True) == [("product", f"{product}/zarr.json")]
+@pytest.mark.parametrize("zarr_format", [2, 3])
+def test_find_zarr_stores_with_zarr_library(tmp_path, container, zarr_format):
+    """Identify Zarr v2 and v3 stores with the zarr library and ignore nested array/group metadata."""
+    base = tmp_path / "output"
+    product = base / f"{container}product"
+    group = zarr.open_group(str(product), mode="w", zarr_format=zarr_format)
+    group.create_group("measurements").create_array("data", shape=(2,), dtype="i4")
+    (base / "not_a_product").mkdir()
+    (base / "not_a_product" / "file.txt").write_text("not a Zarr store")
+    files = [str(path) for path in sorted(base.rglob("*")) if path.is_file()]
+
+    assert find_zarr_stores(files, str(base)) == [("product", str(product))]
+    assert find_zarr_stores(files, str(product)) == [("product", str(product))]
 
 
 @pytest.mark.parametrize("processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI, DprProcessor.S1L0, "mockup"])
@@ -1031,7 +1067,7 @@ def test_olci_bands_are_published_on_zarr_asset(processor):
         "geometry": None,
         "bbox": None,
     }
-    item = create_stac_item(None, feature, "s3://bucket/product/zarr.json", "product", processor)
+    item = create_stac_item(None, feature, "s3://bucket/product", "product", processor)
     published = item.to_dict()
     assert "bands" not in published["properties"]
     assert published["assets"]["product"]["bands"] == bands

@@ -354,7 +354,9 @@ def test_run_adf_script_returns_generated_zarr(monkeypatch, mocker, tmp_path):
     work_dir.mkdir()
     output_dir.mkdir()
     generated_zarr = output_dir / "generated.zarr"
-    generated_zarr.mkdir()
+    zarr.open_group(str(generated_zarr), mode="w")
+    # A directory with the .zarr extension which is not a Zarr store must be ignored
+    (output_dir / "not_a_store.zarr").mkdir()
 
     completed_process = MagicMock(stdout="line 1\nline 2", stderr="warn 1")
     run_mock = MagicMock(return_value=completed_process)
@@ -1025,8 +1027,8 @@ def test_run_adf_script_stb_convert_products(monkeypatch, mocker, tmp_path):
     work_dir.mkdir()
     output_dir.mkdir()
     # simulate multiple generated outputs (as stb_convert_products may produce)
-    (output_dir / "product_a.zarr").mkdir()
-    (output_dir / "product_b.zarr").mkdir()
+    zarr.open_group(str(output_dir / "product_a.zarr"), mode="w", zarr_format=2)
+    zarr.open_group(str(output_dir / "product_b.zarr"), mode="w", zarr_format=3)
     (output_dir / "product_c.json").write_text("{}")
 
     completed_process = MagicMock(stdout="done", stderr="")

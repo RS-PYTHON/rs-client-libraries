@@ -64,7 +64,6 @@ from rs_workflows.payload_template import (  # StoreOptionsWrapper,
     StorageOptions,
     StoreParams,
 )
-from rs_workflows.utils.zarr_utils import get_zarr_root
 from tests import common
 
 # Mocked values
@@ -1055,14 +1054,19 @@ def _mocked_processor_output(mocker, mocked_s3, mocked_processor_log) -> tuple[s
 
     mocked_s3.create_bucket(Bucket=RSPY_CATALOG_BUCKET)
 
+    # The zarr library reads S3 through s3fs/aiobotocore, which is not intercepted by the moto
+    # in-process mock, so read the mocked Zarr v2 groups from the mocked S3 with boto3 instead.
+    def is_mocked_zarr_group(zarr_location: str) -> bool:
+        """Return True if the mocked S3 location contains a Zarr v2 group."""
+        bucket, _, key = zarr_location.removeprefix("s3://").partition("/")
+        return mocked_s3.list_objects_v2(Bucket=bucket, Prefix=f"{key}/.zgroup").get("KeyCount", 0) > 0
+
     def read_mocked_zarr_attributes(zarr_location: str) -> dict:
-        """
-        The zarr library reads S3 through s3fs/aiobotocore, which is not intercepted by the moto
-        in-process mock, so read the Zarr v2 root attributes from the mocked S3 with boto3 instead.
-        """
-        bucket, _, key = get_zarr_root(zarr_location).removeprefix("s3://").partition("/")
+        """Read the Zarr v2 root attributes from the mocked S3."""
+        bucket, _, key = zarr_location.removeprefix("s3://").partition("/")
         return json.loads(mocked_s3.get_object(Bucket=bucket, Key=f"{key}/.zattrs")["Body"].read())
 
+    mocker.patch("rs_workflows.dpr_flow.is_zarr_group", side_effect=is_mocked_zarr_group)
     mocker.patch("rs_workflows.dpr_flow.read_zarr_attributes", side_effect=read_mocked_zarr_attributes)
 
     expected_items = {}
