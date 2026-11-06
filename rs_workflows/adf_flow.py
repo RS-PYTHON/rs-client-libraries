@@ -47,7 +47,7 @@ from rs_workflows.payload_generator import (
 )
 from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import download_and_extract_assets_task
-from rs_workflows.utils.zarr_utils import read_zarr_attributes
+from rs_workflows.utils.zarr_utils import is_zarr_group, read_zarr_attributes
 
 # Path to the conversion scripts
 ADF_ECMWA_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWA.py"
@@ -367,8 +367,8 @@ def run_adf_script(
         logger.error(f"ADF conversion failed with exit code {e.returncode}")
         raise
 
-    # find the generated ZARR directories and JSON files in output_dir
-    zarr_products = sorted(output_dir.glob("*.zarr"))
+    # find the generated ZARR stores (identified with the zarr library) and JSON files in output_dir
+    zarr_products = sorted(path for path in output_dir.iterdir() if path.is_dir() and is_zarr_group(str(path)))
     json_products = sorted(output_dir.glob("*.json"))
     all_products = zarr_products + json_products
     if not all_products:
@@ -386,7 +386,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     Create a STAC Item from a generated ZARR directory or JSON file.
 
     For ZARR directories, metadata is read from the root group attributes
-    (.zattrs for Zarr v2, zarr.json for Zarr v3) with the zarr library.
+    with the zarr library, whatever the Zarr format.
     For JSON files, the file itself is the metadata and the item ID is
     taken from stac_discovery.id when present, otherwise it is derived
     from the filename (minus the .json extension).

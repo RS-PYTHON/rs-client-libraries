@@ -19,18 +19,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import zarr
-
-# Group-level metadata files: "zarr.json" for Zarr v3, ".zattrs"/".zgroup" for Zarr v2.
-ZARR_METADATA_FILES = ("zarr.json", ".zattrs", ".zgroup")
-
-
-def get_zarr_root(zarr_location: str) -> str:
-    """Return the Zarr store root from either the store root or one of its root metadata files."""
-    zarr_location = zarr_location.rstrip("/")
-    for metadata_file in ZARR_METADATA_FILES:
-        if zarr_location.endswith(f"/{metadata_file}"):
-            return zarr_location.removesuffix(f"/{metadata_file}")
-    return zarr_location
+from zarr.errors import ContainsArrayError
 
 
 def get_zarr_storage_options(zarr_uri: str) -> dict[str, Any] | None:
@@ -49,26 +38,40 @@ def get_zarr_storage_options(zarr_uri: str) -> dict[str, Any] | None:
 
 
 def open_zarr_group(zarr_location: str) -> zarr.Group:
-    """Open a Zarr v2 or v3 group in read-only mode, the format being detected automatically.
+    """Open a Zarr group in read-only mode, the Zarr format being detected by the zarr library.
 
     Args:
-        zarr_location: Local path or S3 URI of the Zarr store root (or of one of its root metadata files).
+        zarr_location: Local path or S3 URI of the Zarr store root.
     """
-    zarr_uri = get_zarr_root(str(zarr_location))
+    zarr_location = zarr_location.rstrip("/")
     return zarr.open_group(
-        store=zarr_uri,
+        store=zarr_location,
         mode="r",
         zarr_format=None,
-        storage_options=get_zarr_storage_options(zarr_uri),
+        storage_options=get_zarr_storage_options(zarr_location),
         # Only the root group metadata is needed, so don't require/read consolidated metadata.
         use_consolidated=False,
     )
 
 
-def read_zarr_attributes(zarr_location: str) -> dict[str, Any]:
-    """Read the root group attributes of a Zarr v2 (.zattrs) or v3 (zarr.json) store.
+def is_zarr_group(zarr_location: str) -> bool:
+    """Return True if the given location is a Zarr group, whatever its Zarr format.
 
     Args:
-        zarr_location: Local path or S3 URI of the Zarr store root (or of one of its root metadata files).
+        zarr_location: Local path or S3 URI of a potential Zarr store root.
+    """
+    try:
+        open_zarr_group(zarr_location)
+    # GroupNotFoundError is a FileNotFoundError. A Zarr array is not a Zarr group either.
+    except (FileNotFoundError, NotADirectoryError, ContainsArrayError):
+        return False
+    return True
+
+
+def read_zarr_attributes(zarr_location: str) -> dict[str, Any]:
+    """Read the root group attributes of a Zarr store, whatever its Zarr format.
+
+    Args:
+        zarr_location: Local path or S3 URI of the Zarr store root.
     """
     return dict(open_zarr_group(zarr_location).attrs)

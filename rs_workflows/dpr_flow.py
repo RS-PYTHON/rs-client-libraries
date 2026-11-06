@@ -42,7 +42,7 @@ from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
 from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import parse_logs
-from rs_workflows.utils.zarr_utils import get_zarr_root, read_zarr_attributes
+from rs_workflows.utils.zarr_utils import is_zarr_group, read_zarr_attributes
 
 
 def s3_list(s3_prefix: str):
@@ -57,13 +57,12 @@ def find_zarr_zip(zarr_location: str) -> str | None:
     """Return the S3 path of the ``<PRODUCT_NAME>.zarr.zip`` stored next to a Zarr product, if it exists.
 
     Args:
-        zarr_location: S3 path of the Zarr product root, or of its root metadata file
-            (``.zattrs`` for Zarr v2, ``zarr.json`` for Zarr v3).
+        zarr_location: S3 URI of the Zarr product store.
 
     Returns:
         The S3 path of the zip file, or None if the zip is not present.
     """
-    zip_s3_path = get_zarr_root(zarr_location) + ".zip"
+    zip_s3_path = zarr_location.rstrip("/") + ".zip"
     if not zip_s3_path.endswith(".zarr.zip"):
         return None
 
@@ -74,56 +73,46 @@ def find_zarr_zip(zarr_location: str) -> str | None:
     return None
 
 
-def extract_products_and_zattrs(files: list[str], base_path: str, *, zarr_v3: bool = True):
-    """Extract product names and their corresponding Zarr root metadata file paths.
+def find_zarr_stores(files: list[str], base_path: str) -> list[tuple[str, str]]:
+    """Find the Zarr product stores located in an output product path.
 
-    The Zarr products are discovered from their root metadata file: ``.zattrs`` for
-    Zarr v2 and, with ``zarr_v3=True``, also ``zarr.json`` for Zarr v3 (preferred per
-    product). The metadata themselves are then read with the zarr library, see
-    ``rs_workflows.utils.zarr_utils.read_zarr_attributes``.
-
-    Filters a list of file paths to find metadata files located under product
-    directories within a base path, following one of these structures:
-    base_path/.zattrs
-    base_path/product_name/.zattrs
-    base_path/products/product_name/.zattrs
+    The candidate store directories are derived from the listed file URIs, and the
+    zarr library is used to identify which of them are Zarr groups, whatever their
+    Zarr format (see ``rs_workflows.utils.zarr_utils.is_zarr_group``). The supported
+    layouts are:
+    base_path (the output path is itself the product store)
+    base_path/product_name
+    base_path/products/product_name
 
     Args:
-        files: List of file paths to search through.
-        base_path: The base directory path to strip from file paths.
+        files: List of file URIs found under the base path.
+        base_path: The base directory URI of the output products.
 
     Returns:
         A list of tuples, where each tuple contains:
-            - product_name (str): The name of the product directory.
-            - file (str): The full path to the .zattrs file.
+            - product_name (str): The name of the product store directory.
+            - store_uri (str): The URI of the Zarr product store.
 
-        If ``base_path/.zattrs`` exists, it is treated as the product metadata
-        and nested group metadata is ignored. Otherwise, includes files that are
-        directly under a product directory, with an optional ``products``
-        container directory under the base path.
+        If ``base_path`` is itself a Zarr group, it is the only returned product,
+        and its nested groups are ignored. Nested groups of the product stores are
+        never returned either.
 
     Example:
         >>> files = [
-        ...     "/data/products/product_a/.zattrs",
-        ...     "/data/products/product_b/.zattrs",
+        ...     "/data/products/product_a/zarr.json",
+        ...     "/data/products/product_b/.zgroup",
         ...     "/data/products/product_c/subdir/file.txt"
         ... ]
-        >>> extract_products_and_zattrs(files, "/data/products")
-        [('product_a', '/data/products/product_a/.zattrs'),
-         ('product_b', '/data/products/product_b/.zattrs')]
+        >>> find_zarr_stores(files, "/data/products")
+        [('product_a', '/data/products/product_a'),
+         ('product_b', '/data/products/product_b')]
     """
-    # OLCI CPM 3 writes root attributes in zarr.json. Prefer it over legacy metadata.
-    metadata_names = ("zarr.json", ".zattrs") if zarr_v3 else (".zattrs",)
-    dirs_and_attrs: dict = {}
-
     normalized_base_path = base_path.rstrip("/")
+    if is_zarr_group(normalized_base_path):
+        return [(normalized_base_path.rsplit("/", maxsplit=1)[-1], normalized_base_path)]
 
-    for metadata_name in metadata_names:
-        root_metadata = f"{normalized_base_path}/{metadata_name}"
-        if root_metadata in files:
-            product_dirname = normalized_base_path.rsplit("/", maxsplit=1)[-1]
-            return [(product_dirname, root_metadata)]
-
+    # Use a dict to keep the listing order without duplicates. key=store URI, value=product name
+    candidates: dict[str, str] = {}
     for file in files:
         if not file.startswith(normalized_base_path + "/"):
             continue
@@ -131,21 +120,15 @@ def extract_products_and_zattrs(files: list[str], base_path: str, *, zarr_v3: bo
         rest = file[len(normalized_base_path) :].lstrip("/")  # noqa: E203
         parts = rest.split("/")
 
-        # 1: base_path/product/.zattrs
-        if len(parts) == 2 and parts[1] in metadata_names:
-            product_dirname = parts[0]
-            previous = dirs_and_attrs.get(product_dirname)
-            if previous is None or file.endswith("/zarr.json"):
-                dirs_and_attrs[product_dirname] = file
+        # 1: base_path/product
+        if len(parts) >= 2:
+            candidates.setdefault(f"{normalized_base_path}/{parts[0]}", parts[0])
 
-        # 2: base_path/products/product/.zattrs
-        elif len(parts) == 3 and parts[0] == "products" and parts[2] in metadata_names:
-            product_dirname = parts[1]
-            previous = dirs_and_attrs.get(product_dirname)
-            if previous is None or file.endswith("/zarr.json"):
-                dirs_and_attrs[product_dirname] = file
+        # 2: base_path/products/product
+        if len(parts) >= 3 and parts[0] == "products":
+            candidates.setdefault(f"{normalized_base_path}/products/{parts[1]}", parts[1])
 
-    return list(dirs_and_attrs.items())
+    return [(product_name, store_uri) for store_uri, product_name in candidates.items() if is_zarr_group(store_uri)]
 
 
 def create_stac_item(
@@ -258,7 +241,7 @@ def create_stac_item(
             Asset: A STAC Asset configured for EOPF output products.
         """
         return Asset(
-            href=get_zarr_root(path),
+            href=path,
             title=product_name,
             media_type="application/vnd+zarr",
             roles=["data", "metadata"],
@@ -324,8 +307,8 @@ def update_eopf_assets(
     Asset Catalog) items for each discovered product.
 
     Workflow:
-        1. Lists the Zarr products (.zattrs or zarr.json root metadata) in the output product paths
-        2. Reads and validates EOPF discovery metadata from each Zarr root group with the zarr library
+        1. Finds the Zarr product stores in the output product paths with the zarr library
+        2. Reads and validates EOPF discovery metadata from each Zarr root group attributes
         3. Extracts product type information
         4. Creates corresponding STAC items for catalog registration
 
@@ -359,14 +342,13 @@ def update_eopf_assets(
 
     if payload.io is None:
         raise RuntimeError("Payload io configuration is missing.")
-    # Get all .zattrs files found in the output products paths
-    zattrs_list = []
+    # Get all Zarr stores found in the output products paths
+    zarr_stores = []
     for prod in payload.io.output_products:
         path = prod.path
-        # Keep track of which output product ID each .zattrs belongs to
-        new_zattrs = extract_products_and_zattrs(s3_list(path), path)
-        for name, loc in new_zattrs:
-            zattrs_list.append((name, loc, prod.id))
+        # Keep track of which output product ID each Zarr store belongs to
+        for name, store_uri in find_zarr_stores(s3_list(path), path):
+            zarr_stores.append((name, store_uri, prod.id))
         logger.info(
             f"The output product section {prod.id} has been added to the list, "
             "and all product types found at this path will be published to the catalog. "
@@ -375,11 +357,11 @@ def update_eopf_assets(
 
     # List & extract
     logger.info(
-        f"Found {len(zattrs_list)} .zattrs files from {len(payload.io.output_products)} "
-        f"output product sections from payload. The list with products to be published: {zattrs_list}",
+        f"Found {len(zarr_stores)} Zarr stores from {len(payload.io.output_products)} "
+        f"output product sections from payload. The list with products to be published: {zarr_stores}",
     )
 
-    input_items = get_input_product_items(env, input_products) if input_products and zattrs_list else []
+    input_items = get_input_product_items(env, input_products) if input_products and zarr_stores else []
     # Copy the first available station, preserving the input property value.
     acquisition_station_properties = {}
     for input_item in input_items:
@@ -398,33 +380,31 @@ def update_eopf_assets(
     # disabled for mockup
     if dpr_processor.lower() in ["mockup"]:
         eopf_origin_datetime = "2026-01-01T00:00:00Z"
-    elif input_products and zattrs_list:
+    elif input_products and zarr_stores:
         eopf_origin_datetime = compute_eopf_origin_datetime(env, input_products, items=input_items)
     else:
         eopf_origin_datetime = None
 
     items_metadata = []
-    for product_name, zattrs_s3_location, output_product_id in zattrs_list:
-        # The discovered metadata file (.zattrs or zarr.json) identifies the Zarr product root.
-        zarr_s3_location = get_zarr_root(zattrs_s3_location)
+    for product_name, zarr_s3_location, output_product_id in zarr_stores:
         logger.info(f"Product = {product_name} | zarr = {zarr_s3_location}")
         # Read the root group attributes, whatever the Zarr format (v2 or v3).
         try:
-            zattrs_data = read_zarr_attributes(zarr_s3_location)
+            zarr_attributes = read_zarr_attributes(zarr_s3_location)
         except Exception as err:
             logger.error(f"Could not read Zarr metadata from {zarr_s3_location}: {err}. Exiting.")
             raise RuntimeError(f"Could not read Zarr metadata from {zarr_s3_location}. Exiting.") from err
-        logger.debug(f"DPR processor attributes {zattrs_data}")
+        logger.debug(f"DPR processor attributes {zarr_attributes}")
 
         # Extract EOPF info
-        if "stac_discovery" not in zattrs_data or "properties" not in zattrs_data["stac_discovery"]:
+        if "stac_discovery" not in zarr_attributes or "properties" not in zarr_attributes["stac_discovery"]:
             logger.error(f"Zarr product {zarr_s3_location} does not contain EOPF discovery metadata. Exiting.")
             raise RuntimeError(f"Zarr product {zarr_s3_location} does not contain EOPF discovery metadata. Exiting.")
 
-        product_type = zattrs_data["stac_discovery"]["properties"].get("product:type", None)
+        product_type = zarr_attributes["stac_discovery"]["properties"].get("product:type", None)
         logger.info(f"Extracted EOPF product type: {product_type}")
 
-        eopf_item = zattrs_data["stac_discovery"]
+        eopf_item = zarr_attributes["stac_discovery"]
         logger.debug(f"EOPF discovery metadata extracted: {eopf_item}")
 
         eopf_item["properties"].update(acquisition_station_properties)
