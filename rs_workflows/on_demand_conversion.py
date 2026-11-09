@@ -75,34 +75,6 @@ def parse_rspy_catalog_item_href(href: str | None, catalog_hrefs: list[str]) -> 
     return unquote(match["owner"]), unquote(match["collection"]), unquote(match["item_id"])
 
 
-# Path of an item href in the RS-Python catalog: /catalog/collections/<owner>:<collection>/items/<item ID>
-RSPY_CATALOG_ITEM_PATH = re.compile(
-    r"/catalog/collections/(?P<owner>[^/:]+):(?P<collection>[^/]+)/items/(?P<item_id>[^/]+)/?$",
-)
-
-
-def parse_rspy_catalog_item_href(href: str | None, catalog_hrefs: list[str]) -> tuple[str, str, str] | None:
-    """
-    Return the owner, collection and item ID of an item href of the RS-Python catalog, or None for another href
-    (e.g. an item of the CDSE STAC catalog).
-
-    Args:
-        href: STAC item href.
-        catalog_hrefs: URLs of the RS-Python catalog, e.g. its public and its cluster-internal URLs. The href must
-            have the hostname of one of them.
-    """
-    if not href:
-        return None
-    parsed_href = urlparse(href)
-    catalog_hostnames = {urlparse(catalog_href).hostname for catalog_href in catalog_hrefs} - {None}
-    if not parsed_href.hostname or parsed_href.hostname not in catalog_hostnames:
-        return None
-    match = RSPY_CATALOG_ITEM_PATH.search(parsed_href.path)
-    if not match:
-        return None
-    return unquote(match["owner"]), unquote(match["collection"]), unquote(match["item_id"])
-
-
 def resolve_generated_product(
     output_product_type: str,
     generated_products: list[FlowGeneratedProduct],
