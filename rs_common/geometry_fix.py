@@ -32,6 +32,7 @@ from pystac import Item
 from shapely import get_parts, make_valid, union_all
 from shapely.geometry import (
     GeometryCollection,
+    LinearRing,
     LineString,
     MultiLineString,
     MultiPoint,
@@ -41,6 +42,7 @@ from shapely.geometry import (
     mapping,
     shape,
 )
+from shapely.geometry.base import BaseGeometry, BaseMultipartGeometry
 from shapely.geometry.polygon import orient
 
 from rs_common.footprint_facility import (
@@ -66,6 +68,63 @@ shapely_to_geojson_cls = {
     Polygon: GeoPolygon,
     MultiPolygon: GeoMultiPolygon,
 }
+
+# Topological dimension of the single-part geometries returned by _flatten_parts
+_DIMENSION_BY_TYPE = {Point: 0, LineString: 1, LinearRing: 1, Polygon: 2}
+
+
+def _flatten_parts(geometry: BaseGeometry) -> list[BaseGeometry]:
+    """Recursively flatten multi-part geometries and collections into non-empty single-part geometries."""
+    parts: list[BaseGeometry] = []
+    for part in get_parts(geometry):
+        if isinstance(part, BaseMultipartGeometry):
+            parts.extend(_flatten_parts(part))
+        elif not part.is_empty:
+            parts.append(part)
+    return parts
+
+
+def polygon_parts(geometry: BaseGeometry) -> list[Polygon]:
+    """Return the non-empty polygons contained in a geometry, flattening multi-parts and collections."""
+    return [part for part in _flatten_parts(geometry) if isinstance(part, Polygon)]
+
+
+def reduce_geometry_collection(geometry: BaseGeometry) -> BaseGeometry:
+    """Reduce a GeometryCollection to its highest-dimension parts.
+
+    make_valid can return a GeometryCollection when an invalid polygon contains collapsed parts, e.g. a
+    Polygon plus a degenerate LineString for a spike made of two almost identical vertices. These
+    lower-dimension parts are repair artifacts, not footprint information, so keep only the parts of the
+    highest dimension (polygons, otherwise lines, otherwise points) and return them as a Polygon/MultiPolygon,
+    LineString/MultiLineString or Point/MultiPoint. Other geometry types are returned unchanged.
+
+    Only call it on a collection created by make_valid: a GeometryCollection provided as is by a processor
+    is legitimate data and must be kept.
+    """
+    # Multi* geometries are not GeometryCollection subclasses in shapely 2, so only real collections match.
+    if not isinstance(geometry, GeometryCollection):
+        return geometry
+
+    parts = _flatten_parts(geometry)
+    if not parts:
+        return geometry
+
+    max_dimension = max(_DIMENSION_BY_TYPE[type(part)] for part in parts)
+    kept = [part for part in parts if _DIMENSION_BY_TYPE[type(part)] == max_dimension]
+    if len(kept) < len(parts):
+        _get_logger().warning(
+            f"Dropping {len(parts) - len(kept)} lower-dimension part(s) from a GeometryCollection footprint.",
+        )
+
+    if max_dimension == 2:
+        merged = union_all(kept)
+        if not merged.is_valid:
+            merged = make_valid(merged)
+        polygons = polygon_parts(merged)
+        return MultiPolygon(polygons) if len(polygons) > 1 else polygons[0]
+    if max_dimension == 1:
+        return MultiLineString(kept) if len(kept) > 1 else kept[0]
+    return MultiPoint(kept) if len(kept) > 1 else kept[0]
 
 
 def looks_like_swath_polygon(geometry: Polygon) -> bool:
@@ -105,15 +164,6 @@ def rebuild_swath_polygon(geometry: Polygon) -> MultiPolygon | Polygon:
     - antimeridian.fix_shape API:
       https://www.gadom.ski/antimeridian/v0.4.5/api/#antimeridian.fix_shape
     """
-
-    def polygon_parts(geometry):
-        parts = []
-        for part in get_parts(geometry):
-            if isinstance(part, Polygon):
-                parts.append(part)
-            elif isinstance(part, (MultiPolygon, GeometryCollection)):
-                parts.extend(polygon_parts(part))
-        return parts
 
     logger = _get_logger()
     # Drop the closing coordinate and split the ring into the two swath borders.
@@ -169,7 +219,12 @@ def repair_and_orient_geojson_geometry(geometry: dict[str, Any]) -> dict[str, An
         shapely_geometry = rework_to_polygon_geometry(shapely_geometry)
 
     if not shapely_geometry.is_valid:
+        input_is_collection = isinstance(shapely_geometry, GeometryCollection)
         shapely_geometry = make_valid(shapely_geometry)
+        if not input_is_collection:
+            # make_valid may turn a single/multi geometry into a GeometryCollection (e.g. Polygon + collapsed
+            # LineString): drop these repair artifacts. A collection provided by the processor is kept.
+            shapely_geometry = reduce_geometry_collection(shapely_geometry)
 
     if isinstance(shapely_geometry, Polygon):
         # RFC7946 expects exterior rings CCW and interior rings CW.
@@ -207,6 +262,11 @@ def fix_geojson_geometry(item: Item):
     # Points do not define a path, so antimeridian crossing checks can be false positives for MultiPoint.
     if isinstance(shapely_geom, (Point, MultiPoint)):
         logger.info("Item has a point geometry, skipping fix_geojson_geometry.")
+        return
+    # A GeometryCollection provided by the processor is valid GeoJSON accepted by the catalog: keep it as is,
+    # the antimeridian rework only supports polygonal and linear geometries.
+    if isinstance(shapely_geom, GeometryCollection):
+        logger.info("Item has a geometry collection, skipping antimeridian rework in fix_geojson_geometry.")
         return
 
     reworked_geometry = shapely_geom
