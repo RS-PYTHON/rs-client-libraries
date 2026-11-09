@@ -21,14 +21,9 @@ from prefect import flow
 from rs_workflows.flow_utils import FlowEnvArgs
 from rs_workflows.on_demand.common.l0_last_steps import process_staged_session
 
-S3_L0_RESULT_STORAGE = "local-file-system/s3-processing-shared-results"
-
-
 @flow(
     name="process-s3-l0",
     flow_run_name="s3-l0-{session}",
-    persist_result=True,
-    result_storage=S3_L0_RESULT_STORAGE,
 )
 async def process_s3l0(
     session: str,
