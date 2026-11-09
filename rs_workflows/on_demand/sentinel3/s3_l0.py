@@ -21,6 +21,7 @@ from prefect import flow
 from rs_workflows.flow_utils import FlowEnvArgs
 from rs_workflows.on_demand.common.l0_last_steps import process_staged_session
 
+
 @flow(
     name="process-s3-l0",
     flow_run_name="s3-l0-{session}",
