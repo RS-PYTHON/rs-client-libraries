@@ -42,9 +42,22 @@ PI_CATEGORY_DATA = [
     ("S3", "STC2", "STC for SY_2_VG1, SY_2_VG10 and SRAL/MWR", 158400),
     ("S3", "NTC1", "NTC for all optical instruments : OLCI and SLSTR", 252000),
     ("S3", "NTC2", "NTC for SRAL and MWR", 2505600),
+    ("CRI", "L0-FTD", "Slices L0 with timeliness FTD", 21600),
+    ("CRI", "L0-STC", "Slices L0 with timeliness STC", 172800),
+    ("CRI", "L0-NTC", "Slices L0 with timeliness NTC", 3456000),
+    ("CRI", "L1A-FTD", "Slices L1A with timeliness FTD", 21600),
+    ("CRI", "L1A-STC", "Slices L1A with timeliness STC", 172800),
+    ("CRI", "L1A-NTC", "Slices L1A with timeliness NTC", 3456000),
+    ("CRI", "L1B-FTD", "Slices L1B with timeliness FTD", 21600),
+    ("CRI", "L1B-STC", "Slices L1B with timeliness STC", 172800),
+    ("CRI", "L1B-NTC", "Slices L1B with timeliness NTC", 3456000),
+    ("CRI", "L2-FTD", "Slices L2 with timeliness FTD", 21600),
+    ("CRI", "L2-STC", "Slices L2 with timeliness STC", 172800),
+    ("CRI", "L2-NTC", "Slices L2 with timeliness NTC", 3456000),
     ("S1", "None", "S1 product outside any PI", 0),
     ("S2", "None", "S2 product outside any PI", 0),
     ("S3", "None", "S3 product outside any PI", 0),
+    ("CRI", "None", "CRI product outside any PI", 0),
 ]
 
 

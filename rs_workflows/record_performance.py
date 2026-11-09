@@ -46,12 +46,19 @@ def get_db_session():
     return session(), engine
 
 
-def resolve_param(param_value, runtime_key, default):
+def resolve_param(param_value, runtime_key, default=None):
     """Return param_value if set, else runtime parameter, else default."""
     if param_value is not None:
         return param_value
+
     runtime_val = runtime.flow_run.parameters.get(runtime_key)
-    return runtime_val if runtime_val is not None else default
+    if runtime_val is not None:
+        return runtime_val
+
+    if default is not None:
+        return default
+
+    raise ValueError(f"The required parameter {runtime_key!r} could not be resolved.")
 
 
 def get_flow_run_id(prefect_flow_id: str) -> int | None:
@@ -120,6 +127,9 @@ def get_pi_category_id(eopf_type: str) -> int | None:
         elif eopf_type.startswith("S03"):
             mission = "S3"
             name = "NRT"
+        elif eopf_type.startswith("CRI"):
+            mission = "CRI"
+            name = "FTD"
 
         if mission is None or name is None:
             logger.warning(f"No mapping found for eopf_type={eopf_type}")
@@ -173,7 +183,7 @@ def record_flow_run(
         # Insert new record with RETURNING id
         values = {
             "flow_type": resolve_param(flow_run_type, "flow_run_type", "systematic"),
-            "mission": resolve_param(mission, "mission", "sentinel-1"),
+            "mission": resolve_param(mission, "mission"),
             "prefect_flow_id": prefect_flow_id,
             "prefect_flow_parent_id": runtime.flow_run.parent_flow_run_id,
             "dask_version": "1.0",  # version("dask"),

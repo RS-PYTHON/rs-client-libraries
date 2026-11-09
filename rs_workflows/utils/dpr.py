@@ -66,6 +66,7 @@ class ProcessingId(str, Enum):
     S3_L0 = "s3l0"
     S3_OLCI_L1 = "s3l1olci"
     S3_OLCI_L2 = "s3l2olci"
+    CRI_L0 = "cril0"
 
 
 class ProcessorInfo(BaseModel):

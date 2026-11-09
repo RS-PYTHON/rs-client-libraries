@@ -38,6 +38,7 @@ from rs_workflows.utils.prefect import get_logger
 L0_PROCESSINGS: dict[str, tuple[ProcessingId, str]] = {
     "1": (ProcessingId.S1_L0, "S1CADUS"),
     "3": (ProcessingId.S3_L0, "S3ACADUS"),
+    "CR": (ProcessingId.CRI_L0, "CRCADUS"),
 }
 
 
@@ -98,7 +99,15 @@ async def process_l0_last_steps(
     logger.info(f"Starting L0 last steps: mission={mission!r}, session={session!r}, verbose={verbose!r}")
     session_collections = get_session_collections(settings)
 
-    with flow_env.start_span(__name__, f"sentinel{mission}-level0-processing"):
+    if mission == "CR":
+        satellite_name = f"cristal-{session[2].lower()}"
+    else:
+        satellite_name = f"sentinel-{mission}{session[2].lower()}"
+
+    with flow_env.start_span(
+        __name__,
+        "cristal-level0-processing" if mission == "CR" else f"sentinel{mission}-level0-processing",
+    ):
         logger.info(f"Looking up catalog session: session={session!r}, collections={session_collections!r}")
         item_session: Item | None = await get_single_catalog_item(flow_env, session, session_collections)
         if not item_session:
@@ -127,7 +136,7 @@ async def process_l0_last_steps(
             external_variables={
                 "start_datetime": session_datetime,
                 "end_datetime": session_datetime,
-                "satellite": f"sentinel-{mission}{session[2].lower()}",
+                "satellite": satellite_name,
             },
             workflow=workflow,
         )

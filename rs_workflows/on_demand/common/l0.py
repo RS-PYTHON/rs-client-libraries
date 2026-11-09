@@ -29,6 +29,7 @@ from rs_workflows.on_demand.common.l0_last_steps import (
     get_session_collections,
 )
 from rs_workflows.on_demand.common.staging import stage_session_common
+from rs_workflows.on_demand.cristal.cri_l0 import process_cril0
 from rs_workflows.on_demand.sentinel1.s1_l0 import process_s1l0
 from rs_workflows.on_demand.sentinel3.s3_l0 import process_s3l0
 from rs_workflows.utils.cadip import get_cadip_station
@@ -41,7 +42,7 @@ from rs_workflows.utils.dpr import load_processor_settings
 from rs_workflows.utils.prefect import get_logger
 
 # Level-0 flow of each mission
-L0_FLOWS = {"1": process_s1l0, "3": process_s3l0}
+L0_FLOWS = {"1": process_s1l0, "3": process_s3l0, "CR": process_cril0}
 
 
 @flow(name="process-l0")
@@ -54,8 +55,8 @@ async def process_l0(
     """
     This is the generic l0 processing flow, started by the systematic processing after the staging of a session.
     It performs common L0 task like retrieving session from catalog an staging it from cadip if needed.
-    Then it runs the Level-0 flow of the mission (`process-s1-l0` or `process-s3-l0`) as a sub-flow, with the
-    settings of the `s<mission>l0-default-setting` Prefect variable.
+    Then it runs the Level-0 flow of the mission (`process-s1-l0` or `process-s3-l0` or `process-cr-l0`)
+    as a sub-flow, with the settings of the `s<mission>l0-default-setting` Prefect variable.
 
     Args:
         session: Identifier of the session.
@@ -68,16 +69,33 @@ async def process_l0(
     logger.info(f"Mode verbose is set to {verbose}")
 
     # Check session name format
-    pattern = re.compile(r"^S[123]._")
-    if not pattern.match(session):
-        logger.error("❌ Bad Sentinel-1,2,3 session name.")
-        raise ValueError(f"Invalid session name: '{session}'")
+    if session.startswith("CR"):
+        # Cristal format expected
+        if len(session) < 4 or session[3] != "_":
+            logger.error("❌ Bad Cristal session name.")
+            raise ValueError(f"Invalid Cristal session name: '{session}'")
+
+        mission = "CR"
+        mission_label = "Cristal"
+
+    elif session.startswith("S"):
+        # Sentinel format expected
+        pattern = re.compile(r"^S[123]._")
+        if not pattern.match(session):
+            logger.error("❌ Bad Sentinel-1,2,3 session name.")
+            raise ValueError(f"Invalid session name: '{session}'")
+
+        mission = session[1]
+        mission_label = f"Sentinel-{mission}"
+
+    else:
+        logger.error(f"❌ Unknown mission prefix for session: '{session}'")
+        raise ValueError(f"Invalid session name prefix: '{session}'")
 
     # We detect the mission
-    mission: str = session[1]
     if mission not in L0_FLOWS:
-        raise ValueError(f"❌ No Level-0 processing for Sentinel-{mission}")
-    logger.info(f"✅ Sentinel-{mission} session name is correct.")
+        raise ValueError(f"❌ No Level-0 processing for {mission_label}")
+    logger.info(f"✅ {mission_label} session name is correct.")
 
     # Read the Prefect blocks into env vars (e.g. DASK_GATEWAY_ADDRESS), needed to check the Dask clusters
     flow_env = FlowEnv(env_args)
@@ -104,7 +122,9 @@ async def process_l0(
                 logger.error(f"❌ The session '{session}' has not been published yet")
                 raise ValueError(f"'{session}' has not been published")
         else:
-            logger.info(f"📥 Try to stage session {session} from {mission} stations :{settings.cadip_collections}")
+            logger.info(
+                f"📥 Try to stage session {session} from {mission_label} stations :{settings.cadip_collections}",
+            )
             station = await get_cadip_station(
                 flow_env,
                 session,
@@ -115,7 +135,7 @@ async def process_l0(
 
         # The session is staged at this step.
         # We can run the flow of the mission, that reads its settings again as it can also be run alone
-        logger.info(f"🚧 We start Sentinel-{mission} processing.")
+        logger.info(f"🚧 We start {mission_label} processing.")
         if not found:
             return None
         return await L0_FLOWS[mission](
