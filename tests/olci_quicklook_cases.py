@@ -26,6 +26,8 @@ import xarray as xr
 from PIL import Image
 from pystac import Asset, Item
 
+from rs_workflows.utils.zarr_utils import ZARR_MEDIA_TYPE
+
 # Allow collection without runner-only packages; restore the module registry afterwards.
 with patch.dict(
     "sys.modules",
@@ -86,7 +88,7 @@ class OlciQuicklookTests:
         item = Item("product", None, None, datetime(2025, 6, 12, tzinfo=timezone.utc), {})
         item.stac_extensions = [FILE_EXTENSION]
         item.add_asset("metadata", Asset("s3://test-bucket/metadata.json", media_type="application/json"))
-        item.add_asset("product", Asset(PRODUCT_HREF + "/", media_type=common.ZARR_MEDIA_TYPE))
+        item.add_asset("product", Asset(PRODUCT_HREF + "/", media_type=ZARR_MEDIA_TYPE))
 
         # Replace Prefect setup and catalog access, and supply harmless S3 credentials.
         flow_env = mocker.patch.object(common, "FlowEnv").return_value

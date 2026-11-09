@@ -42,7 +42,11 @@ from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.record_performance import record_performance_indicators
 from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import parse_logs
-from rs_workflows.utils.zarr_utils import is_zarr_group, read_zarr_attributes
+from rs_workflows.utils.zarr_utils import (
+    ZARR_MEDIA_TYPE,
+    is_zarr_group,
+    read_zarr_attributes,
+)
 
 
 def s3_list(s3_prefix: str):
@@ -243,7 +247,7 @@ def create_stac_item(
         return Asset(
             href=path,
             title=product_name,
-            media_type="application/vnd+zarr",
+            media_type=ZARR_MEDIA_TYPE,
             roles=["data", "metadata"],
             # TODO: The story RSPY-280 is implemented in the catalog to fill the auth:ref field
             # extra_fields={

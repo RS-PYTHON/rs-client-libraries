@@ -47,7 +47,11 @@ from rs_workflows.payload_generator import (
 )
 from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import download_and_extract_assets_task
-from rs_workflows.utils.zarr_utils import is_zarr_group, read_zarr_attributes
+from rs_workflows.utils.zarr_utils import (
+    ZARR_MEDIA_TYPE,
+    is_zarr_group,
+    read_zarr_attributes,
+)
 
 # Path to the conversion scripts
 ADF_ECMWA_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWA.py"
@@ -492,7 +496,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
             asset=Asset(
                 href=str(zarr_path),
                 title=item_id,
-                media_type="application/vnd+zarr",
+                media_type=ZARR_MEDIA_TYPE,
                 roles=["data", "metadata"],
             ),
         )

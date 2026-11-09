@@ -26,7 +26,7 @@ The flow takes a `dpr_input` parameter (`DprProcessIn`) and an optional `retry_c
 | `dask_cluster_label` | Yes | Label of the Dask cluster where the processor runs, see [Dask](https://github.com/RS-PYTHON/rs-documentation/blob/develop/docs/services/virtual-environment/dask.md). |
 | `dask_cluster_instance` | No | Identifier of a specific Dask cluster instance, used to log the direct URL of its dashboard. |
 | `s3_payload_file` | Yes | S3 path where the payload file is written (deleted after the run). |
-| `input_products` | Yes | The input products: list of `{name, item_id, collection_name}`, where `name` is the input name in the task table, and `item_id` and `collection_name` identify the STAC item in the catalog. |
+| `input_products` | Yes | The input products: list of `{name, item_id, collection_name, zarr}`, where `name` is the input name in the task table, `item_id` and `collection_name` identify the STAC item in the catalog, and `zarr` (`false` by default) is `true` if the processor reads the product in the Zarr format. Then the flow fails before launching the processor if the first asset of the item, read by the processor, is not in the Zarr format (Zarr media type or `.zarr` extension), e.g. a product in the legacy SAFE format. The reader of the task table cannot be used instead: `cpm_zarr` is also given for raw inputs, e.g. the CADU chunks. |
 | `generated_product_to_collection_identifier` | Yes | Where to publish the generated products, see [Generated products](#generated-products). |
 | `auxiliary_product_to_collection_identifier` | Yes | Where to find and stage the auxiliary files, see [Auxiliary files](#auxiliary-files). |
 | `processing_mode` | No | Processing modes, used to filter the inputs and ADFs of the task table: `nrt`, `ntc`, `reprocessing`, `subs`. `always` is always applied. |
@@ -189,7 +189,10 @@ async def process_my_product(env_args, settings, item_id, collection_name, prope
     return await call_dpr_flow(
         env_args,
         settings,
-        input_products=[FlowInputProduct(name=base_name, item_id=item_id, collection_name=collection_name)],
+        # zarr=True: the processor reads the product in the Zarr format, check it before launching the processor
+        input_products=[
+            FlowInputProduct(name=base_name, item_id=item_id, collection_name=collection_name, zarr=True),
+        ],
         external_variables={"start_datetime": properties["start_datetime"], "end_datetime": properties["end_datetime"]},
         workflow=workflow,
     )

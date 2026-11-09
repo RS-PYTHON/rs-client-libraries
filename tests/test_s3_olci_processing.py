@@ -215,7 +215,7 @@ async def test_compute_s3l1olci_inputs(  # pylint: disable=too-many-arguments,to
     if natl0_found:
         expected.append(("NAV_1", "natl0-item", natl0_collection))
     assert input_products == [
-        FlowInputProduct(name=name, item_id=item_id, collection_name=collection)
+        FlowInputProduct(name=name, item_id=item_id, collection_name=collection, zarr=True)
         for name, item_id, collection in expected
     ]
 
@@ -345,7 +345,7 @@ async def test_process_s3l2olci_product(mocker):
         "l2",
         ENV_ARGS,
         SETTINGS,
-        [FlowInputProduct(name="OLCEFR", item_id="olcefr-item", collection_name="s03olcefr")],
+        [FlowInputProduct(name="OLCEFR", item_id="olcefr-item", collection_name="s03olcefr", zarr=True)],
         {"start_datetime": OLCEFR_PROPERTIES["start_datetime"], "end_datetime": OLCEFR_PROPERTIES["end_datetime"]},
         WorkflowType.ON_DEMAND,
     )
@@ -417,11 +417,11 @@ async def test_systematic_flows_accept_the_product_events(mocker):
 
     l1_input, l2_input = (call.args[0] for call in dpr_processing.call_args_list)
     assert l1_input.input_products == [
-        FlowInputProduct(name="S3OLCIL0_1", item_id="olcl0-item", collection_name="s03olcl0_"),
+        FlowInputProduct(name="S3OLCIL0_1", item_id="olcl0-item", collection_name="s03olcl0_", zarr=True),
     ]
     assert l1_input.satellite == "sentinel-3a"
     assert l2_input.input_products == [
-        FlowInputProduct(name="S03OLCEFR", item_id="olcefr-item", collection_name="s03olcefr"),
+        FlowInputProduct(name="S03OLCEFR", item_id="olcefr-item", collection_name="s03olcefr", zarr=True),
     ]
     for dpr_input in (l1_input, l2_input):
         assert dpr_input.env == FlowEnvArgs(owner_id="owner")

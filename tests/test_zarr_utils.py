@@ -14,8 +14,11 @@
 
 """Unit tests for the Zarr v2/v3 helpers."""
 
+from datetime import datetime
+
 import pytest
 import zarr
+from pystac import Asset, Item
 
 from rs_workflows.on_demand_conversion import read_zarr_stac_item
 from rs_workflows.utils import zarr_utils
@@ -111,3 +114,46 @@ def test_read_zarr_stac_item(zarr_store):
     assert item.id == "S01SIWSLC_TEST"
     assert item.properties["product:type"] == "S01SIWSLC"
     assert item.assets["S01SIWSLC_TEST"].href == str(store)
+
+
+def _stac_item(*hrefs_and_media_types: tuple[str, str | None]) -> Item:
+    """STAC item with the given assets, in this order."""
+    item = Item("S1C_IW_SLC", None, None, datetime(2026, 4, 8), {}, collection="s1-l1-iw-slc")
+    for index, (href, media_type) in enumerate(hrefs_and_media_types):
+        item.add_asset(f"asset{index}", Asset(href, media_type=media_type))
+    return item
+
+
+@pytest.mark.parametrize(
+    "href,media_type,expected",
+    [
+        ("s3://bucket/s01siwslc/S1C_IW_SLC", zarr_utils.ZARR_MEDIA_TYPE, True),
+        ("s3://bucket/s01siwslc/S1C_IW_SLC.zarr", None, True),
+        ("s3://bucket/s01siwslc/S1C_IW_SLC.ZARR/", None, True),
+        ("s3://bucket/s1-l1-iw-slc/S1C_IW_SLC/S1C_IW_SLC.SAFE", None, False),
+        ("s3://bucket/s1-l1-iw-slc/S1C_IW_SLC.SAFE.zip", "application/zip", False),
+        ("s3://bucket/s01siwslc/S1C_IW_SLC.zarr.zip", "application/zip", False),
+    ],
+)
+def test_is_zarr_asset(href, media_type, expected):
+    """A STAC asset is a Zarr product if it has the Zarr media type or the .zarr extension."""
+    assert zarr_utils.is_zarr_asset(Asset(href, media_type=media_type)) == expected
+
+
+def test_is_zarr_item_checks_the_first_asset():
+    """The first asset of a STAC item is read by the processors: only this one must be a Zarr product."""
+    zarr_asset = ("s3://bucket/S1C_IW_SLC.zarr", zarr_utils.ZARR_MEDIA_TYPE)
+    thumbnail = ("s3://bucket/thumbnail.png", "image/png")
+    assert zarr_utils.is_zarr_item(_stac_item(zarr_asset, thumbnail))
+    assert not zarr_utils.is_zarr_item(_stac_item(thumbnail, zarr_asset))
+    assert not zarr_utils.is_zarr_item(_stac_item())
+
+
+def test_check_zarr_input():
+    """A STAC item that is not in the Zarr format is rejected."""
+    safe_item = _stac_item(("s3://bucket/s1-l1-iw-slc/S1C_IW_SLC/S1C_IW_SLC.SAFE", None))
+    zarr_item = _stac_item(("s3://bucket/s01siwslc/S1C_IW_SLC.zarr", zarr_utils.ZARR_MEDIA_TYPE))
+
+    zarr_utils.check_zarr_input(zarr_item, "slcs")
+    with pytest.raises(ValueError, match=r"'slcs' .* 'S1C_IW_SLC' of the 's1-l1-iw-slc' collection"):
+        zarr_utils.check_zarr_input(safe_item, "slcs")

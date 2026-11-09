@@ -27,6 +27,7 @@ from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct, Work
 from rs_workflows.payload_generator import EDH_API_KEY_ENV_VAR
 from rs_workflows.utils.catalog import get_catalog_items
 from rs_workflows.utils.dpr import ProcessingId, call_dpr_flow, load_processor_settings
+from rs_workflows.utils.zarr_utils import is_zarr_item
 
 # Pipelines of the nominal on-demand flow
 S1ArdPipeline = Literal["SLC__1_CSL__1", "SLC__1_GSL__1", "SLC__1_NRB__1"]
@@ -68,6 +69,25 @@ def _get_slc_collection(slc: str, input_collections: list[str]) -> str:
         if collection:
             return collection
     return input_collections[0]
+
+
+def _get_slc_items(slcs: list[str], items: list[Item], input_collections: list[str]) -> dict[str, Item] | None:
+    """
+    Return the catalog item of each SLC, or None if an SLC is not found.
+
+    If an SLC is found in several collections, e.g. in a legacy SAFE collection (s1-l1-iw-slc) and in a Zarr
+    collection (s01siwslc), the item in the Zarr format, read by the S1 ARD processor, is preferred. An item that is not
+    in the Zarr format is rejected later, when the input products of the processor payload are checked.
+    """
+    logger = get_run_logger()
+    slc_items: dict[str, Item] = {}
+    for slc in slcs:
+        found = [item for item in items if item.id == slc]
+        if not found:
+            logger.error(f"❌ The processing cannot be launched, the SLC {slc!r} is not found in {input_collections}")
+            return None
+        slc_items[slc] = next((item for item in found if is_zarr_item(item)), found[0])
+    return slc_items
 
 
 def _check_slcs(slcs: list[str], reference_date: date | None) -> bool:
@@ -171,17 +191,27 @@ async def _do_process_s1ard(
             logger.error(f"❌ The processing cannot be launched, no items found for {slcs} in {input_collections}")
             return
 
-        instrument_mode = _get_instrument_mode(item_collection.items)
+        slc_items = _get_slc_items(slcs, item_collection.items, input_collections)
+        if not slc_items:
+            return
+
+        instrument_mode = _get_instrument_mode(list(slc_items.values()))
         if not instrument_mode:
             return
 
+        # Read each SLC from the collection where it was found, else from the collection of its instrument mode
         input_products = [
             FlowInputProduct(
                 name="slcs",
                 item_id=slc,
-                collection_name=_get_slc_collection(slc, input_collections),
+                collection_name=(
+                    item.collection_id
+                    if item.collection_id in input_collections
+                    else _get_slc_collection(slc, input_collections)
+                ),
+                zarr=True,
             )
-            for slc in slcs
+            for slc, item in slc_items.items()
         ]
 
         # Call DPR flow

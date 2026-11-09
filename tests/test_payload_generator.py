@@ -53,6 +53,7 @@ from rs_workflows.payload_template import (
     StoreParams,
     WorkflowStep,
 )
+from rs_workflows.utils.zarr_utils import ZARR_MEDIA_TYPE
 
 
 # build_workflow_step
@@ -801,6 +802,91 @@ def test_build_input_products_success_multiple_inputs_regex(sample_unit, mock_st
     assert isinstance(input_product.reader_params, StoreParams)
     assert input_product.reader_params.regex == r"(item1|item2)"
     assert input_product.reader_params.multiplicity == "2"
+
+
+@pytest.mark.parametrize("several_products", [False, True])
+def test_build_input_products_rejects_items_not_in_zarr(
+    sample_unit,
+    mock_store_params,
+    mocker,
+    several_products,
+):
+    """
+    Non-regression: an input product that the processor reads in the Zarr format must be in the Zarr format.
+    Else the processor cannot open it, e.g. a legacy SAFE product, and fails with an unclear error.
+    """
+    safe_item = Item("S1C_IW_SLC", None, None, datetime(2026, 4, 8), {}, collection="s1-l1-iw-slc")
+    safe_item.add_asset("product", Asset("s3://bucket/s1-l1-iw-slc/S1C_IW_SLC/S1C_IW_SLC.SAFE"))
+    zarr_item = Item("S1C_IW_SLC.zarr", None, None, datetime(2026, 4, 8), {}, collection="s01siwslc")
+    zarr_item.add_asset("product", Asset("s3://bucket/s01siwslc/S1C_IW_SLC.zarr", media_type=ZARR_MEDIA_TYPE))
+    resolved = [(zarr_item, "s3://bucket/s01siwslc/S1C_IW_SLC.zarr"), (safe_item, "s3://bucket/s1-l1-iw-slc/S1C")]
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        side_effect=resolved if several_products else resolved[1:],
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [
+        FlowInputProduct(name="S1CADUS", item_id="S1C_IW_SLC", collection_name="coll", zarr=True),
+    ]
+    if several_products:
+        mock_dpr.input_products.insert(
+            0,
+            FlowInputProduct(name="S1CADUS", item_id="S1C_IW_SLC.zarr", collection_name="coll", zarr=True),
+        )
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    with pytest.raises(ValueError, match="'S1C_IW_SLC' of the 's1-l1-iw-slc' collection is not in the Zarr format"):
+        build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+
+
+@pytest.mark.parametrize("zarr", [False, True])
+def test_build_input_products_accepts_items_in_zarr(sample_unit, mock_store_params, mocker, zarr):
+    """An input product in the Zarr format is accepted, the check being required or not."""
+    zarr_item = Item("S1C_IW_SLC.zarr", None, None, datetime(2026, 4, 8), {}, collection="s01siwslc")
+    zarr_item.add_asset("product", Asset("s3://bucket/s01siwslc/S1C_IW_SLC.zarr", media_type=ZARR_MEDIA_TYPE))
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value=(zarr_item, "s3://bucket/s01siwslc/S1C_IW_SLC.zarr"),
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [
+        FlowInputProduct(name="S1CADUS", item_id="S1C_IW_SLC.zarr", collection_name="coll", zarr=zarr),
+    ]
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+    assert [i.path for i in inputs] == ["s3://bucket/s01siwslc/S1C_IW_SLC.zarr"]
+
+
+def test_build_input_products_doesnt_check_the_format_by_default(sample_unit, mock_store_params, mocker):
+    """
+    Non-regression: an input product that is not in the Zarr format is accepted when the flow doesn't require the
+    Zarr format, even with the cpm_zarr reader in the tasktable, that is also given for raw inputs, e.g. CADU chunks.
+    """
+    sample_unit["input_products"][0]["engine"] = "cpm_zarr"
+    cadu_item = Item("S3B_20251010143722593812", None, None, datetime(2025, 10, 10), {}, collection="cadip")
+    cadu_item.add_asset("chunk", Asset("s3://bucket/cadip/S3B_20251010143722593812/DCS_06_ch1_DSDB_00000.raw"))
+    mocker.patch(
+        "rs_workflows.payload_generator.resolve_stac_input_path",
+        return_value=(cadu_item, "s3://bucket/cadip/S3B_20251010143722593812"),
+    )
+
+    mock_dpr = MagicMock()
+    mock_dpr.input_products = [
+        FlowInputProduct(name="S1CADUS", item_id="S3B_20251010143722593812", collection_name="cadip"),
+    ]
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+
+    inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
+    assert [(i.engine, i.path) for i in inputs] == [("cpm_zarr", "s3://bucket/cadip/S3B_20251010143722593812")]
 
 
 def test_build_input_products_missing_mapping(sample_unit):

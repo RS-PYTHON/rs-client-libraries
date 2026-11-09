@@ -19,7 +19,49 @@ from typing import Any
 from urllib.parse import urlparse
 
 import zarr
+from pystac import Asset, Item
 from zarr.errors import ContainsArrayError
+
+# Media type of the STAC assets of the Zarr products
+ZARR_MEDIA_TYPE = "application/vnd+zarr"
+
+
+def is_zarr_asset(asset: Asset) -> bool:
+    """Return True if the STAC asset is a Zarr product: Zarr media type or .zarr extension."""
+    return asset.media_type == ZARR_MEDIA_TYPE or asset.href.rstrip("/").lower().endswith(".zarr")
+
+
+def is_zarr_item(item: Item) -> bool:
+    """Return True if the first asset of the STAC item, that is read by the processors, is a Zarr product."""
+    first_asset = next(iter(item.assets.values()), None)
+    return first_asset is not None and is_zarr_asset(first_asset)
+
+
+def check_zarr_input(item: Item, input_name: str) -> None:
+    """
+    Check that the STAC item of an input product that the processor reads in the Zarr format, is in the Zarr format.
+
+    Without this check, the processor cannot open the product, e.g. in the legacy SAFE format, and fails with an
+    unclear error, e.g. EOPF ignores the optional input products that it cannot open. The reader (engine) of the
+    processor tasktable cannot be used to know if the product is read in the Zarr format: cpm_zarr is also given for
+    raw inputs, e.g. the CADU chunks.
+
+    Args:
+        item: STAC item of the input product.
+        input_name: Name of the input product in the processor tasktable.
+
+    Raises:
+        ValueError: If the STAC item is not in the Zarr format.
+    """
+    if is_zarr_item(item):
+        return
+    first_asset = next(iter(item.assets.values()), None)
+    raise ValueError(
+        f"The input product {input_name!r} is read in the Zarr format by the processor, but the STAC item "
+        f"{item.id!r} of the {item.collection_id!r} collection is not in the Zarr format "
+        f"(first asset: {first_asset.href if first_asset else None!r}). Give the ID of a product in the Zarr format, "
+        "e.g. converted from the legacy SAFE format by the convert-safe flow.",
+    )
 
 
 def get_zarr_storage_options(zarr_uri: str) -> dict[str, Any] | None:

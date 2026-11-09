@@ -66,7 +66,10 @@ async def process_s3l2olci_product(
     Returns:
         The STAC items of the generated products.
     """
-    input_products = [FlowInputProduct(name=olcefr_base_name, item_id=item_id, collection_name=collection_name)]
+    # The S3 L2 OLCI processor reads the L1 products in the Zarr format
+    input_products = [
+        FlowInputProduct(name=olcefr_base_name, item_id=item_id, collection_name=collection_name, zarr=True),
+    ]
     external_variables = {"start_datetime": properties["start_datetime"], "end_datetime": properties["end_datetime"]}
     return await process_olci("l2", env_args, settings, input_products, external_variables, workflow)
 

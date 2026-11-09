@@ -292,6 +292,14 @@ class FlowInputProduct(BaseModel):
     name: str = Field(description="Input product name.")
     item_id: str = Field(description="STAC item identifier.")
     collection_name: str = Field(description="Collection name.")
+    zarr: bool = Field(
+        default=False,
+        description=(
+            "True if the processor reads the product in the Zarr format. Then the STAC item is checked before the "
+            "processor is launched, to fail with a clear error if it is not in the Zarr format, e.g. in the legacy "
+            "SAFE format, instead of an unclear processor error."
+        ),
+    )
 
     def items(self):
         """Helper method to return the model fields as items, useful for logging."""

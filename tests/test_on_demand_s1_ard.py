@@ -25,6 +25,7 @@ from rs_workflows.flow_utils import FlowEnvArgs, WorkflowType
 from rs_workflows.on_demand.sentinel1 import s1_ard
 from rs_workflows.payload_generator import EDH_API_KEY_ENV_VAR
 from rs_workflows.utils.dpr import ProcessingId
+from rs_workflows.utils.zarr_utils import ZARR_MEDIA_TYPE
 from tests.common import (
     DASK_ENV_VARS,
     PROCESSOR_SETTINGS,
@@ -46,11 +47,22 @@ def edh_api_key(monkeypatch):
     monkeypatch.setenv(EDH_API_KEY_ENV_VAR, "key")
 
 
-def _items(*modes):
-    """Catalog items with the given sar:instrument_mode values."""
+def _item(item_id, mode="IW", collection_id="s01siwslc", href=None, media_type=ZARR_MEDIA_TYPE):
+    """Catalog item of an SLC, in the Zarr format by default."""
+    asset = MagicMock(href=href or f"s3://bucket/{collection_id}/{item_id}.zarr", media_type=media_type)
+    return MagicMock(
+        id=item_id,
+        collection_id=collection_id,
+        properties={"sar:instrument_mode": mode},
+        assets={item_id: asset},
+    )
+
+
+def _items(*modes, items=None):
+    """Catalog items of SLC_IW_1 and SLC_IW_2 with the given sar:instrument_mode values, or the given items."""
     item_collection = MagicMock()
-    item_collection.items = [MagicMock(properties={"sar:instrument_mode": mode}) for mode in modes]
-    item_collection.__len__.return_value = len(modes)
+    item_collection.items = items or [_item(slc, mode) for slc, mode in zip([SLC_IW_1, SLC_IW_2], modes)]
+    item_collection.__len__.return_value = len(item_collection.items)
     return item_collection
 
 
@@ -126,6 +138,46 @@ async def test_process_s1ard_rejects_bad_catalog_items(mocker, item_collection):
     dpr_mock.assert_not_awaited()
 
 
+async def test_process_s1ard_passes_the_slcs_not_in_zarr_to_the_payload_check(mocker):
+    """An SLC found only in a legacy SAFE collection is passed to the DPR flow, that rejects it when it checks that the
+    input products of a Zarr reader are in the Zarr format."""
+    safe_item = _item(
+        SLC_IW_1,
+        collection_id="s1-l1-iw-slc",
+        href=f"s3://bucket/s1-l1-iw-slc/{SLC_IW_1}",
+        media_type=None,
+    )
+    dpr_mock = _patch(mocker, _items(items=[safe_item]), processor_settings(input_collections=["s1-l1-iw-slc"]))
+    await s1_ard.process_s1ard_reference.fn(SLC_IW_1, ENV_ARGS)
+
+    assert [p.collection_name for p in dpr_mock.call_args.kwargs["input_products"]] == ["s1-l1-iw-slc"]
+
+
+async def test_process_s1ard_rejects_missing_slcs(mocker):
+    """If an SLC is not found in the catalog, the processing is not launched."""
+    dpr_mock = _patch(mocker, _items("IW"))
+    await s1_ard.process_s1ard.fn([SLC_IW_1, SLC_IW_2], date(2026, 4, 8), ENV_ARGS)
+    dpr_mock.assert_not_awaited()
+
+
+async def test_process_s1ard_reads_the_zarr_slc_from_its_collection(mocker):
+    """When an SLC is in a legacy SAFE collection and in a Zarr collection of the settings, with the same ID, the Zarr
+    one is read from the collection where it was found, not from the first collection of its instrument mode."""
+    items = [
+        _item(SLC_IW_1, collection_id="s1-l1-iw-slc", href=f"s3://bucket/s1-l1-iw-slc/{SLC_IW_1}", media_type=None),
+        _item(SLC_IW_1, collection_id="s01siwslc"),
+    ]
+    dpr_mock = _patch(
+        mocker,
+        _items(items=items),
+        processor_settings(input_collections=["s1-l1-iw-slc", "s01siwslc"]),
+    )
+    await s1_ard.process_s1ard_reference.fn(SLC_IW_1, ENV_ARGS)
+
+    dpr_mock.assert_awaited_once()
+    assert [p.collection_name for p in dpr_mock.call_args.kwargs["input_products"]] == ["s01siwslc"]
+
+
 async def test_process_s1ard_requires_the_edh_api_key(mocker, monkeypatch):
     """Without the EarthDataHub API key in the Prefect blocks of the owner, the processing is not launched."""
     monkeypatch.delenv(EDH_API_KEY_ENV_VAR)
@@ -156,6 +208,8 @@ async def test_process_s1ard_calls_dpr_flow(mocker):
     }
     assert [p.item_id for p in kwargs["input_products"]] == [SLC_IW_1, SLC_IW_2]
     assert {p.collection_name for p in kwargs["input_products"]} == {"s01siwslc"}
+    # The S1 ARD processor reads the SLCs in the Zarr format: they are checked before launching it
+    assert all(p.zarr for p in kwargs["input_products"])
     assert kwargs["pipeline"] == "SLC__1_NRB__1"
     assert kwargs["temporary_folder"] == s1_ard.TEMPORARY_FOLDER
 

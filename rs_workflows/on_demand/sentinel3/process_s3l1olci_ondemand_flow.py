@@ -101,7 +101,10 @@ async def compute_s3l1olci_inputs(
     duration = end_datetime - start_datetime
 
     # The first element is the one used to call the flow
-    input_products = [FlowInputProduct(name=f"{olcil0_base_name}1", item_id=item_id, collection_name=collection_name)]
+    # The S3 L1 OLCI processor reads the L0 products in the Zarr format
+    input_products = [
+        FlowInputProduct(name=f"{olcil0_base_name}1", item_id=item_id, collection_name=collection_name, zarr=True),
+    ]
     names = Counter({olcil0_base_name: 1})
     for base_name, product_type, collection, shift in (
         (olcil0_base_name, OLCL0_PRODUCT_TYPE, collection_name, duration),  # next product
@@ -123,6 +126,7 @@ async def compute_s3l1olci_inputs(
                     name=f"{base_name}{names[base_name]}",
                     item_id=found[0].id,
                     collection_name=collection,
+                    zarr=True,
                 ),
             )
     return input_products

@@ -31,12 +31,12 @@ from sentineltoolbox.api import S3BucketCredentials, open_datatree
 from rs_common import prefect_utils
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.utils.prefect import get_logger
+from rs_workflows.utils.zarr_utils import is_zarr_asset
 
 JPEG_MEDIA_TYPE = "image/jpeg"
 COG_MEDIA_TYPE = "image/tiff; application=geotiff; profile=cloud-optimized"
 QUICKLOOK_JPEG_FILENAME = "quicklook.jpg"
 QUICKLOOK_COG_FILENAME = "quicklook.tif"
-ZARR_MEDIA_TYPE = "application/vnd+zarr"
 PROJECTION_EXTENSION = "https://stac-extensions.github.io/projection/v2.0.0/schema.json"
 # Use one browser-friendly CRS for every georeferenced quicklook.
 QUICKLOOK_CRS = "EPSG:4326"
@@ -56,7 +56,7 @@ def get_zarr_href(item) -> str:
     # Accept either the declared Zarr media type or a conventional .zarr suffix.
     for asset in item.assets.values():
         href = asset.href.rstrip("/")
-        if asset.media_type == ZARR_MEDIA_TYPE or href.lower().endswith(".zarr"):
+        if is_zarr_asset(asset):
             if not href.lower().startswith("s3://"):
                 raise ValueError(f"The Zarr asset must use an S3 href, found: {href!r}")
             return href

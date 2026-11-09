@@ -48,6 +48,7 @@ from rs_workflows.payload_template import (
 from rs_workflows.storage_configuration import StorageConfig
 from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import get_common_and_relative_paths, search_by_name
+from rs_workflows.utils.zarr_utils import ZARR_MEDIA_TYPE, check_zarr_input
 
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
 DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
@@ -165,7 +166,7 @@ def get_first_asset_dir(item: Item) -> str | None:
     first_asset = next(iter(item.assets.values()))
     href = first_asset.href
 
-    if first_asset.media_type == "application/vnd+zarr":
+    if first_asset.media_type == ZARR_MEDIA_TYPE:
         return href
 
     parsed = urlparse(href)
@@ -411,6 +412,8 @@ def build_input_products(
             # Reuse the resolved STAC item later when derived_from links are built.
             source_item_href = None
             if stac_item is not None:
+                if input_product.zarr:
+                    check_zarr_input(stac_item, product_name)
                 source_item_href = stac_item.get_self_href()
 
             if kind in ("shared_disk", "local_disk"):
@@ -444,6 +447,9 @@ def build_input_products(
                 )
                 for product in products
             ]
+            for product, (stac_item, _) in zip(products, resolved_products):
+                if product.zarr and stac_item is not None:
+                    check_zarr_input(stac_item, product_name)
             paths = [path for _, path in resolved_products]
             source_item_hrefs = [
                 href
