@@ -55,6 +55,10 @@ DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
 RSPY_CATALOG_BUCKET = "rs-dev-cluster-catalog"
 DATA_EDH_DOMAIN = "data.earthdatahub.destine.eu"
 
+# Env var of the Destination Earth / EarthDataHub standard API key, used to read the Copernicus DEM. It is read from
+# the Prefect blocks of the flow owner, not from the flow parameters that can be read by everyone in the Prefect UI.
+EDH_API_KEY_ENV_VAR = "EDH_API_KEY"
+
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
 # Engines of the output products that the options `write_engine` and `use_obstore` of the flow environment apply to
@@ -629,7 +633,6 @@ def get_io(
 def build_adfs(
     storage_configuration: StorageConfig,
     adfs: list[tuple[str, str, str]],
-    dpr_process_in: DprProcessIn,
 ) -> list[AdfConfig]:
     """
     Build a list of AdfConfig objects from input ADF definitions.
@@ -642,8 +645,8 @@ def build_adfs(
     Args:
         storage_configuration (StorageConfig): Configuration object used to
             retrieve default storage parameters.
-        adfs (list[tuple[str, str, str]]): List of (adf_id, adfs_type, path) tuples.
-        dpr_process_in (DprProcessIn): DPR input process definition
+        adfs (list[tuple[str, str, str]]): List of (adf_id, adfs_type, path) tuples. The EarthDataHub API key is
+            injected in the EarthDataHub paths, from the EDH_API_KEY env var.
 
     Returns:
         list[AdfConfig]: List of constructed AdfConfig objects, one per group
@@ -667,9 +670,9 @@ def build_adfs(
                 path = os.path.dirname(path)
             # Inject EarthDataHub API Key in path, as per documentation at
             # https://earthdatahub.destine.eu/collections/copernicus-dem/datasets/GLO-30
-            if dpr_process_in.edh_api_key and path.startswith(f"https://{DATA_EDH_DOMAIN}/"):
+            if (edh_api_key := os.getenv(EDH_API_KEY_ENV_VAR)) and path.startswith(f"https://{DATA_EDH_DOMAIN}/"):
                 path = SecretStr(
-                    path.replace(DATA_EDH_DOMAIN, f"edh:{dpr_process_in.edh_api_key}@api.earthdatahub.destine.eu"),
+                    path.replace(DATA_EDH_DOMAIN, f"edh:{edh_api_key}@api.earthdatahub.destine.eu"),
                 )
             result.append(AdfConfig(id=adfs_id, path=path, adf_params=store_params))
         elif isinstance(store_params, StoreParams):
@@ -805,7 +808,7 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
             raise ValueError(f"Key {ke} not found in unit list") from ke
 
     logger.info("Building ADFs section")
-    io_config.adfs = build_adfs(storage_configuration, adfs, dpr_process_in)
+    io_config.adfs = build_adfs(storage_configuration, adfs)
 
     # Sort lists by ids
     for _type in "input_products", "output_products", "adfs":

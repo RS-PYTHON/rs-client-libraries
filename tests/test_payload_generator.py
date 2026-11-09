@@ -33,6 +33,7 @@ from rs_workflows.flow_utils import (
 from rs_workflows.on_demand_processing import build_output_lineage
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
     DATA_EDH_DOMAIN,
+    EDH_API_KEY_ENV_VAR,
     build_adfs,
     build_input_products,
     build_output_products,
@@ -891,11 +892,12 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
 # build_adfs
 
 
-def _make_dpr_process_in(edh_api_key=None):
-    """Helper to create a minimal DprProcessIn mock for build_adfs tests."""
-    mock = MagicMock()
-    mock.edh_api_key = edh_api_key
-    return mock
+def _set_edh_api_key(monkeypatch, edh_api_key=None):
+    """Set the EarthDataHub API key env var, read by build_adfs, or remove it."""
+    if edh_api_key:
+        monkeypatch.setenv(EDH_API_KEY_ENV_VAR, edh_api_key)
+    else:
+        monkeypatch.delenv(EDH_API_KEY_ENV_VAR, raising=False)
 
 
 def test_build_adfs_single_folder(mock_store_params):
@@ -908,7 +910,7 @@ def test_build_adfs_single_folder(mock_store_params):
         ("adf1", "folder", "/data/myfolder/file1.txt"),
     ]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in())
+    result = build_adfs(mock_storage_config, adfs)
 
     assert len(result) == 1
     assert result[0].id == "adf1"
@@ -925,7 +927,7 @@ def test_build_adfs_single_filename(mock_store_params):
         ("adf1", "file", "/data/file1.txt"),
     ]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in())
+    result = build_adfs(mock_storage_config, adfs)
 
     assert len(result) == 1
     assert result[0].id == "adf1"
@@ -943,7 +945,7 @@ def test_build_adfs_multiple_entries(mock_store_params):
         ("adf1", "file", "/data/folder/file2.txt"),
     ]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in())
+    result = build_adfs(mock_storage_config, adfs)
 
     assert len(result) == 1
     adf = result[0]
@@ -955,7 +957,7 @@ def test_build_adfs_multiple_entries(mock_store_params):
     assert adf.adf_params.regex == r"(file1\.txt|file2\.txt)"
 
 
-def test_build_adfs_edh_url_replaced_with_api_key(mock_store_params):
+def test_build_adfs_edh_url_replaced_with_api_key(mock_store_params, monkeypatch):
     """EDH URL is rewritten to inject the API key and becomes a SecretStr."""
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
@@ -964,7 +966,8 @@ def test_build_adfs_edh_url_replaced_with_api_key(mock_store_params):
     edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
     adfs = [("DEM", "file", edh_url)]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
+    _set_edh_api_key(monkeypatch, "my-secret-token")
+    result = build_adfs(mock_storage_config, adfs)
 
     assert len(result) == 1
     path = result[0].path
@@ -975,7 +978,7 @@ def test_build_adfs_edh_url_replaced_with_api_key(mock_store_params):
     assert full_url == "https://edh:my-secret-token@api.earthdatahub.destine.eu/copernicus-dem-30m/tile.tif"
 
 
-def test_build_adfs_edh_url_secret_hides_token(mock_store_params):
+def test_build_adfs_edh_url_secret_hides_token(mock_store_params, monkeypatch):
     """The SecretStr representation must not expose the API key in plain text."""
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
@@ -984,7 +987,8 @@ def test_build_adfs_edh_url_secret_hides_token(mock_store_params):
     edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
     adfs = [("DEM", "file", edh_url)]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
+    _set_edh_api_key(monkeypatch, "my-secret-token")
+    result = build_adfs(mock_storage_config, adfs)
 
     path = result[0].path
     assert isinstance(path, SecretStr)
@@ -992,7 +996,7 @@ def test_build_adfs_edh_url_secret_hides_token(mock_store_params):
     assert "my-secret-token" not in repr(path)
 
 
-def test_build_adfs_no_edh_key_url_unchanged(mock_store_params):
+def test_build_adfs_no_edh_key_url_unchanged(mock_store_params, monkeypatch):
     """EDH URL is left unchanged when no API key is provided."""
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
@@ -1001,14 +1005,15 @@ def test_build_adfs_no_edh_key_url_unchanged(mock_store_params):
     edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
     adfs = [("DEM", "file", edh_url)]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key=None))
+    _set_edh_api_key(monkeypatch, None)
+    result = build_adfs(mock_storage_config, adfs)
 
     path = result[0].path
     assert not isinstance(path, SecretStr)
     assert path == edh_url
 
 
-def test_build_adfs_non_edh_url_not_replaced(mock_store_params):
+def test_build_adfs_non_edh_url_not_replaced(mock_store_params, monkeypatch):
     """A non-EDH https URL is not replaced even when an API key is provided."""
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
@@ -1017,7 +1022,8 @@ def test_build_adfs_non_edh_url_not_replaced(mock_store_params):
     other_url = "https://some-other-service.example.com/data/file.tif"
     adfs = [("ADF1", "file", other_url)]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
+    _set_edh_api_key(monkeypatch, "my-secret-token")
+    result = build_adfs(mock_storage_config, adfs)
 
     path = result[0].path
     assert not isinstance(path, SecretStr)

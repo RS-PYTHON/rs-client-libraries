@@ -35,10 +35,13 @@ The flow takes a `dpr_input` parameter (`DprProcessIn`) and an optional `retry_c
 | `start_datetime`, `end_datetime` | No | Time interval used to find the auxiliary files, usually the sensing start and stop of the input products. For the Level-0 processing, the input is a session without sensing dates: its publication date is used for both. |
 | `satellite` | No | Satellite, e.g. `sentinel-3a`, used by the queries that depend on the satellite. |
 | `reference_date`, `instrument_mode` | No | Other external variables, used by some task tables. |
-| `edh_api_key` | No | [EarthDataHub](https://earthdatahub.destine.eu/) API key, to read the Copernicus DEM. |
 | `temporary_folder`, `temporary_shared`, `dask_task_timeout` | No | Advanced options of the processor run. |
 
 The logging level of the processor is given by `env.logging_level`.
+
+The [EarthDataHub](https://earthdatahub.destine.eu/) API key, to read the Copernicus DEM, is not a parameter, because
+the flow parameters can be read by everyone in the Prefect UI: it is read from the `EDH_API_KEY` env var of the
+`env-vars-<owner_id>` (or `env-vars`) Prefect secret block of the `env.owner_id` user.
 
 ### Generated products
 

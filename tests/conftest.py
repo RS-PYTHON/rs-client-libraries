@@ -690,6 +690,13 @@ def mocked_stac_catalog_search_inside_collection(request):
                     status=status.HTTP_200_OK,
                 )
 
+                # Mock the individual feature from its collection
+                responses.get(
+                    url=f"{website}/{service}/collections/{OWNER_ID}:{collection}/items/{_id}",
+                    json=feature,
+                    status=status.HTTP_200_OK,
+                )
+
             # Mock the search on all features with a GET request
             responses.get(
                 url=f"{website}/{service}/search?ids={','.join(ids)}&collections={','.join(collections)}",
