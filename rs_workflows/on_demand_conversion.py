@@ -15,7 +15,9 @@
 """Prefect flows and tasks for on-demand SAFE -zarr conversion."""
 
 import os
+import re
 from typing import Any, cast
+from urllib.parse import unquote, urlparse
 
 from prefect import flow, task
 from pystac import Item, ItemCollection, Link
@@ -44,6 +46,61 @@ from rs_workflows.utils.utils import (
     get_archived_item_indexes,
 )
 from rs_workflows.utils.zarr_utils import read_zarr_attributes
+
+# Path of an item href in the RS-Python catalog: /catalog/collections/<owner>:<collection>/items/<item ID>
+RSPY_CATALOG_ITEM_PATH = re.compile(
+    r"/catalog/collections/(?P<owner>[^/:]+):(?P<collection>[^/]+)/items/(?P<item_id>[^/]+)/?$",
+)
+
+
+def parse_rspy_catalog_item_href(href: str | None, catalog_hrefs: list[str]) -> tuple[str, str, str] | None:
+    """
+    Return the owner, collection and item ID of an item href of the RS-Python catalog, or None for another href
+    (e.g. an item of the CDSE STAC catalog).
+
+    Args:
+        href: STAC item href.
+        catalog_hrefs: URLs of the RS-Python catalog, e.g. its public and its cluster-internal URLs. The href must
+            have the hostname of one of them.
+    """
+    if not href:
+        return None
+    parsed_href = urlparse(href)
+    catalog_hostnames = {urlparse(catalog_href).hostname for catalog_href in catalog_hrefs} - {None}
+    if not parsed_href.hostname or parsed_href.hostname not in catalog_hostnames:
+        return None
+    match = RSPY_CATALOG_ITEM_PATH.search(parsed_href.path)
+    if not match:
+        return None
+    return unquote(match["owner"]), unquote(match["collection"]), unquote(match["item_id"])
+
+
+# Path of an item href in the RS-Python catalog: /catalog/collections/<owner>:<collection>/items/<item ID>
+RSPY_CATALOG_ITEM_PATH = re.compile(
+    r"/catalog/collections/(?P<owner>[^/:]+):(?P<collection>[^/]+)/items/(?P<item_id>[^/]+)/?$",
+)
+
+
+def parse_rspy_catalog_item_href(href: str | None, catalog_hrefs: list[str]) -> tuple[str, str, str] | None:
+    """
+    Return the owner, collection and item ID of an item href of the RS-Python catalog, or None for another href
+    (e.g. an item of the CDSE STAC catalog).
+
+    Args:
+        href: STAC item href.
+        catalog_hrefs: URLs of the RS-Python catalog, e.g. its public and its cluster-internal URLs. The href must
+            have the hostname of one of them.
+    """
+    if not href:
+        return None
+    parsed_href = urlparse(href)
+    catalog_hostnames = {urlparse(catalog_href).hostname for catalog_href in catalog_hrefs} - {None}
+    if not parsed_href.hostname or parsed_href.hostname not in catalog_hostnames:
+        return None
+    match = RSPY_CATALOG_ITEM_PATH.search(parsed_href.path)
+    if not match:
+        return None
+    return unquote(match["owner"]), unquote(match["collection"]), unquote(match["item_id"])
 
 
 def resolve_generated_product(
@@ -147,7 +204,8 @@ async def on_demand_conversion(
     """
     Convert a legacy SAFE product to its EOPF (Zarr) counterpart on demand.
 
-    The flow stages the input SAFE product into the target catalog collection,
+    The flow stages the input SAFE product into the target catalog collection, or
+    reads it from the RS-Python catalog if 'stac_input' is already an item of this catalog,
     prepares its assets (decompressing/unzipping archived items when needed),
     maps the legacy product type to the corresponding output product type, then
     runs the conversion and publishes the generated product.
@@ -160,14 +218,8 @@ async def on_demand_conversion(
     logger = get_logger()
     logger.info(f"Starting on-demand conversion flow with input: {conversion_input}")
     flow_env = FlowEnv(conversion_input.env)
-    staging_collection = conversion_input.generated_product_to_collection_identifier.collection_name
-    if staging_collection is None:
-        raise ValueError("collection_name is required to stage and retrieve the SAFE item")
 
     with flow_env.start_span(__name__, "legacy-conversion"):
-        # 1. stage
-        logger.info("Staging task submitted, waiting for completion...")
-
         # stac_input is str | dict; normalize once so all downstream code works uniformly.
         stac_item: str | dict[str, Any] = conversion_input.stac_input
         stac_item_id = stac_item.split("/")[-1] if isinstance(stac_item, str) else stac_item["features"][0]["id"]
@@ -181,37 +233,69 @@ async def on_demand_conversion(
                 input_feature["id"],
             )
 
-        legacy_product = staging_task.with_options(
-            retries=retry_config.staging_retries,
-            retry_delay_seconds=retry_config.staging_retry_delay,
-        ).submit(
-            flow_env.serialize(),
-            stac_input=conversion_input.stac_input,
-            catalog_collection_identifier=staging_collection,
-            asset_names=conversion_input.selected_assets or {"product"},
-            poll_interval=10,
-        )
-        staging_results = legacy_product.result()  # type: ignore[unused-coroutine]
-
-        for job_name, job_result in staging_results.items():
-            if job_result.get("status") != "successful":
-                raise RuntimeError(
-                    f"Staging job {job_name!r} failed with status {job_result.get('status')!r}: "
-                    f"{job_result.get('message')}",
-                )
+        # The SAFE item is either already staged in the RS-Python catalog, or staged by this flow
+        # in the output collection. The RS-Python catalog is reached with its public URL (RSPY_WEBSITE)
+        # or its cluster-internal URL (RSPY_HOST_CATALOG).
         catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
+        catalog_hrefs = [
+            href for href in (catalog_client.rs_server_href, catalog_client.href_service) if isinstance(href, str)
+        ]
+        catalog_item = parse_rspy_catalog_item_href(original_stac_href, catalog_hrefs)
+        already_staged = catalog_item is not None
+        staging_owner: str | None = None
+        staging_collection: str | None
+        if catalog_item:
+            staging_owner, staging_collection, stac_item_id = catalog_item
+        else:
+            staging_collection = conversion_input.generated_product_to_collection_identifier.collection_name
+        if staging_collection is None:
+            raise ValueError("collection_name is required to stage and retrieve the SAFE item")
+
+        # 1. stage, if the SAFE item is not already staged in the RS-Python catalog
+        if already_staged:
+            logger.info(
+                f"Reading the SAFE item {stac_item_id!r} already staged in the {staging_collection!r} collection "
+                f"of {staging_owner!r}",
+            )
+        else:
+            logger.info("Staging task submitted, waiting for completion...")
+            legacy_product = staging_task.with_options(
+                retries=retry_config.staging_retries,
+                retry_delay_seconds=retry_config.staging_retry_delay,
+            ).submit(
+                flow_env.serialize(),
+                stac_input=conversion_input.stac_input,
+                catalog_collection_identifier=staging_collection,
+                asset_names=conversion_input.selected_assets or {"product"},
+                poll_interval=10,
+            )
+            staging_results = legacy_product.result()  # type: ignore[unused-coroutine]
+
+            for job_name, job_result in staging_results.items():
+                if job_result.get("status") != "successful":
+                    raise RuntimeError(
+                        f"Staging job {job_name!r} failed with status {job_result.get('status')!r}: "
+                        f"{job_result.get('message')}",
+                    )
+
         catalog_items = ItemCollection(
             catalog_client.get_items(
                 collection_id=staging_collection,
                 items_ids=[stac_item_id],
+                owner_id=staging_owner,
             ),
         )
-        logger.info(f"Retrieved catalog items after staging: {catalog_items.to_dict()}")
+        logger.info(f"Retrieved catalog items: {catalog_items.to_dict()}")
 
-        # Staging can report a "successful" job while staging nothing (e.g. when the
-        # requested assets don't match any asset of the input item), which leaves the
-        # collection empty. Fail explicitly instead of raising an opaque IndexError.
         if not catalog_items.items:
+            if already_staged:
+                raise RuntimeError(
+                    f"SAFE item {stac_item_id!r} not found in the {staging_collection!r} collection of "
+                    f"{staging_owner!r}",
+                )
+            # Staging can report a "successful" job while staging nothing (e.g. when the
+            # requested assets don't match any asset of the input item), which leaves the
+            # collection empty. Fail explicitly instead of raising an opaque IndexError.
             raise RuntimeError(
                 f"Staging produced no catalog item for {stac_item_id!r} in collection "
                 f"{staging_collection!r}. Check that 'selected_assets' matches an asset "
@@ -284,7 +368,12 @@ async def on_demand_conversion(
         # 5. convert to zarr
         # dpr_client.run_conv_safe_zarr(payload, cluster_info_eopf)
         # The staged catalog item must expose the SAFE product asset expected by the conversion step.
-        input_asset = safe_item.assets.get("product") or next(iter(safe_item.assets.values()), None)
+        # The item can also have other assets than the SAFE product, e.g. a thumbnail
+        input_asset = (
+            safe_item.assets.get("product")
+            or next((asset for asset in safe_item.assets.values() if ".SAFE" in asset.href), None)
+            or next(iter(safe_item.assets.values()), None)
+        )
         if input_asset is None:
             raise RuntimeError(f"No SAFE asset found for item {safe_item.id!r}")
 
@@ -356,8 +445,9 @@ async def on_demand_conversion(
         )
         published.result()  # type: ignore[unused-coroutine]
 
-        # 9. cleanup (legacy files, staging area)
-        cleanup = cleanup_staged_safe_item_task.submit(flow_env.serialize(), output_collection, safe_item.id)
-        cleanup.result()  # type: ignore[unused-coroutine]
+        # 9. cleanup (legacy files, staging area), only if the SAFE item was staged by this flow
+        if not already_staged:
+            cleanup = cleanup_staged_safe_item_task.submit(flow_env.serialize(), output_collection, safe_item.id)
+            cleanup.result()  # type: ignore[unused-coroutine]
 
         logger.info("On-demand conversion flow completed successfully.")

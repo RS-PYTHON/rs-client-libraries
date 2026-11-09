@@ -234,6 +234,8 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
     flow_env_mock.serialize.return_value = serialized_env
     flow_env_mock.start_span.return_value = nullcontext()
     catalog_client_mock = MagicMock()
+    catalog_client_mock.rs_server_href = "https://rs-server.test"
+    catalog_client_mock.href_service = "http://rs-server-catalog.processing.svc.cluster.local:8080"
     catalog_client_mock.get_items.return_value = [staged_safe_item]
     flow_env_mock.rs_client.get_catalog_client.return_value = catalog_client_mock
     monkeypatch.setattr(on_demand_conversion_flow, "FlowEnv", lambda env: flow_env_mock)
@@ -305,6 +307,7 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
     catalog_client_mock.get_items.assert_called_once_with(
         collection_id=output_collection,
         items_ids=[safe_item_id],
+        owner_id=None,
     )
 
     find_product_type_mock.assert_called_once_with("IW_SLC__1S")
@@ -387,3 +390,171 @@ async def test_on_demand_conversion_raises_when_staging_produces_no_item(monkeyp
 
     with pytest.raises(RuntimeError, match="Staging produced no catalog item"):
         await on_demand_conversion_flow.on_demand_conversion.fn(conversion_input)
+
+
+async def test_on_demand_conversion_reads_safe_item_already_staged(monkeypatch, mocker):
+    """With an item of the RS-Python catalog, the SAFE item is read from the catalog: no staging and no cleanup."""
+    owner_id = "test-owner"
+    staging_owner = "copernicus"
+    safe_item_id = "S1A_IW_SLC__1SDV_TEST"
+    input_collection = "s1-l1-iw-slc"
+    output_collection = "s01siwslc"
+    serialized_env = FlowEnvArgs(owner_id=owner_id)
+    generated_product = FlowGeneratedProduct(
+        name="S01SIWSLC",
+        product_type="S01SIWSLC",
+        collection_name=output_collection,
+    )
+    conversion_input = ConversionIn(
+        env=serialized_env,
+        stac_input=f"https://rs-server.test/catalog/collections/{staging_owner}:{input_collection}/items/"
+        f"{safe_item_id}",
+        generated_product_to_collection_identifier=generated_product,
+        dask_cluster_label="dask-safe",
+    )
+
+    # SAFE item already staged and extracted, with a thumbnail as first asset
+    staged_safe_item = Item(
+        id=safe_item_id,
+        geometry={"type": "Polygon", "coordinates": [[[1, 2], [3, 2], [3, 4], [1, 4], [1, 2]]]},
+        bbox=[1, 2, 3, 4],
+        datetime=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        properties={"product:type": "IW_SLC__1S"},
+    )
+    staged_safe_item.add_asset(
+        "quick-look.png",
+        Asset(href=f"s3://staged-bucket/{owner_id}/{input_collection}/{safe_item_id}/quick-look.png"),
+    )
+    staged_safe_item.add_asset(
+        f"{safe_item_id}.SAFE",
+        Asset(
+            href=f"s3://staged-bucket/{owner_id}/{input_collection}/{safe_item_id}/{safe_item_id}.SAFE/manifest.safe",
+        ),
+    )
+    converted_item = Item(
+        id=f"{safe_item_id}.zarr",
+        geometry=None,
+        bbox=None,
+        datetime=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        properties={},
+    )
+
+    mocker.patch.object(on_demand_conversion_flow, "get_logger", return_value=MagicMock())
+    monkeypatch.setenv("JUPYTERHUB_API_TOKEN", "")
+    monkeypatch.setenv("DASK_GATEWAY_ADDRESS", "")
+    monkeypatch.setenv("RSPY_HOST_OSAM", "https://osam.test")
+
+    flow_env_mock = MagicMock()
+    flow_env_mock.owner_id = owner_id
+    flow_env_mock.serialize.return_value = serialized_env
+    flow_env_mock.start_span.return_value = nullcontext()
+    catalog_client_mock = MagicMock()
+    catalog_client_mock.rs_server_href = "https://rs-server.test"
+    catalog_client_mock.href_service = "http://rs-server-catalog.processing.svc.cluster.local:8080"
+    catalog_client_mock.get_items.return_value = [staged_safe_item]
+    flow_env_mock.rs_client.get_catalog_client.return_value = catalog_client_mock
+    monkeypatch.setattr(on_demand_conversion_flow, "FlowEnv", lambda env: flow_env_mock)
+
+    staging_with_options_mock = mocker.patch.object(on_demand_conversion_flow.staging_task, "with_options")
+    mocker.patch.object(on_demand_conversion_flow, "fetch_csv_from_endpoint", return_value=[])
+    mocker.patch.object(on_demand_conversion_flow, "find_s3_output_bucket", return_value="output-bucket")
+    mocker.patch.object(on_demand_conversion_flow, "read_zarr_stac_item", return_value=converted_item)
+    conversion_future = MagicMock()
+    conversion_future.result.return_value = {"zarr_uri": f"s3://output-bucket/{owner_id}/{output_collection}/out.zarr"}
+    safe_conversion_submit_mock = mocker.patch.object(
+        on_demand_conversion_flow.safe_conversion_task,
+        "submit",
+        return_value=conversion_future,
+    )
+    mocker.patch.object(on_demand_conversion_flow.catalog_flow.publish, "submit")
+    cleanup_submit_mock = mocker.patch.object(on_demand_conversion_flow.cleanup_staged_safe_item_task, "submit")
+
+    await on_demand_conversion_flow.on_demand_conversion.fn(conversion_input)
+
+    # The SAFE item is read from the RS-Python catalog, not staged again
+    staging_with_options_mock.assert_not_called()
+    catalog_client_mock.get_items.assert_called_once_with(
+        collection_id=input_collection,
+        items_ids=[safe_item_id],
+        owner_id=staging_owner,
+    )
+
+    # The SAFE asset is converted, not the thumbnail
+    _, payload, _ = safe_conversion_submit_mock.call_args.args
+    assert payload["input_safe_path"] == (
+        f"s3://staged-bucket/{owner_id}/{input_collection}/{safe_item_id}/{safe_item_id}.SAFE"
+    )
+    assert payload["output_zarr_dir_path"] == f"s3://output-bucket/{owner_id}/{output_collection}"
+
+    # The SAFE item is kept in the RS-Python catalog
+    cleanup_submit_mock.assert_not_called()
+
+
+async def test_on_demand_conversion_raises_when_catalog_item_not_found(monkeypatch, mocker):
+    """With an item of the RS-Python catalog, a missing SAFE item fails with a clear error."""
+    conversion_input = ConversionIn(
+        env=FlowEnvArgs(owner_id="test-owner"),
+        stac_input={
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "id": "S1A_IW_SLC__1SDV_TEST",
+                    "links": [
+                        {
+                            "rel": "self",
+                            "href": "https://rs-server.test/catalog/collections/copernicus:s1-l1-iw-slc/items/"
+                            "S1A_IW_SLC__1SDV_TEST",
+                        },
+                    ],
+                },
+            ],
+        },
+        generated_product_to_collection_identifier=FlowGeneratedProduct(
+            name="S01SIWSLC",
+            product_type="S01SIWSLC",
+            collection_name="s01siwslc",
+        ),
+        dask_cluster_label="dask-safe",
+    )
+
+    mocker.patch.object(on_demand_conversion_flow, "get_logger", return_value=MagicMock())
+    flow_env_mock = MagicMock()
+    flow_env_mock.start_span.return_value = nullcontext()
+    catalog_client_mock = flow_env_mock.rs_client.get_catalog_client.return_value
+    catalog_client_mock.rs_server_href = "https://rs-server.test"
+    catalog_client_mock.href_service = "https://rs-server.test"
+    catalog_client_mock.get_items.return_value = []
+    monkeypatch.setattr(on_demand_conversion_flow, "FlowEnv", lambda env: flow_env_mock)
+    staging_with_options_mock = mocker.patch.object(on_demand_conversion_flow.staging_task, "with_options")
+
+    with pytest.raises(RuntimeError, match="not found in the 's1-l1-iw-slc' collection of 'copernicus'"):
+        await on_demand_conversion_flow.on_demand_conversion.fn(conversion_input)
+    staging_with_options_mock.assert_not_called()
+
+
+CATALOG_HREFS = ["https://rs-server.test", "http://rs-server-catalog.processing.svc.cluster.local:8080"]
+
+
+@pytest.mark.parametrize(
+    "href, expected",
+    [
+        (
+            "https://rs-server.test/catalog/collections/copernicus:s1-l1-iw-slc/items/S1A_IW_SLC__1SDV_TEST",
+            ("copernicus", "s1-l1-iw-slc", "S1A_IW_SLC__1SDV_TEST"),
+        ),
+        (
+            "http://rs-server-catalog.processing.svc.cluster.local:8080/catalog/collections/user:coll/items/a%20b/",
+            ("user", "coll", "a b"),
+        ),
+        # Same path, but not our catalog
+        ("https://other-server.test/catalog/collections/copernicus:s1-l1-iw-slc/items/S1A_IW_SLC__1SDV_TEST", None),
+        ("https://stac.dataspace.copernicus.eu/v1/collections/sentinel-1-slc/items/S1A_IW_SLC__1SDV_TEST", None),
+        ("https://rs-server.test/catalog/collections/s1-l1-iw-slc/items/S1A_IW_SLC__1SDV_TEST", None),
+        ("S1A_IW_SLC__1SDV_TEST", None),
+        (None, None),
+    ],
+)
+def test_parse_rspy_catalog_item_href(href, expected):
+    """Only the item hrefs of our RS-Python catalog are recognized."""
+    assert on_demand_conversion_flow.parse_rspy_catalog_item_href(href, CATALOG_HREFS) == expected

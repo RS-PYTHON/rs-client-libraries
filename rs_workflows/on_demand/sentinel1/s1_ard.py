@@ -14,6 +14,7 @@
 
 """sentinel 1 ARD processing."""
 
+import os
 import re
 from datetime import date, datetime
 from typing import Literal
@@ -22,12 +23,8 @@ from prefect import flow, get_run_logger, task
 from pystac import Item, ItemCollection
 
 from rs_client.ogcapi.dpr_client import DprPipeline
-from rs_workflows.flow_utils import (
-    FlowEnv,
-    FlowEnvArgs,
-    FlowInputProduct,
-    WorkflowType,
-)
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct, WorkflowType
+from rs_workflows.payload_generator import EDH_API_KEY_ENV_VAR
 from rs_workflows.utils.catalog import get_catalog_items
 from rs_workflows.utils.dpr import ProcessingId, call_dpr_flow, load_processor_settings
 
@@ -57,16 +54,17 @@ def _get_slc_collection(slc: str, input_collections: list[str]) -> str:
     Args:
         slc (str): STAC item identifier of the S1 SLC product, e.g. S1C_IW_SLC__1SDV_...
         input_collections (list[str]): Catalog collection names containing the S1 SLC products,
-        e.g. s01sewslc, s01siwslc, s01ssmslc.
+        e.g. s01sewslc, s01siwslc, s01ssmslc, or s1-l1-ew-slc, s1-l1-iw-slc, s1-l1-sm-slc for the legacy SLCs.
 
     Returns:
-        str: The collection matching the instrument mode (IW, EW, or SM for S1..S6 stripmap modes),
-        or the first collection if no match is found.
+        str: The collection whose name ends with the instrument mode (IW, EW, or SM for S1..S6 stripmap modes)
+        followed by "slc", with an optional "-" or "_" separator, or the first collection if no match is found.
     """
     match = re.match(r"^S1[A-Z]_(IW|EW|S[1-6])_", slc)
     if match:
         mode = "sm" if match.group(1).startswith("S") else match.group(1).lower()
-        collection = next((c for c in input_collections if c.lower().endswith(f"{mode}slc")), None)
+        mode_regex = re.compile(rf"{mode}[-_]?slc$", re.IGNORECASE)
+        collection = next((c for c in input_collections if mode_regex.search(c)), None)
         if collection:
             return collection
     return input_collections[0]
@@ -110,7 +108,6 @@ def _build_external_variables(
     instrument_mode: str,
     slcs: list[str],
     reference_date: date | None,
-    edh_api_key: str,
     pipeline: str | None,
 ) -> dict[str, str]:
     """Build the external variables passed to the DPR processor."""
@@ -122,15 +119,12 @@ def _build_external_variables(
             reference_date = datetime.strptime(match.group(1), "%Y%m%d").date()
     if reference_date:
         external_variables["reference_date"] = str(reference_date)
-    if edh_api_key:
-        external_variables["edh_api_key"] = edh_api_key
     return external_variables
 
 
 async def _do_process_s1ard(
     slcs: list[str],
     reference_date: date | None,
-    edh_api_key: str,
     env_args: FlowEnvArgs,
     pipeline: str | None,
     verbose: bool = False,  # pylint: disable=unused-argument
@@ -143,7 +137,6 @@ async def _do_process_s1ard(
         slcs (list[str]): STAC item identifiers of S1 SLC input products, already converted to zarr.
         A single item for the reference pipeline.
         reference_date (date | None): Date of the master (reference) SLC. Set to None for reference pipeline
-        edh_api_key: Destination Earth / EarthDataHub standard API key used to access Copernicus DEM
         env_args (FlowEnvArgs): Flow environment arguments
         pipeline (str | None): Pipeline to run, or None to run the pipeline of the settings
         verbose (bool, optional): not used yet. Defaults to False.
@@ -155,6 +148,15 @@ async def _do_process_s1ard(
 
     # Read the Prefect blocks into env vars (e.g. DASK_GATEWAY_ADDRESS), needed to check the Dask clusters
     flow_env = FlowEnv(env_args)
+
+    # The EarthDataHub API key, used to read the Copernicus DEM, is read from the Prefect blocks of the owner,
+    # not from the flow parameters that can be read by everyone in the Prefect UI.
+    if not os.getenv(EDH_API_KEY_ENV_VAR):
+        logger.error(
+            f"❌ The processing cannot be launched, set the EarthDataHub API key as {EDH_API_KEY_ENV_VAR!r} in the "
+            f"'env-vars-{env_args.owner_id}' (or 'env-vars') Prefect secret block",
+        )
+        return
 
     # Read the settings and check the Dask clusters before searching the SLCs
     settings = await load_processor_settings(ProcessingId.S1_ARD)
@@ -191,7 +193,6 @@ async def _do_process_s1ard(
                 instrument_mode,
                 slcs,
                 reference_date,
-                edh_api_key,
                 pipeline,
             ),
             workflow=WorkflowType.ON_DEMAND,
@@ -206,7 +207,6 @@ async def _do_process_s1ard(
 async def process_s1ard(
     slcs: list[str],
     reference_date: date,
-    edh_api_key: str,
     env_args: FlowEnvArgs,
     pipeline: S1ArdPipeline | None = None,
     verbose: bool = False,
@@ -217,8 +217,7 @@ async def process_s1ard(
         Args:
             slcs: STAC item identifiers of S1 SLC input products, already converted to zarr.
             reference_date: Date of the master (reference) SLC
-            edh_api_key: Destination Earth / EarthDataHub standard API key used to access Copernicus DEM
-            env_args: Flow environment arguments
+            env_args: Flow environment arguments, the owner Prefect blocks must contain the EarthDataHub API key
             pipeline: Pipeline to run (default: the pipeline of the `s1ard-default-setting` Prefect variable)
     """
 
@@ -229,21 +228,20 @@ async def process_s1ard(
 
     # https://earthdatahub.destine.eu/api/stac/v1/collections/copernicus-dem/items/GLO-30
 
-    await _do_process_s1ard(slcs, reference_date, edh_api_key, env_args, pipeline, verbose)
+    await _do_process_s1ard(slcs, reference_date, env_args, pipeline, verbose)
 
 
 @flow(name="process-s1-ard-reference")
-async def process_s1ard_reference(slc: str, edh_api_key: str, env_args: FlowEnvArgs, verbose: bool = False):
+async def process_s1ard_reference(slc: str, env_args: FlowEnvArgs, verbose: bool = False):
     """
     Sentinel-1 ARD processing reference pipeline.
     This flow must be run once to generate the REFERENCE_DB used in on-demand S1 ARD processing flow.
 
         Args:
             slc: STAC item identifier of S1 master SLC input product, already converted to zarr.
-            edh_api_key: Destination Earth / EarthDataHub standard API key used to access Copernicus DEM
-            env_args: Flow environment arguments
+            env_args: Flow environment arguments, the owner Prefect blocks must contain the EarthDataHub API key
     """
-    await _do_process_s1ard([slc], None, edh_api_key, env_args, DprPipeline.S1ARD_REF.value, verbose)
+    await _do_process_s1ard([slc], None, env_args, DprPipeline.S1ARD_REF.value, verbose)
 
 
 @task(name="process sentinel-1 level-1-ard")
