@@ -47,6 +47,7 @@ from rs_workflows.payload_generator import (
 )
 from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import download_and_extract_assets_task
+from rs_workflows.utils.zarr_utils import is_zarr_group, read_zarr_attributes
 
 # Path to the conversion scripts
 ADF_ECMWA_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWA.py"
@@ -366,8 +367,8 @@ def run_adf_script(
         logger.error(f"ADF conversion failed with exit code {e.returncode}")
         raise
 
-    # find the generated ZARR directories and JSON files in output_dir
-    zarr_products = sorted(output_dir.glob("*.zarr"))
+    # find the generated ZARR stores (identified with the zarr library) and JSON files in output_dir
+    zarr_products = sorted(path for path in output_dir.iterdir() if path.is_dir() and is_zarr_group(str(path)))
     json_products = sorted(output_dir.glob("*.json"))
     all_products = zarr_products + json_products
     if not all_products:
@@ -384,7 +385,8 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     """
     Create a STAC Item from a generated ZARR directory or JSON file.
 
-    For ZARR directories, metadata is read from .zattrs or zarr.json.
+    For ZARR directories, metadata is read from the root group attributes
+    with the zarr library, whatever the Zarr format.
     For JSON files, the file itself is the metadata and the item ID is
     taken from stac_discovery.id when present, otherwise it is derived
     from the filename (minus the .json extension).
@@ -394,23 +396,14 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
 
     if is_json_product:
         logger.info(f"Creating STAC item from JSON file: {zarr_path}")
-        metadata_path = zarr_path
+        with open(zarr_path, encoding="utf-8") as f:
+            metadata = json.load(f)
     else:
         logger.info(f"Creating STAC item from ZARR: {zarr_path}")
-        # read .zattrs for global attributes
-        metadata_path = zarr_path / ".zattrs"
-        if not metadata_path.exists():
-            # try zarr.json if .zattrs doesn't exist
-            metadata_path = zarr_path / "zarr.json"
-
-    if not metadata_path.exists():
-        raise RuntimeError(f"Metadata file (.zattrs or zarr.json) not found in {zarr_path}")
-
-    with open(metadata_path, encoding="utf-8") as f:
-        metadata = json.load(f)
-
-    if not is_json_product and metadata_path.name == "zarr.json":
-        metadata = metadata.get("attributes", {})
+        try:
+            metadata = read_zarr_attributes(str(zarr_path))
+        except Exception as err:
+            raise RuntimeError(f"Could not read Zarr (v2 or v3) group metadata from {zarr_path}: {err}") from err
 
     stac_discovery = metadata.get("stac_discovery") if isinstance(metadata.get("stac_discovery"), dict) else {}
     stac_metadata = stac_discovery if is_json_product and stac_discovery else metadata
@@ -432,7 +425,11 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
         item_id = stac_discovery.get("id") or zarr_path.stem
     else:
         item_id = metadata.get("id", zarr_path.stem)
-    logger.info(f"Setting item_id to {item_id}")
+
+    # Safe version of the item_id str, to prevent code injection through logs (needed by SonarQube)
+    item_id_logs = str(item_id).replace("\r", "\\r").replace("\n", "\\n")
+
+    logger.info(f"Setting item_id to {item_id_logs}")
 
     # extract start/end datetime for pystac.Item validation.
     # try to find them in the metadata, but if they are not present, try to take them from the
@@ -447,7 +444,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
             end_dt_str = end_dt_str or id_datetimes[1]
             logger.info(f"Extracted start/end datetimes from item_id: {id_datetimes[0]} / {id_datetimes[1]}")
         else:
-            msg = f"Could not extract datetimes from metadata properties or from item_id {item_id!r}"
+            msg = f"Could not extract datetimes from metadata properties or from item_id '{item_id_logs}'"
             logger.error(msg)
             raise RuntimeError(msg)
 
