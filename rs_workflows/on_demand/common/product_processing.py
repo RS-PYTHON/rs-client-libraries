@@ -70,7 +70,7 @@ async def process_catalog_product(
     """
     # Read the Prefect blocks into env vars (e.g. DASK_GATEWAY_ADDRESS), needed to check the Dask clusters
     flow_env = FlowEnv(env_args)
-    settings = await load_processor_settings(processing_id)
+    settings = await load_processor_settings(processing_id, flow_env)
     with flow_env.start_span(__name__, "process-catalog-product"):  # NOSONAR
         item = await get_single_catalog_item(flow_env, input_item.item_id, [input_item.collection_name])
         if item is None:
@@ -107,7 +107,7 @@ async def process_event_product(
     env_args = FlowEnvArgs(owner_id=payload["owner_id"])
     # Read the Prefect blocks into env vars (e.g. DASK_GATEWAY_ADDRESS), needed to check the Dask clusters
     flow_env = FlowEnv(env_args)
-    settings = await load_processor_settings(processing_id)
+    settings = await load_processor_settings(processing_id, flow_env)
     product = payload["product"]
     with flow_env.start_span(__name__, "process-event-product"):  # NOSONAR
         return await process_product(

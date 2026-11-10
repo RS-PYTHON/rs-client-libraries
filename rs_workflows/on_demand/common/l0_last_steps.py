@@ -64,7 +64,7 @@ async def process_staged_session(
     """
     # Read the Prefect blocks into env vars (e.g. DASK_GATEWAY_ADDRESS), needed to check the Dask clusters
     flow_env = FlowEnv(env_args)
-    settings = await load_processor_settings(L0_PROCESSINGS[mission][0])
+    settings = await load_processor_settings(L0_PROCESSINGS[mission][0], flow_env)
     return await process_l0_last_steps(
         mission=mission,
         session=session,

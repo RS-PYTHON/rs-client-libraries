@@ -140,9 +140,11 @@ async def test_process_s1ard_calls_dpr_flow(mocker):
     """The nominal flow reads its settings, then calls the DPR flow with the reference date and instrument mode."""
     dpr_mock = _patch(mocker, _items("IW", "IW"))
     load_settings, get_items = _patch_settings_and_catalog(mocker, _items("IW", "IW"))
+    flow_env = flow_env_mock()
+    mocker.patch.object(s1_ard, "FlowEnv", return_value=flow_env)
     await s1_ard.process_s1ard.fn([SLC_IW_1, SLC_IW_2], date(2026, 4, 8), ENV_ARGS)
 
-    load_settings.assert_awaited_once_with(ProcessingId.S1_ARD)
+    load_settings.assert_awaited_once_with(ProcessingId.S1_ARD, flow_env)
     get_items.assert_awaited_once()
     assert get_items.call_args.args[2] == COLLECTIONS
     dpr_mock.assert_awaited_once()

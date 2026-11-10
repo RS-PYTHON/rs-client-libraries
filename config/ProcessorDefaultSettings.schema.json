@@ -109,6 +109,7 @@
                         "minLength": 1
                     },
                     "collection_name": {
+                        "description": "Existing catalog collection where the products are published, the product type in lowercase by default",
                         "type": "string",
                         "minLength": 1
                     }
