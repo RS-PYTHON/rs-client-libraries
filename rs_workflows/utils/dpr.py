@@ -30,9 +30,14 @@ from rs_client.ogcapi.dpr_client import (
     DprPipeline,
     DprProcessor,
 )
+from rs_workflows.catalog_flow import (
+    check_collections_exist,
+    get_generated_product_collections,
+)
 from rs_workflows.flow_utils import (
     AuxiliaryProductMapping,
     DprProcessIn,
+    FlowEnv,
     FlowEnvArgs,
     FlowGeneratedProduct,
     FlowInputProduct,
@@ -88,23 +93,28 @@ class ProcessorSettings(BaseModel):
     cadip_collections: list[str] = Field(default=[], description="Level-0: CADIP collections to stage the sessions.")
 
 
-async def load_processor_settings(processing_id: ProcessingId) -> ProcessorSettings:
+async def load_processor_settings(processing_id: ProcessingId, flow_env: FlowEnv) -> ProcessorSettings:
     """
     Read the default settings of a processing from its `<processing_id>-default-setting` Prefect variable, check them
-    against their JSON schema, and check that the Dask clusters of the processing are running.
+    against their JSON schema, check that the catalog collections of the generated products exist, and check that
+    the Dask clusters of the processing are running.
 
     The flows call it first, before searching their inputs in the catalog or the external stations, so that a
-    configuration error or an unavailable Dask cluster is reported as soon as possible.
+    configuration error, a missing catalog collection or an unavailable Dask cluster is reported as soon as possible.
+    But they must create their `FlowEnv` before, as it reads the Prefect blocks into the env vars needed to connect
+    to the catalog and to the Dask gateway.
 
     Args:
         processing_id: Identifier of the processing.
+        flow_env: Prefect flow environment.
 
     Returns:
         The default settings of the processing.
 
     Raises:
         RuntimeError: If the Prefect variable is missing.
-        ValueError: If the Prefect variable doesn't match the JSON schema, or if a Dask cluster is not running.
+        ValueError: If the Prefect variable doesn't match the JSON schema, if a catalog collection of the generated
+            products is missing, or if a Dask cluster is not running.
     """
     variable_name = f"{processing_id.value}-default-setting"
     get_logger().info(f"Read Prefect variable {variable_name!r}")
@@ -121,6 +131,12 @@ async def load_processor_settings(processing_id: ProcessingId) -> ProcessorSetti
             f"❌ Invalid JSON schema for var set in Prefect variable {variable_name!r}:\n{err.message}",
         ) from err
     settings = ProcessorSettings.model_validate(raw_settings)
+
+    # The flows don't create the catalog collections: they must have been created by the RS operators/administrators
+    await check_collections_exist(
+        flow_env,
+        get_generated_product_collections(settings.generated_product_to_collection_identifier),
+    )
 
     # The staging Dask cluster stages the auxiliary files of the processor
     for dask_cluster in (settings.dask_cluster_name, DASK_CLUSTER_STAGING):

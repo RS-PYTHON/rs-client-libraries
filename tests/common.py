@@ -14,8 +14,10 @@
 
 """Common code for the pytests."""
 
-from unittest.mock import MagicMock
+from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock
 
+from rs_workflows.utils import dask, dpr
 from rs_workflows.utils.dpr import ProcessorSettings
 
 # Default settings of a processing, as read from its <processing_id>-default-setting Prefect variable
@@ -45,6 +47,59 @@ def flow_env_mock() -> MagicMock:
     flow_env = MagicMock()
     flow_env.start_span.return_value.__enter__.return_value = MagicMock()
     return flow_env
+
+
+# Env vars of the Dask gateway, that the FlowEnv reads from the Prefect blocks
+DASK_ENV_VARS = {
+    "DASK_GATEWAY_ADDRESS": "http://dask-gateway",
+    "DASK_GATEWAY_PUBLIC": "https://dask-gateway.public",
+    "JUPYTERHUB_API_TOKEN": "jupyterhub-token",
+}
+
+
+def patch_dask_env_read_by_flow_env(
+    mocker,
+    monkeypatch,
+    module: ModuleType,
+    settings: dict,
+) -> tuple[MagicMock, MagicMock]:
+    """
+    Run the real `load_processor_settings` and `is_dask_cluster_running` from a flow module, with the Dask env vars
+    set only once the FlowEnv of the flow is created, like in a Prefect worker where the FlowEnv reads them from the
+    Prefect blocks. So the settings can be loaded only if the flow creates its FlowEnv first, otherwise
+    `KeyError('DASK_GATEWAY_ADDRESS')` is raised.
+
+    Args:
+        mocker: pytest-mock fixture.
+        monkeypatch: pytest monkeypatch fixture.
+        module: Flow module, that imports `FlowEnv` and `load_processor_settings`.
+        settings: Settings returned by the `<processing_id>-default-setting` Prefect variable.
+
+    Returns:
+        The mocked FlowEnv and Dask gateway classes.
+    """
+    for key in DASK_ENV_VARS:
+        monkeypatch.delenv(key, raising=False)
+
+    flow_env = flow_env_mock()
+
+    def read_prefect_blocks(*_args, **_kwargs):
+        for key, value in DASK_ENV_VARS.items():
+            monkeypatch.setenv(key, value)
+        return flow_env
+
+    flow_env_class = mocker.patch.object(module, "FlowEnv", side_effect=read_prefect_blocks, return_value=flow_env)
+    mocker.patch.object(module, "load_processor_settings", new=dpr.load_processor_settings)
+    mocker.patch.object(dpr, "check_collections_exist", new=AsyncMock())
+    mocker.patch.object(dpr.Variable, "get", new=AsyncMock(return_value=settings))
+    mocker.patch.object(dask, "JupyterHubAuth")
+    mocker.patch.object(dask, "acreate_markdown_artifact", new=AsyncMock())
+    gateway = mocker.patch.object(dask, "Gateway")
+    gateway.return_value.list_clusters.return_value = [
+        MagicMock(options={"cluster_name": name}, status=2)  # 2 = RUNNING
+        for name in (settings["dask_cluster_name"], dpr.DASK_CLUSTER_STAGING)
+    ]
+    return flow_env_class, gateway
 
 
 def json_landing_page(href: str, user_collection: str, service="catalog", conforms_to=True):

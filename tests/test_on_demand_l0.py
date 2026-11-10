@@ -24,10 +24,20 @@ from rs_workflows.on_demand.common import l0, l0_last_steps
 from rs_workflows.on_demand.sentinel1 import s1_l0
 from rs_workflows.on_demand.sentinel3 import s3_l0
 from rs_workflows.utils.dpr import ProcessingId
-from tests.common import flow_env_mock, processor_settings
+from tests.common import (
+    DASK_ENV_VARS,
+    PROCESSOR_SETTINGS,
+    flow_env_mock,
+    patch_dask_env_read_by_flow_env,
+    processor_settings,
+)
 
 ENV_ARGS = FlowEnvArgs(owner_id="owner")
-SETTINGS = processor_settings(input_collections=["s0x-cadip-session", "s0x-other-session"], cadip_collections=["sgs"])
+RAW_SETTINGS = PROCESSOR_SETTINGS | {
+    "input_collections": ["s0x-cadip-session", "s0x-other-session"],
+    "cadip_collections": ["sgs"],
+}
+SETTINGS = processor_settings(**RAW_SETTINGS)
 S1_SESSION = "S1A_20230101T000000"
 S3_SESSION = "S3A_20230101T000000"
 
@@ -45,7 +55,8 @@ def _patch_l0(
     published=(True, datetime.now(timezone.utc)),
 ):
     mocker.patch.object(l0, "get_logger", return_value=MagicMock())
-    mocker.patch.object(l0, "FlowEnv", return_value=flow_env_mock())
+    flow_env = flow_env_mock()
+    mocker.patch.object(l0, "FlowEnv", return_value=flow_env)
     load_settings = mocker.patch.object(l0, "load_processor_settings", new=AsyncMock(return_value=SETTINGS))
     get_item = mocker.patch.object(l0, "get_single_catalog_item", new=AsyncMock(return_value=item))
     mocker.patch.object(l0, "is_unpublished", return_value=unpublished)
@@ -55,6 +66,7 @@ def _patch_l0(
     flows = {"1": AsyncMock(return_value=["s1-product"]), "3": AsyncMock(return_value=["s3-product"])}
     mocker.patch.dict(l0.L0_FLOWS, flows)
     return {
+        "flow_env": flow_env,
         "load_settings": load_settings,
         "get_item": get_item,
         "get_station": get_station,
@@ -120,7 +132,7 @@ async def test_process_l0_runs_the_s1_flow_for_a_session_found_in_catalog(mocker
     mocks = _patch_l0(mocker, item=MagicMock())
     result = await l0.process_l0.fn(S1_SESSION, ENV_ARGS, force_systematic=force_systematic)
     assert result == ["s1-product"]
-    mocks["load_settings"].assert_awaited_once_with(ProcessingId.S1_L0)
+    mocks["load_settings"].assert_awaited_once_with(ProcessingId.S1_L0, mocks["flow_env"])
     mocks["get_item"].assert_awaited_once()
     assert mocks["get_item"].call_args.args[1:] == (S1_SESSION, ["s0x-cadip-session", "s0x-other-session"])
     mocks["stage"].assert_not_awaited()
@@ -139,7 +151,7 @@ async def test_process_l0_stages_then_runs_the_s3_flow(mocker):
     mocks = _patch_l0(mocker, item=None, station="s3_sgs", staged=True)
     result = await l0.process_l0.fn(S3_SESSION, ENV_ARGS, force_systematic=True)
     assert result == ["s3-product"]
-    mocks["load_settings"].assert_awaited_once_with(ProcessingId.S3_L0)
+    mocks["load_settings"].assert_awaited_once_with(ProcessingId.S3_L0, mocks["flow_env"])
     assert mocks["get_station"].call_args.args[1:] == (S3_SESSION, ["sgs"])
     mocks["stage"].assert_awaited_once()
     mocks["s3_flow"].assert_awaited_once_with(
@@ -159,6 +171,20 @@ async def test_process_l0_not_processed_when_station_not_found(mocker):
     mocks["s1_flow"].assert_not_awaited()
 
 
+async def test_process_l0_reads_the_prefect_blocks_before_checking_the_dask_clusters(mocker, monkeypatch):
+    """Non-regression: the Dask gateway env vars are read from the Prefect blocks by the FlowEnv, so it must be
+    created before the settings are loaded and the Dask clusters are checked, instead of failing with
+    KeyError('DASK_GATEWAY_ADDRESS')."""
+    mocks = _patch_l0(mocker, item=MagicMock())
+    flow_env_class, gateway = patch_dask_env_read_by_flow_env(mocker, monkeypatch, l0, RAW_SETTINGS)
+
+    assert await l0.process_l0.fn(S3_SESSION, ENV_ARGS) == ["s3-product"]
+
+    flow_env_class.assert_called_once_with(ENV_ARGS)
+    assert gateway.call_args.kwargs["address"] == DASK_ENV_VARS["DASK_GATEWAY_ADDRESS"]
+    mocks["s3_flow"].assert_awaited_once()
+
+
 # --------------------------------------------------------------------------- #
 # process_staged_session and process_l0_last_steps
 # --------------------------------------------------------------------------- #
@@ -176,15 +202,19 @@ async def test_process_staged_session(mocker, mission, processing_id, force_syst
         "load_processor_settings",
         new=AsyncMock(return_value=SETTINGS),
     )
+    flow_env = flow_env_mock()
+    flow_env_class = mocker.patch.object(l0_last_steps, "FlowEnv", return_value=flow_env)
     last_steps = mocker.patch.object(l0_last_steps, "process_l0_last_steps", new=AsyncMock(return_value=["product"]))
 
     result = await l0_last_steps.process_staged_session(mission, "session", ENV_ARGS, force_systematic, True)
 
     assert result == ["product"]
-    load_settings.assert_awaited_once_with(processing_id)
+    flow_env_class.assert_called_once_with(ENV_ARGS)
+    load_settings.assert_awaited_once_with(processing_id, flow_env)
     last_steps.assert_awaited_once_with(
         mission=mission,
         session="session",
+        flow_env=flow_env,
         env_args=ENV_ARGS,
         settings=SETTINGS,
         workflow=workflow,
@@ -192,9 +222,28 @@ async def test_process_staged_session(mocker, mission, processing_id, force_syst
     )
 
 
+@pytest.mark.parametrize("mission", ["1", "3"])
+async def test_process_staged_session_reads_the_prefect_blocks_before_checking_the_dask_clusters(
+    mocker,
+    monkeypatch,
+    mission,
+):
+    """Non-regression: when the flow of a mission is run alone, it creates its FlowEnv, that reads the Dask gateway
+    env vars from the Prefect blocks, before loading the settings and checking the Dask clusters."""
+    flow_env_class, gateway = patch_dask_env_read_by_flow_env(mocker, monkeypatch, l0_last_steps, RAW_SETTINGS)
+    last_steps = mocker.patch.object(l0_last_steps, "process_l0_last_steps", new=AsyncMock(return_value=["product"]))
+
+    assert await l0_last_steps.process_staged_session(mission, "session", ENV_ARGS, False, False) == ["product"]
+
+    assert gateway.call_args.kwargs["address"] == DASK_ENV_VARS["DASK_GATEWAY_ADDRESS"]
+    assert last_steps.call_args.kwargs["settings"] == SETTINGS
+    # The FlowEnv is created only once, and passed to the last steps
+    flow_env_class.assert_called_once_with(ENV_ARGS)
+    assert last_steps.call_args.kwargs["flow_env"] is flow_env_class.return_value
+
+
 def _patch_last_steps(mocker, item):
     mocker.patch.object(l0_last_steps, "get_logger", return_value=MagicMock())
-    mocker.patch.object(l0_last_steps, "FlowEnv", return_value=flow_env_mock())
     mocker.patch.object(l0_last_steps, "get_single_catalog_item", new=AsyncMock(return_value=item))
     return mocker.patch.object(l0_last_steps, "call_dpr_flow", new=AsyncMock(return_value=[]))
 
@@ -209,7 +258,15 @@ def _session_item(properties):
 async def test_process_l0_last_steps_returns_early_without_item(mocker):
     """When the session is not in the catalog, no DPR flow is triggered."""
     dpr_mock = _patch_last_steps(mocker, item=None)
-    result = await l0_last_steps.process_l0_last_steps("1", "S1A_x", ENV_ARGS, SETTINGS, WorkflowType.ON_DEMAND, False)
+    result = await l0_last_steps.process_l0_last_steps(
+        "1",
+        "S1A_x",
+        flow_env_mock(),
+        ENV_ARGS,
+        SETTINGS,
+        WorkflowType.ON_DEMAND,
+        False,
+    )
     assert result is None
     dpr_mock.assert_not_awaited()
 
@@ -218,7 +275,15 @@ async def test_process_l0_last_steps_requires_the_session_datetime(mocker):
     """A session without datetime cannot be processed."""
     dpr_mock = _patch_last_steps(mocker, item=_session_item({}))
     with pytest.raises(ValueError, match="'datetime' property"):
-        await l0_last_steps.process_l0_last_steps("1", "S1A_x", ENV_ARGS, SETTINGS, WorkflowType.ON_DEMAND, False)
+        await l0_last_steps.process_l0_last_steps(
+            "1",
+            "S1A_x",
+            flow_env_mock(),
+            ENV_ARGS,
+            SETTINGS,
+            WorkflowType.ON_DEMAND,
+            False,
+        )
     dpr_mock.assert_not_awaited()
 
 
@@ -235,6 +300,7 @@ async def test_process_l0_last_steps_calls_dpr_flow(mocker, mission, session, in
     result = await l0_last_steps.process_l0_last_steps(
         mission,
         session,
+        flow_env_mock(),
         ENV_ARGS,
         SETTINGS,
         WorkflowType.SYSTEMATIC,

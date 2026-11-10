@@ -154,8 +154,16 @@ def init_traces(service_name: str):
     os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = tempo_endpoint
 
     # We'll use custom instrumentation for these packages (separated by ,)
+    custom_instrumentations = "aiobotocore,botocore,requests"
+    # Disable the asyncio instrumentation: it wraps the coroutine of each new asyncio task, and when the task is
+    # cancelled before it starts, the original coroutine is never awaited. Python then warns with e.g.
+    # "RuntimeWarning: coroutine 'PrefectEventsClient._checkpoint_loop' was never awaited" because Prefect starts
+    # this task twice and cancels the first one. We don't use it anyway: no OTEL_PYTHON_ASYNCIO_* env var is set.
+    disabled_instrumentations = "asyncio"
     org_disabled = os.getenv("OTEL_PYTHON_DISABLED_INSTRUMENTATIONS", "")
-    os.environ["OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"] = f"{org_disabled},aiobotocore,botocore,requests"
+    os.environ["OTEL_PYTHON_DISABLED_INSTRUMENTATIONS"] = (
+        f"{org_disabled},{custom_instrumentations},{disabled_instrumentations}"
+    )
 
     # Run the opentelemetry auto instrumentation on all packages under opentelemetry.instrumentation.*
     # This is what the command line "opentelemetry-instrumentation" would do.

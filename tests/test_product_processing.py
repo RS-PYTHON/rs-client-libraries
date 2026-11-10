@@ -22,7 +22,13 @@ from rs_workflows.flow_utils import FlowEnvArgs, WorkflowType
 from rs_workflows.on_demand.common import product_processing
 from rs_workflows.on_demand.common.product_processing import FlowInputItem
 from rs_workflows.utils.dpr import ProcessingId
-from tests.common import flow_env_mock, processor_settings
+from tests.common import (
+    DASK_ENV_VARS,
+    PROCESSOR_SETTINGS,
+    flow_env_mock,
+    patch_dask_env_read_by_flow_env,
+    processor_settings,
+)
 
 ENV_ARGS = FlowEnvArgs(owner_id="owner")
 PROPERTIES = {"product:type": "S03OLCL0_", "platform": "sentinel-3a"}
@@ -71,7 +77,7 @@ async def test_process_catalog_product(mocker, force_systematic, workflow):
     )
 
     assert result == PUBLISHED_ITEMS
-    load_settings.assert_awaited_once_with(ProcessingId.S3_OLCI_L1)
+    load_settings.assert_awaited_once_with(ProcessingId.S3_OLCI_L1, flow_env)
     get_item.assert_awaited_once_with(flow_env, "olcl0-item", ["s03olcl0_"])
     process_product.assert_awaited_once_with(ENV_ARGS, SETTINGS, "olcl0-item", "s03olcl0_", PROPERTIES, workflow)
 
@@ -116,7 +122,7 @@ async def test_process_catalog_product_fails_without_the_product(mocker):
 
 async def test_process_event_product(mocker):
     """A systematic processing processes the product of the event, on behalf of its owner."""
-    load_settings, _, _ = _patch(mocker, None)
+    load_settings, flow_env, _ = _patch(mocker, None)
     process_product = AsyncMock(return_value=PUBLISHED_ITEMS)
     payload = {
         "owner_id": "event-owner",
@@ -131,7 +137,7 @@ async def test_process_event_product(mocker):
     result = await product_processing.process_event_product(payload, ProcessingId.S3_OLCI_L2, process_product)
 
     assert result == PUBLISHED_ITEMS
-    load_settings.assert_awaited_once_with(ProcessingId.S3_OLCI_L2)
+    load_settings.assert_awaited_once_with(ProcessingId.S3_OLCI_L2, flow_env)
     process_product.assert_awaited_once_with(
         FlowEnvArgs(owner_id="event-owner"),
         SETTINGS,
@@ -140,3 +146,49 @@ async def test_process_event_product(mocker):
         PROPERTIES,
         WorkflowType.SYSTEMATIC,
     )
+
+
+async def test_process_catalog_product_reads_the_prefect_blocks_before_checking_the_dask_clusters(mocker, monkeypatch):
+    """Non-regression: the FlowEnv, that reads the Dask gateway env vars from the Prefect blocks, is created before
+    the settings are loaded and the Dask clusters are checked, instead of failing with
+    KeyError('DASK_GATEWAY_ADDRESS')."""
+    _patch(mocker, MagicMock(properties=PROPERTIES))
+    flow_env_class, gateway = patch_dask_env_read_by_flow_env(
+        mocker,
+        monkeypatch,
+        product_processing,
+        PROCESSOR_SETTINGS,
+    )
+    process_product = AsyncMock(return_value=PUBLISHED_ITEMS)
+
+    result = await product_processing.process_catalog_product(
+        ENV_ARGS,
+        FlowInputItem(item_id="olcl0-item", collection_name="s03olcl0_"),
+        False,
+        ProcessingId.S3_OLCI_L1,
+        process_product,
+    )
+
+    assert result == PUBLISHED_ITEMS
+    flow_env_class.assert_called_once_with(ENV_ARGS)
+    assert gateway.call_args.kwargs["address"] == DASK_ENV_VARS["DASK_GATEWAY_ADDRESS"]
+    assert process_product.call_args.args[1] == SETTINGS
+
+
+async def test_process_event_product_reads_the_prefect_blocks_before_checking_the_dask_clusters(mocker, monkeypatch):
+    """Non-regression: the FlowEnv, that reads the Dask gateway env vars from the Prefect blocks of the owner of the
+    event, is created before the settings are loaded and the Dask clusters are checked."""
+    flow_env_class, gateway = patch_dask_env_read_by_flow_env(
+        mocker,
+        monkeypatch,
+        product_processing,
+        PROCESSOR_SETTINGS,
+    )
+    process_product = AsyncMock(return_value=PUBLISHED_ITEMS)
+    payload = {"owner_id": "event-owner", "product": {"id": "olcl0-item", "collection": "s03olcl0_", "properties": {}}}
+
+    result = await product_processing.process_event_product(payload, ProcessingId.S3_OLCI_L2, process_product)
+
+    assert result == PUBLISHED_ITEMS
+    assert gateway.call_args.kwargs["address"] == DASK_ENV_VARS["DASK_GATEWAY_ADDRESS"]
+    flow_env_class.assert_called_once_with(FlowEnvArgs(owner_id="event-owner"))

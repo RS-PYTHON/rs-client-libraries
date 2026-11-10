@@ -305,8 +305,27 @@ class FlowGeneratedProduct(BaseModel):
     product_type: str = Field(description="Product type.")
     collection_name: str | None = Field(
         default=None,
-        description="Collection name. If not provided, it defaults to product_type.",
+        description="Collection name. If not provided, it defaults to the product_type in lowercase.",
     )
+
+    @property
+    def target_collection(self) -> str:
+        """
+        Catalog collection of the product: the collection name if provided, otherwise the product type in
+        lowercase, as the collections are in lowercase by convention while the product types are in uppercase,
+        and the STAC collection identifiers are case sensitive.
+
+        Raises:
+            ValueError: If the product type is the '*' wildcard and the collection name is not provided.
+        """
+        if self.collection_name:
+            return self.collection_name
+        if self.product_type == "*":
+            raise ValueError(
+                "The product type in generated_product_to_collection_identifier "
+                f"cannot be '*' if the collection name is not specified for product '{self.name}'",
+            )
+        return self.product_type.lower()
 
     def items(self):
         """Helper method to return the model fields as items, useful for logging."""
@@ -514,12 +533,6 @@ class DprProcessIn(BaseModel):
         default=None,
         title="Instrument Mode",
         description="Instrument mode used in certain queries. Can be a string or InstrumentMode enum.",
-    )
-
-    edh_api_key: str | None = Field(
-        default=None,
-        title="EarthDataHub Standard API key",
-        description="Destination Earth / EarthDataHub standard API key used to access Copernicus DEM",
     )
 
     # -----------------------

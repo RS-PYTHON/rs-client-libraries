@@ -20,6 +20,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import zarr
 from pystac import Asset, Item, ItemCollection
 
 from rs_workflows import adf_flow
@@ -35,6 +36,9 @@ from rs_workflows.utils import utils as workflow_utils
 pytestmark = pytest.mark.filterwarnings(
     "ignore:Logger 'prefect\\.task_runs' attempted to send logs to the API without a flow run id\\.:UserWarning",
 )
+
+# Group metadata of a Zarr v2 store. The root attributes are written in the ".zattrs" file next to it.
+ZARR_V2_ZGROUP = json.dumps({"zarr_format": 2})
 
 
 @pytest.fixture
@@ -99,12 +103,11 @@ def create_stac_item_mock(monkeypatch):
     return mock
 
 
-def test_create_stac_item_from_zarr(mocker, tmp_path):
-    """Test STAC item creation from ZARR metadata."""
+@pytest.mark.parametrize("zarr_format", [2, 3])
+def test_create_stac_item_from_zarr(mocker, tmp_path, zarr_format):
+    """Test STAC item creation from ZARR (v2 or v3) metadata."""
     mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
     zarr_dir = tmp_path / "test.zarr"
-    zarr_dir.mkdir()
-    zattrs_file = zarr_dir / ".zattrs"
     zattrs_content = {
         "id": "S00__ADF_ECMWA_20210321T030000_20210321T150000",
         "properties": {
@@ -114,7 +117,8 @@ def test_create_stac_item_from_zarr(mocker, tmp_path):
             "end_datetime": "2021-03-21T15:00:00Z",
         },
     }
-    zattrs_file.write_text(json.dumps(zattrs_content))
+    zarr.open_group(str(zarr_dir), mode="w", zarr_format=zarr_format).attrs.update(zattrs_content)
+    assert (zarr_dir / (".zattrs" if zarr_format == 2 else "zarr.json")).is_file()
 
     item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_ECMWA")
 
@@ -221,6 +225,7 @@ def test_create_stac_item_uses_stac_props_over_item_id(mocker, tmp_path):
             "end_datetime": "2000-12-31T23:59:59Z",
         },
     }
+    (zarr_dir / ".zgroup").write_text(ZARR_V2_ZGROUP)
     (zarr_dir / ".zattrs").write_text(json.dumps(zattrs_content))
 
     item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_OLCAL")
@@ -250,6 +255,7 @@ def test_create_stac_item_uses_item_id_when_stac_props_missing(mocker, tmp_path)
             # No start_datetime/end_datetime => should fall back to item_id
         },
     }
+    (zarr_dir / ".zgroup").write_text(ZARR_V2_ZGROUP)
     (zarr_dir / ".zattrs").write_text(json.dumps(zattrs_content))
 
     item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_OLCAL")
@@ -279,6 +285,7 @@ def test_create_stac_item_falls_back_to_metadata_when_item_id_has_no_dates(mocke
             "end_datetime": "2021-03-21T15:00:00Z",
         },
     }
+    (zarr_dir / ".zgroup").write_text(ZARR_V2_ZGROUP)
     (zarr_dir / ".zattrs").write_text(json.dumps(zattrs_content))
 
     item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_ECMWA")
@@ -313,12 +320,26 @@ def test_create_stac_item_raises_error_when_datetimes_missing(mocker, tmp_path):
             # missing start_datetime and end_datetime
         },
     }
+    (zarr_dir / ".zgroup").write_text(ZARR_V2_ZGROUP)
     (zarr_dir / ".zattrs").write_text(json.dumps(zattrs_content))
 
     with pytest.raises(
         RuntimeError,
         match="Could not extract datetimes from metadata properties or from item_id 'simple-id-no-dates'",
     ):
+        adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_ECMWA")
+
+
+@pytest.mark.parametrize("metadata_files", [{}, {".zattrs": json.dumps({"id": "no-zgroup"})}])
+def test_create_stac_item_raises_error_on_invalid_zarr(mocker, tmp_path, metadata_files):
+    """Test that a RuntimeError is raised if the directory is not a valid Zarr v2 or v3 group."""
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
+    zarr_dir = tmp_path / "test.zarr"
+    zarr_dir.mkdir()
+    for name, content in metadata_files.items():
+        (zarr_dir / name).write_text(content)
+
+    with pytest.raises(RuntimeError, match="Could not read Zarr \\(v2 or v3\\) group metadata from"):
         adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_ECMWA")
 
 
@@ -333,7 +354,9 @@ def test_run_adf_script_returns_generated_zarr(monkeypatch, mocker, tmp_path):
     work_dir.mkdir()
     output_dir.mkdir()
     generated_zarr = output_dir / "generated.zarr"
-    generated_zarr.mkdir()
+    zarr.open_group(str(generated_zarr), mode="w")
+    # A directory with the .zarr extension which is not a Zarr store must be ignored
+    (output_dir / "not_a_store.zarr").mkdir()
 
     completed_process = MagicMock(stdout="line 1\nline 2", stderr="warn 1")
     run_mock = MagicMock(return_value=completed_process)
@@ -565,6 +588,7 @@ async def test_adf_conversion_flow_logic(
             "end_datetime": "2021-03-21T15:00:00Z",
         },
     }
+    (zarr_path / ".zgroup").write_text(ZARR_V2_ZGROUP)
     (zarr_path / ".zattrs").write_text(json.dumps(zattrs_content))
     run_script_mock = MagicMock(return_value=[zarr_path])
     monkeypatch.setattr(adf_flow, "run_adf_script", run_script_mock)
@@ -660,6 +684,7 @@ async def test_adf_conversion_flow_logic_for_ecmwf(
 
     zarr_path = tmp_path / "mock-ecmwf.zarr"
     zarr_path.mkdir()
+    (zarr_path / ".zgroup").write_text(ZARR_V2_ZGROUP)
     (zarr_path / ".zattrs").write_text(
         json.dumps(
             {
@@ -750,6 +775,7 @@ async def test_adf_conversion_flow_logic_for_water(
 
     zarr_path = tmp_path / "mock-water.zarr"
     zarr_path.mkdir()
+    (zarr_path / ".zgroup").write_text(ZARR_V2_ZGROUP)
     (zarr_path / ".zattrs").write_text(
         json.dumps(
             {
@@ -847,6 +873,7 @@ async def test_adf_conversion_raises_when_publish_collection_not_found(
 
     zarr_path = tmp_path / "mock.zarr"
     zarr_path.mkdir()
+    (zarr_path / ".zgroup").write_text(ZARR_V2_ZGROUP)
     (zarr_path / ".zattrs").write_text(
         json.dumps(
             {
@@ -930,6 +957,7 @@ async def test_adf_conversion_flow_logic_for_getas(
 
     zarr_path = tmp_path / "mock-getas.zarr"
     zarr_path.mkdir()
+    (zarr_path / ".zgroup").write_text(ZARR_V2_ZGROUP)
     (zarr_path / ".zattrs").write_text(
         json.dumps(
             {
@@ -999,8 +1027,8 @@ def test_run_adf_script_stb_convert_products(monkeypatch, mocker, tmp_path):
     work_dir.mkdir()
     output_dir.mkdir()
     # simulate multiple generated outputs (as stb_convert_products may produce)
-    (output_dir / "product_a.zarr").mkdir()
-    (output_dir / "product_b.zarr").mkdir()
+    zarr.open_group(str(output_dir / "product_a.zarr"), mode="w", zarr_format=2)
+    zarr.open_group(str(output_dir / "product_b.zarr"), mode="w", zarr_format=3)
     (output_dir / "product_c.json").write_text("{}")
 
     completed_process = MagicMock(stdout="done", stderr="")
@@ -1057,6 +1085,7 @@ async def _run_stb_adf_conversion(monkeypatch, mocker, tmp_path, adf_input, expe
 
     zarr_path = tmp_path / "mock-adf.zarr"
     zarr_path.mkdir()
+    (zarr_path / ".zgroup").write_text(ZARR_V2_ZGROUP)
     (zarr_path / ".zattrs").write_text(
         json.dumps(
             {
@@ -1340,6 +1369,7 @@ async def test_adf_conversion_uses_custom_cql2_filter(
             "end_datetime": "2021-03-21T15:00:00Z",
         },
     }
+    (zarr_path / ".zgroup").write_text(ZARR_V2_ZGROUP)
     (zarr_path / ".zattrs").write_text(json.dumps(zattrs_content))
     run_script_mock = MagicMock(return_value=[zarr_path])
     monkeypatch.setattr(adf_flow, "run_adf_script", run_script_mock)

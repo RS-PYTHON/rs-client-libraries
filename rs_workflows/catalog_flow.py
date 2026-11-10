@@ -16,18 +16,11 @@
 
 import json
 import os
-from datetime import datetime
+from collections.abc import Iterable
 from typing import Any
 
 from prefect import flow, runtime, task
-from pystac import (
-    Collection,
-    Extent,
-    ItemCollection,
-    Link,
-    SpatialExtent,
-    TemporalExtent,
-)
+from pystac import ItemCollection, Link
 
 from rs_client.stac.catalog_client import CatalogClient
 from rs_common.geometry_fix import fix_geojson_geometry
@@ -176,9 +169,6 @@ async def publish(
                     target_collection,
                 )
 
-                # Check that the collection exists. Otherwise create it.
-                await check_and_create_collection(flow_env, target_collection)
-
                 # Publish item to catalog
                 # TODO: adjust timeout as needed. Current value is 6 hours.
                 logger.info(
@@ -267,19 +257,14 @@ def resolve_collection(
             continue
         # 1. Exact Name, Exact Type
         if item_metadata.product_type == gen_prod.product_type:
-            target_collection = gen_prod.collection_name or gen_prod.product_type
+            target_collection = gen_prod.target_collection
             logger.info(f"Exact match (Name & Type) found: {gen_prod}, resolved collection: {target_collection}")
             break
         # 2. Exact Name, Wildcard Type
         if gen_prod.product_type == "*" and target_collection is None:
-            target_collection = gen_prod.collection_name or gen_prod.product_type
-            # This protection is also set in build_output_products from payload_generator.py,
-            # but it's good to have it here as well for safety or a future change in logic.
-            if target_collection == "*":
-                raise RuntimeError(
-                    f"The product type in generated_product_to_collection_identifier cannot be '*' "
-                    f"if the collection name is not specified for product '{gen_prod.name}'",
-                )
+            # Raises if the collection name is not specified, this protection is also set in
+            # build_output_products from payload_generator.py.
+            target_collection = gen_prod.target_collection
             logger.info(
                 f"Match with Exact Name & Wildcard Type: {gen_prod}, resolved collection: {target_collection}",
             )
@@ -294,30 +279,51 @@ def resolve_collection(
     return target_collection
 
 
-@task(name="Check and create the collection if needed")
-async def check_and_create_collection(flow_env: FlowEnv, collection_name: str):
+def get_generated_product_collections(
+    generated_product_to_collection_identifier: list[FlowGeneratedProduct],
+) -> list[str]:
     """
-    Check if a collection exists, and create it if it doesn't.
+    Return the catalog collections of the generated products, in the order of the mapping, without duplicates.
+
+    Raises:
+        ValueError: If the collection of a generated product cannot be determined.
     """
-    # Check that the collection "collection_name" exists. Otherwise create it.
+    return list(dict.fromkeys(p.target_collection for p in generated_product_to_collection_identifier))
+
+
+async def check_collections_exist(flow_env: FlowEnv, collections: Iterable[str]) -> None:
+    """
+    Check that the catalog collections exist. The flows don't create the missing collections: the catalog
+    collections are created by the RS operators/administrators only.
+
+    The flows call it as soon as possible, before staging or processing anything, so that a configuration error
+    (missing collection or wrong collection name) is reported at the very beginning of the processing.
+
+    Args:
+        flow_env: Prefect flow environment.
+        collections: Catalog collections to check.
+
+    Raises:
+        ValueError: If at least one collection is missing from the catalog.
+    """
     logger = get_logger()
+    collections = list(dict.fromkeys(collections))
+    logger.info(f"Checking that the catalog collections exist: {collections}")
 
     catalog_client: CatalogClient = flow_env.rs_client.get_catalog_client()
-    try:
-        catalog_client.search(collections=[collection_name])
-    except RuntimeError:
-        # The collection is missing, we will create it
-        logger.info(f"The collection {collection_name} is missing; it will be created.")
-        spatial = SpatialExtent(bboxes=[[-94.6911621, 37.0332547, -94.402771, 37.1077651]])
-        date_strings = ["2000-02-01T00:00:00Z", "2100-02-12T00:00:00Z"]
-        date_objects: list[datetime | None] = [
-            datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%SZ") for date_str in date_strings
-        ]
-        temporal = TemporalExtent(intervals=date_objects)
-        extent = Extent(spatial=spatial, temporal=temporal)
-        new_collection = Collection(
-            id=collection_name,
-            description=f"{collection_name} collection",
-            extent=extent,
+    missing: list[str] = []
+    for collection in collections:
+        try:
+            catalog_client.get_collection(collection)
+        except RuntimeError:
+            missing.append(collection)
+
+    if missing:
+        message = (
+            f"❌ The following catalog collections are missing for owner {catalog_client.owner_id!r}: {missing}. "
+            "The flows don't create the collections: ask an RS operator/administrator to create them, "
+            "or fix the collection names in the Prefect variable or in the flow parameters."
         )
-        catalog_client.add_collection(new_collection)
+        logger.error(message)
+        raise ValueError(message)
+    logger.info(f"✅ The catalog collections exist: {collections}")

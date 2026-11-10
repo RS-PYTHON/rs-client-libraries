@@ -31,7 +31,7 @@ from pystac import Asset, Item
 
 from rs_common.prefect_utils import s3_upload_dir, s3_upload_file
 from rs_workflows.aux_flow import aux_staging_task
-from rs_workflows.catalog_flow import publish
+from rs_workflows.catalog_flow import check_collections_exist, publish
 from rs_workflows.flow_utils import (
     AdfProcessIn,
     AdfType,
@@ -47,6 +47,7 @@ from rs_workflows.payload_generator import (
 )
 from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import download_and_extract_assets_task
+from rs_workflows.utils.zarr_utils import is_zarr_group, read_zarr_attributes
 
 # Path to the conversion scripts
 ADF_ECMWA_SCRIPT_PATH = Path(__file__).parent / "adf_conversion" / "S00__ADF_ECMWA.py"
@@ -366,8 +367,8 @@ def run_adf_script(
         logger.error(f"ADF conversion failed with exit code {e.returncode}")
         raise
 
-    # find the generated ZARR directories and JSON files in output_dir
-    zarr_products = sorted(output_dir.glob("*.zarr"))
+    # find the generated ZARR stores (identified with the zarr library) and JSON files in output_dir
+    zarr_products = sorted(path for path in output_dir.iterdir() if path.is_dir() and is_zarr_group(str(path)))
     json_products = sorted(output_dir.glob("*.json"))
     all_products = zarr_products + json_products
     if not all_products:
@@ -384,7 +385,8 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     """
     Create a STAC Item from a generated ZARR directory or JSON file.
 
-    For ZARR directories, metadata is read from .zattrs or zarr.json.
+    For ZARR directories, metadata is read from the root group attributes
+    with the zarr library, whatever the Zarr format.
     For JSON files, the file itself is the metadata and the item ID is
     taken from stac_discovery.id when present, otherwise it is derived
     from the filename (minus the .json extension).
@@ -394,23 +396,14 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
 
     if is_json_product:
         logger.info(f"Creating STAC item from JSON file: {zarr_path}")
-        metadata_path = zarr_path
+        with open(zarr_path, encoding="utf-8") as f:
+            metadata = json.load(f)
     else:
         logger.info(f"Creating STAC item from ZARR: {zarr_path}")
-        # read .zattrs for global attributes
-        metadata_path = zarr_path / ".zattrs"
-        if not metadata_path.exists():
-            # try zarr.json if .zattrs doesn't exist
-            metadata_path = zarr_path / "zarr.json"
-
-    if not metadata_path.exists():
-        raise RuntimeError(f"Metadata file (.zattrs or zarr.json) not found in {zarr_path}")
-
-    with open(metadata_path, encoding="utf-8") as f:
-        metadata = json.load(f)
-
-    if not is_json_product and metadata_path.name == "zarr.json":
-        metadata = metadata.get("attributes", {})
+        try:
+            metadata = read_zarr_attributes(str(zarr_path))
+        except Exception as err:
+            raise RuntimeError(f"Could not read Zarr (v2 or v3) group metadata from {zarr_path}: {err}") from err
 
     stac_discovery = metadata.get("stac_discovery") if isinstance(metadata.get("stac_discovery"), dict) else {}
     stac_metadata = stac_discovery if is_json_product and stac_discovery else metadata
@@ -432,7 +425,11 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
         item_id = stac_discovery.get("id") or zarr_path.stem
     else:
         item_id = metadata.get("id", zarr_path.stem)
-    logger.info(f"Setting item_id to {item_id}")
+
+    # Safe version of the item_id str, to prevent code injection through logs (needed by SonarQube)
+    item_id_logs = str(item_id).replace("\r", "\\r").replace("\n", "\\n")
+
+    logger.info(f"Setting item_id to {item_id_logs}")
 
     # extract start/end datetime for pystac.Item validation.
     # try to find them in the metadata, but if they are not present, try to take them from the
@@ -447,7 +444,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
             end_dt_str = end_dt_str or id_datetimes[1]
             logger.info(f"Extracted start/end datetimes from item_id: {id_datetimes[0]} / {id_datetimes[1]}")
         else:
-            msg = f"Could not extract datetimes from metadata properties or from item_id {item_id!r}"
+            msg = f"Could not extract datetimes from metadata properties or from item_id '{item_id_logs}'"
             logger.error(msg)
             raise RuntimeError(msg)
 
@@ -564,6 +561,18 @@ async def adf_conversion(adf_input: AdfProcessIn):
         required_types = resolve_required_types(adf_config, adf_input.satellite)
         generated_prod_type = adf_config.generated_prod_type
         script_path = adf_config.script_path
+
+        # Check the output collection first, to report a configuration error before staging or converting anything
+        output_collection = resolve_collection_name(
+            adf_input.auxiliary_product_to_collection_identifier,
+            generated_prod_type,
+        )
+        if output_collection is None:
+            raise RuntimeError(
+                "❌ No target collection found for generated product type "
+                f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
+            )
+        await check_collections_exist(flow_env, [output_collection])
 
         staged_items: list[Item] = []
         for prod_type in required_types:
@@ -696,16 +705,8 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 stac_item = create_stac_item_from_zarr(zarr_product_path, generated_prod_type)
                 stac_item.properties["product:type"] = generated_prod_type
 
-                # 6. Resolve destination collection
-                target_collection = resolve_collection_name(
-                    adf_input.auxiliary_product_to_collection_identifier,
-                    generated_prod_type,
-                )
-                if target_collection is None:
-                    raise RuntimeError(
-                        "❌ No target collection found for generated product type "
-                        f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
-                    )
+                # 6. Destination collection, resolved and checked at the beginning of the flow
+                target_collection = output_collection
 
                 bucket_name = find_s3_output_bucket(
                     bucket_configuration,

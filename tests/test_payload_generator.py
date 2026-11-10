@@ -30,6 +30,7 @@ from rs_workflows.flow_utils import (
 from rs_workflows.on_demand_processing import build_output_lineage
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
     DATA_EDH_DOMAIN,
+    EDH_API_KEY_ENV_VAR,
     build_adfs,
     build_input_products,
     build_output_products,
@@ -43,6 +44,7 @@ from rs_workflows.payload_generator import (  # load_store_params_from_config,
     wildcard_match,
 )
 from rs_workflows.payload_template import (
+    AdfConfig,
     GeneralConfiguration,
     InputProduct,
     IOConfig,
@@ -54,6 +56,33 @@ from rs_workflows.payload_template import (
 
 
 # build_workflow_step
+@pytest.mark.parametrize("selected_adfs", [[], [AdfConfig(id="fpo", path="s3://bucket/fpo")]])
+def test_output_lineage_optional_adf(selected_adfs):
+    """Only selected optional ADFs contribute to downstream output lineage."""
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="s3://bucket/input", engine="cadu")],
+            output_products=[OutputProduct(id="final", path="s3://bucket/output", engine="cpm_zarr")],
+            adfs=selected_adfs,
+        ),
+        workflow=[
+            WorkflowStep(
+                name="S1L0Processor.1",
+                inputs={"input": "cadus"},
+                adfs={"fpo": "fpo"},
+                outputs={"output": "raw"},
+            ),
+            WorkflowStep(
+                name="next.1",
+                inputs={"input": "S1L0Processor.1.raw"},
+                outputs={"output": "final"},
+            ),
+        ],
+    )
+
+    assert build_output_lineage(payload) == {"final": {"cadus"} | {adf.id for adf in selected_adfs}}
+
+
 def test_build_workflow_step_valid(sample_unit):
     """
     Test that a valid unit dictionary is correctly transformed into a WorkflowStep.
@@ -69,6 +98,22 @@ def test_build_workflow_step_valid(sample_unit):
     assert step.outputs == {"*.tif": "output1", "output2": "output2"}
     assert step.processing_unit == "unit1"
     assert step.parameters == {"testparam": "testvalue"}
+
+
+@pytest.mark.parametrize(
+    ("selected", "expected"),
+    [
+        ({"output1"}, {"*.tif": "output1"}),
+        ({"output2"}, {"output2": "output2"}),
+        (set(), None),
+        ({"unknown"}, None),
+    ],
+)
+def test_build_workflow_step_selected_outputs(sample_unit, selected, expected):
+    """Only selected names are mapped, preserving task table regexes."""
+    step = build_workflow_step(sample_unit, selected)
+
+    assert step.outputs == expected
 
 
 def test_build_workflow_step_missing_key_raises():
@@ -139,7 +184,7 @@ def test_get_io_builds_input_and_output(
     assert len(outputs) == 2
     assert isinstance(outputs[0], OutputProduct)
     assert outputs[0].id == "output1"
-    assert outputs[0].path == "s3://mocked-output-bucket/test-owner/S1A_IW_GRDH_1S/00000000-0000-0000-0000-000000000000"
+    assert outputs[0].path == "s3://mocked-output-bucket/test-owner/s1a_iw_grdh_1s/00000000-0000-0000-0000-000000000000"
     assert outputs[1].id == "output2"
     assert (
         outputs[1].path
@@ -439,6 +484,9 @@ def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in
     mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
 
     mock_dpr_process_in.processor_name = "MOCKUP"
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="S03OLCL0_", product_type="S03OLCL0_"),
+    ]
     payload = generate_payload.fn(
         flow_env=flow_env,
         unit_list=[mockup_unit],
@@ -447,6 +495,8 @@ def test_generate_payload_mockup_processor(mocker, flow_env, mock_dpr_process_in
     )
     assert isinstance(payload, PayloadSchema)
     assert any(step.module == "l0.s1.mockup_processor" for step in (payload.workflow or []))
+    assert payload.workflow is not None
+    assert payload.workflow[0].outputs == {"S03OLCL0_": "S03OLCL0_"}
     # make mypy happy with the follwing 3 asserts ....
     assert payload.io is not None
     assert payload.io.input_products is not None
@@ -852,11 +902,12 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
 # build_adfs
 
 
-def _make_dpr_process_in(edh_api_key=None):
-    """Helper to create a minimal DprProcessIn mock for build_adfs tests."""
-    mock = MagicMock()
-    mock.edh_api_key = edh_api_key
-    return mock
+def _set_edh_api_key(monkeypatch, edh_api_key=None):
+    """Set the EarthDataHub API key env var, read by build_adfs, or remove it."""
+    if edh_api_key:
+        monkeypatch.setenv(EDH_API_KEY_ENV_VAR, edh_api_key)
+    else:
+        monkeypatch.delenv(EDH_API_KEY_ENV_VAR, raising=False)
 
 
 def test_build_adfs_single_folder(mock_store_params):
@@ -869,7 +920,7 @@ def test_build_adfs_single_folder(mock_store_params):
         ("adf1", "folder", "/data/myfolder/file1.txt"),
     ]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in())
+    result = build_adfs(mock_storage_config, adfs)
 
     assert len(result) == 1
     assert result[0].id == "adf1"
@@ -886,7 +937,7 @@ def test_build_adfs_single_filename(mock_store_params):
         ("adf1", "file", "/data/file1.txt"),
     ]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in())
+    result = build_adfs(mock_storage_config, adfs)
 
     assert len(result) == 1
     assert result[0].id == "adf1"
@@ -904,7 +955,7 @@ def test_build_adfs_multiple_entries(mock_store_params):
         ("adf1", "file", "/data/folder/file2.txt"),
     ]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in())
+    result = build_adfs(mock_storage_config, adfs)
 
     assert len(result) == 1
     adf = result[0]
@@ -916,7 +967,7 @@ def test_build_adfs_multiple_entries(mock_store_params):
     assert adf.adf_params.regex == r"(file1\.txt|file2\.txt)"
 
 
-def test_build_adfs_edh_url_replaced_with_api_key(mock_store_params):
+def test_build_adfs_edh_url_replaced_with_api_key(mock_store_params, monkeypatch):
     """EDH URL is rewritten to inject the API key and becomes a SecretStr."""
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
@@ -925,7 +976,8 @@ def test_build_adfs_edh_url_replaced_with_api_key(mock_store_params):
     edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
     adfs = [("DEM", "file", edh_url)]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
+    _set_edh_api_key(monkeypatch, "my-secret-token")
+    result = build_adfs(mock_storage_config, adfs)
 
     assert len(result) == 1
     path = result[0].path
@@ -936,7 +988,7 @@ def test_build_adfs_edh_url_replaced_with_api_key(mock_store_params):
     assert full_url == "https://edh:my-secret-token@api.earthdatahub.destine.eu/copernicus-dem-30m/tile.tif"
 
 
-def test_build_adfs_edh_url_secret_hides_token(mock_store_params):
+def test_build_adfs_edh_url_secret_hides_token(mock_store_params, monkeypatch):
     """The SecretStr representation must not expose the API key in plain text."""
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
@@ -945,7 +997,8 @@ def test_build_adfs_edh_url_secret_hides_token(mock_store_params):
     edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
     adfs = [("DEM", "file", edh_url)]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
+    _set_edh_api_key(monkeypatch, "my-secret-token")
+    result = build_adfs(mock_storage_config, adfs)
 
     path = result[0].path
     assert isinstance(path, SecretStr)
@@ -953,7 +1006,7 @@ def test_build_adfs_edh_url_secret_hides_token(mock_store_params):
     assert "my-secret-token" not in repr(path)
 
 
-def test_build_adfs_no_edh_key_url_unchanged(mock_store_params):
+def test_build_adfs_no_edh_key_url_unchanged(mock_store_params, monkeypatch):
     """EDH URL is left unchanged when no API key is provided."""
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
@@ -962,14 +1015,15 @@ def test_build_adfs_no_edh_key_url_unchanged(mock_store_params):
     edh_url = f"https://{DATA_EDH_DOMAIN}/copernicus-dem-30m/tile.tif"
     adfs = [("DEM", "file", edh_url)]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key=None))
+    _set_edh_api_key(monkeypatch, None)
+    result = build_adfs(mock_storage_config, adfs)
 
     path = result[0].path
     assert not isinstance(path, SecretStr)
     assert path == edh_url
 
 
-def test_build_adfs_non_edh_url_not_replaced(mock_store_params):
+def test_build_adfs_non_edh_url_not_replaced(mock_store_params, monkeypatch):
     """A non-EDH https URL is not replaced even when an API key is provided."""
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
@@ -978,7 +1032,8 @@ def test_build_adfs_non_edh_url_not_replaced(mock_store_params):
     other_url = "https://some-other-service.example.com/data/file.tif"
     adfs = [("ADF1", "file", other_url)]
 
-    result = build_adfs(mock_storage_config, adfs, _make_dpr_process_in(edh_api_key="my-secret-token"))
+    _set_edh_api_key(monkeypatch, "my-secret-token")
+    result = build_adfs(mock_storage_config, adfs)
 
     path = result[0].path
     assert not isinstance(path, SecretStr)
@@ -1125,7 +1180,14 @@ def test_build_output_products_error_no_storage(
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
 
-def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_process_in, mock_store_params, mocker):
+@pytest.mark.parametrize("mandatory", [True, None, 0, "false"])
+def test_build_output_products_missing_relation_raises(
+    sample_unit,
+    mock_dpr_process_in,
+    mock_store_params,
+    mocker,
+    mandatory,
+):
     """
     Test that build_output_products raises an error if an output product
     defined in the unit is missing from dpr_process_in.generated_product_to_collection_identifier.
@@ -1134,6 +1196,10 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
     mock_storage.get_storage_for_specific_product.return_value = "S3"
     mock_storage.get_store_params.return_value = mock_store_params
     mock_storage.get_storage_kind.return_value = "obs"
+    if mandatory is not None:
+        sample_unit["output_products"][1]["mandatory"] = mandatory
+    else:
+        sample_unit["output_products"][1].pop("mandatory", None)
 
     # sample_unit has "output1" and "output2"
     # We provide only "output1" in generated_product_to_collection_identifier, so "output2" should trigger the error
@@ -1153,6 +1219,43 @@ def test_build_output_products_missing_relation_raises(sample_unit, mock_dpr_pro
         match="Missing mapping in generated_product_to_collection_identifier for task table entry 'output2'",
     ):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+@pytest.mark.parametrize("selected", [False, True])
+def test_build_output_products_optional_mapping(sample_unit, mock_dpr_process_in, mock_store_params, mocker, selected):
+    """Optional outputs are written only when a collection mapping is supplied."""
+    sample_unit["output_products"][1]["mandatory"] = False
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="output1_type", collection_name="OUT_COLL"),
+    ]
+    if selected:
+        mock_dpr_process_in.generated_product_to_collection_identifier.append(
+            FlowGeneratedProduct(name="output2", product_type="output2_type", collection_name="OUT_COLL"),
+        )
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_store_params.return_value = mock_store_params
+    mock_storage.get_storage_kind.return_value = "obs"
+    mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+
+    outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    assert [output.id for output in outputs] == (["output1", "output2"] if selected else ["output1"])
+    assert mock_storage.get_storage_for_specific_product.call_count == len(outputs)
+
+
+def test_build_output_products_all_optional_outputs_unselected(mock_dpr_process_in, mocker):
+    """Unselected optional outputs are logged and skipped before storage resolution."""
+    unit = {"output_products": [{"name": "optional_output", "mandatory": False}]}
+    mock_dpr_process_in.generated_product_to_collection_identifier = []
+    storage = MagicMock()
+    logger = mocker.patch("rs_workflows.payload_generator.get_logger").return_value
+
+    outputs = build_output_products(unit, mock_dpr_process_in, storage, "test-owner", [])
+
+    assert not outputs
+    assert not storage.mock_calls
+    logger.info.assert_any_call("Skipping optional output without collection mapping: optional_output")
 
 
 def test_build_output_products_extra_mapping_is_ignored(sample_unit, mock_dpr_process_in, mock_store_params, mocker):

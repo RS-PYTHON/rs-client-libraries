@@ -204,6 +204,11 @@ When it is completed, the flow creates the STAC items of the generated products,
 inputs and ADFs, and publishes them in the catalog collections given by the
 `generated_product_to_collection_identifier` parameter.
 
+Optional task table outputs (`mandatory: false`) are included in `io.output_products` only when their name is
+present in `generated_product_to_collection_identifier`. Outputs with `mandatory: true`, or without a `mandatory`
+flag, require a mapping; payload generation fails if it is missing. The workflow step's `outputs` section also
+includes only names present in `generated_product_to_collection_identifier`, retaining their task table regexes.
+
 ## Auxiliary data selection policies
 
 The queries of the task tables implement the input retrieval policies defined by ESA for the Copernicus processors.

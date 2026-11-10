@@ -57,7 +57,7 @@ processors.
 | `convert-adf-group` | `period_start_datetime`, `period_end_datetime`, `configuration`, `owner` | Convert a set of ADF types over a period: the past part of the period is converted immediately, the future part is scheduled with `convert-adf-scheduled`. A sample configuration is given in [convert-aux-sample.json](https://github.com/RS-PYTHON/rs-client-libraries/blob/develop/rs_workflows/on_demand/adf/config/convert-aux-sample.json). |
 | `convert-adf-scheduled` | `adf_type`, `cql2_filter_without_date`, `period`, `auxiliary_product_to_collection_identifier` | Convert the ADFs of the last period, started by a schedule. |
 | `import-adf-from-obs` | `configuration`, `owner`, `obs_id`, `rehearsal_mode` | Import ADF files already in Zarr format from an object storage bucket into the catalog. |
-| `convert-safe` | `conversion_input` | Stage a legacy SAFE product, convert it to its EOPF Zarr counterpart with the `conv_safe_zarr` process of [rs-dpr-service](https://github.com/RS-PYTHON/rs-dpr-service/blob/develop/docs/doc/index.md), and publish it. |
+| `convert-safe` | `conversion_input` | Stage a legacy SAFE product, convert it to its EOPF Zarr counterpart with the `conv_safe_zarr` process of [rs-dpr-service](https://github.com/RS-PYTHON/rs-dpr-service/blob/develop/docs/doc/index.md), and publish it. If `stac_input` is already an item of the RS-Python catalog (its href, or a feature collection whose item has a `self` link to it, with the hostname of the public or cluster-internal URL of the catalog), the SAFE product is read from the catalog instead of being staged again, and its item is kept after the conversion. |
 
 ![ADF conversion](../../images/aux-conversion.svg)
 

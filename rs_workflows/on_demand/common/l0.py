@@ -79,11 +79,13 @@ async def process_l0(
         raise ValueError(f"❌ No Level-0 processing for Sentinel-{mission}")
     logger.info(f"✅ Sentinel-{mission} session name is correct.")
 
+    # Read the Prefect blocks into env vars (e.g. DASK_GATEWAY_ADDRESS), needed to check the Dask clusters
+    flow_env = FlowEnv(env_args)
+
     # Read the settings and check the Dask clusters before searching the session
-    settings = await load_processor_settings(L0_PROCESSINGS[mission][0])
+    settings = await load_processor_settings(L0_PROCESSINGS[mission][0], flow_env)
     session_collections = get_session_collections(settings)
 
-    flow_env = FlowEnv(env_args)
     with flow_env.start_span(__name__, "level0-processing"):
         found = False
 
