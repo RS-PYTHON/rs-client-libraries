@@ -127,7 +127,7 @@ def get_pi_category_id(eopf_type: str) -> int | None:
         elif eopf_type.startswith("S03"):
             mission = "S3"
             name = "NRT"
-        elif eopf_type.startswith("CRI"):
+        elif eopf_type.startswith("CR"):
             mission = "CRI"
             name = "FTD"
 

@@ -44,4 +44,4 @@ async def process_cril0(
             of the chain from the events of the generated products.
         verbose: not used yet.
     """
-    return await process_staged_session("1", session, env_args, force_systematic, verbose)
+    return await process_staged_session("CR", session, env_args, force_systematic, verbose)

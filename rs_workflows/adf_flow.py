@@ -467,7 +467,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
             logger.info(
                 "'platform' property has been computed from the item name. " f"Value is '{stac_props["platform"]}'",
             )
-        elif item_id.lower().startswith("cria"):
+        elif item_id.lower().startswith(("cria", "cri_a")):
             stac_props["platform"] = "cristal"
             logger.info(
                 "'platform' property has been computed from the item name. " f"Value is '{stac_props["platform"]}'",

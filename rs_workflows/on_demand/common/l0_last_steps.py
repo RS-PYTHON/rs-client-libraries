@@ -19,12 +19,7 @@ from typing import Any
 
 from pystac import Item
 
-from rs_workflows.flow_utils import (
-    FlowEnv,
-    FlowEnvArgs,
-    FlowInputProduct,
-    WorkflowType,
-)
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct, WorkflowType
 from rs_workflows.utils.catalog import get_single_catalog_item
 from rs_workflows.utils.dpr import (
     ProcessingId,
@@ -38,7 +33,7 @@ from rs_workflows.utils.prefect import get_logger
 L0_PROCESSINGS: dict[str, tuple[ProcessingId, str]] = {
     "1": (ProcessingId.S1_L0, "S1CADUS"),
     "3": (ProcessingId.S3_L0, "S3ACADUS"),
-    "CR": (ProcessingId.CRI_L0, "CRCADUS"),
+    "CR": (ProcessingId.CRI_L0, "CRACADUS"),
 }
 
 

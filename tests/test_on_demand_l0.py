@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for the on_demand Level-0 flows (common.l0, common.l0_last_steps, sentinel1/3)."""
+"""Unit tests for the on_demand Level-0 flows (common.l0, common.l0_last_steps, sentinel1/3, Cristal)."""
 
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
@@ -21,6 +21,7 @@ import pytest
 
 from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, WorkflowType
 from rs_workflows.on_demand.common import l0, l0_last_steps
+from rs_workflows.on_demand.cristal import cri_l0
 from rs_workflows.on_demand.sentinel1 import s1_l0
 from rs_workflows.on_demand.sentinel3 import s3_l0
 from rs_workflows.utils.dpr import ProcessingId
@@ -78,7 +79,7 @@ def _patch_l0(
 
 def test_l0_flows():
     """The Level-0 flow of each mission is run by process-l0."""
-    assert l0.L0_FLOWS == {"1": s1_l0.process_s1l0, "3": s3_l0.process_s3l0}
+    assert l0.L0_FLOWS == {"1": s1_l0.process_s1l0, "3": s3_l0.process_s3l0, "CR": cri_l0.process_cril0}
 
 
 @pytest.mark.parametrize(
@@ -289,7 +290,11 @@ async def test_process_l0_last_steps_requires_the_session_datetime(mocker):
 
 @pytest.mark.parametrize(
     "mission,session,input_name,satellite",
-    [("1", "S1A_session", "S1CADUS", "sentinel-1a"), ("3", "S3B_session", "S3ACADUS", "sentinel-3b")],
+    [
+        ("1", "S1A_session", "S1CADUS", "sentinel-1a"),
+        ("3", "S3B_session", "S3ACADUS", "sentinel-3b"),
+        ("CR", "CRA_session", "CRACADUS", "cristal-a"),
+    ],
 )
 async def test_process_l0_last_steps_calls_dpr_flow(mocker, mission, session, input_name, satellite):
     """A session found in a collection of the settings is processed with the settings, its satellite, and its
@@ -322,16 +327,34 @@ async def test_process_l0_last_steps_calls_dpr_flow(mocker, mission, session, in
     )
 
 
+async def test_process_l0_last_steps_raises_on_bad_cristal_session():
+    """Checks that the function raises an exception if the Cristal session name is invalid."""
+    with pytest.raises(ValueError, match="Invalid Cristal session name: 'CRAB_SESSION'"):
+        await l0.process_l0.fn(
+            session="CRAB_SESSION",
+            env_args=ENV_ARGS,
+            force_systematic=True,
+            verbose=True,
+        )
+
+
 # --------------------------------------------------------------------------- #
 # sentinel1 / sentinel3 entry points
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("module,mission", [(s1_l0, "1"), (s3_l0, "3")])
+@pytest.mark.parametrize("module,mission", [(s1_l0, "1"), (s3_l0, "3"), (cri_l0, "CR")])
 async def test_process_mission_l0(mocker, module, mission):
     """The flow of a mission processes the staged session with the settings of the mission."""
     process = mocker.patch.object(module, "process_staged_session", new=AsyncMock(return_value=["product"]))
-    flow = s1_l0.process_s1l0 if module is s1_l0 else s3_l0.process_s3l0
 
-    result = await flow.fn("session", ENV_ARGS, force_systematic=True)
+    result = (
+        await module.process_cril0.fn("session", ENV_ARGS, force_systematic=True)
+        if mission == "CR"
+        else (
+            await module.process_s1l0.fn("session", ENV_ARGS, force_systematic=True)
+            if mission == "1"
+            else await module.process_s3l0.fn("session", ENV_ARGS, force_systematic=True)
+        )
+    )
 
     assert result == ["product"]
     process.assert_awaited_once_with(mission, "session", ENV_ARGS, True, False)
