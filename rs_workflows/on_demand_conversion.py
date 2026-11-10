@@ -192,6 +192,14 @@ async def on_demand_conversion(
     flow_env = FlowEnv(conversion_input.env)
 
     with flow_env.start_span(__name__, "legacy-conversion"):
+        # Check the output collection first, to report a configuration error before staging or converting anything
+        await catalog_flow.check_collections_exist(
+            flow_env,
+            catalog_flow.get_generated_product_collections(
+                [conversion_input.generated_product_to_collection_identifier],
+            ),
+        )
+
         # stac_input is str | dict; normalize once so all downstream code works uniformly.
         stac_item: str | dict[str, Any] = conversion_input.stac_input
         stac_item_id = stac_item.split("/")[-1] if isinstance(stac_item, str) else stac_item["features"][0]["id"]
@@ -315,7 +323,7 @@ async def on_demand_conversion(
             [conversion_input.generated_product_to_collection_identifier],
         )
 
-        output_collection = generated_product.collection_name or generated_product.product_type
+        output_collection = generated_product.target_collection
 
         # Read the owner/collection/product-type to S3 bucket rules from OSAM.
         bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")

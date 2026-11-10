@@ -15,7 +15,7 @@
 """Unit tests for the default settings of the processings and the DPR flow call (rs_workflows.utils.dpr)."""
 
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -33,6 +33,7 @@ from rs_workflows.utils.dpr import ProcessingId
 from tests.common import PROCESSOR_SETTINGS, processor_settings
 
 ENV_ARGS = FlowEnvArgs(owner_id="owner")
+FLOW_ENV = MagicMock()
 INPUT_PRODUCTS = [FlowInputProduct(name="S3OLCIL0_1", item_id="olcl0-item", collection_name="s03olcl0_")]
 EXTERNAL_VARIABLES = {"start_datetime": "2026-10-01T10:00:00.000Z", "satellite": "sentinel-3a"}
 PUBLISHED_ITEMS = [{"id": "S03OLCEFR_item", "properties": {"product:type": "S03OLCEFR"}}]
@@ -66,6 +67,7 @@ def _patch_settings(mocker, settings=None, running_clusters=("dask-processing", 
         "is_dask_cluster_running",
         new=AsyncMock(side_effect=lambda cluster: cluster in running_clusters),
     )
+    mocker.patch.object(dpr, "check_collections_exist", new=AsyncMock())
     return variable_get, is_cluster_running
 
 
@@ -85,7 +87,7 @@ async def test_load_processor_settings(mocker, processing_id):
     """The settings are read from the Prefect variable of the processing, once its Dask clusters are checked."""
     variable_get, is_cluster_running = _patch_settings(mocker)
 
-    settings = await dpr.load_processor_settings(processing_id)
+    settings = await dpr.load_processor_settings(processing_id, FLOW_ENV)
 
     variable_get.assert_awaited_once_with(f"{processing_id.value}-default-setting")
     assert [call.args for call in is_cluster_running.await_args_list] == [
@@ -104,11 +106,27 @@ async def test_load_processor_settings_of_l0(mocker):
     """The Level-0 settings contain the collections of the sessions."""
     _patch_settings(mocker, L0_SETTINGS)
 
-    settings = await dpr.load_processor_settings(ProcessingId.S3_L0)
+    settings = await dpr.load_processor_settings(ProcessingId.S3_L0, FLOW_ENV)
 
     assert settings.input_collections == ["s03-cadip-session"]
     assert settings.cadip_collections == ["s3_sgs"]
     assert settings.generated_product_to_collection_identifier[0].collection_name is None
+
+
+async def test_load_processor_settings_checks_the_output_collections(mocker):
+    """The collections of the generated products must exist, the product type in lowercase being the default."""
+    _, is_cluster_running = _patch_settings(mocker, L0_SETTINGS)
+    check_collections = mocker.patch.object(
+        dpr,
+        "check_collections_exist",
+        new=AsyncMock(side_effect=ValueError("missing collections")),
+    )
+
+    with pytest.raises(ValueError, match="missing collections"):
+        await dpr.load_processor_settings(ProcessingId.S3_L0, FLOW_ENV)
+
+    check_collections.assert_awaited_once_with(FLOW_ENV, ["s03olcl0_"])
+    is_cluster_running.assert_not_awaited()
 
 
 async def test_load_processor_settings_fails_without_variable(mocker):
@@ -117,7 +135,7 @@ async def test_load_processor_settings_fails_without_variable(mocker):
     mocker.patch.object(dpr.Variable, "get", new=AsyncMock(return_value=None))
 
     with pytest.raises(RuntimeError, match="'s3l1olci-default-setting' is missing"):
-        await dpr.load_processor_settings(ProcessingId.S3_OLCI_L1)
+        await dpr.load_processor_settings(ProcessingId.S3_OLCI_L1, FLOW_ENV)
 
     is_cluster_running.assert_not_awaited()
 
@@ -148,7 +166,7 @@ async def test_load_processor_settings_rejects_invalid_settings(mocker, settings
     _, is_cluster_running = _patch_settings(mocker, settings)
 
     with pytest.raises(ValueError, match="Invalid JSON schema .* 's3l1olci-default-setting'"):
-        await dpr.load_processor_settings(ProcessingId.S3_OLCI_L1)
+        await dpr.load_processor_settings(ProcessingId.S3_OLCI_L1, FLOW_ENV)
 
     is_cluster_running.assert_not_awaited()
 
@@ -162,7 +180,7 @@ async def test_load_processor_settings_requires_running_dask_clusters(mocker, ru
     _patch_settings(mocker, running_clusters=running_clusters)
 
     with pytest.raises(ValueError, match=f"'{missing_cluster}' is unknown or not ready"):
-        await dpr.load_processor_settings(ProcessingId.S3_OLCI_L1)
+        await dpr.load_processor_settings(ProcessingId.S3_OLCI_L1, FLOW_ENV)
 
 
 # --------------------------------------------------------------------------- #

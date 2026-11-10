@@ -31,7 +31,7 @@ from pystac import Asset, Item
 
 from rs_common.prefect_utils import s3_upload_dir, s3_upload_file
 from rs_workflows.aux_flow import aux_staging_task
-from rs_workflows.catalog_flow import publish
+from rs_workflows.catalog_flow import check_collections_exist, publish
 from rs_workflows.flow_utils import (
     AdfProcessIn,
     AdfType,
@@ -562,6 +562,18 @@ async def adf_conversion(adf_input: AdfProcessIn):
         generated_prod_type = adf_config.generated_prod_type
         script_path = adf_config.script_path
 
+        # Check the output collection first, to report a configuration error before staging or converting anything
+        output_collection = resolve_collection_name(
+            adf_input.auxiliary_product_to_collection_identifier,
+            generated_prod_type,
+        )
+        if output_collection is None:
+            raise RuntimeError(
+                "❌ No target collection found for generated product type "
+                f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
+            )
+        await check_collections_exist(flow_env, [output_collection])
+
         staged_items: list[Item] = []
         for prod_type in required_types:
             # find target collection from mapping, preferring an exact product type match
@@ -693,16 +705,8 @@ async def adf_conversion(adf_input: AdfProcessIn):
                 stac_item = create_stac_item_from_zarr(zarr_product_path, generated_prod_type)
                 stac_item.properties["product:type"] = generated_prod_type
 
-                # 6. Resolve destination collection
-                target_collection = resolve_collection_name(
-                    adf_input.auxiliary_product_to_collection_identifier,
-                    generated_prod_type,
-                )
-                if target_collection is None:
-                    raise RuntimeError(
-                        "❌ No target collection found for generated product type "
-                        f"{generated_prod_type!r} in auxiliary_product_to_collection_identifier.",
-                    )
+                # 6. Destination collection, resolved and checked at the beginning of the flow
+                target_collection = output_collection
 
                 bucket_name = find_s3_output_bucket(
                     bucket_configuration,

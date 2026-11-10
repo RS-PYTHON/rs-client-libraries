@@ -141,6 +141,16 @@ def test_resolve_collection_generated_product(mocker):
     )
     assert resolve_collection(meta_hkm, input_collections) == "collection_HKM"
 
+    # Without collection name, the collection is the product type in lowercase
+    meta_sral = DprProcessedItemMetadata(
+        stac_item=mocker.Mock(),
+        product_type="S03SRAL0C",
+        output_product_id="S03SRAL0C",
+    )
+    assert (
+        resolve_collection(meta_sral, [FlowGeneratedProduct(name="S03SRAL0C", product_type="S03SRAL0C")]) == "s03sral0c"
+    )
+
     # Wildcard name is NOT supported
     input_wildcard_name: list[FlowGeneratedProduct] = [
         FlowGeneratedProduct(name="*", product_type="product_type_4", collection_name="collection_4"),
@@ -174,7 +184,7 @@ def test_resolve_collection_generated_product(mocker):
         product_type="any_type",
         output_product_id="product_name",
     )
-    with pytest.raises(RuntimeError, match=r"cannot be '\*' if the collection name is not specified"):
+    with pytest.raises(ValueError, match=r"cannot be '\*' if the collection name is not specified"):
         resolve_collection(meta_wildcard, invalid_wildcard)
 
 

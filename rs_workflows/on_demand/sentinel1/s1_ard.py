@@ -159,7 +159,7 @@ async def _do_process_s1ard(
         return
 
     # Read the settings and check the Dask clusters before searching the SLCs
-    settings = await load_processor_settings(ProcessingId.S1_ARD)
+    settings = await load_processor_settings(ProcessingId.S1_ARD, flow_env)
     pipeline = pipeline or settings.pipeline
     input_collections = settings.input_collections or DEFAULT_INPUT_COLLECTIONS
     mission = "1"

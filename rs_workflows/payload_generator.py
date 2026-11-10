@@ -522,15 +522,11 @@ def build_output_products(
             )
 
         product_type = output_product.product_type
-        output_collection = (
-            output_product.collection_name if output_product.collection_name is not None else product_type
-        )
         # When using * for product_type, the collection name becomes mandatory.
-        if output_collection == "*":
-            raise RuntimeError(
-                "The product type in generated_product_to_collection_identifier "
-                f"cannot be '*' if the collection name is not specified for product '{product_name}'",
-            )
+        try:
+            output_collection = output_product.target_collection
+        except ValueError as err:
+            raise RuntimeError(str(err)) from err
 
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)

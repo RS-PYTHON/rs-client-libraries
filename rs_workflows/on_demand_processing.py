@@ -452,6 +452,12 @@ async def dpr_processing(
 
     with flow_env.start_span(__name__, "dpr-processing"):
 
+        # Check the output collections first, to report a configuration error before staging or processing anything
+        await catalog_flow.check_collections_exist(
+            flow_env,
+            catalog_flow.get_generated_product_collections(dpr_input.generated_product_to_collection_identifier),
+        )
+
         cluster_info = ClusterInfo(
             jupyter_token=os.environ["JUPYTERHUB_API_TOKEN"],
             dask_gateway_address=os.environ["DASK_GATEWAY_ADDRESS"],

@@ -25,7 +25,7 @@ from prefect.artifacts import (
 )
 from pydantic import BaseModel, Field
 
-from rs_workflows.catalog_flow import check_and_create_collection
+from rs_workflows.catalog_flow import check_collections_exist
 from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs
 from rs_workflows.utils.artifact_verbose import ReportManager
 from rs_workflows.utils.cadip import cadip_session_search
@@ -307,8 +307,8 @@ async def stage_session_common(
     sat = cadip_collection[1]
     catalog_cadip_collection = f"s0{sat}-cadip-session"
 
-    # Check that the collection exists. Otherwise create it.
-    await check_and_create_collection(flow_env, catalog_cadip_collection)
+    # Check that the collection exists, the flow doesn't create it
+    await check_collections_exist(flow_env, [catalog_cadip_collection])
 
     # URL to search the STAC ItemCollection
     cadip_client = flow_env.rs_client.get_cadip_client()

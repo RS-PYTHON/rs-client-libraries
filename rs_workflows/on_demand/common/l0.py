@@ -83,7 +83,7 @@ async def process_l0(
     flow_env = FlowEnv(env_args)
 
     # Read the settings and check the Dask clusters before searching the session
-    settings = await load_processor_settings(L0_PROCESSINGS[mission][0])
+    settings = await load_processor_settings(L0_PROCESSINGS[mission][0], flow_env)
     session_collections = get_session_collections(settings)
 
     with flow_env.start_span(__name__, "level0-processing"):

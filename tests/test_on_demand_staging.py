@@ -125,7 +125,7 @@ async def test_cadip_session_stage_missing_status_returns_empty(mocker):
 def _patch_stage_session_common(mocker, status):
     """Patch the collaborators used by stage_session_common; return its mocks."""
     mocker.patch.object(staging, "get_logger", return_value=MagicMock())
-    check_mock = mocker.patch.object(staging, "check_and_create_collection", new=AsyncMock())
+    check_mock = mocker.patch.object(staging, "check_collections_exist", new=AsyncMock())
 
     stage_mock = mocker.patch.object(staging, "cadip_session_stage")
     stage_mock.submit.return_value.result.return_value = status
@@ -145,7 +145,7 @@ async def test_stage_session_common_success(mocker):
     result = await stage_session_common.fn(flow_env, CadipCollections.S1_SGS, "SESSION_42", report)
 
     assert result is True
-    check_mock.assert_awaited_once_with(flow_env, "s01-cadip-session")
+    check_mock.assert_awaited_once_with(flow_env, ["s01-cadip-session"])
     report.success_step.assert_called_once()
     # the staging task is submitted with the session id inside the search URL
     assert "SESSION_42" in stage_mock.submit.call_args.kwargs["cadip_search_url"]

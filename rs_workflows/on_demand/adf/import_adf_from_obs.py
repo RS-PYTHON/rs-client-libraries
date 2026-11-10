@@ -29,7 +29,7 @@ from prefect.cache_policies import NO_CACHE
 from pystac import Item
 
 from rs_common.utils import extract_tar, strftime_millis
-from rs_workflows.catalog_flow import check_and_create_collection
+from rs_workflows.catalog_flow import check_collections_exist
 from rs_workflows.dpr_flow import create_stac_item
 from rs_workflows.flow_utils import (
     FlowEnv,
@@ -151,9 +151,6 @@ async def _handle_production_mode(
     """Handle file upload and STAC item publication in production mode."""
     logger = get_logger()
 
-    # Ensure the collection exists
-    await check_and_create_collection(flow_env, target_collection)
-
     # Check if the item already exists
     logger.debug(f"Checking if item '{item.id}' already exists in collection '{target_collection}'.")
     existing_item = await get_single_catalog_item(flow_env, item.id, [target_collection])
@@ -200,6 +197,13 @@ async def import_items(
     if not matching_files:
         logger.warning("⚠️ No files matched the extraction pattern. Exiting.")
         return
+
+    # Check that the target collections exist before importing any file, the flow doesn't create them.
+    # Also in rehearsal mode, to detect the configuration errors before the real import.
+    await check_collections_exist(
+        flow_env,
+        (_compute_target_collection(Path(file).name, override_collection) for file in matching_files),
+    )
 
     # Step 2: Process each matching file
     for file in matching_files:
@@ -329,7 +333,7 @@ async def import_adf_from_obs(
     | `configuration` | `dict` | *required* | JSON configuration (see format below) |
     | `owner` | `str` | `copernicus` | Name of the user triggering the flow |
     | `obs_id` | `str` | `PUBLICATION` | Object storage identifier for credentials |
-    | `rehearsal_mode` | `bool` | `True` | If `True`, STAC items are *not* published |
+    | `rehearsal_mode` | `bool` | `True` | If `True`, STAC items are *not* published (the collections are checked) |
 
     > *Note:* The collection where ADF files are published is derived from `product:type` by default,
     > but can be *overridden* via the configuration.
@@ -374,6 +378,12 @@ async def import_adf_from_obs(
         # Init flow environment and opentelemetry span
         flow_env = FlowEnv(env)
         with flow_env.start_span(__name__, "import-adfs-obs"):
+            # Check the target collection first when it is set by the configuration, before downloading anything,
+            # also in rehearsal mode. Otherwise, the collections are derived from the extracted files, and checked
+            # before importing them.
+            if output_config.get("collection"):
+                await check_collections_exist(flow_env, [output_config["collection"]])
+
             logger.info(f"🪣 Retrieve credentials to access bucket linked to '{obs_id}'.")
 
             # Step 1: Connect to S3 with 2 differents settings

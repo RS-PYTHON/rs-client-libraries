@@ -90,6 +90,7 @@ def patch_dask_env_read_by_flow_env(
 
     flow_env_class = mocker.patch.object(module, "FlowEnv", side_effect=read_prefect_blocks, return_value=flow_env)
     mocker.patch.object(module, "load_processor_settings", new=dpr.load_processor_settings)
+    mocker.patch.object(dpr, "check_collections_exist", new=AsyncMock())
     mocker.patch.object(dpr.Variable, "get", new=AsyncMock(return_value=settings))
     mocker.patch.object(dask, "JupyterHubAuth")
     mocker.patch.object(dask, "acreate_markdown_artifact", new=AsyncMock())

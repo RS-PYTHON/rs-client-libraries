@@ -55,7 +55,8 @@ def _patch_l0(
     published=(True, datetime.now(timezone.utc)),
 ):
     mocker.patch.object(l0, "get_logger", return_value=MagicMock())
-    mocker.patch.object(l0, "FlowEnv", return_value=flow_env_mock())
+    flow_env = flow_env_mock()
+    mocker.patch.object(l0, "FlowEnv", return_value=flow_env)
     load_settings = mocker.patch.object(l0, "load_processor_settings", new=AsyncMock(return_value=SETTINGS))
     get_item = mocker.patch.object(l0, "get_single_catalog_item", new=AsyncMock(return_value=item))
     mocker.patch.object(l0, "is_unpublished", return_value=unpublished)
@@ -65,6 +66,7 @@ def _patch_l0(
     flows = {"1": AsyncMock(return_value=["s1-product"]), "3": AsyncMock(return_value=["s3-product"])}
     mocker.patch.dict(l0.L0_FLOWS, flows)
     return {
+        "flow_env": flow_env,
         "load_settings": load_settings,
         "get_item": get_item,
         "get_station": get_station,
@@ -130,7 +132,7 @@ async def test_process_l0_runs_the_s1_flow_for_a_session_found_in_catalog(mocker
     mocks = _patch_l0(mocker, item=MagicMock())
     result = await l0.process_l0.fn(S1_SESSION, ENV_ARGS, force_systematic=force_systematic)
     assert result == ["s1-product"]
-    mocks["load_settings"].assert_awaited_once_with(ProcessingId.S1_L0)
+    mocks["load_settings"].assert_awaited_once_with(ProcessingId.S1_L0, mocks["flow_env"])
     mocks["get_item"].assert_awaited_once()
     assert mocks["get_item"].call_args.args[1:] == (S1_SESSION, ["s0x-cadip-session", "s0x-other-session"])
     mocks["stage"].assert_not_awaited()
@@ -149,7 +151,7 @@ async def test_process_l0_stages_then_runs_the_s3_flow(mocker):
     mocks = _patch_l0(mocker, item=None, station="s3_sgs", staged=True)
     result = await l0.process_l0.fn(S3_SESSION, ENV_ARGS, force_systematic=True)
     assert result == ["s3-product"]
-    mocks["load_settings"].assert_awaited_once_with(ProcessingId.S3_L0)
+    mocks["load_settings"].assert_awaited_once_with(ProcessingId.S3_L0, mocks["flow_env"])
     assert mocks["get_station"].call_args.args[1:] == (S3_SESSION, ["sgs"])
     mocks["stage"].assert_awaited_once()
     mocks["s3_flow"].assert_awaited_once_with(
@@ -208,7 +210,7 @@ async def test_process_staged_session(mocker, mission, processing_id, force_syst
 
     assert result == ["product"]
     flow_env_class.assert_called_once_with(ENV_ARGS)
-    load_settings.assert_awaited_once_with(processing_id)
+    load_settings.assert_awaited_once_with(processing_id, flow_env)
     last_steps.assert_awaited_once_with(
         mission=mission,
         session="session",
