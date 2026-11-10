@@ -623,6 +623,7 @@ async def test_run_processor_filters_non_final_products(
     # mock_dpr_client.wait_for_job.assert_called_once_with(mock_job_status, mock_logger, "'s3_l0' processor")
     spy_run_process.assert_called_once()
     spy_wait_for_job.assert_called_once()
+    assert spy_wait_for_job.call_args.kwargs["process_id"] == processor
 
     # Verify result is the items metadata from update_eopf_assets
     assert result == items_metadata

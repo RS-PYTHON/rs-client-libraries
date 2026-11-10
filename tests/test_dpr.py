@@ -653,13 +653,36 @@ def test_wait_for_job_with_logger(mocker, dpr_client: DprClient):
     )
 
     job_status = {"jobID": "123"}
-    result = dpr_client.wait_for_job(job_status=job_status, logger=mock_logger)
+    result = dpr_client.wait_for_job(
+        job_status=job_status,
+        logger=mock_logger,
+        process_id="s1_l0",
+    )
 
     mock_stream_logs.assert_called_once()
-    assert "jobs/123/logs" in mock_stream_logs.call_args[0][0]
+    assert mock_stream_logs.call_args[0][0] == (
+        f"{dpr_client.href_service}/dpr/processes/s1_l0/jobs/123/logs"
+    )
 
     mock_super_wait.assert_called_once()
     assert result == ["result_ok"]
+
+
+def test_wait_for_job_without_process_id_uses_legacy_log_path(mocker, dpr_client: DprClient):
+    """Keep the original log URL available for callers that do not provide a process ID."""
+    mock_logger = mocker.Mock()
+    mock_stream_logs = mocker.patch.object(dpr_client, "stream_logs")
+    mocker.patch(
+        "rs_client.ogcapi.dpr_client.OgcApiClient.wait_for_job",
+        return_value={"message": "[]"},
+    )
+
+    dpr_client.wait_for_job(job_status={"jobID": "123"}, logger=mock_logger)
+
+    mock_stream_logs.assert_called_once_with(
+        f"{dpr_client.href_service}/dpr/jobs/123/logs",
+        mock_logger,
+    )
 
 
 def test_stream_logs_stops_when_job_status_check_fails(mocker, dpr_client: DprClient):

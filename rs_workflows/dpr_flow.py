@@ -613,7 +613,12 @@ async def run_processor(
             s3_report_dir=s3_payload_dir,
         )
         try:
-            dpr_client.wait_for_job(job_status, logger, f"{processor!r} processor")
+            dpr_client.wait_for_job(
+                job_status,
+                logger,
+                f"{processor!r} processor",
+                process_id=processor,
+            )
         finally:
             logger.info(f"Processor execution time: {str(timedelta(seconds=time.time() - start_time))}")
             if is_local_path:

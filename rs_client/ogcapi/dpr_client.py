@@ -340,9 +340,14 @@ class DprClient(OgcApiClient):
         logger=None,
         job_name: str = "",
         poll_interval: int = 2,
+        process_id: str | None = None,
     ) -> list[dict]:
         """
         Wait for job to finish.
+
+        Args:
+            process_id: DPR process name used to route the log stream to the instance running the job.
+                If omitted, use the legacy job log endpoint.
 
         Returns:
             EOPF results
@@ -356,7 +361,13 @@ class DprClient(OgcApiClient):
                 f"curl -X 'DELETE' '{host_dpr_service}/dpr/jobs/{job_identifier}'",
             )
             # connect to the log stream endpoint and use the logger to display the logs in real time
-            url = f"{self.href_service}/{self.endpoint_prefix}jobs/{job_identifier}/logs"
+            if process_id:
+                url = (
+                    f"{self.href_service}/{self.endpoint_prefix}processes/{process_id}"
+                    f"/jobs/{job_identifier}/logs"
+                )
+            else:
+                url = f"{self.href_service}/{self.endpoint_prefix}jobs/{job_identifier}/logs"
             self.stream_logs(url, logger)
 
         # Call parent method and parse results
