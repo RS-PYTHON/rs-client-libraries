@@ -14,7 +14,9 @@
 
 """Test the payload_generator module"""
 
+import json
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,6 +30,7 @@ from rs_workflows.flow_utils import (
     FlowInputProduct,
 )
 from rs_workflows.on_demand_processing import build_output_lineage
+from rs_workflows.payload_builder import build_unit_list
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
     DATA_EDH_DOMAIN,
     EDH_API_KEY_ENV_VAR,
@@ -1543,3 +1546,51 @@ def test_build_output_products_disk_no_disk_config_raises(
 
     with pytest.raises(RuntimeError, match="has no storage path configured"):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+def test_s3_workflow_payload_matches_individual_processing_units():
+    """Keep classes, inactive formatting, and regex links when building the S3 workflow."""
+    tasktable = json.loads((Path(__file__).parent / "resources/test_payload/s3-workflow.json").read_text())
+    units = build_unit_list(tasktable, pipeline="s3_l0_full", processing_mode=None)
+    steps = [build_workflow_step(unit) for unit in units]
+    assert len(steps) == 10
+    assert [entry["name"] for entry in tasktable["io"]["input"]] == ["S3ACADUS"]
+    assert sum(
+        origin == "pipeline_input"
+        for step in tasktable["pipelines"][0]["steps"]
+        for origin in step["input_products"].values()
+    ) == 1
+    no_cache = build_workflow_step(units[-1], selected_input_names={"S3ACADUS"})
+    assert no_cache.inputs == {".*": "ProductFormatting.9..*"}
+    assert steps[0].processing_unit == "CADUProcessingUnit"
+    assert steps[0].inputs == {"CADUs": "S3ACADUS"}
+    assert steps[1].inputs == {".*": "CADUProcessing.1..*"}
+    assert steps[3].processing_unit == "GranuleFormatingUnit"
+    assert steps[3].active is False
+    assert steps[4].inputs == {".*": "GranuleProcessing.3..*"}
+    assert steps[6].processing_unit == "CheckManouveringUnit"
+    assert steps[-1].inputs == {".*": "ProductFormatting.9..*"}
+    assert steps[-1].processing_unit == "MergeAndConsolidationUnit"
+    assert steps[-1].outputs["^S03OLCL0_.*"] == "S03OLCL0"
+
+
+def test_output_lineage_with_in_memory_regex_steps():
+    """A final output inherits session and auxiliary inputs through unwritten steps."""
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="s3://bucket/input", engine="cadu")],
+            output_products=[OutputProduct(id="final", path="s3://bucket/output", engine="cpm_zarr")],
+            adfs=[AdfConfig(id="orbit", path="s3://bucket/orbit")],
+        ),
+        workflow=[
+            WorkflowStep(name="CADUProcessing.1", inputs={"CADUs": "cadus"}),
+            WorkflowStep(
+                name="MetadataProcessing.2", inputs={".*": "CADUProcessing.1..*"}, adfs={"osf": "orbit"},
+            ),
+            WorkflowStep(
+                name="MergeAndConsolidation.3",
+                inputs={".*": "MetadataProcessing.2..*"}, outputs={"^S03.*": "final"},
+            ),
+        ],
+    )
+    assert build_output_lineage(payload) == {"final": {"cadus", "orbit"}}

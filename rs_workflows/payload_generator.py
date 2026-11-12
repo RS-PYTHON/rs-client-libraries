@@ -61,15 +61,21 @@ EDH_API_KEY_ENV_VAR = "EDH_API_KEY"
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
 
-def _build_workflow_inputs(unit: dict) -> dict[str, str]:
+def _build_workflow_inputs(unit: dict, selected_input_names: set[str] | None = None) -> dict[str, str]:
     """Map unit inputs to pipeline inputs or upstream workflow outputs."""
     inputs: dict[str, str] = {}
     for input_product in unit.get("input_products", []):
         if isinstance(input_product, dict) and "origin" in input_product and "name" in input_product:
             if "pipeline_input" in input_product["origin"]:
-                inputs[input_product["name"]] = input_product["name"]
+                if (
+                    selected_input_names is not None
+                    and input_product.get("mandatory") is False
+                    and input_product["name"] not in selected_input_names
+                ):
+                    continue
+                inputs[input_product.get("regex", input_product["name"])] = input_product["name"]
             else:
-                inputs[input_product["name"]] = input_product["origin"]
+                inputs[input_product.get("regex", input_product["name"])] = input_product["origin"]
     return inputs
 
 
@@ -95,7 +101,9 @@ def _build_workflow_outputs(unit: dict, selected_output_names: set[str] | None) 
     return outputs
 
 
-def build_workflow_step(unit, selected_output_names: set[str] | None = None):
+def build_workflow_step(
+    unit, selected_output_names: set[str] | None = None, selected_input_names: set[str] | None = None,
+):
     """
     Constructs a WorkflowStep instance from a unit configuration dictionary.
 
@@ -120,16 +128,16 @@ def build_workflow_step(unit, selected_output_names: set[str] | None = None):
     Raises:
         ValueError: If a required key is missing from the provided unit dictionary.
     """
-    inputs = _build_workflow_inputs(unit)
+    inputs = _build_workflow_inputs(unit, selected_input_names)
     adfs = _build_workflow_adfs(unit)
     outputs = _build_workflow_outputs(unit, selected_output_names)
     try:
         return WorkflowStep(  # type: ignore
             name=unit["name"],
-            active=True,
+            active=unit.get("active", True),
             validate_output=False,
             module=unit["module"],
-            processing_unit=unit["name"].split(".")[0] if "." in unit["name"] else unit["name"],
+            processing_unit=unit.get("processing_unit", unit["name"].split(".")[0]),
             inputs=inputs or None,
             adfs=adfs or None,
             outputs=outputs or None,
@@ -379,6 +387,8 @@ def build_input_products(
         mapping = search_by_name(unit.get("input_products", []), product_name)
         if not mapping:
             raise RuntimeError(f"Couldn't find any input for task table entry '{product_name}'")
+        if mapping.get("origin") not in (None, "pipeline_input"):
+            continue  # Upstream products are passed by CPM, without catalog lookup.
 
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
@@ -616,7 +626,17 @@ def get_io(
     """
     catalog_client = flow_env.rs_client.get_catalog_client()
     owner_id = flow_env.owner_id
-    inputs = build_input_products(unit, dpr_process_in, storage_configuration, catalog_client)
+    unit_process_in = dpr_process_in
+    if dpr_process_in.pipeline:
+        external_inputs = {
+            entry["name"]
+            for entry in unit.get("input_products", [])
+            if entry.get("origin", "pipeline_input") == "pipeline_input"
+        }
+        unit_process_in = dpr_process_in.model_copy(
+            update={"input_products": [p for p in dpr_process_in.input_products if p.name in external_inputs]},
+        )
+    inputs = build_input_products(unit, unit_process_in, storage_configuration, catalog_client)
     outputs = build_output_products(unit, dpr_process_in, storage_configuration, owner_id, bucket_configuration)
 
     return inputs, outputs
@@ -785,7 +805,9 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     selected_output_names = {product.name for product in dpr_process_in.generated_product_to_collection_identifier}
     for unit in unit_list:
         try:
-            workflow_steps.append(build_workflow_step(unit, selected_output_names))
+            workflow_steps.append(
+                build_workflow_step(unit, selected_output_names, {p.name for p in dpr_process_in.input_products}),
+            )
             input_products, output_products = get_io(
                 unit,
                 dpr_process_in,
@@ -838,6 +860,8 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     if adf_l0cfg:
         io_config.adfs.append(AdfConfig(id="adf_l0cfg", path=adf_l0cfg))
         for workflow_step in workflow_steps:
+            if workflow_step.adfs is None:
+                workflow_step.adfs = {}
             workflow_step.adfs["adf_l0cfg"] = "adf_l0cfg"
 
     # Build the full payload using the schema

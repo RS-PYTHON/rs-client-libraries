@@ -469,6 +469,16 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
             elif input_reference in input_ids:
                 sources.add(input_reference)
             else:
+                # CPM can pass every in-memory product from a step using a regex,
+                # even when that step has no persisted output destinations.
+                upstream = next(
+                    (candidate for candidate in workflow if input_reference == f"{candidate.name}..*"),
+                    None,
+                )
+                if upstream is not None:
+                    producers[input_reference] = upstream
+                    sources.update(resolve_sources(input_reference))
+                    continue
                 raise ValueError(
                     f"Workflow input '{input_reference}' from step '{step.name}' "
                     "does not reference a payload input or a workflow output",
