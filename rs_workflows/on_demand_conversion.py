@@ -149,7 +149,11 @@ async def safe_conversion_task(
         conversion_result = dpr_client.wait_for_job(job_status, logger, "SAFE conversion")
         logger.info(f"SAFE conversion completed with result: {conversion_result}")
         # The generic DPR client annotation is list[dict], but conv_safe_zarr returns one result dictionary.
-        return cast(dict[str, Any], conversion_result)
+        result = cast(dict[str, Any], conversion_result)
+        # e.g. the Sentinel-1 SLC products are written in the S1 ARD format, not compatible with CPM 3.0.0
+        if warning := result.get("warning"):
+            logger.warning(f"Converted product {result.get('zarr_uri')!r}: {warning}")
+        return result
 
 
 @task(name="Cleanup staged SAFE item")
