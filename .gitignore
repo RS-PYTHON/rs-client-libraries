@@ -176,3 +176,6 @@ cython_debug/
 # SonarQube reports
 /.reports
 pylint-report.txt
+
+# Others
+*.orig
