@@ -69,6 +69,9 @@ SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-z
 
 TASK_TABLE_SCHEMA = osp.realpath(osp.join(osp.dirname(__file__), "../config/TaskTable.schema.json"))
 
+# HACK for S1-ARD: name of the input ADFS written by the reference pipeline, never staged
+REFERENCE_DB_ADFS = "REFERENCE_DB"
+
 
 def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
     """Build the Dask dashboard log message from the configured public gateway endpoint."""
@@ -585,11 +588,6 @@ def build_and_generate_payload(
 ) -> tuple[PrefectFuture[PayloadSchema], dict[str, list[Item | str]]]:  # (payload, source_items)
     """Build and generate the payload file and the lineage source items"""
 
-    # Validate tasktable contents against json schema
-    with open(TASK_TABLE_SCHEMA, encoding="utf-8") as opened:
-        schema = json.load(opened)
-    jsonschema.validate(instance=task_table, schema=schema)
-
     # Dictionary of external variables values from flow's input
     external_variables = {
         "start_datetime": dpr_input.start_datetime,
@@ -598,9 +596,7 @@ def build_and_generate_payload(
         "instrument_mode": dpr_input.instrument_mode,
         "satellite": dpr_input.satellite,
     }
-
-    # Replace configured external variables from the task table with the input parameters
-    task_table = replace_external_variables(task_table, external_variables)
+    task_table = prepare_task_table(task_table, external_variables)
 
     processing_mode = list(dpr_input.processing_mode) if dpr_input.processing_mode else None
     unit_list = build_unit_list(
@@ -614,8 +610,8 @@ def build_and_generate_payload(
     for unit in unit_list:
         # For each input_adfs element computed on STEP 1
         for input_adfs in unit["input_adfs"]:
-            # HACK for S1-ARD: REFERENCE_DB is not staged, see below
-            if input_adfs["name"] == "REFERENCE_DB":
+            # HACK for S1-ARD: REFERENCE_DB is not staged, see build_reference_db_adfs
+            if input_adfs["name"] == REFERENCE_DB_ADFS:
                 continue
             # For each specific input in case of multiplicity=one_per_input
             specific_input_name, product_stac_items = resolve_specific_input_product_stac_items(
@@ -664,18 +660,8 @@ def build_and_generate_payload(
             else:
                 raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
 
-    # HACK for S1-ARD: the reference pipeline writes the REFERENCE_DB in a new s3 folder
-    if dpr_input.pipeline == "ARD_REFERENCE_PIPELINE":
-        logger.warning(f"ARD HACK FOR PIPELINE {dpr_input.pipeline}")
-        owner_id: str = dpr_input.env.owner_id
-        output_collection = "s1-ard-reference-db"
-        adf_type = "ARD_REFERENCE_DB"
-        bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
-        bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, adf_type)
-        ref_db_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
-        logger.warning(f"ARD REFERENCE_DB: {ref_db_path}")
-        # adf_type is not 'folder' on purpose, so that the path is not truncated by build_adfs
-        adfs.add(("REFERENCE_DB", adf_type, ref_db_path))
+    if reference_db_adfs := build_reference_db_adfs(dpr_input):
+        adfs.add(reference_db_adfs)
 
     # generate the dpr payload file
     return (
@@ -688,3 +674,44 @@ def build_and_generate_payload(
         ),
         source_items,
     )
+
+
+def prepare_task_table(task_table: dict[str, Any], external_variables: dict[str, Any]) -> dict[str, Any]:
+    """
+    Validate the task table against its JSON schema, and return a copy where the external variables
+    are replaced with the given values.
+    """
+    with open(TASK_TABLE_SCHEMA, encoding="utf-8") as opened:
+        schema = json.load(opened)
+    jsonschema.validate(instance=task_table, schema=schema)
+    return replace_external_variables(task_table, external_variables)
+
+
+def build_reference_db_adfs(
+    dpr_input: DprProcessIn,
+    bucket_configuration: list[list[str]] | None = None,
+) -> tuple[str, str, str] | None:
+    """
+    HACK for S1-ARD: the REFERENCE_DB input ADFS is not staged, the reference pipeline writes it in a new s3 folder.
+
+    Args:
+        dpr_input: DPR input configuration.
+        bucket_configuration: Parsed S3 bucket configuration entries. Default: read from rs-osam.
+
+    Returns:
+        The REFERENCE_DB ADFS (name, type, s3 path) for the S1-ARD reference pipeline, None for the other pipelines.
+    """
+    if dpr_input.pipeline != "ARD_REFERENCE_PIPELINE":
+        return None
+    logger = get_logger()
+    logger.warning(f"ARD HACK FOR PIPELINE {dpr_input.pipeline}")
+    owner_id: str = dpr_input.env.owner_id
+    output_collection = "s1-ard-reference-db"
+    adf_type = "ARD_REFERENCE_DB"
+    if bucket_configuration is None:
+        bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
+    bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, adf_type)
+    ref_db_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
+    logger.warning(f"ARD REFERENCE_DB: {ref_db_path}")
+    # adf_type is not 'folder' on purpose, so that the path is not truncated by build_adfs
+    return REFERENCE_DB_ADFS, adf_type, ref_db_path
