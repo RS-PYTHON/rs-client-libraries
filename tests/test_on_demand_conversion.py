@@ -146,7 +146,7 @@ async def test_on_demand_conversion_helpers_cover_mapping_zarr_and_safe_task(tmp
     )
 
     assert result == {"zarr_uri": "s3://bucket/output.zarr"}
-    dpr_client_mock.run_conv_safe_zarr.assert_called_once_with(payload, cluster_info)
+    dpr_client_mock.run_conv_safe_zarr.assert_called_once_with(payload, cluster_info, "conv_safe_zarr")
     dpr_client_mock.wait_for_job.assert_called_once()
 
 
@@ -320,6 +320,7 @@ async def test_on_demand_conversion_orchestrates_safe_conversion_happy_path(monk
     )
 
     _, payload, cluster_info = safe_conversion_submit_mock.call_args.args
+    assert safe_conversion_submit_mock.call_args.kwargs == {"process": "conv_safe_zarr"}
     assert payload == {
         "input_safe_path": f"s3://staged-bucket/work/{safe_item_id}",
         "output_zarr_dir_path": f"s3://output-bucket/{owner_id}/{output_collection}",
@@ -558,3 +559,22 @@ CATALOG_HREFS = ["https://rs-server.test", "http://rs-server-catalog.processing.
 def test_parse_rspy_catalog_item_href(href, expected):
     """Only the item hrefs of our RS-Python catalog are recognized."""
     assert on_demand_conversion_flow.parse_rspy_catalog_item_href(href, CATALOG_HREFS) == expected
+
+
+def test_conversion_input_cpm_major_version():
+    """The CPM major version selects the rs-dpr-service conversion process, CPM 2 only writes Zarr v2."""
+    common = {
+        "env": FlowEnvArgs(owner_id="test-owner"),
+        "stac_input": "https://catalog.test/collections/s1-l1-iw-slc/items/S1A_IW_SLC_SAFE",
+        "generated_product_to_collection_identifier": FlowGeneratedProduct(
+            name="out",
+            product_type="S01SIWSLC",
+            collection_name="s01siwslc",
+        ),
+        "dask_cluster_label": "dask-safe",
+    }
+    assert ConversionIn(**common).dpr_process == "conv_safe_zarr"
+    assert ConversionIn(**common, cpm_major_version=3, zarr_format=3).dpr_process == "conv_safe_zarr"
+    assert ConversionIn(**common, cpm_major_version=2).dpr_process == "conv_safe_zarr_cpm2"
+    with pytest.raises(ValueError, match="EOPF CPM 2 only writes the Zarr format 2"):
+        ConversionIn(**common, cpm_major_version=2, zarr_format=3)

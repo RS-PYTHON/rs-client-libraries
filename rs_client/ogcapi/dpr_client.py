@@ -179,21 +179,23 @@ class DprClient(OgcApiClient):
         # Call the parent method
         return super()._run_process(process, data)
 
-    def run_conv_safe_zarr(self, payload: dict, cluster_info: ClusterInfo):
+    def run_conv_safe_zarr(self, payload: dict, cluster_info: ClusterInfo, process: str = "conv_safe_zarr"):
         """Method to start the safe to zarr conversion process from rs-client -
-           Call the endpoint /processes/conv_safe_zarr/execution
+           Call the endpoint /processes/<process>/execution
 
         Args:
             payload: Dictionary to pass to the processor,
             cluster_info: Information to connect to a DPR Dask cluster
             containing input_safe_path - the s3 path of legacy product and
             output_zarr_dir_path - the s3 path for the new zarr
+            process: "conv_safe_zarr" (EOPF CPM 3.x, cpm3 Dask cluster) or "conv_safe_zarr_cpm2"
+            (EOPF CPM 2.8.1, cpm2 Dask cluster)
         Return:
             job_id (int, str): Returns the status code of the request + the identifier
             (or None if endpoint fails) of the running job
         """
         payload.update(asdict(cluster_info))  # Add the cluster info to the payload
-        return super()._run_process("conv_safe_zarr", payload)
+        return super()._run_process(process, payload)
 
     def stream_logs(self, url: str, logger) -> None:
         """

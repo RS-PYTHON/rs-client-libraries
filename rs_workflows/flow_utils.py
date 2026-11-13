@@ -694,3 +694,25 @@ class ConversionIn(BaseModel):
         title="Zarr format (default: 2)",
         description="Output Zarr format. Defaults to 2 when omitted. ",
     )
+    cpm_major_version: Literal[2, 3] = Field(
+        default=3,
+        title="EOPF CPM major version (default: 3)",
+        description=(
+            "EOPF CPM version used for the conversion: 3 (conv_safe_zarr processor, on a cpm3 Dask cluster) or "
+            "2 (CPM 2.8.1, conv_safe_zarr_cpm2 processor, on a cpm2 Dask cluster, Zarr format 2 only). "
+            "e.g. the S1 ARD processor reads the Sentinel-1 SLC products converted by CPM 2.8.1, "
+            "not the ones converted by CPM 3.0.0."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def check_cpm2_zarr_format(self) -> "ConversionIn":
+        """EOPF CPM 2.x only writes Zarr v2"""
+        if self.cpm_major_version == 2 and self.zarr_format != 2:
+            raise ValueError("EOPF CPM 2 only writes the Zarr format 2")
+        return self
+
+    @property
+    def dpr_process(self) -> str:
+        """Name of the rs-dpr-service conversion process"""
+        return "conv_safe_zarr_cpm2" if self.cpm_major_version == 2 else "conv_safe_zarr"

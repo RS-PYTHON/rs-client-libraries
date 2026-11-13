@@ -137,15 +137,16 @@ async def safe_conversion_task(
     env: FlowEnvArgs,
     payload: dict,
     cluster_info: ClusterInfo,
+    process: str = "conv_safe_zarr",
 ) -> dict[str, Any]:
-    """Submit and monitor the SAFE-to-Zarr DPR conversion job."""
+    """Submit and monitor the SAFE-to-Zarr DPR conversion job, with the "conv_safe_zarr[_cpm2]" process."""
     logger = get_logger()
     flow_env = FlowEnv(env)
     with flow_env.start_span(__name__, "safe-conversion"):
         # Use the DPR service client to submit and monitor the SAFE-to-Zarr conversion job.
         dpr_client: DprClient = flow_env.rs_client.get_dpr_client()
-        logger.info(f"Triggering SAFE conversion with payload: {payload}")
-        job_status = dpr_client.run_conv_safe_zarr(payload, cluster_info)
+        logger.info(f"Triggering SAFE conversion with the {process!r} process and payload: {payload}")
+        job_status = dpr_client.run_conv_safe_zarr(payload, cluster_info, process)
         conversion_result = dpr_client.wait_for_job(job_status, logger, "SAFE conversion")
         logger.info(f"SAFE conversion completed with result: {conversion_result}")
         # The generic DPR client annotation is list[dict], but conv_safe_zarr returns one result dictionary.
@@ -390,6 +391,7 @@ async def on_demand_conversion(
             flow_env.serialize(),
             payload,
             cluster_info,
+            process=conversion_input.dpr_process,
         )
         conversion_result: dict[str, Any] = conversion.result()  # type: ignore[assignment]
 
