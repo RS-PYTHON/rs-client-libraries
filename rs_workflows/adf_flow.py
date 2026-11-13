@@ -189,12 +189,22 @@ ADF_TYPE_CONFIG: dict[str, AdfConversionConfig] = {
     },
     # Orbit files: the legacy auxiliary product type depends on the mission
     AdfType.S00__ADF_FROAX: AdfConversionConfig(
-        required_types={"sentinel-1": ["MPL_ORBRES"], "sentinel-2": ["MPL_ORBRES"], "sentinel-3": ["AX___FRO_AX"]},
+        required_types={
+            "sentinel-1": ["MPL_ORBRES"],
+            "sentinel-2": ["MPL_ORBRES"],
+            "sentinel-3": ["AX___FRO_AX"],
+            "cristal": ["CRI__ADF_RESO_"],
+        },
         generated_prod_type="ADF_FROAX",
         script_path=STB_CONVERT_PRODUCTS,
     ),
     AdfType.S00__ADF_FPOAX: AdfConversionConfig(
-        required_types={"sentinel-1": ["MPL_ORBPRE"], "sentinel-2": ["MPL_ORBPRE"], "sentinel-3": ["AX___FPO_AX"]},
+        required_types={
+            "sentinel-1": ["MPL_ORBPRE"],
+            "sentinel-2": ["MPL_ORBPRE"],
+            "sentinel-3": ["AX___FPO_AX"],
+            "cristal": ["CRI__ADF_PREO_"],
+        },
         generated_prod_type="ADF_FPOAX",
         script_path=STB_CONVERT_PRODUCTS,
     ),
@@ -213,7 +223,7 @@ def resolve_required_types(adf_config: AdfConversionConfig, satellite: str | Non
     """
     if isinstance(adf_config.required_types, list):
         return adf_config.required_types
-    mission = re.sub(r"[a-z]$", "", satellite.lower()) if satellite else None
+    mission = re.sub(r"-?[a-z]$", "", satellite.lower()) if satellite else None
     if mission not in adf_config.required_types:
         raise ValueError(
             f"A satellite of the missions {list(adf_config.required_types)} is required to generate "
@@ -452,12 +462,17 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     # If not, we will get it from the name of the generated item
     if not stac_props.get("platform"):
         value_platform: str = item_id[2:4].lower()
-        if value_platform not in ("0_", "__", "00"):
+        if value_platform in ("1a", "1b", "2a", "2b", "3a", "3b"):
             stac_props["platform"] = f"sentinel-{value_platform}"
             logger.info(
                 "'platform' property has been computed from the item name. " f"Value is '{stac_props["platform"]}'",
             )
-        else:
+        elif item_id.lower().startswith(("cria", "cri_a")):
+            stac_props["platform"] = "cristal"
+            logger.info(
+                "'platform' property has been computed from the item name. " f"Value is '{stac_props["platform"]}'",
+            )
+        elif value_platform not in ("0_", "__", "00"):
             logger.info("'platform' is not added to properties because ADF is not specific to a platform.")
 
     start_dt = parse_date(start_dt_str) if start_dt_str else None

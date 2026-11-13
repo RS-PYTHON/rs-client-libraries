@@ -98,6 +98,7 @@ class SentinelSatellite(str, Enum):
     S2C = "sentinel-2c"
     S3A = "sentinel-3a"
     S3B = "sentinel-3b"
+    CRA = "cristal-a"
 
 
 class AdfType(str, Enum):
