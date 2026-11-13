@@ -187,7 +187,7 @@ def test_get_io_builds_input_and_output(
     assert len(outputs) == 2
     assert isinstance(outputs[0], OutputProduct)
     assert outputs[0].id == "output1"
-    assert outputs[0].path == "s3://mocked-output-bucket/test-owner/S1A_IW_GRDH_1S/00000000-0000-0000-0000-000000000000"
+    assert outputs[0].path == "s3://mocked-output-bucket/test-owner/s1a_iw_grdh_1s/00000000-0000-0000-0000-000000000000"
     assert outputs[1].id == "output2"
     assert (
         outputs[1].path

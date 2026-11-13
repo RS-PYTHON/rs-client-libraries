@@ -108,6 +108,16 @@ Most flows take an `env` parameter (`FlowEnvArgs`), with:
 The processing flows read their default parameters from a Prefect variable, so they can be run with very few
 parameters, see [Customise the DPR processing](../advanced/customise-dpr-flow.md#default-settings-of-the-processing-flows).
 
+## Catalog collections
+
+The flows don't create the catalog collections where they publish their products: the collections are created by
+the RS operators or administrators only, so that they keep full control on the catalog. The collection names are in
+lowercase by convention, and the STAC collection identifiers are case sensitive.
+
+The processing and conversion flows check that their output collections exist at their very beginning, before
+staging or processing anything, and fail with the list of the missing collections otherwise, so that a
+configuration error is detected as soon as possible.
+
 ## Artifacts
 
 The flows publish [Prefect artifacts](https://docs.prefect.io/v3/concepts/artifacts) to help the investigations:

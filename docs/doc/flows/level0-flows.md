@@ -21,9 +21,11 @@ automation after the staging of each session, see [Systematic processing](../adv
 
 1. Check the session identifier and deduce the mission from it.
 2. Read the default settings of the Level-0 processing of the mission.
-3. Check that the Dask cluster given by `dask_cluster_name` and the `dask-staging` cluster are running.
+3. Check that the catalog collections of the generated products (`generated_product_to_collection_identifier`)
+   exist, and that the Dask cluster given by `dask_cluster_name` and the `dask-staging` cluster are running.
 4. Look for the session in the catalog collections `input_collections`. If it is not there, find it in the CADIP
-   collections `cadip_collections` and stage it. An unpublished (expired) session is rejected.
+   collections `cadip_collections` and stage it in the `s0<mission>-cadip-session` catalog collection, which must
+   exist. An unpublished (expired) session is rejected.
 5. Run the Level-0 flow of the mission (`process-s1-l0` or `process-s3-l0`) as a sub-flow, that reads the settings
    again and runs the generic processing flow `process-generic` with:
     - the session as input product,

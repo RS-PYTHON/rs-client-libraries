@@ -56,10 +56,16 @@ the flow parameters can be read by everyone in the Prefect UI: it is read from t
 ```
 
 - `name` is the name of the output in the task table,
-- if `collection_name` is not given, the collection is named after the product type,
+- if `collection_name` is not given, the collection is named after the product type in lowercase (`s03olcerr`
+  above), as the collection names are in lowercase by convention and the STAC collection identifiers are case
+  sensitive,
 - `product_type` can be `*`: all the product types are mapped to the same collection, which is then mandatory,
 - the list can contain more elements than the outputs of the task table, so the same mapping can be used for
   several pipelines.
+
+The flows don't create the catalog collections: all the collections of the list must have been created by an RS
+operator or administrator. `process-generic` checks that they exist at its very beginning, before staging the ADFs
+and running the processor, and fails with the list of the missing collections otherwise.
 
 ### Auxiliary files
 
@@ -276,17 +282,19 @@ The output products written in the object storage are stored in the bucket given
 ## Call the generic flow from your own flow
 
 A flow that doesn't process a single product reads the settings of its processing with `load_processor_settings`
-of `rs_workflows.utils.dpr`, before searching its inputs, then runs the processor with `call_dpr_flow`, that builds
+of `rs_workflows.utils.dpr`, before searching its inputs (it also checks that the collections of the generated
+products exist and that the Dask clusters are running), then runs the processor with `call_dpr_flow`, that builds
 the `DprProcessIn` parameters, calls `process-generic` and emits the events of the generated products:
 
 ```python
-from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, WorkflowType
+from rs_workflows.flow_utils import FlowEnv, FlowEnvArgs, FlowInputProduct, WorkflowType
 from rs_workflows.utils.dpr import ProcessingId, call_dpr_flow, load_processor_settings
 
-settings = await load_processor_settings(ProcessingId.S3_OLCI_L1)
+env_args = FlowEnvArgs(owner_id="my-login")
+settings = await load_processor_settings(ProcessingId.S3_OLCI_L1, FlowEnv(env_args))
 input_products = [FlowInputProduct(name="S3OLCIL0_1", item_id="<item id>", collection_name="s3-l0"), ...]
 products = await call_dpr_flow(
-    FlowEnvArgs(owner_id="my-login"),
+    env_args,
     settings,
     input_products=input_products,
     external_variables={"start_datetime": start, "end_datetime": end, "satellite": "sentinel-3a"},

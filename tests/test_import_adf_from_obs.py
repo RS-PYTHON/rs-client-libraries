@@ -273,3 +273,56 @@ async def test_import_adf_from_obs_flow(mock_flow_env, tmp_path, sample_configur
     mock_download.assert_called_once()
     mock_extract.assert_called_once()
     mock_import.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rehearsal_mode", [False, True])
+# pylint: disable=redefined-outer-name
+async def test_import_items_fails_on_missing_collection(
+    mock_flow_env,
+    mock_s3_client,
+    sample_extracted_files,
+    rehearsal_mode,
+):
+    """The target collections are checked before importing any file, also in rehearsal mode, and never created."""
+    with patch(
+        "rs_workflows.on_demand.adf.import_adf_from_obs.check_collections_exist",
+        new=AsyncMock(side_effect=ValueError("missing collections")),
+    ) as mock_check:
+        with patch("rs_workflows.on_demand.adf.import_adf_from_obs.create_new_stac_item") as mock_create_item:
+            with patch("rs_workflows.on_demand.adf.import_adf_from_obs.get_logger"):
+                with pytest.raises(ValueError, match="missing collections"):
+                    await import_items(
+                        flow_env=mock_flow_env,
+                        s3_client=mock_s3_client,
+                        extracted_files=sample_extracted_files,
+                        output_path="",
+                        extract_pattern="S3__*.tgz|S3A_*.tgz",
+                        rehearsal_mode=rehearsal_mode,
+                    )
+
+    assert list(mock_check.call_args.args[1]) == ["ol_1_clutax", "ax___lwm_ax"]
+    mock_create_item.assert_not_called()
+    mock_s3_client.upload_file.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rehearsal_mode", [False, True])
+# pylint: disable=redefined-outer-name
+async def test_import_adf_from_obs_checks_the_collection_first(mock_flow_env, sample_configuration, rehearsal_mode):
+    """The collection of the configuration is checked before downloading the files, also in rehearsal mode."""
+    with patch(
+        "rs_workflows.on_demand.adf.import_adf_from_obs.check_collections_exist",
+        new=AsyncMock(side_effect=ValueError("missing collections")),
+    ) as mock_check:
+        with patch("rs_workflows.on_demand.adf.import_adf_from_obs.download_adf_files") as mock_download:
+            with patch("rs_workflows.on_demand.adf.import_adf_from_obs.FlowEnv", return_value=mock_flow_env):
+                with pytest.raises(ValueError, match="missing collections"):
+                    await import_adf_from_obs.fn(
+                        sample_configuration,
+                        owner="test-user",
+                        rehearsal_mode=rehearsal_mode,
+                    )
+
+    mock_check.assert_awaited_once_with(mock_flow_env, ["collection-output"])
+    mock_download.assert_not_called()

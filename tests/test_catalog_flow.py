@@ -15,7 +15,7 @@
 """Unit tests for catalog_flow.py"""
 
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 import responses
@@ -66,13 +66,6 @@ async def test_publish_tempfixes(
         catalog_flow,
         "FlowEnv",
         lambda env: flow_env_mock,
-    )
-
-    # Mock check_and_create_collection to avoid unmocked HTTP calls
-    monkeypatch.setattr(
-        catalog_flow,
-        "check_and_create_collection",
-        AsyncMock(),
     )
 
     # Mock add_item
@@ -224,12 +217,6 @@ async def test_publish_continues_after_item_publish_failure(
         lambda env: flow_env_mock,
     )
 
-    monkeypatch.setattr(
-        catalog_flow,
-        "check_and_create_collection",
-        AsyncMock(),
-    )
-
     catalog_mapping = [
         FlowGeneratedProduct(name="item1", product_type="S1_GRD", collection_name="OUTPUT_GRD_COLLECTION"),
         FlowGeneratedProduct(name="item2", product_type="S1_GRD", collection_name="OUTPUT_GRD_COLLECTION"),
@@ -290,73 +277,66 @@ async def test_publish_continues_after_item_publish_failure(
 
 
 @pytest.mark.asyncio
-async def test_check_and_create_collection(
+async def test_check_collections_exist(
     mocker,
-    monkeypatch,
     mocked_rspy_landing_pages,
 ):  # pylint: disable=unused-argument
-    """Test the check_and_create_collection function."""
-    # Mock FlowEnv and CatalogClient
-    mock_logger = MagicMock()
-    mocker.patch(
-        "rs_workflows.catalog_flow.get_logger",
-        return_value=mock_logger,
-    )
-
-    real_catalog_client = catalog_client.CatalogClient(
-        MOCKED_RSPY_WEBSITE,
-        "test-api-key",
-        OWNER_ID,
-    )
+    """The existing collections are accepted, the missing ones are reported and never created."""
+    mocker.patch("rs_workflows.catalog_flow.get_logger", return_value=MagicMock())
+    real_catalog_client = catalog_client.CatalogClient(MOCKED_RSPY_WEBSITE, "test-api-key", OWNER_ID)
     flow_env_mock = MagicMock()
     flow_env_mock.rs_client.get_catalog_client.return_value = real_catalog_client
-    flow_env_mock.start_span.return_value.__enter__ = lambda self: MagicMock()
-    flow_env_mock.start_span.return_value.__exit__ = lambda self, *args: None
-    monkeypatch.setattr(
-        catalog_flow,
-        "FlowEnv",
-        lambda env: flow_env_mock,
-    )
-
-    # --- Case 1 : the collection exists.
-    collection_name = "existing_collection"
-    responses.add(
-        responses.POST,
-        f"{MOCKED_RSPY_WEBSITE}/catalog/search",
-        json={"type": "FeatureCollection", "features": []},
-        status=status.HTTP_200_OK,
-    )
     spy_add_collection = mocker.spy(catalog_client.CatalogClient, "add_collection")
 
-    await catalog_flow.check_and_create_collection.fn(flow_env_mock, collection_name)
+    def collection_url(name: str) -> str:
+        return f"{MOCKED_RSPY_WEBSITE}/catalog/collections/{OWNER_ID}:{name}"
+
+    for name in ("s03sral0c", "s03olcl0_"):
+        responses.get(
+            collection_url(name),
+            json={
+                "type": "Collection",
+                "stac_version": "1.0.0",
+                "id": f"{OWNER_ID}_{name}",
+                "description": name,
+                "license": "proprietary",
+                "extent": {
+                    "spatial": {"bbox": [[-180, -90, 180, 90]]},
+                    "temporal": {"interval": [[None, None]]},
+                },
+                "links": [],
+            },
+            status=status.HTTP_200_OK,
+        )
+    for name in ("S03SRAL0C", "s03missing"):
+        responses.get(
+            collection_url(name),
+            json={"code": "NotFound", "description": f"Collection {name} not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Case 1: all the collections exist
+    await catalog_flow.check_collections_exist(flow_env_mock, ["s03sral0c", "s03olcl0_", "s03sral0c"])
+
+    # Case 2: the missing collections are all reported, and not created
+    with pytest.raises(ValueError, match=r"missing.*\['S03SRAL0C', 's03missing'\].*RS operator/administrator"):
+        await catalog_flow.check_collections_exist(flow_env_mock, ["S03SRAL0C", "s03olcl0_", "s03missing"])
     spy_add_collection.assert_not_called()
 
-    # --- Case 2 : The collection does not exist
-    spy_add_collection.reset_mock()
-    collection_name = "harry_potter"
-    responses.add(
-        responses.POST,
-        f"{MOCKED_RSPY_WEBSITE}/catalog/search",
-        json={"error": "Collection not found"},
-        status=status.HTTP_404_NOT_FOUND,
-    )
-    # Simulate the creation of the collection
-    responses.add(
-        responses.POST,
-        f"{MOCKED_RSPY_WEBSITE}/catalog/collections",
-        json={"id": collection_name, "description": f"{collection_name} collection"},
-        status=status.HTTP_201_CREATED,
-    )
 
-    await catalog_flow.check_and_create_collection.fn(flow_env_mock, collection_name)
-    spy_add_collection.assert_called_once()
+def test_get_generated_product_collections():
+    """The collections default to the product type in lowercase, without duplicates."""
+    mapping = [
+        FlowGeneratedProduct(name="S03SRAL0C", product_type="S03SRAL0C"),
+        FlowGeneratedProduct(name="S03OLCL0", product_type="S03OLCL0_"),
+        FlowGeneratedProduct(name="S03CACHE", product_type="*", collection_name="s3_production_cache_s3l0"),
+        FlowGeneratedProduct(name="S03OLCL0_BIS", product_type="S03OLCL0_"),
+    ]
+    assert catalog_flow.get_generated_product_collections(mapping) == [
+        "s03sral0c",
+        "s03olcl0_",
+        "s3_production_cache_s3l0",
+    ]
 
-    # Get collection object
-    collection_arg = spy_add_collection.call_args[0][1]
-
-    # Check content
-    assert collection_arg.id == collection_name
-    assert collection_arg.description == f"{collection_name} collection"
-    assert collection_arg.extent is not None
-    assert len(collection_arg.extent.spatial.bboxes) == 1
-    assert len(collection_arg.extent.temporal.intervals) == 1
+    with pytest.raises(ValueError, match="cannot be '\\*' if the collection name is not specified"):
+        catalog_flow.get_generated_product_collections([FlowGeneratedProduct(name="ANY", product_type="*")])
