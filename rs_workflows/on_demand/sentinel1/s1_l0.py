@@ -26,22 +26,19 @@ from rs_workflows.on_demand.common.l0_last_steps import process_staged_session
 async def process_s1l0(
     session: str,
     env_args: FlowEnvArgs,
-    force_systematic: bool = False,
-    verbose: bool = False,
 ) -> list[dict[str, Any]] | None:
     """
     Sentinel-1 L0 processing, with the settings of the `s1l0-default-setting` Prefect variable.
     The session should have been staged before.
 
     A `product.<product type>.generated` event is emitted for each generated product, related to the workflow of
-    the processing: systematic with `force_systematic`, set by the automation that starts `process-l0` after the
+    the processing: systematic with `env_args.process.force_systematic`, set by the automation that starts `process-l0` after the
     staging of the session.
 
     Args:
         session: Identifier of the session.
-        env_args: Flow environment arguments.
-        force_systematic: Run the processing as a systematic one, so that the automations start the next processing
-            of the chain from the events of the generated products.
-        verbose: not used yet.
+        env_args: Flow environment arguments. Its `process` field sets `force_systematic` (run the processing as a
+            systematic one, so that the automations start the next processing of the chain from the events of the
+            generated products) and `verbose` (not used yet).
     """
-    return await process_staged_session("1", session, env_args, force_systematic, verbose)
+    return await process_staged_session("1", session, env_args)

@@ -158,6 +158,59 @@ class AuxiliarySource(str, Enum):
     EARTHDATAHUB = "earthdatahub"
 
 
+class WriteEngine(str, Enum):
+    """
+    Engine used to write the zarr products:
+
+    Attributes:
+        cpm_zarr: default zarr writer.
+        fast_zarr: inspired by the ACRI-ST FastZarrStore idea, it writes DataTree products through direct Zarr
+        API calls and is intended for metadata-heavy products where xarray metadata creation dominates the write time.
+    """
+
+    CPM_ZARR = "cpm_zarr"
+    FAST_ZARR = "fast_zarr"
+
+
+class FlowEnvProcess(BaseModel):
+    """
+    Prefect flow environment arguments, specific to the DPR processing.
+
+    Attributes:
+        write_engine: Engine used to write the zarr products. Written in the `engine` of the zarr output products of
+            the payload. None to keep the engine of the task table.
+        use_obstore: Use obstore or fsspec (if False) for the final upload to the S3-backed zarr store. Written in
+            the `writer_params` of the zarr output products of the payload. None to keep the CPM default.
+        triggering__stage_s3_upload_max_concurrency: Maximum concurrency of the S3 uploads when staging. Written in
+            the `general_configuration` of the payload. None to keep the CPM default.
+        force_systematic: Run the processing as a systematic one, so that the automations start the next processing
+            of the chain from the events of the generated products.
+        verbose: not used yet.
+    """
+
+    write_engine: WriteEngine | None = Field(
+        default=None,
+        description="Engine used to write the zarr products. If not set, the engine of the task table is used.",
+    )
+    use_obstore: bool | None = Field(
+        default=None,
+        description="Use obstore or fsspec (if False) for the final upload to the S3-backed zarr store.",
+    )
+    triggering__stage_s3_upload_max_concurrency: int | None = Field(
+        default=None,
+        ge=1,
+        description="Maximum number of concurrent S3 file uploads used by the CPM staging.",
+    )
+    force_systematic: bool = Field(
+        default=False,
+        description=(
+            "Run the processing as a systematic one, so that the automations start the next processing "
+            "of the chain from the events of the generated products."
+        ),
+    )
+    verbose: bool = Field(default=False, description="Not used yet.")
+
+
 class FlowEnvArgs(BaseModel):
     """
     Prefect flow environment arguments.
@@ -168,6 +221,7 @@ class FlowEnvArgs(BaseModel):
         server because there will be only one block.
         calling_span (tuple): Serialized OpenTelemetry span of the calling flow, if any.
         service_name: OpenTelemetry service name
+        process: Options of the flows that run a processor, see `FlowEnvProcess`.
     """
 
     owner_id: str = Field(
@@ -192,6 +246,10 @@ class FlowEnvArgs(BaseModel):
         title="Called by",
         description="Any additional information on who or what called the flow",
     )
+    process: FlowEnvProcess = Field(
+        default_factory=FlowEnvProcess,
+        description="Options of the flows that run a processor",
+    )
 
 
 class FlowEnv:
@@ -211,6 +269,7 @@ class FlowEnv:
         self.calling_span: SpanContext | None = None
         self.this_span: SpanContext | None = None
         self.logging_level: str = args.logging_level.value
+        self.process: FlowEnvProcess = args.process
 
         # Set root logging level to the one selected for this flow
         logging.getLogger().setLevel(self.logging_level)
@@ -257,6 +316,7 @@ class FlowEnv:
             owner_id=self.owner_id,
             calling_span=serialized_span,
             logging_level=logging_level,
+            process=self.process,
         )  # type: ignore
 
     @_agnosticcontextmanager
@@ -353,7 +413,7 @@ class AuxiliaryProductMapping(BaseModel):
 
 class DprProcessIn(BaseModel):
     """
-    Input parameters for executing the 'dpr-process' flow.
+    Input parameters for executing dpr processing flows.
 
     This model defines all the configuration needed to run a DPR processor,
     including input datasets, generated outputs, auxiliary data mapping,

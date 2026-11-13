@@ -34,6 +34,7 @@ from rs_common import prefect_utils
 from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
+    WriteEngine,
 )
 from rs_workflows.payload_template import (
     AdfConfig,
@@ -59,6 +60,9 @@ DATA_EDH_DOMAIN = "data.earthdatahub.destine.eu"
 EDH_API_KEY_ENV_VAR = "EDH_API_KEY"
 
 CONFIG_DIR = Path(__file__).parent.parent / "config"
+
+# Engines of the output products that the options `write_engine` and `use_obstore` of the flow environment apply to
+ZARR_WRITE_ENGINES = {WriteEngine.CPM_ZARR.value, WriteEngine.FAST_ZARR.value}
 
 
 def _build_workflow_inputs(unit: dict) -> dict[str, str]:
@@ -485,6 +489,9 @@ def build_output_products(
     Each output product is mapped to an appropriate S3 bucket, determined by
     the owner ID, collection, and product type according to the configuration file.
 
+    The options `write_engine` and `use_obstore` of `dpr_process_in.env.process`, when set, override the `engine`
+    and the `use_obstore` writer parameter of the output products that use a zarr writer (`cpm_zarr`, `fast_zarr`).
+
     Args:
         unit (dict): Workflow unit definition containing output product metadata.
         dpr_process_in (DprProcessIn): Input configuration defining generated outputs.
@@ -505,6 +512,7 @@ def build_output_products(
     logger = get_logger()
 
     mapping_lookup = {p.name: p for p in dpr_process_in.generated_product_to_collection_identifier}
+    process_options = dpr_process_in.env.process
 
     for mapping in unit.get("output_products", []):
         product_name = mapping["name"]
@@ -564,6 +572,14 @@ def build_output_products(
 
         # Default to write mode, allowing explicit task table settings to override it.
         extra_fields = {"mode": "w", **(mapping.get("writer_params") or {})}
+
+        # The options of the flow environment override the task table, only for the zarr writers
+        engine = mapping["engine"]
+        if engine in ZARR_WRITE_ENGINES:
+            if process_options.write_engine is not None:
+                engine = process_options.write_engine.value
+            if process_options.use_obstore is not None:
+                extra_fields["use_obstore"] = process_options.use_obstore
         if not store_params:
             store_params = StoreParams(**extra_fields)
         else:
@@ -574,7 +590,7 @@ def build_output_products(
             OutputProduct(
                 id=mapping["name"],
                 path=output_path,
-                engine=mapping["engine"],
+                engine=engine,
                 writer_params=store_params,
                 type=mapping.get("type", "file"),
                 final_product=mapping.get("final_product", True),
@@ -863,6 +879,9 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
             triggering__stage_s3_temporary_prefix=dpr_process_in.triggering__stage_s3_temporary_prefix,
             triggering__stage_s3_outputs_min_size=dpr_process_in.triggering__stage_s3_outputs_min_size,
             triggering__stage_s3_memory_fit_safety_ratio=dpr_process_in.triggering__stage_s3_memory_fit_safety_ratio,
+            triggering__stage_s3_upload_max_concurrency=(
+                dpr_process_in.env.process.triggering__stage_s3_upload_max_concurrency
+            ),
             triggering__use_datatree=True if is_olci_processor else None,
             triggering__use_default_filename=True if is_olci_processor else None,
             dask_utils__timeout=dpr_process_in.dask_task_timeout,

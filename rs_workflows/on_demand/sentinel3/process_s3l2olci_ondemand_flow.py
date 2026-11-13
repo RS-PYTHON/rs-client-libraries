@@ -75,14 +75,14 @@ async def process_s3l2olci_product(
 async def process_s3l2olci_ondemand(
     env_args: FlowEnvArgs,
     single_input_product: FlowInputS3l2olci,
-    force_systematic: bool = False,
     olcefr_base_name: str = OLCEFR_DEFAULT_BASE_NAME,
 ) -> list[dict[str, Any]]:
     """
     # Process ON DEMAND S3 L2 OLCI
 
     This flow is in charge to prepare the S3 L2 OLCI processing by computing all the needed inputs.
-    Then it runs the processor with workflow set to "on-demand" ("systematic" if `force_systematic` is set).
+    Then it runs the processor with workflow set to "on-demand" ("systematic" if `env_args.process.force_systematic`
+    is set).
 
     ---
     ## Workflow Steps
@@ -97,9 +97,8 @@ async def process_s3l2olci_ondemand(
     ## Parameters
     Parameter | Type | Default | Description |
     |---|---|---|---|
-    | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments |
+    | `env_args` | `FlowEnvArgs` | *required* | Flow environment arguments. `process.force_systematic` sets the workflow. |
     | `single_input_product` | `FlowInputS3l2olci` | *required* | STAC item and collection of the `S03OLCEFR` product |
-    | `force_systematic` | `bool` | `False` | If true, the workflow is systematic: the next processing follows. |
     | `olcefr_base_name` | `str` | `S03OLCEFR` | S03OLCEFR product name on the task table. |
 
     ---
@@ -107,7 +106,6 @@ async def process_s3l2olci_ondemand(
     return await process_catalog_product(
         env_args,
         single_input_product,
-        force_systematic,
         ProcessingId.S3_OLCI_L2,
         partial(process_s3l2olci_product, olcefr_base_name=olcefr_base_name),
     )
