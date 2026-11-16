@@ -803,11 +803,25 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     workflow_steps = []
     io_config = IOConfig()
     selected_output_names = {product.name for product in dpr_process_in.generated_product_to_collection_identifier}
+    common_chunk_parameters = {}
+    if dpr_process_in.processor_name == DprProcessor.S3L0:
+        # Legacy S3 tables put CADU chunks on the first PU and ISP chunks on the
+        # last PU, even when the latter is inactive. Reuse those existing values
+        # as defaults for each PU. Tables using pipeline.parameters work as before.
+        for unit in unit_list:
+            for key in ("cadu_chunk_size", "isp_chunk_size"):
+                value = (unit.get("parameters") or {}).get(key)
+                if key not in common_chunk_parameters and isinstance(value, dict):
+                    common_chunk_parameters[key] = value
     for unit in unit_list:
         try:
             workflow_steps.append(
                 build_workflow_step(unit, selected_output_names, {p.name for p in dpr_process_in.input_products}),
             )
+            if common_chunk_parameters:
+                workflow_steps[-1].parameters = deepcopy({
+                    **common_chunk_parameters, **(workflow_steps[-1].parameters or {}),
+                })
             if not workflow_steps[-1].active:
                 # EOPF skips this PU; its I/O must not be resolved or published.
                 continue

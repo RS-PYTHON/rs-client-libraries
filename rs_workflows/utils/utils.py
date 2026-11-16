@@ -469,12 +469,14 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
             elif input_reference in input_ids:
                 sources.add(input_reference)
             else:
-                # CPM can pass every in-memory product from a step using a regex,
-                # even when that step has no persisted output destinations.
+                # In-memory products use their PU reference, even when that PU
+                # has no persisted output destinations (e.g. CADUProcessing.1.olci).
                 upstream = next(
                     (
-                        candidate for candidate in workflow
-                        if input_reference in (f"{candidate.name}.*", f"{candidate.name}..*")
+                        candidate
+                        for candidate in sorted(workflow, key=lambda value: len(value.name), reverse=True)
+                        if input_reference.startswith(f"{candidate.name}.")
+                        and len(input_reference) > len(candidate.name) + 1
                     ),
                     None,
                 )
@@ -509,8 +511,10 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
             if upstream is None:
                 upstream = next(
                     (
-                        candidate for candidate in workflow
-                        if reference in (f"{candidate.name}.*", f"{candidate.name}..*")
+                        candidate
+                        for candidate in sorted(workflow, key=lambda value: len(value.name), reverse=True)
+                        if reference.startswith(f"{candidate.name}.")
+                        and len(reference) > len(candidate.name) + 1
                     ),
                     None,
                 )

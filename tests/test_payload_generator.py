@@ -1671,3 +1671,60 @@ def test_build_payload_excludes_io_from_disabled_processing_units(mocker, flow_e
     assert len(payload.workflow) == 2
     assert payload.workflow[1].active is False
     assert build_output_lineage(payload) == {}
+
+
+@pytest.mark.parametrize("explicit_override", [False, True])
+def test_legacy_s3_chunk_parameters_are_shared_even_from_disabled_units(
+    mocker, flow_env, mock_dpr_process_in, explicit_override,
+):
+    """Old task tables may carry ISP chunks only on a disabled merge PU."""
+    mock_dpr_process_in.processor_name = DprProcessor.S3L0
+    mock_dpr_process_in.generated_product_to_collection_identifier = []
+    get_io_mock = mocker.patch("rs_workflows.payload_generator.get_io", return_value=([], []))
+    mocker.patch("rs_workflows.payload_generator.build_adfs", return_value=[])
+    units = [
+        {"name": "CADUProcessing.1", "module": "l0.cadu_processing.cadu_processing_unit",
+         "parameters": {"cadu_chunk_size": {"olci": 10000}, "mission": "S3"}},
+        {"name": "APIDFiltering.2", "module": "l0.s3.apid_filtering_unit"},
+        {"name": "SpecificSorting.5", "module": "l0.s3.specific_sorting_unit"},
+        {"name": "MergeAndConsolidation.10", "module": "l0.s3.merge_and_consolidation_unit",
+         "active": False, "parameters": {"isp_chunk_size": {"S03OLC_IG": 10000}}},
+    ]
+    if explicit_override:
+        # The modern table has already supplied common defaults to the first PU.
+        units[0]["parameters"]["isp_chunk_size"] = {"S03OLC_IG": 10000}
+        units[1]["parameters"] = {"isp_chunk_size": {"S03OLC_IG": 20000}}
+    payload = build_payload(flow_env, units, [], mock_dpr_process_in, MagicMock(), [])
+    assert get_io_mock.call_count == 3
+    by_name = {step.name: step for step in payload.workflow}
+    for name in ("CADUProcessing.1", "SpecificSorting.5", "MergeAndConsolidation.10"):
+        assert by_name[name].parameters["cadu_chunk_size"] == {"olci": 10000}
+        assert by_name[name].parameters["isp_chunk_size"] == {"S03OLC_IG": 10000}
+    assert by_name["CADUProcessing.1"].parameters["mission"] == "S3"
+    expected_apid_chunk = 20000 if explicit_override else 10000
+    assert by_name["APIDFiltering.2"].parameters["isp_chunk_size"] == {"S03OLC_IG": expected_apid_chunk}
+    by_name["CADUProcessing.1"].parameters["cadu_chunk_size"]["olci"] = 1
+    assert by_name["SpecificSorting.5"].parameters["cadu_chunk_size"]["olci"] == 10000
+    assert units[0]["parameters"]["cadu_chunk_size"]["olci"] == 10000
+
+
+@pytest.mark.parametrize("source_name", ["CADUProcessing", "CADUProcessing.1"])
+def test_lineage_with_explicit_unwritten_cadu_outputs(source_name):
+    """APID filtering may consume CADU's memory outputs without writing CADU products."""
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="S3ACADUS", path="s3://bucket/session", engine="cadu")],
+            output_products=[OutputProduct(id="output_folder", path="s3://bucket/out", engine="cpm_zarr")],
+            adfs=[AdfConfig(id="osf", path="/orbit")],
+        ),
+        workflow=[
+            WorkflowStep(name=source_name, inputs={"CADUs": "S3ACADUS"}, adfs={"osf": "osf"}),
+            WorkflowStep(name="APIDFiltering.2", inputs={
+                name: f"{source_name}.{name}" for name in ("olci", "slstr", "sral")
+            }, outputs={".*": "output_folder"}),
+        ],
+    )
+    assert build_output_lineage(payload) == {"output_folder": {"S3ACADUS", "osf"}}
+    payload.workflow[1].inputs = {"olci": "MissingUnit.olci"}
+    with pytest.raises(ValueError, match="does not reference a payload input or a workflow output"):
+        build_output_lineage(payload)
