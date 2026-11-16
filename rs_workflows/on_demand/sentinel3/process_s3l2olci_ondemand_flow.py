@@ -29,7 +29,7 @@ from rs_workflows.on_demand.sentinel3.s3_processing_utils import process_olci
 from rs_workflows.utils.dpr import ProcessingId, ProcessorSettings
 
 OLCEFR_PRODUCT_TYPE = "S03OLCEFR"
-OLCEFR_DEFAULT_BASE_NAME = "S03OLCEFR"
+OLCEFR_DEFAULT_BASE_NAME = "S3OLCIL1"
 
 
 class FlowInputS3l2olci(FlowInputItem):
@@ -103,7 +103,7 @@ async def process_s3l2olci_ondemand(
     |---|---|---|---|
     | `env_args` | `FlowEnvArgs` | *required* | Flow env arguments. `process.force_systematic` sets the workflow. |
     | `single_input_product` | `FlowInputS3l2olci` | *required* | STAC item and collection of the `S03OLCEFR` product |
-    | `olcefr_base_name` | `str` | `S03OLCEFR` | S03OLCEFR product name on the task table. |
+    | `olcefr_base_name` | `str` | `S3OLCIL1` | S03OLCEFR product name on the task table. |
 
     ---
     """
