@@ -835,18 +835,6 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
         match dpr_process_in.processor_name:
             case DprProcessor.S1L0:
                 adf_l0cfg = "/opt/dask-l0/s1_adf_l0cfg.json"
-                # TODO: this section is temporary, should be removed when the S1 L0 processor doesn't need it anymore
-                # the processor doesn't start without these parameters
-                for workflow_step in workflow_steps:
-                    extra_parameters = {
-                        "streaming_mode": False,
-                        "temporary_path": "./output_params/tmp",
-                        "acquisition_report_output_path": "./output_params/s1",
-                    }
-                    if workflow_step.parameters:
-                        workflow_step.parameters.update(extra_parameters)
-                    else:
-                        workflow_step.parameters = extra_parameters
             case DprProcessor.S3L0:
                 adf_l0cfg = "/opt/dask-l0/s3_adf_l0cfg.json"
 
