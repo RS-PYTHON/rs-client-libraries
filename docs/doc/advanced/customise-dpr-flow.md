@@ -99,6 +99,7 @@ The processing flows read the parameters of their processor from the `<processin
 | Sentinel-1 Level-0 | `process-l0`, `process-s1-l0` | `s1l0-default-setting` |
 | Sentinel-1 ARD | `process-s1-ard-reference`, `process-s1-ard` | `s1ard-default-setting` |
 | Sentinel-3 Level-0 | `process-l0`, `process-s3-l0` | `s3l0-default-setting` |
+| Cristal Level-0 | `process-l0`, `process-cri-l0` | `cril0-default-setting` |
 | Sentinel-3 OLCI Level-1 | `process-s3-l1-olci-ondemand`, `process-s3-l1-olci-systematic` | `s3l1olci-default-setting` |
 | Sentinel-3 OLCI Level-2 | `process-s3-l2-olci-ondemand`, `process-s3-l2-olci-systematic` | `s3l2olci-default-setting` |
 
@@ -160,11 +161,12 @@ The flows read these settings first, and check that the Dask cluster of the proc
 configuration error or an unavailable Dask cluster is reported at once.
 
 The settings are the same for all the runs of a processing. What changes for a run is given by the parameters of the
-flows: the owner of the products (`env_args`), the input products, `force_systematic`, and the pipeline of
-`process-s1-ard`.
+flows: the owner of the products (`env_args`), the input products, and the pipeline of
+`process-s1-ard`. The options of the run that are common to the flows (`force_systematic`, `verbose`...) are in
+`env_args.process` (`FlowEnvProcess`).
 
 After running the processor, the flows emit an event for each generated product, related to the `workflow`:
-`on-demand`, or `systematic` for the systematic flows and the runs with `force_systematic`. Only the events of a
+`on-demand`, or `systematic` for the systematic flows and the runs with `env_args.process.force_systematic`. Only the events of a
 `systematic` workflow start the next processing, see [Systematic processing](systematic-processing.md#product-events).
 
 ### Write a processing flow
@@ -203,10 +205,10 @@ async def process_my_product(env_args, settings, item_id, collection_name, prope
 
 @flow(name="process-my-product-ondemand")
 async def process_my_product_ondemand(env_args: FlowEnvArgs, single_input_product: FlowInputItem,
-                                      force_systematic: bool = False, base_name: str = "MY_INPUT"):
+                                      base_name: str = "MY_INPUT"):
     """Read the product from the catalog and process it."""
     return await process_catalog_product(
-        env_args, single_input_product, force_systematic, ProcessingId.MY_PROCESSING,
+        env_args, single_input_product, ProcessingId.MY_PROCESSING,
         partial(process_my_product, base_name=base_name),
     )
 
