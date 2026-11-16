@@ -1556,6 +1556,12 @@ def test_s3_workflow_payload_matches_individual_processing_units():
     units = build_unit_list(tasktable, pipeline="s3_l0_full", processing_mode=None)
     steps = [build_workflow_step(unit) for unit in units]
     assert len(steps) == 10
+    # Every writer shares the final S3 destination, including intermediate writers.
+    assert all(
+        product["origin"] == "pipeline_output"
+        for unit in units
+        for product in unit["output_products"]
+    )
     for step in steps:
         assert step.parameters["cadu_chunk_size"]["olci"] == 10000
         assert step.parameters["isp_chunk_size"]["S03OLC_IG"] == 10000
@@ -1649,3 +1655,44 @@ def test_shared_folder_becomes_final_when_terminal_step_writes_it(mocker, flow_e
     )
     assert len(payload.io.output_products) == 1
     assert payload.io.output_products[0].final_product is True
+
+
+@pytest.mark.parametrize("source_name", ["CADUProcessing", "CADUProcessing.1"])
+def test_shared_folder_lineage_with_explicit_inputs_and_wildcard_outputs(source_name):
+    """Concrete CADU outputs identify their producer even when it writes via `.*`."""
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="s3://bucket/input", engine="cadu")],
+            output_products=[OutputProduct(id="output_folder", path="s3://bucket/out", engine="cpm_zarr")],
+            adfs=[AdfConfig(id="orbit", path="/orbit")],
+        ),
+        workflow=[
+            WorkflowStep(name=source_name, inputs={"CADUs": "cadus"},
+                         adfs={"osf": "orbit"}, outputs={".*": "output_folder"}),
+            WorkflowStep(name="APIDFiltering", inputs={
+                name: f"{source_name}.{name}" for name in ("olci", "slstr", "sral")
+            }, outputs={".*": "output_folder"}),
+        ],
+    )
+    assert build_output_lineage(payload) == {"output_folder": {"cadus", "orbit"}}
+    payload.workflow.append(WorkflowStep(
+        name="Unrelated", inputs={"input": "cadus"}, outputs={".*": "output_folder"},
+    ))
+    with pytest.raises(ValueError, match="exactly one workflow producer"):
+        build_output_lineage(payload)
+
+
+def test_lineage_rejects_concrete_output_not_matched_by_producer_regex():
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="s3://bucket/input", engine="cadu")],
+            output_products=[OutputProduct(id="final", path="s3://bucket/out", engine="cpm_zarr")],
+        ),
+        workflow=[
+            WorkflowStep(name="CADUProcessing", inputs={"CADUs": "cadus"}, outputs={"^olci$": "intermediate"}),
+            WorkflowStep(name="APIDFiltering", inputs={"input": "CADUProcessing.unknown"},
+                         outputs={".*": "final"}),
+        ],
+    )
+    with pytest.raises(ValueError, match="does not reference a payload input or a workflow output"):
+        build_output_lineage(payload)
