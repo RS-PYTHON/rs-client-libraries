@@ -329,7 +329,7 @@ def test_flow_input_s3l2olci():
 
 
 async def test_process_s3l2olci_product(mocker):
-    """The S03OLCEFR product is the single input, and its dates are the external variables."""
+    """The S03OLCEFR product is the single input, and its dates and satellite are the external variables."""
     process_olci = mocker.patch.object(
         process_s3l2olci_ondemand_flow,
         "process_olci",
@@ -352,7 +352,11 @@ async def test_process_s3l2olci_product(mocker):
         ENV_ARGS,
         SETTINGS,
         [FlowInputProduct(name="OLCEFR", item_id="olcefr-item", collection_name="s03olcefr")],
-        {"start_datetime": OLCEFR_PROPERTIES["start_datetime"], "end_datetime": OLCEFR_PROPERTIES["end_datetime"]},
+        {
+            "start_datetime": OLCEFR_PROPERTIES["start_datetime"],
+            "end_datetime": OLCEFR_PROPERTIES["end_datetime"],
+            "satellite": "sentinel-3a",
+        },
         WorkflowType.ON_DEMAND,
     )
 
@@ -426,11 +430,11 @@ async def test_systematic_flows_accept_the_product_events(mocker):
     assert l1_input.input_products == [
         FlowInputProduct(name="S3OLCIL0_1", item_id="olcl0-item", collection_name="s03olcl0_"),
     ]
-    assert l1_input.satellite == "sentinel-3a"
     assert l2_input.input_products == [
         FlowInputProduct(name="S03OLCEFR", item_id="olcefr-item", collection_name="s03olcefr"),
     ]
     for dpr_input in (l1_input, l2_input):
+        assert dpr_input.satellite == "sentinel-3a"
         assert dpr_input.env == FlowEnvArgs(owner_id="owner")
         assert dpr_input.workflow_type == WorkflowType.SYSTEMATIC
 

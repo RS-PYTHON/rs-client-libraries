@@ -51,15 +51,15 @@ async def process_s3l2olci_product(
     olcefr_base_name: str = OLCEFR_DEFAULT_BASE_NAME,
 ) -> list[dict[str, Any]]:
     """
-    Run the S3 L2 OLCI processing of an S03OLCEFR product, its single input, with the sensing dates of the product
-    as external variables.
+    Run the S3 L2 OLCI processing of an S03OLCEFR product, its single input, with the sensing dates and the satellite
+    of the product as external variables.
 
     Args:
         env_args: Flow environment arguments.
         settings: Default settings of the S3 L2 OLCI processing.
         item_id: STAC item identifier of the S03OLCEFR product.
         collection_name: Collection of the S03OLCEFR product.
-        properties: STAC item properties of the S03OLCEFR product (`start_datetime`, `end_datetime`).
+        properties: STAC item properties of the S03OLCEFR product (`platform`, `start_datetime`, `end_datetime`).
         workflow: Type of workflow of the processing.
         olcefr_base_name: S03OLCEFR product name on the task table.
 
@@ -67,7 +67,11 @@ async def process_s3l2olci_product(
         The STAC items of the generated products.
     """
     input_products = [FlowInputProduct(name=olcefr_base_name, item_id=item_id, collection_name=collection_name)]
-    external_variables = {"start_datetime": properties["start_datetime"], "end_datetime": properties["end_datetime"]}
+    external_variables = {
+        "start_datetime": properties["start_datetime"],
+        "end_datetime": properties["end_datetime"],
+        "satellite": properties["platform"],
+    }
     return await process_olci("l2", env_args, settings, input_products, external_variables, workflow)
 
 
