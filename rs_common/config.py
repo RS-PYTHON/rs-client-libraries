@@ -40,6 +40,7 @@ class EPlatform(str, Enum):
     S2B = "S2B"
     S3A = "S3A"
     S3B = "S3B"
+    CRA = "CRA"
 
 
 class ECadipStation(str, Enum):

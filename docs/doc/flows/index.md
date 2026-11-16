@@ -58,7 +58,7 @@ deployments delivered by default are:
 | Convert ADF Scheduled | `convert-adf-scheduled` | conversion, auxip | integrated |
 | Convert SAFE | `convert-safe` | conversion, staging, on-demand | integrated |
 | Process Generic | `process-generic` | all, processing | integrated |
-| Process L0 | `process-l0` | l0, processing, s1, s2, s3 | integrated |
+| Process L0 | `process-l0` | l0, processing, s1, s2, s3, Cristal | integrated |
 | Process S1 L0 | `process-s1-l0` | l0, processing, s1 | integrated |
 | Process S1 ARD Reference | `process-s1-ard-reference` | ard, processing, s1 | integrated |
 | Process S1 ARD | `process-s1-ard` | ard, processing, s1 | integrated |
