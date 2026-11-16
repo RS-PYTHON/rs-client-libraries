@@ -431,7 +431,7 @@ async def test_systematic_flows_accept_the_product_events(mocker):
         FlowInputProduct(name="S3OLCIL0_1", item_id="olcl0-item", collection_name="s03olcl0_"),
     ]
     assert l2_input.input_products == [
-        FlowInputProduct(name="S03OLCEFR", item_id="olcefr-item", collection_name="s03olcefr"),
+        FlowInputProduct(name="S3OLCIL1", item_id="olcefr-item", collection_name="s03olcefr"),
     ]
     for dpr_input in (l1_input, l2_input):
         assert dpr_input.satellite == "sentinel-3a"
