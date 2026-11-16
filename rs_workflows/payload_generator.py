@@ -770,6 +770,23 @@ def generate_payload(  # pylint: disable=unused-argument
     )
 
 
+def _legacy_s3_chunk_parameters(unit_list: list[dict]) -> dict:
+    """Read defaults from legacy S3 PU definitions, including inactive PUs.
+
+    Prefer the owning PU over per-step overrides, independently of list order.
+    Modern tables declare these defaults once in pipeline.parameters instead.
+    """
+    defaults = {}
+    for key, owner in (("cadu_chunk_size", "cadu_processing"), ("isp_chunk_size", "merge_and_consolidation")):
+        candidates = [unit for unit in unit_list if isinstance((unit.get("parameters") or {}).get(key), dict)]
+        candidates.sort(key=lambda unit: (owner not in unit.get("module", ""), unit["name"]))
+        if candidates:
+            source = candidates[0]
+            defaults[key] = deepcopy(source["parameters"][key])
+            get_logger().debug("S3 chunk default %s supplied by %s", key, source["name"])
+    return defaults
+
+
 def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
     flow_env: FlowEnv,
     unit_list: list[dict],
@@ -803,20 +820,16 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     workflow_steps = []
     io_config = IOConfig()
     selected_output_names = {product.name for product in dpr_process_in.generated_product_to_collection_identifier}
-    common_chunk_parameters = {}
-    if dpr_process_in.processor_name == DprProcessor.S3L0:
-        # Legacy S3 tables put CADU chunks on the first PU and ISP chunks on the
-        # last PU, even when the latter is inactive. Reuse those existing values
-        # as defaults for each PU. Tables using pipeline.parameters work as before.
-        for unit in unit_list:
-            for key in ("cadu_chunk_size", "isp_chunk_size"):
-                value = (unit.get("parameters") or {}).get(key)
-                if key not in common_chunk_parameters and isinstance(value, dict):
-                    common_chunk_parameters[key] = value
+    selected_input_names = {product.name for product in dpr_process_in.input_products}
+    common_chunk_parameters = (
+        _legacy_s3_chunk_parameters(unit_list) if dpr_process_in.processor_name == DprProcessor.S3L0 else {}
+    )
+    seen_inputs: set[str] = set()
+    seen_outputs: dict[str, OutputProduct] = {}
     for unit in unit_list:
         try:
             workflow_steps.append(
-                build_workflow_step(unit, selected_output_names, {p.name for p in dpr_process_in.input_products}),
+                build_workflow_step(unit, selected_output_names, selected_input_names),
             )
             if common_chunk_parameters:
                 workflow_steps[-1].parameters = deepcopy({
@@ -832,9 +845,10 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
                 storage_configuration,
                 bucket_configuration,
             )
-            seen_inputs = {p.id for p in io_config.input_products}
-            io_config.input_products += [p for p in input_products if p.id not in seen_inputs]
-            seen_outputs = {p.id: p for p in io_config.output_products}
+            for product in input_products:
+                if product.id not in seen_inputs:
+                    io_config.input_products.append(product)
+                    seen_inputs.add(product.id)
             for product in output_products:
                 if product.id in seen_outputs:
                     # A shared destination can hold intermediate and final outputs.

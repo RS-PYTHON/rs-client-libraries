@@ -762,3 +762,33 @@ def test_build_and_generate_payload_reuses_adfs_across_units(mocker, different_c
         ("osf", "file", "s3://bucket/osf.EOF"), ("fro", "file", "s3://bucket/fro.EOF"),
     }
     assert generate_mock.submit.call_args.args[1] == units
+
+
+def test_build_and_generate_payload_skips_inactive_adfs(mocker):
+    """Disabled PUs keep chunk defaults but cannot trigger mandatory ADF searches."""
+    mocker.patch.object(on_demand_processing.jsonschema, "validate")
+    mocker.patch.object(on_demand_processing, "replace_external_variables")
+    units = [
+        {
+            "name": "MergeAndConsolidation.10",
+            "active": False,
+            "parameters": {"isp_chunk_size": {"S03OLC_IG": 10000}},
+            "input_adfs": [{"name": "mandatory_unused_adf", "mandatory": True}],
+        }
+    ]
+    mocker.patch.object(on_demand_processing, "build_unit_list", return_value=units)
+    resolve = mocker.patch.object(on_demand_processing, "resolve_specific_input_product_stac_items")
+    stage = mocker.patch.object(on_demand_processing, "process_input_adfs")
+    generate = mocker.patch.object(on_demand_processing, "generate_payload")
+    _, sources = on_demand_processing.build_and_generate_payload(
+        MagicMock(),
+        MagicMock(),
+        {},
+        MagicMock(pipeline="s3_l0_cadu_apid", processing_mode=None),
+        MagicMock(),
+    )
+    resolve.assert_not_called()
+    stage.submit.assert_not_called()
+    assert generate.submit.call_args.args[1] == units
+    assert generate.submit.call_args.args[2] == []
+    assert sources == {}

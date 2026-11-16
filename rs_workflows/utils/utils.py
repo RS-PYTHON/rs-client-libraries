@@ -449,6 +449,25 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
             producers[output_reference] = step
             output_references.setdefault(output_id, []).append(output_reference)
 
+    steps_by_name_length = sorted(workflow, key=lambda step: len(step.name), reverse=True)
+
+    def find_producer(reference: str) -> WorkflowStep | None:
+        """Resolve persisted destinations and explicit in-memory PU references."""
+        if reference in input_ids:
+            return None
+        if reference not in producers:
+            upstream = next(
+                (
+                    step
+                    for step in steps_by_name_length
+                    if reference.startswith(f"{step.name}.") and len(reference) > len(step.name) + 1
+                ),
+                None,
+            )
+            if upstream is not None:
+                producers[reference] = upstream
+        return producers.get(reference)
+
     resolved: dict[str, set[str]] = {}
     resolving: set[str] = set()
 
@@ -464,26 +483,11 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
         sources = set()
 
         for input_reference in (step.inputs or {}).values():
-            if input_reference in producers:
-                sources.update(resolve_sources(input_reference))
-            elif input_reference in input_ids:
+            if input_reference in input_ids:
                 sources.add(input_reference)
+            elif find_producer(input_reference) is not None:
+                sources.update(resolve_sources(input_reference))
             else:
-                # In-memory products use their PU reference, even when that PU
-                # has no persisted output destinations (e.g. CADUProcessing.1.olci).
-                upstream = next(
-                    (
-                        candidate
-                        for candidate in sorted(workflow, key=lambda value: len(value.name), reverse=True)
-                        if input_reference.startswith(f"{candidate.name}.")
-                        and len(input_reference) > len(candidate.name) + 1
-                    ),
-                    None,
-                )
-                if upstream is not None:
-                    producers[input_reference] = upstream
-                    sources.update(resolve_sources(input_reference))
-                    continue
                 raise ValueError(
                     f"Workflow input '{input_reference}' from step '{step.name}' "
                     "does not reference a payload input or a workflow output",
@@ -507,17 +511,7 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
         visiting = visiting | {step.name}
         ancestors: set[str] = set()
         for reference in (step.inputs or {}).values():
-            upstream = producers.get(reference)
-            if upstream is None:
-                upstream = next(
-                    (
-                        candidate
-                        for candidate in sorted(workflow, key=lambda value: len(value.name), reverse=True)
-                        if reference.startswith(f"{candidate.name}.")
-                        and len(reference) > len(candidate.name) + 1
-                    ),
-                    None,
-                )
+            upstream = find_producer(reference)
             if upstream is not None:
                 ancestors.add(upstream.name)
                 ancestors.update(ancestor_names(upstream, visiting))

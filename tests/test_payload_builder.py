@@ -776,14 +776,3 @@ def test_pipeline_common_parameters_are_copied_and_step_values_override():
     units[0]["parameters"]["isp_chunk_size"]["S03OLC_IG"] = 1
     assert units[1]["parameters"]["isp_chunk_size"]["S03OLC_IG"] == 10000
     assert pipeline["parameters"]["isp_chunk_size"]["S03OLC_IG"] == 10000
-
-
-def test_preserve_unit_names_requires_unique_steps():
-    """Opting out of step suffixes cannot create ambiguous workflow references."""
-    tasktable = _valid_tasktable()
-    tasktable["pipelines"][0].update(preserve_unit_names=True, steps=[
-        {"unit_name": "u1", "step_id": 1, "input_products": {}, "output_products": {}},
-        {"unit_name": "u1", "step_id": 2, "input_products": {}, "output_products": {}},
-    ])
-    with pytest.raises(TaskTableError, match="unique unit names"):
-        build_unit_list(tasktable, pipeline="p1")

@@ -238,30 +238,26 @@ search.
 
 ## Sentinel-3 L0 workflow outputs
 
-The `s3_l0_full` workflow uses the unit names from the L0 workflow sample, without
-step ID suffixes (`preserve_unit_names: true`). Its chunk dictionaries are declared
-once under the pipeline's `parameters`; each step inherits them and can override
-individual parameter groups.
+The `s3_l0_cadu_apid` pipeline runs CADUProcessing + APIDFiltering. Other workflow
+units are inactive. The single external input is `S3ACADUS`. APIDFiltering receives
+three explicit in-memory references: `CADUProcessing.1.olci`,
+`CADUProcessing.1.slstr`, and `CADUProcessing.1.sral`. EOPF 3.0.0rc4 does not expand
+wildcards in those input references. CADU uses `apply_mask: true`.
 
-The intermediate units write `.*` to the shared `output_folder`. The final
-`MergeAndConsolidation` unit writes `^(?!cache).*` to the same folder and `cache.*`
-to `S03CACHE`. Configure the flow's `generated_product_to_collection_identifier`
-with a shared destination, for example:
+APIDFiltering writes all its products using the output pattern `.*` to
+`output_folder`. Select an S3 collection for this destination:
 
 ```json
 [
-  {"name": "output_folder", "product_type": "*", "collection_name": "TEST_FLOW_OUTPUT_S3_L0"},
-  {"name": "S03CACHE", "product_type": "*", "collection_name": "TEST_FLOW_OUTPUT_S3_L0_CACHE"}
+  {"name": "output_folder", "product_type": "*", "collection_name": "TEST_FLOW_OUTPUT_S3_L0"}
 ]
 ```
 
-`output_folder` is required; `S03CACHE` is optional and is not published as a final
-product. The common folder contains intermediate and final products, matching the
-sample's writing behavior. The existing per-product output mappings are replaced
-by these folder mappings. The input remains `S3ACADUS`.
+The `s3_l0_full` pipeline retains the original S3L0Processor and its individual
+product output mappings. It can still be selected independently.
 
-`CheckManoeuvring` is temporarily disabled because its L0 constructor does not
-accept a workflow identifier. Until it is re-enabled with a compatible L0 version,
-`MetadataProcessing` reads from `CheckISPs` directly. Some L0 units also discard
-the identifier passed by EOPF; reproducing the sample does not repair those L0
-constructor incompatibilities.
+Declare `cadu_chunk_size` and `isp_chunk_size` once under the pipeline's
+`parameters`. Each step receives an independent copy; step parameters override
+whole parameter groups. For older task tables, the client also inherits chunk
+defaults from the CADU and MergeAndConsolidation definitions, including inactive
+units. Inactive units do not stage ADFs or resolve input/output storage.

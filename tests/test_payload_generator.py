@@ -1551,38 +1551,58 @@ def test_build_output_products_disk_no_disk_config_raises(
 
 
 def test_s3_workflow_payload_matches_individual_processing_units():
-    """Keep classes, inactive formatting, and regex links when building the S3 workflow."""
-    tasktable = json.loads((Path(__file__).parent / "resources/test_payload/s3-workflow.json").read_text())
-    units = build_unit_list(tasktable, pipeline="s3_l0_full", processing_mode=None)
+    """Generate concrete CADU/APID links without relying on a local task table."""
+    names = ["CADUProcessing", "APIDFiltering", "GranuleFormatting"]
+    tasktable = {
+        "units": [
+            {
+                "name": name,
+                "module": f"l0.{name}",
+                "processing_unit": f"{name}Unit",
+                "active": name != "GranuleFormatting",
+                "input_adfs": [],
+                "input_products": [
+                    {"name": product, "mandatory": True}
+                    for product in (["S3ACADUS"] if i == 0 else ["olci", "slstr", "sral"])
+                ],
+                "output_products": [{"name": "output_folder", "mandatory": True}] if i == 1 else [],
+            }
+            for i, name in enumerate(names)
+        ],
+        "io": {
+            "input": [{"name": "S3ACADUS", "mandatory": True, "regex": "CADUs"}],
+            "output": [{"name": "output_folder", "mandatory": True, "regex": ".*", "final_product": True}],
+        },
+        "pipelines": [
+            {
+                "name": "s3_l0_cadu_apid",
+                "parameters": {"cadu_chunk_size": {"olci": 10000}, "isp_chunk_size": {"S03OLC_IG": 10000}},
+                "steps": [
+                    {
+                        "step_id": i + 1,
+                        "unit_name": name,
+                        "input_products": (
+                            {"S3ACADUS": "pipeline_input"}
+                            if i == 0
+                            else {product: f"CADUProcessing.1.{product}" for product in ("olci", "slstr", "sral")}
+                        ),
+                        "output_products": {"output_folder": "pipeline_output"} if i == 1 else {},
+                    }
+                    for i, name in enumerate(names)
+                ],
+            }
+        ],
+    }
+    units = build_unit_list(tasktable, pipeline="s3_l0_cadu_apid")
     steps = [build_workflow_step(unit) for unit in units]
-    assert len(steps) == 10
-    for step in steps:
-        assert step.parameters["cadu_chunk_size"]["olci"] == 10000
-        assert step.parameters["isp_chunk_size"]["S03OLC_IG"] == 10000
-        assert step.parameters["isp_chunk_size"]["S03OLCL0_"] == 10000
-    assert [entry["name"] for entry in tasktable["io"]["input"]] == ["S3ACADUS"]
-    assert sum(
-        origin == "pipeline_input"
-        for step in tasktable["pipelines"][0]["steps"]
-        for origin in step["input_products"].values()
-    ) == 1
-    no_cache = build_workflow_step(units[-1], selected_input_names={"S3ACADUS"})
-    assert no_cache.inputs == {".*": "ProductFormatting.*"}
-    assert steps[0].processing_unit == "CADUProcessingUnit"
+    assert [step.name for step in steps] == [f"{name}.{i + 1}" for i, name in enumerate(names)]
     assert steps[0].inputs == {"CADUs": "S3ACADUS"}
-    assert steps[1].inputs == {".*": "CADUProcessing.*"}
-    assert steps[3].processing_unit == "GranuleFormatingUnit"
-    assert steps[3].active is False
-    assert steps[4].inputs == {".*": "GranuleProcessing.*"}
-    assert steps[6].processing_unit == "CheckManouveringUnit"
-    assert steps[-1].inputs == {".*": "ProductFormatting.*"}
-    assert steps[-1].processing_unit == "MergeAndConsolidationUnit"
-    assert [step.name for step in steps] == [unit["name"] for unit in tasktable["units"]]
-    for step in steps[1:-1]:
-        assert step.outputs == {".*": "output_folder"}
-    assert steps[6].active is False
-    assert steps[7].inputs == {".*": "CheckISPs.*"}
-    assert steps[-1].outputs == {"^(?!cache).*": "output_folder", "cache.*": "S03CACHE"}
+    assert steps[1].inputs == {product: f"CADUProcessing.1.{product}" for product in ("olci", "slstr", "sral")}
+    assert steps[1].outputs == {".*": "output_folder"}
+    assert steps[2].active is False
+    for step in steps:
+        assert step.parameters["isp_chunk_size"] == {"S03OLC_IG": 10000}
+
 
 
 def test_output_lineage_with_in_memory_regex_steps():
@@ -1673,9 +1693,14 @@ def test_build_payload_excludes_io_from_disabled_processing_units(mocker, flow_e
     assert build_output_lineage(payload) == {}
 
 
+@pytest.mark.parametrize("reverse_units", [False, True])
 @pytest.mark.parametrize("explicit_override", [False, True])
 def test_legacy_s3_chunk_parameters_are_shared_even_from_disabled_units(
-    mocker, flow_env, mock_dpr_process_in, explicit_override,
+    mocker,
+    flow_env,
+    mock_dpr_process_in,
+    explicit_override,
+    reverse_units,
 ):
     """Old task tables may carry ISP chunks only on a disabled merge PU."""
     mock_dpr_process_in.processor_name = DprProcessor.S3L0
@@ -1694,6 +1719,9 @@ def test_legacy_s3_chunk_parameters_are_shared_even_from_disabled_units(
         # The modern table has already supplied common defaults to the first PU.
         units[0]["parameters"]["isp_chunk_size"] = {"S03OLC_IG": 10000}
         units[1]["parameters"] = {"isp_chunk_size": {"S03OLC_IG": 20000}}
+    original_cadu = units[0]
+    if reverse_units:
+        units.reverse()
     payload = build_payload(flow_env, units, [], mock_dpr_process_in, MagicMock(), [])
     assert get_io_mock.call_count == 3
     by_name = {step.name: step for step in payload.workflow}
@@ -1705,7 +1733,7 @@ def test_legacy_s3_chunk_parameters_are_shared_even_from_disabled_units(
     assert by_name["APIDFiltering.2"].parameters["isp_chunk_size"] == {"S03OLC_IG": expected_apid_chunk}
     by_name["CADUProcessing.1"].parameters["cadu_chunk_size"]["olci"] = 1
     assert by_name["SpecificSorting.5"].parameters["cadu_chunk_size"]["olci"] == 10000
-    assert units[0]["parameters"]["cadu_chunk_size"]["olci"] == 10000
+    assert original_cadu["parameters"]["cadu_chunk_size"]["olci"] == 10000
 
 
 @pytest.mark.parametrize("source_name", ["CADUProcessing", "CADUProcessing.1"])

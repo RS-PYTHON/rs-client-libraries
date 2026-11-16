@@ -613,6 +613,8 @@ def build_and_generate_payload(
     tasks = []
     submitted_adfs: set[str] = set()
     for unit in unit_list:
+        if not unit.get("active", True):
+            continue
         # For each input_adfs element computed on STEP 1
         for input_adfs in unit["input_adfs"]:
             # HACK for S1-ARD: REFERENCE_DB is not staged, see below
