@@ -716,3 +716,49 @@ def test_build_and_generate_payload_skips_reference_db(mocker):
     generate_mock.submit.assert_called_once()
     assert generate_mock.submit.call_args.args[2] == []
     assert not source_items
+
+
+@pytest.mark.parametrize("different_context", [None, "definition", "input"])
+def test_build_and_generate_payload_reuses_adfs_across_units(mocker, different_context):
+    """Stage shared AUX once while keeping different queries and input items separate."""
+    mocker.patch.object(on_demand_processing.jsonschema, "validate")
+    mocker.patch.object(on_demand_processing, "replace_external_variables", side_effect=lambda tt, _: tt)
+    osf = {"name": "osf", "type": "file", "alternatives": [{"query": {"parameters": {"dTa": 6000}}}]}
+    other_osf = json.loads(json.dumps(osf))
+    if different_context == "definition":
+        other_osf["alternatives"][0]["query"]["parameters"]["dTa"] = 7000
+    fro = {"name": "fro", "type": "file"}
+    units = [{"input_adfs": [osf, fro]}, {"input_adfs": [other_osf, fro]}]
+    mocker.patch.object(on_demand_processing, "build_unit_list", return_value=units)
+    item = Item("input-1", None, None, datetime(2020, 1, 1, tzinfo=timezone.utc), {})
+    other_item = item.clone()
+    other_item.id = "input-2"
+    contexts = [(None, [None])] * 4
+    if different_context == "input":
+        contexts = [("source", [item]), (None, [None]), ("source", [other_item]), (None, [None])]
+    mocker.patch.object(
+        on_demand_processing, "resolve_specific_input_product_stac_items", side_effect=contexts,
+    )
+    process_mock = mocker.patch.object(on_demand_processing, "process_input_adfs")
+
+    def staged_result(adf, *_args):
+        staged = Item(adf["name"], None, None, datetime(2020, 1, 1, tzinfo=timezone.utc), {})
+        staged.add_asset("data", Asset(f"s3://bucket/{adf['name']}.EOF"))
+        return MagicMock(result=Mock(return_value=(adf["name"], "file", (True, ItemCollection([staged])))))
+
+    process_mock.submit.side_effect = staged_result
+    generate_mock = mocker.patch.object(on_demand_processing, "generate_payload")
+    dpr_input = MagicMock(pipeline="S3_L0", processing_mode=None)
+    _, sources = on_demand_processing.build_and_generate_payload(
+        MagicMock(), MagicMock(), {}, dpr_input, MagicMock(),
+    )
+
+    expected_osf_calls = 1 if different_context is None else 2
+    assert [call.args[0]["name"] for call in process_mock.submit.call_args_list].count("osf") == expected_osf_calls
+    assert [call.args[0]["name"] for call in process_mock.submit.call_args_list].count("fro") == 1
+    assert len(sources["osf"]) == expected_osf_calls
+    assert len(sources["fro"]) == 1
+    assert set(generate_mock.submit.call_args.args[2]) == {
+        ("osf", "file", "s3://bucket/osf.EOF"), ("fro", "file", "s3://bucket/fro.EOF"),
+    }
+    assert generate_mock.submit.call_args.args[1] == units

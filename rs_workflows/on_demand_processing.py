@@ -611,6 +611,7 @@ def build_and_generate_payload(
     )
 
     tasks = []
+    submitted_adfs: set[str] = set()
     for unit in unit_list:
         # For each input_adfs element computed on STEP 1
         for input_adfs in unit["input_adfs"]:
@@ -626,6 +627,20 @@ def build_and_generate_payload(
                 flow_env.rs_client,
             )
             for specific_input_product_stac_item in product_stac_items:
+                # Share the complete staging/normalization task across units with
+                # identical ADFS definitions and input context, within this run.
+                request_key = json.dumps(
+                    [
+                        input_adfs,
+                        specific_input_name,
+                        specific_input_product_stac_item.to_dict() if specific_input_product_stac_item else None,
+                    ],
+                    sort_keys=True,
+                )
+                if request_key in submitted_adfs:
+                    logger.info("Reusing ADFS task for '%s' across processing units", input_adfs["name"])
+                    continue
+                submitted_adfs.add(request_key)
                 if specific_input_product_stac_item:
                     logger.info(
                         f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product_stac_item}",
