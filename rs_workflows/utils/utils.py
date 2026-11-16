@@ -535,9 +535,11 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
                     for other in references if other != reference
                 )
             ]
-        if len(references) != 1:
+        if not references or (len(references) != 1 and output_product.type != "folder"):
             raise ValueError(
                 f"Final output '{output_product.id}' must have exactly one workflow producer, found {references}",
             )
-        lineage[output_product.id] = set(resolve_sources(references[0]))
+        # A folder can deliberately collect products from several terminal branches
+        # (e.g. preprocessed granules and final L0 products in the sample workflow).
+        lineage[output_product.id] = set().union(*(resolve_sources(reference) for reference in references))
     return lineage

@@ -1578,7 +1578,7 @@ def test_s3_workflow_payload_matches_individual_processing_units():
     assert steps[0].inputs == {"CADUs": "S3ACADUS"}
     assert steps[1].inputs == {".*": "CADUProcessing.*"}
     assert steps[3].processing_unit == "GranuleFormatingUnit"
-    assert steps[3].active is False
+    assert steps[3].active is True
     assert steps[4].inputs == {".*": "GranuleProcessing.*"}
     assert steps[6].processing_unit == "CheckManouveringUnit"
     assert steps[-1].inputs == {".*": "ProductFormatting.*"}
@@ -1586,8 +1586,8 @@ def test_s3_workflow_payload_matches_individual_processing_units():
     assert [step.name for step in steps] == [unit["name"] for unit in tasktable["units"]]
     for step in steps[1:-1]:
         assert step.outputs == {".*": "output_folder"}
-    assert steps[6].active is False
-    assert steps[7].inputs == {".*": "CheckISPs.*"}
+    assert steps[6].active is True
+    assert steps[7].inputs == {".*": "CheckManoeuvring.*"}
     assert steps[-1].outputs == {"^(?!cache).*": "output_folder", "cache.*": "S03CACHE"}
 
 
@@ -1696,3 +1696,22 @@ def test_lineage_rejects_concrete_output_not_matched_by_producer_regex():
     )
     with pytest.raises(ValueError, match="does not reference a payload input or a workflow output"):
         build_output_lineage(payload)
+
+
+def test_shared_folder_lineage_includes_parallel_granule_formatting_branch():
+    """A shared folder can contain outputs from more than one terminal branch."""
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="s3://bucket/input", engine="cadu")],
+            output_products=[OutputProduct(id="output_folder", path="s3://bucket/out",
+                                           engine="cpm_zarr", type="folder")],
+            adfs=[AdfConfig(id="orbit", path="/orbit")],
+        ),
+        workflow=[
+            WorkflowStep(name="Granules", inputs={"CADUs": "cadus"}, outputs={".*": "output_folder"}),
+            WorkflowStep(name="Formatting", inputs={".*": "Granules.*"}, outputs={".*": "output_folder"}),
+            WorkflowStep(name="Merge", inputs={".*": "Granules.*"}, adfs={"osf": "orbit"},
+                         outputs={".*": "output_folder"}),
+        ],
+    )
+    assert build_output_lineage(payload) == {"output_folder": {"cadus", "orbit"}}
