@@ -757,13 +757,20 @@ def test_pipeline_common_parameters_are_copied_and_step_values_override():
     """Shared chunk settings reach every step without sharing mutable dictionaries."""
     tasktable = _valid_tasktable()
     pipeline = tasktable["pipelines"][0]
-    pipeline["parameters"] = {"isp_chunk_size": {"S03OLC_IG": 10000}, "enabled": True}
+    pipeline["parameters"] = {
+        "cadu_chunk_size": {"olci": 10000},
+        "isp_chunk_size": {"S03OLC_IG": 10000},
+        "enabled": True,
+    }
     pipeline["steps"] = [
         {"step_id": 1, "unit_name": "u1", "input_products": {}, "output_products": {}},
         {"step_id": 2, "unit_name": "u1", "input_products": {}, "output_products": {},
          "parameters": {"enabled": False}},
     ]
     units = build_unit_list(tasktable, pipeline="p1", processing_mode=None)
+    for unit in units:
+        assert unit["parameters"]["cadu_chunk_size"] == {"olci": 10000}
+        assert unit["parameters"]["isp_chunk_size"] == {"S03OLC_IG": 10000}
     assert units[0]["parameters"]["enabled"] is True
     assert units[1]["parameters"]["enabled"] is False
     units[0]["parameters"]["isp_chunk_size"]["S03OLC_IG"] = 1
