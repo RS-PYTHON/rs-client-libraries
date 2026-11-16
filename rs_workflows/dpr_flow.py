@@ -213,6 +213,12 @@ def create_stac_item(
         if feature_dict["properties"].get("datetime") is None:
             feature_dict["properties"]["datetime"] = feature_dict["properties"]["created"]
 
+        # EOPF intermediate products may have no creation timestamp. STAC permits
+        # omission of this optional field, but rejects empty strings and nulls.
+        created = feature_dict["properties"].get("created")
+        if created is None or (isinstance(created, str) and not created.strip()):
+            feature_dict["properties"].pop("created", None)
+
         # STAC 1.1 allows bands on assets, but forbids them in Item properties.
         if dpr_processor in (DprProcessor.S3L1OLCI.value, DprProcessor.S3L2OLCI.value):
             bands = feature_dict["properties"].pop("bands", None)
