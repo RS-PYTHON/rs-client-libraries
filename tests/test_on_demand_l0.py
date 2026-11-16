@@ -19,7 +19,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, WorkflowType
+from rs_workflows.flow_utils import (
+    FlowEnvArgs,
+    FlowEnvProcess,
+    FlowInputProduct,
+    WorkflowType,
+)
 from rs_workflows.on_demand.common import l0, l0_last_steps
 from rs_workflows.on_demand.cristal import cri_l0
 from rs_workflows.on_demand.sentinel1 import s1_l0
@@ -131,7 +136,8 @@ async def test_process_l0_raises_when_session_not_published(mocker):
 async def test_process_l0_runs_the_s1_flow_for_a_session_found_in_catalog(mocker, force_systematic):
     """A published S1 session in the catalog is processed by the S1 Level-0 flow, systematic when forced."""
     mocks = _patch_l0(mocker, item=MagicMock())
-    result = await l0.process_l0.fn(S1_SESSION, ENV_ARGS, force_systematic=force_systematic)
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=force_systematic))
+    result = await l0.process_l0.fn(S1_SESSION, env_args)
     assert result == ["s1-product"]
     mocks["load_settings"].assert_awaited_once_with(ProcessingId.S1_L0, mocks["flow_env"])
     mocks["get_item"].assert_awaited_once()
@@ -139,9 +145,7 @@ async def test_process_l0_runs_the_s1_flow_for_a_session_found_in_catalog(mocker
     mocks["stage"].assert_not_awaited()
     mocks["s1_flow"].assert_awaited_once_with(
         session=S1_SESSION,
-        env_args=ENV_ARGS,
-        force_systematic=force_systematic,
-        verbose=False,
+        env_args=env_args,
     )
     mocks["s3_flow"].assert_not_awaited()
 
@@ -150,16 +154,15 @@ async def test_process_l0_stages_then_runs_the_s3_flow(mocker):
     """An S3 session absent from the catalog is staged from the CADIP collections of the settings, then processed
     by the S3 Level-0 flow."""
     mocks = _patch_l0(mocker, item=None, station="s3_sgs", staged=True)
-    result = await l0.process_l0.fn(S3_SESSION, ENV_ARGS, force_systematic=True)
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=True))
+    result = await l0.process_l0.fn(S3_SESSION, env_args)
     assert result == ["s3-product"]
     mocks["load_settings"].assert_awaited_once_with(ProcessingId.S3_L0, mocks["flow_env"])
     assert mocks["get_station"].call_args.args[1:] == (S3_SESSION, ["sgs"])
     mocks["stage"].assert_awaited_once()
     mocks["s3_flow"].assert_awaited_once_with(
         session=S3_SESSION,
-        env_args=ENV_ARGS,
-        force_systematic=True,
-        verbose=False,
+        env_args=env_args,
     )
     mocks["s1_flow"].assert_not_awaited()
 
@@ -207,16 +210,17 @@ async def test_process_staged_session(mocker, mission, processing_id, force_syst
     flow_env_class = mocker.patch.object(l0_last_steps, "FlowEnv", return_value=flow_env)
     last_steps = mocker.patch.object(l0_last_steps, "process_l0_last_steps", new=AsyncMock(return_value=["product"]))
 
-    result = await l0_last_steps.process_staged_session(mission, "session", ENV_ARGS, force_systematic, True)
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=force_systematic, verbose=True))
+    result = await l0_last_steps.process_staged_session(mission, "session", env_args)
 
     assert result == ["product"]
-    flow_env_class.assert_called_once_with(ENV_ARGS)
+    flow_env_class.assert_called_once_with(env_args)
     load_settings.assert_awaited_once_with(processing_id, flow_env)
     last_steps.assert_awaited_once_with(
         mission=mission,
         session="session",
         flow_env=flow_env,
-        env_args=ENV_ARGS,
+        env_args=env_args,
         settings=SETTINGS,
         workflow=workflow,
         verbose=True,
@@ -234,7 +238,7 @@ async def test_process_staged_session_reads_the_prefect_blocks_before_checking_t
     flow_env_class, gateway = patch_dask_env_read_by_flow_env(mocker, monkeypatch, l0_last_steps, RAW_SETTINGS)
     last_steps = mocker.patch.object(l0_last_steps, "process_l0_last_steps", new=AsyncMock(return_value=["product"]))
 
-    assert await l0_last_steps.process_staged_session(mission, "session", ENV_ARGS, False, False) == ["product"]
+    assert await l0_last_steps.process_staged_session(mission, "session", ENV_ARGS) == ["product"]
 
     assert gateway.call_args.kwargs["address"] == DASK_ENV_VARS["DASK_GATEWAY_ADDRESS"]
     assert last_steps.call_args.kwargs["settings"] == SETTINGS
@@ -332,9 +336,7 @@ async def test_process_l0_last_steps_raises_on_bad_cristal_session():
     with pytest.raises(ValueError, match="Invalid Cristal session name: 'CRAB_SESSION'"):
         await l0.process_l0.fn(
             session="CRAB_SESSION",
-            env_args=ENV_ARGS,
-            force_systematic=True,
-            verbose=True,
+            env_args=FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=True, verbose=True)),
         )
 
 
@@ -346,15 +348,16 @@ async def test_process_mission_l0(mocker, module, mission):
     """The flow of a mission processes the staged session with the settings of the mission."""
     process = mocker.patch.object(module, "process_staged_session", new=AsyncMock(return_value=["product"]))
 
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=True))
     result = (
-        await module.process_cril0.fn("session", ENV_ARGS, force_systematic=True)
+        await module.process_cril0.fn("session", env_args)
         if mission == "CR"
         else (
-            await module.process_s1l0.fn("session", ENV_ARGS, force_systematic=True)
+            await module.process_s1l0.fn("session", env_args)
             if mission == "1"
-            else await module.process_s3l0.fn("session", ENV_ARGS, force_systematic=True)
+            else await module.process_s3l0.fn("session", env_args)
         )
     )
 
     assert result == ["product"]
-    process.assert_awaited_once_with(mission, "session", ENV_ARGS, True, False)
+    process.assert_awaited_once_with(mission, "session", env_args)

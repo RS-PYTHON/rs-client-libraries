@@ -24,8 +24,11 @@ from pystac import Asset, Item
 from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_workflows.flow_utils import (
     DprProcessIn,
+    FlowEnvArgs,
+    FlowEnvProcess,
     FlowGeneratedProduct,
     FlowInputProduct,
+    WriteEngine,
 )
 from rs_workflows.on_demand_processing import build_output_lineage
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
@@ -381,6 +384,42 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
     assert all(adf.id != "adf_l0cfg" for adf in payload.io.adfs)
     assert general_configuration["triggering__use_datatree"] is True
     assert general_configuration["triggering__use_default_filename"] is True
+
+
+@pytest.mark.parametrize("max_concurrency", [None, 1, 128])
+def test_generate_payload_sets_the_upload_max_concurrency(
+    mocker,
+    sample_unit,
+    mock_dpr_process_in,
+    flow_env,
+    _mock_os_env,
+    max_concurrency,
+):
+    """The S3 upload concurrency of the process options is in the general configuration, only when it is set."""
+    mocker.patch("rs_workflows.payload_generator.StorageConfig", return_value=MagicMock(default_adfs_storage="s3"))
+    mocker.patch("rs_workflows.payload_generator.get_io", return_value=([], []))
+    mocker.patch("rs_workflows.payload_generator.fetch_csv_from_endpoint", return_value=[])
+    mocker.patch("rs_workflows.payload_generator.get_logger", return_value=MagicMock())
+    mock_secret = MagicMock()
+    mock_secret.get.return_value = {"S3_ACCESSKEY": "dummy", "S3_SECRETKEY": "dummy"}
+    mocker.patch("rs_workflows.payload_generator.Secret.load", return_value=mock_secret)
+    mock_dpr_process_in.env = FlowEnvArgs(
+        owner_id="test-owner",
+        process=FlowEnvProcess(triggering__stage_s3_upload_max_concurrency=max_concurrency),
+    )
+
+    payload = generate_payload.fn(
+        flow_env=flow_env,
+        unit_list=[sample_unit],
+        adfs=[],
+        dpr_process_in=mock_dpr_process_in,
+    )
+
+    general_configuration = payload.general_configuration.dump()
+    if max_concurrency is None:
+        assert "triggering__stage_s3_upload_max_concurrency" not in general_configuration
+    else:
+        assert general_configuration["triggering__stage_s3_upload_max_concurrency"] == max_concurrency
 
 
 def test_generate_payload_missing_key_raises(mocker, mock_dpr_process_in, flow_env, _mock_os_env):
@@ -1092,6 +1131,123 @@ def test_build_output_products_specific_storage(
     assert not hasattr(mock_store_params, "mode")
 
     mock_storage.get_storage_for_specific_product.assert_called_with("output2")  # last call
+
+
+def _output_products_with_process_options(sample_unit, mock_dpr_process_in, mocker, kind, engines, **process_options):
+    """Build the output products of the sample unit with the given task table engines and process options."""
+    for output, engine in zip(sample_unit["output_products"], engines):
+        output["engine"] = engine
+    mock_dpr_process_in.env = FlowEnvArgs(owner_id="test-owner", process=FlowEnvProcess(**process_options))
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output1", product_type="out_type", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output2", product_type="out_type2", collection_name="OUT_COLL"),
+    ]
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "store"
+    mock_storage.get_storage_kind.return_value = kind
+    if kind == "obs":
+        mock_storage.get_store_params.return_value = StoreParams(s3_secret_alias="s3")
+        mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+    else:
+        mock_storage.get_store_params.return_value = None
+        mock_storage.get_disk_storage.return_value = {"path": "/mnt/shared/job"}
+    return build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+@pytest.mark.parametrize("kind", ["obs", "shared_disk"])
+@pytest.mark.parametrize("write_engine", list(WriteEngine))
+@pytest.mark.parametrize("task_table_engine", ["cpm_zarr", "fast_zarr"])
+def test_build_output_products_write_engine(
+    sample_unit,
+    mock_dpr_process_in,
+    mocker,
+    kind,
+    write_engine,
+    task_table_engine,
+):
+    """The write_engine option replaces the engine of the zarr output products."""
+    outputs = _output_products_with_process_options(
+        sample_unit,
+        mock_dpr_process_in,
+        mocker,
+        kind,
+        [task_table_engine] * 2,
+        write_engine=write_engine,
+    )
+    assert [o.engine for o in outputs] == [write_engine.value] * 2
+    assert [o.dump()["engine"] for o in outputs] == [write_engine.value] * 2
+    # The other writer params are not changed, and use_obstore is not set
+    assert all("use_obstore" not in o.dump()["writer_params"] for o in outputs)
+
+
+@pytest.mark.parametrize("kind", ["obs", "shared_disk"])
+@pytest.mark.parametrize("use_obstore", [True, False])
+def test_build_output_products_use_obstore(sample_unit, mock_dpr_process_in, mocker, kind, use_obstore):
+    """The use_obstore option is set in the writer_params of the zarr output products, with the write mode."""
+    outputs = _output_products_with_process_options(
+        sample_unit,
+        mock_dpr_process_in,
+        mocker,
+        kind,
+        ["cpm_zarr", "fast_zarr"],
+        use_obstore=use_obstore,
+    )
+    assert [o.engine for o in outputs] == ["cpm_zarr", "fast_zarr"]
+    for output in outputs:
+        writer_params = output.dump()["writer_params"]
+        assert writer_params["use_obstore"] is use_obstore
+        assert writer_params["mode"] == "w"
+
+
+def test_build_output_products_use_obstore_overrides_the_task_table(sample_unit, mock_dpr_process_in, mocker):
+    """The use_obstore option has priority over the writer_params of the task table."""
+    sample_unit["output_products"][0]["writer_params"] = {"use_obstore": True, "mode": "w-"}
+    outputs = _output_products_with_process_options(
+        sample_unit,
+        mock_dpr_process_in,
+        mocker,
+        "obs",
+        ["cpm_zarr"] * 2,
+        use_obstore=False,
+    )
+    assert outputs[0].dump()["writer_params"]["use_obstore"] is False
+    assert outputs[0].dump()["writer_params"]["mode"] == "w-"
+
+
+@pytest.mark.parametrize("kind", ["obs", "shared_disk"])
+def test_build_output_products_process_options_ignored_by_other_writers(
+    sample_unit,
+    mock_dpr_process_in,
+    mocker,
+    kind,
+):
+    """Output products that don't use a zarr writer keep their engine and writer_params."""
+    outputs = _output_products_with_process_options(
+        sample_unit,
+        mock_dpr_process_in,
+        mocker,
+        kind,
+        ["s3_cache", "cpm_zarr"],
+        write_engine=WriteEngine.FAST_ZARR,
+        use_obstore=True,
+    )
+    assert [o.engine for o in outputs] == ["s3_cache", "fast_zarr"]
+    assert "use_obstore" not in outputs[0].dump()["writer_params"]
+    assert outputs[1].dump()["writer_params"]["use_obstore"] is True
+
+
+@pytest.mark.parametrize("kind", ["obs", "shared_disk"])
+def test_build_output_products_process_options_not_set(sample_unit, mock_dpr_process_in, mocker, kind):
+    """Without process options, the engine of the task table is kept and use_obstore is not in the payload."""
+    outputs = _output_products_with_process_options(
+        sample_unit,
+        mock_dpr_process_in,
+        mocker,
+        kind,
+        ["cpm_zarr", "fast_zarr"],
+    )
+    assert [o.engine for o in outputs] == ["cpm_zarr", "fast_zarr"]
+    assert all("use_obstore" not in o.dump()["writer_params"] for o in outputs)
 
 
 def test_build_output_products_fallback_unit(
