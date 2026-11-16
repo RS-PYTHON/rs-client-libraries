@@ -31,6 +31,7 @@ from sqlalchemy import (
 from sqlalchemy.sql.dml import Insert, Update
 
 import rs_workflows.record_performance as record_flow_module
+from rs_workflows.pi_db_models import FlowRun
 from rs_workflows.record_performance import (
     extract_min_datetime,
     update_timeliness_fields,
@@ -196,6 +197,7 @@ def test_record_flow_run_inserts_new_entry(mock_db_env, mocker):
     mock_flow_run = MagicMock()
     mock_flow_run.id = "fake-id"
     mock_flow_run.parent_flow_run_id = "parent-id"
+    mock_flow_run.parameters = {}
     mocker.patch.object(record_flow_module.runtime, "flow_run", mock_flow_run)
 
     mocker.patch("rs_workflows.record_performance.version", return_value="2025.0.0")
@@ -212,7 +214,12 @@ def test_record_flow_run_inserts_new_entry(mock_db_env, mocker):
     mock_session.execute.return_value.fetchone.return_value = None
     mock_session.execute.return_value.scalar.return_value = 999
 
-    result = record_flow_module.record_flow_run.fn(start_date="2025-01-01", stop_date="2025-01-02", status="OK")
+    result = record_flow_module.record_flow_run.fn(
+        start_date="2025-01-01",
+        stop_date="2025-01-02",
+        status="OK",
+        dpr_processor_name="s1_l0",
+    )
 
     # Verify it was insert
     stmt = mock_session.execute.call_args[0][0]
@@ -265,6 +272,82 @@ def test_record_flow_run_updates_existing_entry(mock_db_env, mocker):
     assert stmt.table.name == "flow_run"  # type: ignore
     assert result == "existing-id"
     mock_session.commit.assert_called_once()
+
+
+def _mock_new_flow_run(mocker, parameters: dict):
+    """Mock the DB and a Prefect flow run with the given parameters, without any flow_run record yet."""
+    mock_flow_run = MagicMock()
+    mock_flow_run.id = "fake-id"
+    mock_flow_run.parent_flow_run_id = "parent-id"
+    mock_flow_run.parameters = parameters
+    mocker.patch.object(record_flow_module.runtime, "flow_run", mock_flow_run)
+
+    mocker.patch("rs_workflows.record_performance.create_engine", return_value=MagicMock())
+    mock_session = make_mock_session(mocker)
+    # Real flow_run table definition, to compile the inserted values
+    mocker.patch("rs_workflows.record_performance.Table", return_value=FlowRun.__table__)
+
+    mock_session.execute.return_value.fetchone.return_value = None
+    mock_session.execute.return_value.scalar.return_value = 999
+    return mock_session
+
+
+@pytest.mark.parametrize(
+    "processor, parameters, expected_mission",
+    [
+        # The flows have no 'mission' parameter: the mission is deduced from the processor
+        ("s1_ard", {}, "S1"),
+        ("s3_l1olci", {}, "S3"),
+        # A 'mission' flow parameter has the priority over the processor
+        ("s1_ard", {"mission": "S2"}, "S2"),
+    ],
+)
+def test_record_flow_run_resolves_mission(mock_db_env, mocker, processor, parameters, expected_mission):
+    """The mission of the inserted flow_run record is resolved from the flow parameters, else from the processor."""
+    mock_session = _mock_new_flow_run(mocker, parameters)
+
+    result = record_flow_module.record_flow_run.fn(start_date="2025-01-01", status="OK", dpr_processor_name=processor)
+
+    stmt = mock_session.execute.call_args[0][0]
+    assert isinstance(stmt, Insert)
+    params = stmt.compile().params
+    assert params["mission"] == expected_mission
+    assert params["dpr_processor_name"] == processor
+    assert result == 999
+
+
+def test_record_flow_run_unknown_mission(mock_db_env, mocker):
+    """The flow_run record cannot be inserted without a mission parameter, for a processor of an unknown mission."""
+    mock_session = _mock_new_flow_run(mocker, {})
+
+    with pytest.raises(ValueError, match="The required parameter 'mission' could not be resolved."):
+        record_flow_module.record_flow_run.fn(start_date="2025-01-01", status="OK", dpr_processor_name="unknown")
+    mock_session.commit.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "processor, expected_mission",
+    [
+        ("s1_l0", "S1"),
+        ("s1_ard", "S1"),
+        ("S2_L1C", "S2"),
+        ("s3_l0", "S3"),
+        ("s3_l2olci", "S3"),
+        ("s3l1olci", "S3"),
+        ("s01_ard", "S1"),
+        ("cri_l0", "CRI"),
+        ("cril0", "CRI"),
+        ("cr_l0", "CRI"),
+        ("s12_l0", None),
+        ("safe_to_zarr", None),
+        ("dpr_processor", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_get_mission_from_processor(processor, expected_mission):
+    """The mission is deduced from the prefix of the DPR processor name."""
+    assert record_flow_module.get_mission_from_processor(processor) == expected_mission
 
 
 def test_record_product_realised_no_items(mock_db_env):
