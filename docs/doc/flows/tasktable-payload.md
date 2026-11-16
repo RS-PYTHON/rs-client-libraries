@@ -265,9 +265,3 @@ accept a workflow identifier. Until it is re-enabled with a compatible L0 versio
 `MetadataProcessing` reads from `CheckISPs` directly. Some L0 units also discard
 the identifier passed by EOPF; reproducing the sample does not repair those L0
 constructor incompatibilities.
-
-All S3 L0 `output_folder` writers use `pipeline_output` storage routing, including
-intermediate steps. This keeps the shared destination on the configured final
-output bucket; routing intermediate writers as `pipeline_internal` would select
-the default `other` storage (a shared disk in the example configuration). The
-`final_product` flag still controls catalog publication independently of storage.

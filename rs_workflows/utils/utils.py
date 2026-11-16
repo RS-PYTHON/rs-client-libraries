@@ -449,22 +449,6 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
             producers[output_reference] = step
             output_references.setdefault(output_id, []).append(output_reference)
 
-    def find_producer(reference: str) -> WorkflowStep | None:
-        """Resolve destination IDs, wildcard links, and concrete PU output names."""
-        if reference in producers:
-            return producers[reference]
-        # Match complete step names first, including any numeric step suffix.
-        for candidate in sorted(workflow, key=lambda step: len(step.name), reverse=True):
-            prefix = f"{candidate.name}."
-            if not reference.startswith(prefix):
-                continue
-            output_name = reference[len(prefix):]
-            if output_name in ("*", ".*") or any(
-                re.match(pattern, output_name) for pattern in (candidate.outputs or {})
-            ):
-                return candidate
-        return None
-
     resolved: dict[str, set[str]] = {}
     resolving: set[str] = set()
 
@@ -485,7 +469,15 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
             elif input_reference in input_ids:
                 sources.add(input_reference)
             else:
-                upstream = find_producer(input_reference)
+                # CPM can pass every in-memory product from a step using a regex,
+                # even when that step has no persisted output destinations.
+                upstream = next(
+                    (
+                        candidate for candidate in workflow
+                        if input_reference in (f"{candidate.name}.*", f"{candidate.name}..*")
+                    ),
+                    None,
+                )
                 if upstream is not None:
                     producers[input_reference] = upstream
                     sources.update(resolve_sources(input_reference))
@@ -513,7 +505,15 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
         visiting = visiting | {step.name}
         ancestors: set[str] = set()
         for reference in (step.inputs or {}).values():
-            upstream = find_producer(reference)
+            upstream = producers.get(reference)
+            if upstream is None:
+                upstream = next(
+                    (
+                        candidate for candidate in workflow
+                        if reference in (f"{candidate.name}.*", f"{candidate.name}..*")
+                    ),
+                    None,
+                )
             if upstream is not None:
                 ancestors.add(upstream.name)
                 ancestors.update(ancestor_names(upstream, visiting))
@@ -535,11 +535,9 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
                     for other in references if other != reference
                 )
             ]
-        if not references or (len(references) != 1 and output_product.type != "folder"):
+        if len(references) != 1:
             raise ValueError(
                 f"Final output '{output_product.id}' must have exactly one workflow producer, found {references}",
             )
-        # A folder can deliberately collect products from several terminal branches
-        # (e.g. preprocessed granules and final L0 products in the sample workflow).
-        lineage[output_product.id] = set().union(*(resolve_sources(reference) for reference in references))
+        lineage[output_product.id] = set(resolve_sources(references[0]))
     return lineage

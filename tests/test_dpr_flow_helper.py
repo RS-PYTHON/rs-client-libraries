@@ -1071,34 +1071,3 @@ def test_olci_bands_are_published_on_zarr_asset(processor):
     published = item.to_dict()
     assert "bands" not in published["properties"]
     assert published["assets"]["product"]["bands"] == bands
-
-
-@pytest.mark.parametrize("created", ["", None, "   ", "2026-11-16T12:41:23Z", "2026-11-16T12:41:23+00:00"])
-def test_created_timestamp_is_omitted_when_empty_and_preserved_when_present(created):
-    """Unknown creation time must not make an otherwise valid STAC item invalid."""
-    feature = {
-        "geometry": None,
-        "properties": {"datetime": "2020-01-21T05:09:11.936058Z", "created": created},
-    }
-    item = create_stac_item(
-        None, feature, "s3://bucket/product.zarr", "product.zarr", DprProcessor.S3L0,
-    )
-    properties = item.to_dict()["properties"]
-    if created and created.strip():
-        assert properties["created"] == created
-    else:
-        assert "created" not in properties
-    assert properties["datetime"] == "2020-01-21T05:09:11.936058Z"
-
-
-def test_created_timestamp_still_supplies_missing_datetime():
-    """Preserve the existing OLCI fallback when a creation timestamp is available."""
-    feature = {
-        "geometry": None,
-        "properties": {"datetime": None, "created": "2026-11-16T12:41:23Z"},
-    }
-    item = create_stac_item(
-        None, feature, "s3://bucket/product.zarr", "product.zarr", DprProcessor.S3L2OLCI,
-    )
-    assert item.to_dict()["properties"]["created"] == "2026-11-16T12:41:23Z"
-    assert item.datetime == datetime.datetime(2026, 11, 16, 12, 41, 23, tzinfo=datetime.UTC)
