@@ -37,6 +37,7 @@ from rs_workflows.payload_generator import (  # load_store_params_from_config,
     build_adfs,
     build_input_products,
     build_output_products,
+    build_payload,
     build_workflow_step,
     fetch_csv_from_endpoint,
     find_s3_output_bucket,
@@ -1555,6 +1556,10 @@ def test_s3_workflow_payload_matches_individual_processing_units():
     units = build_unit_list(tasktable, pipeline="s3_l0_full", processing_mode=None)
     steps = [build_workflow_step(unit) for unit in units]
     assert len(steps) == 10
+    for step in steps:
+        assert step.parameters["cadu_chunk_size"]["olci"] == 10000
+        assert step.parameters["isp_chunk_size"]["S03OLC_IG"] == 10000
+        assert step.parameters["isp_chunk_size"]["S03OLCL0_"] == 10000
     assert [entry["name"] for entry in tasktable["io"]["input"]] == ["S3ACADUS"]
     assert sum(
         origin == "pipeline_input"
@@ -1562,17 +1567,22 @@ def test_s3_workflow_payload_matches_individual_processing_units():
         for origin in step["input_products"].values()
     ) == 1
     no_cache = build_workflow_step(units[-1], selected_input_names={"S3ACADUS"})
-    assert no_cache.inputs == {".*": "ProductFormatting.9..*"}
+    assert no_cache.inputs == {".*": "ProductFormatting.*"}
     assert steps[0].processing_unit == "CADUProcessingUnit"
     assert steps[0].inputs == {"CADUs": "S3ACADUS"}
-    assert steps[1].inputs == {".*": "CADUProcessing.1..*"}
+    assert steps[1].inputs == {".*": "CADUProcessing.*"}
     assert steps[3].processing_unit == "GranuleFormatingUnit"
     assert steps[3].active is False
-    assert steps[4].inputs == {".*": "GranuleProcessing.3..*"}
+    assert steps[4].inputs == {".*": "GranuleProcessing.*"}
     assert steps[6].processing_unit == "CheckManouveringUnit"
-    assert steps[-1].inputs == {".*": "ProductFormatting.9..*"}
+    assert steps[-1].inputs == {".*": "ProductFormatting.*"}
     assert steps[-1].processing_unit == "MergeAndConsolidationUnit"
-    assert steps[-1].outputs["^S03OLCL0_.*"] == "S03OLCL0"
+    assert [step.name for step in steps] == [unit["name"] for unit in tasktable["units"]]
+    for step in steps[1:-1]:
+        assert step.outputs == {".*": "output_folder"}
+    assert steps[6].active is False
+    assert steps[7].inputs == {".*": "CheckISPs.*"}
+    assert steps[-1].outputs == {"^(?!cache).*": "output_folder", "cache.*": "S03CACHE"}
 
 
 def test_output_lineage_with_in_memory_regex_steps():
@@ -1595,3 +1605,47 @@ def test_output_lineage_with_in_memory_regex_steps():
         ],
     )
     assert build_output_lineage(payload) == {"final": {"cadus", "orbit"}}
+
+
+def test_output_lineage_with_shared_workflow_output_folder():
+    """Only the terminal writer determines final lineage for a shared folder."""
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="/input", engine="cadu")],
+            output_products=[OutputProduct(id="output_folder", path="/output", engine="cpm_zarr")],
+            adfs=[AdfConfig(id="orbit", path="/orbit")],
+        ),
+        workflow=[
+            WorkflowStep(name="CADUProcessing", inputs={"CADUs": "cadus"}),
+            WorkflowStep(name="APIDFiltering", inputs={".*": "CADUProcessing.*"},
+                         outputs={".*": "output_folder"}),
+            WorkflowStep(name="Inactive", active=False, inputs={".*": "missing.*"},
+                         outputs={".*": "output_folder"}),
+            WorkflowStep(name="MergeAndConsolidation", inputs={".*": "APIDFiltering.*"},
+                         adfs={"osf": "orbit"}, outputs={"^(?!cache).*": "output_folder"}),
+        ],
+    )
+    assert build_output_lineage(payload) == {"output_folder": {"cadus", "orbit"}}
+    payload.workflow.append(WorkflowStep(name="Unrelated", inputs={"CADUs": "cadus"},
+                                        outputs={".*": "output_folder"}))
+    with pytest.raises(ValueError, match="exactly one workflow producer"):
+        build_output_lineage(payload)
+
+
+def test_shared_folder_becomes_final_when_terminal_step_writes_it(mocker, flow_env, mock_dpr_process_in):
+    """Intermediate output metadata must not prevent publication of the final folder."""
+    mock_dpr_process_in.processor_name = "TEST_PROCESSOR"
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output_folder", product_type="*", collection_name="output"),
+    ]
+    mocker.patch("rs_workflows.payload_generator.build_adfs", return_value=[])
+    mocker.patch("rs_workflows.payload_generator.get_io", side_effect=[
+        ([], [OutputProduct(id="output_folder", path="/output", engine="cpm_zarr", final_product=False)]),
+        ([], [OutputProduct(id="output_folder", path="/output", engine="cpm_zarr", final_product=True)]),
+    ])
+    payload = build_payload(
+        flow_env, [{"name": "first", "module": "pkg.unit"}, {"name": "last", "module": "pkg.unit"}],
+        [], mock_dpr_process_in, MagicMock(), [],
+    )
+    assert len(payload.io.output_products) == 1
+    assert payload.io.output_products[0].final_product is True

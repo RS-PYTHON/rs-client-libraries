@@ -235,3 +235,33 @@ supported by the catalog.
 
 Other policies can be added in the task tables with the same mechanism, as long as they can be expressed as a STAC
 search.
+
+## Sentinel-3 L0 workflow outputs
+
+The `s3_l0_full` workflow uses the unit names from the L0 workflow sample, without
+step ID suffixes (`preserve_unit_names: true`). Its chunk dictionaries are declared
+once under the pipeline's `parameters`; each step inherits them and can override
+individual parameter groups.
+
+The intermediate units write `.*` to the shared `output_folder`. The final
+`MergeAndConsolidation` unit writes `^(?!cache).*` to the same folder and `cache.*`
+to `S03CACHE`. Configure the flow's `generated_product_to_collection_identifier`
+with a shared destination, for example:
+
+```json
+[
+  {"name": "output_folder", "product_type": "*", "collection_name": "TEST_FLOW_OUTPUT_S3_L0"},
+  {"name": "S03CACHE", "product_type": "*", "collection_name": "TEST_FLOW_OUTPUT_S3_L0_CACHE"}
+]
+```
+
+`output_folder` is required; `S03CACHE` is optional and is not published as a final
+product. The common folder contains intermediate and final products, matching the
+sample's writing behavior. The existing per-product output mappings are replaced
+by these folder mappings. The input remains `S3ACADUS`.
+
+`CheckManoeuvring` is temporarily disabled because its L0 constructor does not
+accept a workflow identifier. Until it is re-enabled with a compatible L0 version,
+`MetadataProcessing` reads from `CheckISPs` directly. Some L0 units also discard
+the identifier passed by EOPF; reproducing the sample does not repair those L0
+constructor incompatibilities.

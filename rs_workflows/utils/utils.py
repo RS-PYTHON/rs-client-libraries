@@ -433,7 +433,7 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
     if payload.io is None:
         raise ValueError("Payload io configuration is missing")
 
-    workflow = payload.workflow or []
+    workflow = [step for step in (payload.workflow or []) if step.active]
     input_ids = {input_product.id for input_product in payload.io.input_products}
     adf_ids = {adf.id for adf in payload.io.adfs}
 
@@ -472,7 +472,10 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
                 # CPM can pass every in-memory product from a step using a regex,
                 # even when that step has no persisted output destinations.
                 upstream = next(
-                    (candidate for candidate in workflow if input_reference == f"{candidate.name}..*"),
+                    (
+                        candidate for candidate in workflow
+                        if input_reference in (f"{candidate.name}.*", f"{candidate.name}..*")
+                    ),
                     None,
                 )
                 if upstream is not None:
@@ -494,12 +497,44 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
         resolved[output_reference] = sources
         return sources
 
+    def ancestor_names(step: WorkflowStep, visiting: set[str] | None = None) -> set[str]:
+        """Identify upstream writers when several steps share an output folder."""
+        visiting = set() if visiting is None else visiting
+        if step.name in visiting:
+            raise ValueError(f"Cyclic workflow dependency detected at '{step.name}'")
+        visiting = visiting | {step.name}
+        ancestors: set[str] = set()
+        for reference in (step.inputs or {}).values():
+            upstream = producers.get(reference)
+            if upstream is None:
+                upstream = next(
+                    (
+                        candidate for candidate in workflow
+                        if reference in (f"{candidate.name}.*", f"{candidate.name}..*")
+                    ),
+                    None,
+                )
+            if upstream is not None:
+                ancestors.add(upstream.name)
+                ancestors.update(ancestor_names(upstream, visiting))
+        return ancestors
+
     lineage: dict[str, set[str]] = {}
     for output_product in payload.io.output_products:
         if not output_product.final_product:
             continue
 
         references = output_references.get(output_product.id, [])
+        if len(references) > 1:
+            # Keep the terminal writer; preceding writers only persist intermediates.
+            ancestors = {reference: ancestor_names(producers[reference]) for reference in references}
+            references = [
+                reference for reference in references
+                if not any(
+                    producers[reference].name in ancestors[other]
+                    for other in references if other != reference
+                )
+            ]
         if len(references) != 1:
             raise ValueError(
                 f"Final output '{output_product.id}' must have exactly one workflow producer, found {references}",

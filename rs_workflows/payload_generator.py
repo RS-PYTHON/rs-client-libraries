@@ -817,8 +817,15 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
             )
             seen_inputs = {p.id for p in io_config.input_products}
             io_config.input_products += [p for p in input_products if p.id not in seen_inputs]
-            seen_outputs = {p.id for p in io_config.output_products}
-            io_config.output_products += [p for p in output_products if p.id not in seen_outputs]
+            seen_outputs = {p.id: p for p in io_config.output_products}
+            for product in output_products:
+                if product.id in seen_outputs:
+                    # A shared destination can hold intermediate and final outputs.
+                    existing = seen_outputs[product.id]
+                    existing.final_product = bool(existing.final_product or product.final_product)
+                else:
+                    io_config.output_products.append(product)
+                    seen_outputs[product.id] = product
         except KeyError as ke:
             raise ValueError(f"Key {ke} not found in unit list") from ke
 

@@ -156,7 +156,10 @@ def _extract_io_origin_from_pipeline(
         # NOTE: we don't check that the referenced product exists in the outputs of the unit we found.
         # A product exists in the outputs only if we want to write it on disk or s3.
 
-        product_origin = f"{origin_unit_name}.{origin_step_id}.{origin_product_name}"
+        if pipeline_full.get("preserve_unit_names", False):
+            product_origin = f"{origin_unit_name}.{origin_product_name}"
+        else:
+            product_origin = f"{origin_unit_name}.{origin_step_id}.{origin_product_name}"
 
     return product_origin
 
@@ -318,7 +321,7 @@ def _build_single_unit_details(
 
     # If "pipeline" mode, call the unit <unit_name>.<step_id> to be able to differenciate
     # between several steps using the same unit
-    if full_pipeline:
+    if full_pipeline and not full_pipeline.get("preserve_unit_names", False):
         unit_name = f"{unit_name}.{step_id}"
 
     # Build the final unit details for the payload
@@ -424,6 +427,15 @@ def build_unit_list(
         if not pipeline_steps or not isinstance(pipeline_steps, list):
             raise TaskTableError(f"Pipeline '{pipeline}' is missing a valid 'steps' list.")
 
+        if full_pipeline.get("preserve_unit_names", False):
+            names = [step.get("unit_name") for step in pipeline_steps if isinstance(step, dict)]
+            if len(names) != len(set(names)):
+                raise TaskTableError("preserve_unit_names requires unique unit names within the pipeline.")
+
+        common_parameters = full_pipeline.get("parameters", {})
+        if not isinstance(common_parameters, dict):
+            raise TaskTableError(f"Pipeline '{pipeline}' parameters must be an object.")
+
         for step in pipeline_steps:
             # Validate step structure
             if not isinstance(step, dict):
@@ -442,7 +454,7 @@ def build_unit_list(
                 processing_mode,
                 full_pipeline=full_pipeline,
                 step_id=step["step_id"],
-                parameters=step.get("parameters", None),
+                parameters=deepcopy({**common_parameters, **(step.get("parameters") or {})}),
             )
 
             out_units.append(unit_details)
