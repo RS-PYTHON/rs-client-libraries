@@ -1649,3 +1649,25 @@ def test_shared_folder_becomes_final_when_terminal_step_writes_it(mocker, flow_e
     )
     assert len(payload.io.output_products) == 1
     assert payload.io.output_products[0].final_product is True
+
+
+def test_build_payload_excludes_io_from_disabled_processing_units(mocker, flow_env, mock_dpr_process_in):
+    """Disabled final processors must not create phantom final outputs for lineage."""
+    mock_dpr_process_in.processor_name = "TEST_PROCESSOR"
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="S03DORDOP", product_type="S03DORDOP"),
+    ]
+    mocker.patch("rs_workflows.payload_generator.build_adfs", return_value=[])
+    get_io_mock = mocker.patch("rs_workflows.payload_generator.get_io", return_value=([], []))
+    active = {"name": "CADUProcessing", "module": "l0.cadu_processing.cadu_processing_unit"}
+    inactive = {
+        "name": "MergeAndConsolidation", "module": "l0.s3.merge_and_consolidation_unit", "active": False,
+        "output_products": [{"name": "S03DORDOP", "mandatory": True}],
+    }
+    payload = build_payload(flow_env, [active, inactive], [], mock_dpr_process_in, MagicMock(), [])
+    get_io_mock.assert_called_once()
+    assert get_io_mock.call_args.args[0] is active
+    assert payload.io.output_products == []
+    assert len(payload.workflow) == 2
+    assert payload.workflow[1].active is False
+    assert build_output_lineage(payload) == {}

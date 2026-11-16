@@ -808,6 +808,9 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
             workflow_steps.append(
                 build_workflow_step(unit, selected_output_names, {p.name for p in dpr_process_in.input_products}),
             )
+            if not workflow_steps[-1].active:
+                # EOPF skips this PU; its I/O must not be resolved or published.
+                continue
             input_products, output_products = get_io(
                 unit,
                 dpr_process_in,
