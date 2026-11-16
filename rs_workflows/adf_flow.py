@@ -526,8 +526,9 @@ async def upload_adf_product(product_path: Path, stac_item: Item, s3_dir: str):
         logger.info(f"Uploading JSON to {s3_dest}")
         await s3_upload_file(product_path, s3_dest)
     else:
-        zarr_suffix = ".zarr" if product_path.suffix == ".zarr" else ""
-        s3_dest = f"{s3_dir}/{stac_item.id}{zarr_suffix}/"
+        # Always use the .zarr extension, even when the generated directory has none: the processors open the
+        # ADFs with xarray, that guesses the engine of a path from its extension
+        s3_dest = f"{s3_dir}/{stac_item.id}.zarr/"
         logger.info(f"Uploading ZARR to {s3_dest}")
         await s3_upload_dir(product_path, s3_dest)
     stac_item.assets["data"].href = s3_dest
