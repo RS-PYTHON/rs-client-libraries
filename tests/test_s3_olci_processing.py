@@ -20,7 +20,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from rs_workflows.flow_utils import FlowEnvArgs, FlowInputProduct, WorkflowType
+from rs_workflows.flow_utils import (
+    FlowEnvArgs,
+    FlowEnvProcess,
+    FlowInputProduct,
+    WorkflowType,
+)
 from rs_workflows.on_demand.common import events, product_processing
 from rs_workflows.on_demand.sentinel3 import (
     process_s3l1olci_ondemand_flow,
@@ -278,20 +283,21 @@ async def test_process_s3l1olci_ondemand(mocker, force_systematic):
     )
     single_input_product = process_s3l1olci_ondemand_flow.FlowInputS3l1olci(item_id="olcl0-item")
 
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=force_systematic))
+
     result = await process_s3l1olci_ondemand_flow.process_s3l1olci_ondemand.fn(
-        ENV_ARGS,
+        env_args,
         single_input_product,
-        force_systematic,
         "OLCI_",
         "NAV_",
     )
 
     assert result == GENERATED_PRODUCTS
     args = process_catalog_product.call_args.args
-    assert args[:4] == (ENV_ARGS, single_input_product, force_systematic, ProcessingId.S3_OLCI_L1)
-    assert isinstance(args[4], partial)
-    assert args[4].func is process_s3l1olci_ondemand_flow.process_s3l1olci_product
-    assert args[4].keywords == {"olcil0_base_name": "OLCI_", "navl0_base_name": "NAV_"}
+    assert args[:3] == (env_args, single_input_product, ProcessingId.S3_OLCI_L1)
+    assert isinstance(args[3], partial)
+    assert args[3].func is process_s3l1olci_ondemand_flow.process_s3l1olci_product
+    assert args[3].keywords == {"olcil0_base_name": "OLCI_", "navl0_base_name": "NAV_"}
 
 
 async def test_process_s3l1olci_systematic(mocker):
@@ -361,19 +367,20 @@ async def test_process_s3l2olci_ondemand(mocker, force_systematic):
     )
     single_input_product = process_s3l2olci_ondemand_flow.FlowInputS3l2olci(item_id="olcefr-item")
 
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=force_systematic))
+
     result = await process_s3l2olci_ondemand_flow.process_s3l2olci_ondemand.fn(
-        ENV_ARGS,
+        env_args,
         single_input_product,
-        force_systematic,
         "OLCEFR",
     )
 
     assert result == GENERATED_PRODUCTS
     args = process_catalog_product.call_args.args
-    assert args[:4] == (ENV_ARGS, single_input_product, force_systematic, ProcessingId.S3_OLCI_L2)
-    assert isinstance(args[4], partial)
-    assert args[4].func is process_s3l2olci_ondemand_flow.process_s3l2olci_product
-    assert args[4].keywords == {"olcefr_base_name": "OLCEFR"}
+    assert args[:3] == (env_args, single_input_product, ProcessingId.S3_OLCI_L2)
+    assert isinstance(args[3], partial)
+    assert args[3].func is process_s3l2olci_ondemand_flow.process_s3l2olci_product
+    assert args[3].keywords == {"olcefr_base_name": "OLCEFR"}
 
 
 async def test_process_s3l2olci_systematic(mocker):
@@ -444,10 +451,11 @@ async def test_ondemand_flow_starts_the_next_processing_only_when_forced(mocker,
     dpr_processing = _patch_processing(mocker, [_stac_item("S03OLCEFR", "olcefr-item", OLCEFR_PROPERTIES)])
     emit_event = mocker.patch.object(events, "emit_event")
 
+    env_args = FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=force_systematic))
+
     await process_s3l1olci_ondemand_flow.process_s3l1olci_ondemand.fn(
-        ENV_ARGS,
+        env_args,
         process_s3l1olci_ondemand_flow.FlowInputS3l1olci(item_id="olcl0-item"),
-        force_systematic,
     )
 
     assert dpr_processing.call_args.args[0].workflow_type == workflow

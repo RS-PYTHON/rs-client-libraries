@@ -46,12 +46,39 @@ def get_db_session():
     return session(), engine
 
 
-def resolve_param(param_value, runtime_key, default):
+def resolve_param(param_value, runtime_key, default=None):
     """Return param_value if set, else runtime parameter, else default."""
     if param_value is not None:
         return param_value
+
     runtime_val = runtime.flow_run.parameters.get(runtime_key)
-    return runtime_val if runtime_val is not None else default
+    if runtime_val is not None:
+        return runtime_val
+
+    if default is not None:
+        return default
+
+    raise ValueError(f"The required parameter {runtime_key!r} could not be resolved.")
+
+
+def get_mission_from_processor(dpr_processor_name: str | None) -> str | None:
+    """
+    Return the mission of a DPR processor, with the same values as the `mission` column of the `pi_category` table,
+    deduced from the prefix of the processor name: e.g. 'S1' for 's1_ard', 'S3' for 's3_l1olci', 'CRI' for 'cri_l0'.
+
+    Args:
+        dpr_processor_name: Name of the DPR processor, as a process of rs-dpr-service.
+
+    Returns:
+        The mission, or None if it cannot be deduced from the processor name.
+    """
+    if not dpr_processor_name:
+        return None
+    if match := re.match(r"s0?([1-6])(?![0-9])", dpr_processor_name, re.IGNORECASE):
+        return f"S{match.group(1)}"
+    if dpr_processor_name.lower().startswith("cr"):
+        return "CRI"
+    return None
 
 
 def get_flow_run_id(prefect_flow_id: str) -> int | None:
@@ -120,6 +147,9 @@ def get_pi_category_id(eopf_type: str) -> int | None:
         elif eopf_type.startswith("S03"):
             mission = "S3"
             name = "NRT"
+        elif eopf_type.startswith("CR"):
+            mission = "CRI"
+            name = "FTD"
 
         if mission is None or name is None:
             logger.warning(f"No mapping found for eopf_type={eopf_type}")
@@ -171,15 +201,17 @@ def record_flow_run(
 
     if not existing:
         # Insert new record with RETURNING id
+        dpr_processor_name = resolve_param(dpr_processor_name, "dpr_processor_name", "dpr_processor")
         values = {
             "flow_type": resolve_param(flow_run_type, "flow_run_type", "systematic"),
-            "mission": resolve_param(mission, "mission", "sentinel-1"),
+            # The flows have no 'mission' parameter: deduce it from the DPR processor by default
+            "mission": resolve_param(mission, "mission", get_mission_from_processor(dpr_processor_name)),
             "prefect_flow_id": prefect_flow_id,
             "prefect_flow_parent_id": runtime.flow_run.parent_flow_run_id,
             "dask_version": "1.0",  # version("dask"),
             # TODO: Test why: PackageNotFoundError: No package metadata was found for dask
             "python_version": sys.version.split()[0],
-            "dpr_processor_name": resolve_param(dpr_processor_name, "dpr_processor_name", "dpr_processor"),
+            "dpr_processor_name": dpr_processor_name,
             "dpr_processor_version": resolve_param(
                 dpr_processor_version,
                 "dpr_processor_version",

@@ -127,7 +127,6 @@ async def _do_process_s1ard(
     reference_date: date | None,
     env_args: FlowEnvArgs,
     pipeline: str | None,
-    verbose: bool = False,  # pylint: disable=unused-argument
 ):
     """
     Sentinel-1 ARD processing (common function for reference pipeline and nominal on-demand flow), with the settings
@@ -139,7 +138,6 @@ async def _do_process_s1ard(
         reference_date (date | None): Date of the master (reference) SLC. Set to None for reference pipeline
         env_args (FlowEnvArgs): Flow environment arguments
         pipeline (str | None): Pipeline to run, or None to run the pipeline of the settings
-        verbose (bool, optional): not used yet. Defaults to False.
     """
     logger = get_run_logger()
 
@@ -209,7 +207,6 @@ async def process_s1ard(
     reference_date: date,
     env_args: FlowEnvArgs,
     pipeline: S1ArdPipeline | None = None,
-    verbose: bool = False,
 ):
     """
     Sentinel-1 ARD processing (nominal on-demand flow).
@@ -228,11 +225,11 @@ async def process_s1ard(
 
     # https://earthdatahub.destine.eu/api/stac/v1/collections/copernicus-dem/items/GLO-30
 
-    await _do_process_s1ard(slcs, reference_date, env_args, pipeline, verbose)
+    await _do_process_s1ard(slcs, reference_date, env_args, pipeline)
 
 
 @flow(name="process-s1-ard-reference")
-async def process_s1ard_reference(slc: str, env_args: FlowEnvArgs, verbose: bool = False):
+async def process_s1ard_reference(slc: str, env_args: FlowEnvArgs):
     """
     Sentinel-1 ARD processing reference pipeline.
     This flow must be run once to generate the REFERENCE_DB used in on-demand S1 ARD processing flow.
@@ -241,7 +238,7 @@ async def process_s1ard_reference(slc: str, env_args: FlowEnvArgs, verbose: bool
             slc: STAC item identifier of S1 master SLC input product, already converted to zarr.
             env_args: Flow environment arguments, the owner Prefect blocks must contain the EarthDataHub API key
     """
-    await _do_process_s1ard([slc], None, env_args, DprPipeline.S1ARD_REF.value, verbose)
+    await _do_process_s1ard([slc], None, env_args, DprPipeline.S1ARD_REF.value)
 
 
 @task(name="process sentinel-1 level-1-ard")

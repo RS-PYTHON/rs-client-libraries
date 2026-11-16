@@ -140,7 +140,7 @@ class CadipCollections(str, Enum):
     Enumeration of available CADIP (Copernicus Acquisition Data Information Processing) collections.
 
     This enum defines the supported satellite data collection identifiers that can be queried
-    from the CADIP service, including collections from Sentinel-1, Sentinel-2, and Sentinel-3 missions.
+    from the CADIP service, including collections from Sentinel-1, Sentinel-2, Sentinel-3 and Cristal missions.
     """
 
     S1_SGS = "s1_sgs"
@@ -156,6 +156,7 @@ class CadipCollections(str, Enum):
     S2_INS = "s2_ins"
     S2_KSE = "s2_kse"
     S3_SGS = "s3_sgs"
+    CR_SGS = "cr_sgs"
 
 
 @flow(name="stage-cadip-selection")

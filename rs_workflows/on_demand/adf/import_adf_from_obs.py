@@ -267,17 +267,27 @@ async def create_new_stac_item(item_name: str, href: str) -> Item:
     end_datetime = convert_date(dates[1])
     eopf_origin_datetime = convert_date(dates[2])
     product_type: str = item_name[4:15].upper()
-    platform: str = item_name[2:3].lower()
-    constellation: str = item_name[1:2].lower()
-    if constellation == "_":
-        constellation = ""
-        platform = ""
-    else:
-        if platform == "_":
+
+    # Determine the constellation and platform based on the item name
+    mission_prefix = item_name[0:2].upper()
+
+    if mission_prefix.startswith("CR"):
+        constellation = "cristal"
+        plat_char = item_name[2:3].lower()
+        platform = f"cristal-{plat_char}" if plat_char in ["a", "b"] else "cristal"
+
+    else:  # Comportement par défaut historique pour Sentinel
+        platform = item_name[2:3].lower()
+        constellation = item_name[1:2].lower()
+        if constellation == "_":
+            constellation = ""
             platform = ""
         else:
-            platform = f"sentinel-{constellation}{platform}"
-        constellation = f"sentinel-{constellation}"
+            if platform == "_":
+                platform = ""
+            else:
+                platform = f"sentinel-{constellation}{platform}"
+            constellation = f"sentinel-{constellation}"
 
     eopf_feature = {
         "geometry": {"type": "Point", "coordinates": [0, 0]},

@@ -58,7 +58,7 @@ deployments delivered by default are:
 | Convert ADF Scheduled | `convert-adf-scheduled` | conversion, auxip | integrated |
 | Convert SAFE | `convert-safe` | conversion, staging, on-demand | integrated |
 | Process Generic | `process-generic` | all, processing | integrated |
-| Process L0 | `process-l0` | l0, processing, s1, s2, s3 | integrated |
+| Process L0 | `process-l0` | l0, processing, s1, s2, s3, Cristal | integrated |
 | Process S1 L0 | `process-s1-l0` | l0, processing, s1 | integrated |
 | Process S1 ARD Reference | `process-s1-ard-reference` | ard, processing, s1 | integrated |
 | Process S1 ARD | `process-s1-ard` | ard, processing, s1 | integrated |
@@ -103,6 +103,7 @@ Most flows take an `env` parameter (`FlowEnvArgs`), with:
 | `logging_level` | Logging level of the flow, its tasks and the EOPF processors (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`). |
 | `called_by` | Free text to trace who or what called the flow. |
 | `calling_span` | Internal: OpenTelemetry span of the calling flow, to link the traces. |
+| `process` | Options of the flows that run a processor (`FlowEnvProcess`): `write_engine` (`cpm_zarr` or `fast_zarr`), `use_obstore`, `triggering__stage_s3_upload_max_concurrency` (these three are written in the payload when they are set, see [Task tables and payload file](tasktable-payload.md#options-of-the-processing-in-the-payload)), `force_systematic` (run as a systematic processing, so that the automations start the next processing of the chain) and `verbose` (not used yet). |
 
 The processing flows read their default parameters from a Prefect variable, so they can be run with very few
 parameters, see [Customise the DPR processing](../advanced/customise-dpr-flow.md#default-settings-of-the-processing-flows).

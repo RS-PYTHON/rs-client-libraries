@@ -199,6 +199,7 @@ class GeneralConfiguration(BasePayloadModel):
     triggering__stage_s3_temporary_prefix: bool | None = None
     triggering__stage_s3_memory_fit_safety_ratio: float | None = None
     triggering__stage_s3_outputs_min_size: int | None = Field(default=None, ge=0)
+    triggering__stage_s3_upload_max_concurrency: int | None = Field(default=None, ge=1)
     triggering__validate_run: bool | None = None
     triggering__dry_run: bool | None = None
     triggering__output_generator_consumption: str | None = None

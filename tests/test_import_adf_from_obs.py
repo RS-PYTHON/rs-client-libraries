@@ -232,6 +232,46 @@ async def test_import_items_rehearsal_mode(mock_flow_env, mock_s3_client, sample
 
 @pytest.mark.asyncio
 # pylint: disable=redefined-outer-name
+async def test_import_items_cristal_branches(mock_flow_env, mock_s3_client):
+    """Check that import_items correctly traverses the logical branches of Cristal."""
+    cristal_files = [
+        "CRA_ADF_RESO_20261028T043132______________________________________________________MPC_O_AL_001.SEN3.tgz",
+        "CRI_ADF_PREO_20261028T043132______________________________________________________MPC_O_AL_001.SEN3.tgz",
+    ]
+
+    # Create a mock STAC item to avoid JSON serialization issues
+    fake_stac_item = Item(
+        id="CRISTAL_ADF_MOCK",
+        geometry=None,
+        bbox=None,
+        datetime=datetime.now(timezone.utc),
+        properties={},
+    )
+    with patch.dict(os.environ, {"RSPY_HOST_OSAM": "http://test-host"}):
+        with patch(
+            "rs_workflows.on_demand.adf.import_adf_from_obs.create_new_stac_item",
+            new=AsyncMock(return_value=fake_stac_item),
+        ) as mock_create_item:
+            with patch("rs_workflows.on_demand.adf.import_adf_from_obs.fetch_csv_from_endpoint") as mock_fetch_csv:
+                mock_fetch_csv.return_value = [["*", "*", "*", "*", "test-bucket"]]
+                with patch("rs_workflows.on_demand.adf.import_adf_from_obs.get_logger"):
+
+                    await import_items(
+                        flow_env=mock_flow_env,
+                        s3_client=mock_s3_client,
+                        extracted_files=cristal_files,
+                        output_path="",
+                        override_collection=None,
+                        override=False,
+                        extract_pattern="*",
+                        rehearsal_mode=True,
+                    )
+
+    assert mock_create_item.call_count == 2
+
+
+@pytest.mark.asyncio
+# pylint: disable=redefined-outer-name
 async def test_import_adf_from_obs_flow(mock_flow_env, tmp_path, sample_configuration):
     """Test the full import_adf_from_obs flow."""
     with patch.dict(
