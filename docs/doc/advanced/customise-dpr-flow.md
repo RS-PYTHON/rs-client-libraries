@@ -99,6 +99,7 @@ The processing flows read the parameters of their processor from the `<processin
 | Sentinel-1 Level-0 | `process-l0`, `process-s1-l0` | `s1l0-default-setting` |
 | Sentinel-1 ARD | `process-s1-ard-reference`, `process-s1-ard` | `s1ard-default-setting` |
 | Sentinel-3 Level-0 | `process-l0`, `process-s3-l0` | `s3l0-default-setting` |
+| Cristal Level-0 | `process-l0`, `process-cri-l0` | `cril0-default-setting` |
 | Sentinel-3 OLCI Level-1 | `process-s3-l1-olci-ondemand`, `process-s3-l1-olci-systematic` | `s3l1olci-default-setting` |
 | Sentinel-3 OLCI Level-2 | `process-s3-l2-olci-ondemand`, `process-s3-l2-olci-systematic` | `s3l2olci-default-setting` |
 

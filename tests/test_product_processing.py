@@ -202,7 +202,6 @@ async def test_process_catalog_product_reads_the_prefect_blocks_before_checking_
     result = await product_processing.process_catalog_product(
         ENV_ARGS,
         FlowInputItem(item_id="olcl0-item", collection_name="s03olcl0_"),
-        False,
         ProcessingId.S3_OLCI_L1,
         process_product,
     )

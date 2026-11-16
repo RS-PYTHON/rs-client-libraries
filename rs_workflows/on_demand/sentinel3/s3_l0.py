@@ -35,8 +35,9 @@ async def process_s3l0(
     The session should have been staged before.
 
     A `product.<product type>.generated` event is emitted for each generated product. When the workflow is
-    systematic (`env_args.process.force_systematic`, set by the automation that starts `process-l0` after the staging of the session),
-    it starts the next processing of the chain, e.g. the OLCI Level-1 processing of the S03OLCL0_ products.
+    systematic (`env_args.process.force_systematic`, set by the automation that starts `process-l0` after the staging
+    of the session), it starts the next processing of the chain, e.g. the OLCI Level-1 processing of the
+    S03OLCL0_ products.
 
     Args:
         session: Identifier of the session.

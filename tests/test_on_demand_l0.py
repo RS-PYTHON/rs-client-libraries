@@ -214,7 +214,7 @@ async def test_process_staged_session(mocker, mission, processing_id, force_syst
     result = await l0_last_steps.process_staged_session(mission, "session", env_args)
 
     assert result == ["product"]
-    flow_env_class.assert_called_once_with(ENV_ARGS)
+    flow_env_class.assert_called_once_with(env_args)
     load_settings.assert_awaited_once_with(processing_id, flow_env)
     last_steps.assert_awaited_once_with(
         mission=mission,
@@ -238,7 +238,7 @@ async def test_process_staged_session_reads_the_prefect_blocks_before_checking_t
     flow_env_class, gateway = patch_dask_env_read_by_flow_env(mocker, monkeypatch, l0_last_steps, RAW_SETTINGS)
     last_steps = mocker.patch.object(l0_last_steps, "process_l0_last_steps", new=AsyncMock(return_value=["product"]))
 
-    assert await l0_last_steps.process_staged_session(mission, "session", ENV_ARGS, False, False) == ["product"]
+    assert await l0_last_steps.process_staged_session(mission, "session", ENV_ARGS) == ["product"]
 
     assert gateway.call_args.kwargs["address"] == DASK_ENV_VARS["DASK_GATEWAY_ADDRESS"]
     assert last_steps.call_args.kwargs["settings"] == SETTINGS
@@ -336,9 +336,7 @@ async def test_process_l0_last_steps_raises_on_bad_cristal_session():
     with pytest.raises(ValueError, match="Invalid Cristal session name: 'CRAB_SESSION'"):
         await l0.process_l0.fn(
             session="CRAB_SESSION",
-            env_args=ENV_ARGS,
-            force_systematic=True,
-            verbose=True,
+            env_args=FlowEnvArgs(owner_id="owner", process=FlowEnvProcess(force_systematic=True, verbose=True)),
         )
 
 

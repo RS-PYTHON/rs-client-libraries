@@ -32,8 +32,8 @@ async def process_s1l0(
     The session should have been staged before.
 
     A `product.<product type>.generated` event is emitted for each generated product, related to the workflow of
-    the processing: systematic with `env_args.process.force_systematic`, set by the automation that starts `process-l0` after the
-    staging of the session.
+    the processing: systematic with `env_args.process.force_systematic`, set by the automation that starts
+    `process-l0` after the staging of the session.
 
     Args:
         session: Identifier of the session.

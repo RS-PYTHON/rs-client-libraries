@@ -53,7 +53,7 @@ async def process_l0(
     """
     This is the generic l0 processing flow, started by the systematic processing after the staging of a session.
     It performs common L0 task like retrieving session from catalog an staging it from cadip if needed.
-    Then it runs the Level-0 flow of the mission (`process-s1-l0` or `process-s3-l0` or `process-cr-l0`)
+    Then it runs the Level-0 flow of the mission (`process-s1-l0` or `process-s3-l0` or `process-cri-l0`)
     as a sub-flow, with the settings of the `s<mission>l0-default-setting` Prefect variable.
 
     Args:
