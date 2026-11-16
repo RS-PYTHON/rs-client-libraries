@@ -330,7 +330,8 @@ def test_generate_payload_success(
         adf.id == "adf_l0cfg" and adf.path == f"/opt/dask-l0/{processor_name.value[:2]}_adf_l0cfg.json"
         for adf in payload.io.adfs
     )
-    assert payload.config is None
+    expected_config = ["/opt/dask-l0/s3_adf_l0cfg.json"] if processor_name == DprProcessor.S3L0 else None
+    assert payload.config == expected_config
 
 
 @pytest.mark.parametrize("olci_processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI])

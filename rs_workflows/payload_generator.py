@@ -899,6 +899,8 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
         # The dask context_managers section is built in the dpr_service
         # context_managers=context_managers,
         logging=logging,
+        # S3 workflow constructors read mission configuration before ADFs are opened.
+        config=[adf_l0cfg] if dpr_process_in.processor_name == DprProcessor.S3L0 else None,
         secret=["secrets.json"] if temp_folder_s3_secret else None,
     )
     logger.debug(f"Generated payload: \n {payload}")
