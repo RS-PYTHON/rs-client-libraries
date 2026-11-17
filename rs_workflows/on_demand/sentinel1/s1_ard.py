@@ -206,7 +206,7 @@ async def _do_process_s1ard(
 @flow(name="process-s1-ard")
 async def process_s1ard(
     slcs: list[str],
-    reference_date: date,
+    reference_date: date | None,
     env_args: FlowEnvArgs,
     pipeline: S1ArdPipeline | None = None,
     verbose: bool = False,

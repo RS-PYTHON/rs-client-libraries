@@ -80,6 +80,8 @@ def test_fix_geojson_geometry_reduces_geometry_collection_created_by_make_valid(
     item = _item({"type": "Polygon", "coordinates": [OLCI_L0_SPIKE_FOOTPRINT]})
     fix_geojson_geometry(item)
 
+    assert item.geometry is not None
+    assert item.bbox is not None
     fixed = shape(item.geometry)
     assert item.geometry["type"] == "Polygon"
     assert fixed.is_valid
@@ -96,6 +98,8 @@ def test_fix_geojson_geometry_keeps_input_geometry_collection():
     item = _item(mapping(collection))
     fix_geojson_geometry(item)
 
+    assert item.geometry is not None
+    assert item.bbox is not None
     assert shape(item.geometry).equals(collection)
     assert item.geometry["type"] == "GeometryCollection"
     assert len(item.geometry["geometries"]) == 3

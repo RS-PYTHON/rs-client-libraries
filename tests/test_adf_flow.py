@@ -108,7 +108,7 @@ def test_create_stac_item_from_zarr(mocker, tmp_path, zarr_format):
     """Test STAC item creation from ZARR (v2 or v3) metadata."""
     mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
     zarr_dir = tmp_path / "test.zarr"
-    zattrs_content = {
+    zattrs_content: dict = {
         "id": "S00__ADF_ECMWA_20210321T030000_20210321T150000",
         "properties": {
             "product:type": "ADF_ECMWA",

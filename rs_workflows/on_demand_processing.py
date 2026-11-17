@@ -21,7 +21,7 @@ import os
 import re
 from copy import deepcopy
 from os import path as osp
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
@@ -272,10 +272,13 @@ async def _stage_input_adfs_alternative(
     aux_items: ItemCollection | None
     # Special case for Copernicus DEM available at Earthdatahub
     if input_adfs["name"] == "DEM":
-        aux_items = earthdatahub_flow.earthdatahub_search_task.submit(
-            dpr_input.env,
-            aux_cql2,
-        ).result()
+        aux_items = cast(
+            ItemCollection | None,
+            earthdatahub_flow.earthdatahub_search_task.submit(
+                dpr_input.env,
+                aux_cql2,
+            ).result(),
+        )
         aux_status = True
     else:
         aux_status, aux_items = (
@@ -573,7 +576,7 @@ async def dpr_processing(
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
         published_items = published.result()  # type: ignore[unused-coroutine]
-        return published_items
+        return cast(list[dict[str, Any]], published_items)
 
 
 def build_and_generate_payload(
@@ -660,7 +663,9 @@ def build_and_generate_payload(
 
     try:
         aux_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [
-            result for t in tasks if (result := t.result()) is not None
+            result
+            for t in tasks
+            if (result := cast(tuple[str, str, tuple[bool, ItemCollection]] | None, t.result())) is not None
         ]
     except (RuntimeError, KeyError) as err:
         raise err

@@ -172,14 +172,14 @@ async def test_whole_payload(
         task_table = json.load(opened)
 
     @flow(name="process-generic")
-    async def from_a_flow():
+    async def from_a_flow() -> tuple:
         """Build and generate the payload file from a prefect flow"""
         payload_task, source_items = on_demand_processing.build_and_generate_payload(
             logger,
             flow_env=FlowEnv(dpr_input.env),
             task_table=task_table,
             dpr_input=dpr_input,
-            retry_config=RetryConfig(staging_retries=0),
+            retry_config=RetryConfig(staging_retries=0, staging_retry_delay=0),
         )
         return payload_task.result(), source_items
 

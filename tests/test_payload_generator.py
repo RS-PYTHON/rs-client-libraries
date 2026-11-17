@@ -14,9 +14,8 @@
 
 """Test the payload_generator module"""
 
-import json
 from datetime import datetime
-from pathlib import Path
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -304,6 +303,7 @@ def test_generate_payload_success(
     assert isinstance(payload, PayloadSchema)
     assert isinstance(payload.io, IOConfig)
     assert isinstance(payload.general_configuration, GeneralConfiguration)
+    assert payload.general_configuration is not None
     general_configuration = payload.general_configuration.dump()
     assert general_configuration["logging__level"] == general_configuration["logging__progress_level"]
     assert {key: general_configuration[key] for key in staging_keys} == expected_staging
@@ -311,6 +311,7 @@ def test_generate_payload_success(
     assert general_configuration["triggering__use_basic_logging"] is True
     assert len(payload.workflow or []) == 1
     assert payload.io.adfs[0].id == "ADF1"
+    assert payload.io is not None
     assert all(adf.id != "adf_l0cfg" for adf in payload.io.adfs)
     assert payload.logging is None
     assert payload.config is None
@@ -326,6 +327,7 @@ def test_generate_payload_success(
         adfs=[("ADF1", "file", "s3://bucket/adf1")],
         dpr_process_in=mock_dpr_process_in,
     )
+    assert payload.io is not None
     assert payload.logging == expected_logging
     assert any(
         adf.id == "adf_l0cfg" and adf.path == f"/opt/dask-l0/{processor_name.value[:2]}_adf_l0cfg.json"
@@ -371,6 +373,7 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
         adfs=[],
         dpr_process_in=mock_dpr_process_in,
     )
+    assert payload.general_configuration is not None
     general_configuration = payload.general_configuration.dump()
     assert "triggering__use_datatree" not in general_configuration
     assert "triggering__use_default_filename" not in general_configuration
@@ -382,7 +385,9 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
         adfs=[],
         dpr_process_in=mock_dpr_process_in,
     )
+    assert payload.general_configuration is not None
     general_configuration = payload.general_configuration.dump()
+    assert payload.io is not None
     assert all(adf.id != "adf_l0cfg" for adf in payload.io.adfs)
     assert general_configuration["triggering__use_datatree"] is True
     assert general_configuration["triggering__use_default_filename"] is True
@@ -452,6 +457,7 @@ def test_generate_payload_deduplicates_io(mocker, sample_unit, mock_dpr_process_
     assert payload.io is not None
     assert len(payload.io.input_products) == 1
     assert payload.io.input_products[0].id == "slcs"
+    assert payload.io is not None
     assert len(payload.io.output_products) == 1
     assert payload.io.output_products[0].id == "out1"
 
@@ -1604,7 +1610,6 @@ def test_s3_workflow_payload_matches_individual_processing_units():
         assert step.parameters["isp_chunk_size"] == {"S03OLC_IG": 10000}
 
 
-
 def test_output_lineage_with_in_memory_regex_steps():
     """A final output inherits session and auxiliary inputs through unwritten steps."""
     payload = PayloadSchema(
@@ -1616,11 +1621,14 @@ def test_output_lineage_with_in_memory_regex_steps():
         workflow=[
             WorkflowStep(name="CADUProcessing.1", inputs={"CADUs": "cadus"}),
             WorkflowStep(
-                name="MetadataProcessing.2", inputs={".*": "CADUProcessing.1..*"}, adfs={"osf": "orbit"},
+                name="MetadataProcessing.2",
+                inputs={".*": "CADUProcessing.1..*"},
+                adfs={"osf": "orbit"},
             ),
             WorkflowStep(
                 name="MergeAndConsolidation.3",
-                inputs={".*": "MetadataProcessing.2..*"}, outputs={"^S03.*": "final"},
+                inputs={".*": "MetadataProcessing.2..*"},
+                outputs={"^S03.*": "final"},
             ),
         ],
     )
@@ -1637,17 +1645,19 @@ def test_output_lineage_with_shared_workflow_output_folder():
         ),
         workflow=[
             WorkflowStep(name="CADUProcessing", inputs={"CADUs": "cadus"}),
-            WorkflowStep(name="APIDFiltering", inputs={".*": "CADUProcessing.*"},
-                         outputs={".*": "output_folder"}),
-            WorkflowStep(name="Inactive", active=False, inputs={".*": "missing.*"},
-                         outputs={".*": "output_folder"}),
-            WorkflowStep(name="MergeAndConsolidation", inputs={".*": "APIDFiltering.*"},
-                         adfs={"osf": "orbit"}, outputs={"^(?!cache).*": "output_folder"}),
+            WorkflowStep(name="APIDFiltering", inputs={".*": "CADUProcessing.*"}, outputs={".*": "output_folder"}),
+            WorkflowStep(name="Inactive", active=False, inputs={".*": "missing.*"}, outputs={".*": "output_folder"}),
+            WorkflowStep(
+                name="MergeAndConsolidation",
+                inputs={".*": "APIDFiltering.*"},
+                adfs={"osf": "orbit"},
+                outputs={"^(?!cache).*": "output_folder"},
+            ),
         ],
     )
     assert build_output_lineage(payload) == {"output_folder": {"cadus", "orbit"}}
-    payload.workflow.append(WorkflowStep(name="Unrelated", inputs={"CADUs": "cadus"},
-                                        outputs={".*": "output_folder"}))
+    assert payload.workflow is not None
+    payload.workflow.append(WorkflowStep(name="Unrelated", inputs={"CADUs": "cadus"}, outputs={".*": "output_folder"}))
     with pytest.raises(ValueError, match="exactly one workflow producer"):
         build_output_lineage(payload)
 
@@ -1659,14 +1669,22 @@ def test_shared_folder_becomes_final_when_terminal_step_writes_it(mocker, flow_e
         FlowGeneratedProduct(name="output_folder", product_type="*", collection_name="output"),
     ]
     mocker.patch("rs_workflows.payload_generator.build_adfs", return_value=[])
-    mocker.patch("rs_workflows.payload_generator.get_io", side_effect=[
-        ([], [OutputProduct(id="output_folder", path="/output", engine="cpm_zarr", final_product=False)]),
-        ([], [OutputProduct(id="output_folder", path="/output", engine="cpm_zarr", final_product=True)]),
-    ])
-    payload = build_payload(
-        flow_env, [{"name": "first", "module": "pkg.unit"}, {"name": "last", "module": "pkg.unit"}],
-        [], mock_dpr_process_in, MagicMock(), [],
+    mocker.patch(
+        "rs_workflows.payload_generator.get_io",
+        side_effect=[
+            ([], [OutputProduct(id="output_folder", path="/output", engine="cpm_zarr", final_product=False)]),
+            ([], [OutputProduct(id="output_folder", path="/output", engine="cpm_zarr", final_product=True)]),
+        ],
     )
+    payload = build_payload(
+        flow_env,
+        [{"name": "first", "module": "pkg.unit"}, {"name": "last", "module": "pkg.unit"}],
+        [],
+        mock_dpr_process_in,
+        MagicMock(),
+        [],
+    )
+    assert payload.io is not None
     assert len(payload.io.output_products) == 1
     assert payload.io.output_products[0].final_product is True
 
@@ -1681,16 +1699,21 @@ def test_build_payload_excludes_io_from_disabled_processing_units(mocker, flow_e
     get_io_mock = mocker.patch("rs_workflows.payload_generator.get_io", return_value=([], []))
     active = {"name": "CADUProcessing", "module": "l0.cadu_processing.cadu_processing_unit"}
     inactive = {
-        "name": "MergeAndConsolidation", "module": "l0.s3.merge_and_consolidation_unit", "active": False,
+        "name": "MergeAndConsolidation",
+        "module": "l0.s3.merge_and_consolidation_unit",
+        "active": False,
         "output_products": [{"name": "S03DORDOP", "mandatory": True}],
     }
     payload = build_payload(flow_env, [active, inactive], [], mock_dpr_process_in, MagicMock(), [])
     get_io_mock.assert_called_once()
     assert get_io_mock.call_args.args[0] is active
+    assert payload.io is not None
+    assert payload.workflow is not None
     assert payload.io.output_products == []
     assert len(payload.workflow) == 2
-    assert payload.workflow[1].active is False
-    assert build_output_lineage(payload) == {}
+    workflow = payload.workflow or []
+    assert workflow[1].active is False
+    assert not build_output_lineage(payload)
 
 
 @pytest.mark.parametrize("reverse_units", [False, True])
@@ -1707,13 +1730,20 @@ def test_legacy_s3_chunk_parameters_are_shared_even_from_disabled_units(
     mock_dpr_process_in.generated_product_to_collection_identifier = []
     get_io_mock = mocker.patch("rs_workflows.payload_generator.get_io", return_value=([], []))
     mocker.patch("rs_workflows.payload_generator.build_adfs", return_value=[])
-    units = [
-        {"name": "CADUProcessing.1", "module": "l0.cadu_processing.cadu_processing_unit",
-         "parameters": {"cadu_chunk_size": {"olci": 10000}, "mission": "S3"}},
+    units: list[dict[str, Any]] = [
+        {
+            "name": "CADUProcessing.1",
+            "module": "l0.cadu_processing.cadu_processing_unit",
+            "parameters": {"cadu_chunk_size": {"olci": 10000}, "mission": "S3"},
+        },
         {"name": "APIDFiltering.2", "module": "l0.s3.apid_filtering_unit"},
         {"name": "SpecificSorting.5", "module": "l0.s3.specific_sorting_unit"},
-        {"name": "MergeAndConsolidation.10", "module": "l0.s3.merge_and_consolidation_unit",
-         "active": False, "parameters": {"isp_chunk_size": {"S03OLC_IG": 10000}}},
+        {
+            "name": "MergeAndConsolidation.10",
+            "module": "l0.s3.merge_and_consolidation_unit",
+            "active": False,
+            "parameters": {"isp_chunk_size": {"S03OLC_IG": 10000}},
+        },
     ]
     if explicit_override:
         # The modern table has already supplied common defaults to the first PU.
@@ -1724,15 +1754,18 @@ def test_legacy_s3_chunk_parameters_are_shared_even_from_disabled_units(
         units.reverse()
     payload = build_payload(flow_env, units, [], mock_dpr_process_in, MagicMock(), [])
     assert get_io_mock.call_count == 3
-    by_name = {step.name: step for step in payload.workflow}
+    assert payload.workflow is not None
+    workflow = payload.workflow or []
+    by_name = {step.name: step for step in workflow}
+    parameters = {name: cast(dict[str, Any], step.parameters) for name, step in by_name.items()}
     for name in ("CADUProcessing.1", "SpecificSorting.5", "MergeAndConsolidation.10"):
-        assert by_name[name].parameters["cadu_chunk_size"] == {"olci": 10000}
-        assert by_name[name].parameters["isp_chunk_size"] == {"S03OLC_IG": 10000}
-    assert by_name["CADUProcessing.1"].parameters["mission"] == "S3"
+        assert parameters[name]["cadu_chunk_size"] == {"olci": 10000}
+        assert parameters[name]["isp_chunk_size"] == {"S03OLC_IG": 10000}
+    assert parameters["CADUProcessing.1"]["mission"] == "S3"
     expected_apid_chunk = 20000 if explicit_override else 10000
-    assert by_name["APIDFiltering.2"].parameters["isp_chunk_size"] == {"S03OLC_IG": expected_apid_chunk}
-    by_name["CADUProcessing.1"].parameters["cadu_chunk_size"]["olci"] = 1
-    assert by_name["SpecificSorting.5"].parameters["cadu_chunk_size"]["olci"] == 10000
+    assert parameters["APIDFiltering.2"]["isp_chunk_size"] == {"S03OLC_IG": expected_apid_chunk}
+    parameters["CADUProcessing.1"]["cadu_chunk_size"]["olci"] = 1
+    assert parameters["SpecificSorting.5"]["cadu_chunk_size"]["olci"] == 10000
     assert original_cadu["parameters"]["cadu_chunk_size"]["olci"] == 10000
 
 
@@ -1747,12 +1780,16 @@ def test_lineage_with_explicit_unwritten_cadu_outputs(source_name):
         ),
         workflow=[
             WorkflowStep(name=source_name, inputs={"CADUs": "S3ACADUS"}, adfs={"osf": "osf"}),
-            WorkflowStep(name="APIDFiltering.2", inputs={
-                name: f"{source_name}.{name}" for name in ("olci", "slstr", "sral")
-            }, outputs={".*": "output_folder"}),
+            WorkflowStep(
+                name="APIDFiltering.2",
+                inputs={name: f"{source_name}.{name}" for name in ("olci", "slstr", "sral")},
+                outputs={".*": "output_folder"},
+            ),
         ],
     )
     assert build_output_lineage(payload) == {"output_folder": {"S3ACADUS", "osf"}}
-    payload.workflow[1].inputs = {"olci": "MissingUnit.olci"}
+    assert payload.workflow is not None
+    workflow = payload.workflow or []
+    workflow[1].inputs = {"olci": "MissingUnit.olci"}
     with pytest.raises(ValueError, match="does not reference a payload input or a workflow output"):
         build_output_lineage(payload)

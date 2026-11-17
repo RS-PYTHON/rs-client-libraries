@@ -18,6 +18,7 @@ import fnmatch
 import os
 from collections import defaultdict
 from copy import deepcopy
+from functools import partial
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from uuid import uuid4
@@ -37,6 +38,7 @@ from rs_workflows.flow_utils import (
 )
 from rs_workflows.payload_template import (
     AdfConfig,
+    ExternalModule,
     GeneralConfiguration,
     InputProduct,
     IOConfig,
@@ -73,9 +75,13 @@ def _build_workflow_inputs(unit: dict, selected_input_names: set[str] | None = N
                     and input_product["name"] not in selected_input_names
                 ):
                     continue
-                inputs[input_product.get("regex", input_product["name"])] = input_product["name"]
+                inputs[input_product["regex"] if "regex" in input_product else input_product["name"]] = input_product[
+                    "name"
+                ]
             else:
-                inputs[input_product.get("regex", input_product["name"])] = input_product["origin"]
+                inputs[input_product["regex"] if "regex" in input_product else input_product["name"]] = input_product[
+                    "origin"
+                ]
     return inputs
 
 
@@ -102,7 +108,9 @@ def _build_workflow_outputs(unit: dict, selected_output_names: set[str] | None) 
 
 
 def build_workflow_step(
-    unit, selected_output_names: set[str] | None = None, selected_input_names: set[str] | None = None,
+    unit,
+    selected_output_names: set[str] | None = None,
+    selected_input_names: set[str] | None = None,
 ):
     """
     Constructs a WorkflowStep instance from a unit configuration dictionary.
@@ -682,11 +690,12 @@ def build_adfs(
                 path = os.path.dirname(path)
             # Inject EarthDataHub API Key in path, as per documentation at
             # https://earthdatahub.destine.eu/collections/copernicus-dem/datasets/GLO-30
+            adf_path: str | SecretStr = path
             if (edh_api_key := os.getenv(EDH_API_KEY_ENV_VAR)) and path.startswith(f"https://{DATA_EDH_DOMAIN}/"):
-                path = SecretStr(
+                adf_path = SecretStr(
                     path.replace(DATA_EDH_DOMAIN, f"edh:{edh_api_key}@api.earthdatahub.destine.eu"),
                 )
-            result.append(AdfConfig(id=adfs_id, path=path, adf_params=store_params))
+            result.append(AdfConfig(id=adfs_id, path=adf_path, adf_params=store_params))
         elif isinstance(store_params, StoreParams):
             # Advanced case where several adfs share the same id (i.e. several files)
             adfs_paths = [p for p, _ in adfs_entries]
@@ -770,6 +779,11 @@ def generate_payload(  # pylint: disable=unused-argument
     )
 
 
+def _legacy_chunk_sort_key(unit: dict, *, owner: str) -> tuple[bool, str]:
+    """Order legacy chunk candidates by owning module and unit name."""
+    return owner not in unit.get("module", ""), unit["name"]
+
+
 def _legacy_s3_chunk_parameters(unit_list: list[dict]) -> dict:
     """Read defaults from legacy S3 PU definitions, including inactive PUs.
 
@@ -779,7 +793,7 @@ def _legacy_s3_chunk_parameters(unit_list: list[dict]) -> dict:
     defaults = {}
     for key, owner in (("cadu_chunk_size", "cadu_processing"), ("isp_chunk_size", "merge_and_consolidation")):
         candidates = [unit for unit in unit_list if isinstance((unit.get("parameters") or {}).get(key), dict)]
-        candidates.sort(key=lambda unit: (owner not in unit.get("module", ""), unit["name"]))
+        candidates.sort(key=partial(_legacy_chunk_sort_key, owner=owner))
         if candidates:
             source = candidates[0]
             defaults[key] = deepcopy(source["parameters"][key])
@@ -832,9 +846,12 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
                 build_workflow_step(unit, selected_output_names, selected_input_names),
             )
             if common_chunk_parameters:
-                workflow_steps[-1].parameters = deepcopy({
-                    **common_chunk_parameters, **(workflow_steps[-1].parameters or {}),
-                })
+                workflow_steps[-1].parameters = deepcopy(
+                    {
+                        **common_chunk_parameters,
+                        **(workflow_steps[-1].parameters or {}),
+                    }
+                )
             if not workflow_steps[-1].active:
                 # EOPF skips this PU; its I/O must not be resolved or published.
                 continue
@@ -931,7 +948,11 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
             temporary__folder=dpr_process_in.temporary_folder,
             temporary__folder_s3_secret=temp_folder_s3_secret,
         ),
-        external_modules=external_modules,
+        external_modules=(
+            [ExternalModule.model_validate(module) for module in external_modules]
+            if external_modules is not None
+            else None
+        ),
         workflow=workflow_steps,
         io=io_config,  # type: ignore
         # The dask context_managers section is built in the dpr_service

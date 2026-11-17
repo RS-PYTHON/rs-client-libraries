@@ -733,7 +733,7 @@ def test_build_and_generate_payload_reuses_adfs_across_units(mocker, different_c
     item = Item("input-1", None, None, datetime(2020, 1, 1, tzinfo=timezone.utc), {})
     other_item = item.clone()
     other_item.id = "input-2"
-    contexts = [(None, [None])] * 4
+    contexts: list[tuple[str | None, list[Item | None]]] = [(None, [None])] * 4
     if different_context == "input":
         contexts = [("source", [item]), (None, [None]), ("source", [other_item]), (None, [None])]
     mocker.patch.object(
@@ -791,4 +791,4 @@ def test_build_and_generate_payload_skips_inactive_adfs(mocker):
     stage.submit.assert_not_called()
     assert generate.submit.call_args.args[1] == units
     assert generate.submit.call_args.args[2] == []
-    assert sources == {}
+    assert not sources

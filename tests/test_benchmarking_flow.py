@@ -53,7 +53,7 @@ async def test_benchmark_processor_task(mocker):
     }
     variable_get_mock = mocker.patch.object(
         benchmarking_flow.Variable,
-        "get",
+        "aget",
         new_callable=AsyncMock,
         return_value=variable_value,
     )
