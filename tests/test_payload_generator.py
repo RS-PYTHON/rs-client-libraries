@@ -1596,7 +1596,7 @@ def test_s3_workflow_payload_matches_individual_processing_units():
                     }
                     for i, name in enumerate(names)
                 ],
-            }
+            },
         ],
     }
     units = build_unit_list(tasktable, pipeline="s3_l0_cadu_apid")

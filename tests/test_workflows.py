@@ -737,7 +737,9 @@ def test_build_and_generate_payload_reuses_adfs_across_units(mocker, different_c
     if different_context == "input":
         contexts = [("source", [item]), (None, [None]), ("source", [other_item]), (None, [None])]
     mocker.patch.object(
-        on_demand_processing, "resolve_specific_input_product_stac_items", side_effect=contexts,
+        on_demand_processing,
+        "resolve_specific_input_product_stac_items",
+        side_effect=contexts,
     )
     process_mock = mocker.patch.object(on_demand_processing, "process_input_adfs")
 
@@ -750,7 +752,11 @@ def test_build_and_generate_payload_reuses_adfs_across_units(mocker, different_c
     generate_mock = mocker.patch.object(on_demand_processing, "generate_payload")
     dpr_input = MagicMock(pipeline="S3_L0", processing_mode=None)
     _, sources = on_demand_processing.build_and_generate_payload(
-        MagicMock(), MagicMock(), {}, dpr_input, MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        {},
+        dpr_input,
+        MagicMock(),
     )
 
     expected_osf_calls = 1 if different_context is None else 2
@@ -759,7 +765,8 @@ def test_build_and_generate_payload_reuses_adfs_across_units(mocker, different_c
     assert len(sources["osf"]) == expected_osf_calls
     assert len(sources["fro"]) == 1
     assert set(generate_mock.submit.call_args.args[2]) == {
-        ("osf", "file", "s3://bucket/osf.EOF"), ("fro", "file", "s3://bucket/fro.EOF"),
+        ("osf", "file", "s3://bucket/osf.EOF"),
+        ("fro", "file", "s3://bucket/fro.EOF"),
     }
     assert generate_mock.submit.call_args.args[1] == units
 
@@ -774,7 +781,7 @@ def test_build_and_generate_payload_skips_inactive_adfs(mocker):
             "active": False,
             "parameters": {"isp_chunk_size": {"S03OLC_IG": 10000}},
             "input_adfs": [{"name": "mandatory_unused_adf", "mandatory": True}],
-        }
+        },
     ]
     mocker.patch.object(on_demand_processing, "build_unit_list", return_value=units)
     resolve = mocker.patch.object(on_demand_processing, "resolve_specific_input_product_stac_items")

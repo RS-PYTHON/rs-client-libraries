@@ -202,7 +202,9 @@ def _build_entry(
     # Retrieve product details from "io" section
     io_details = io_index_type.get(io_product["name"], {})
     internal_origin = bool(origin) and origin not in {
-        "pipeline_input", "pipeline_output", "pipeline_internal",
+        "pipeline_input",
+        "pipeline_output",
+        "pipeline_internal",
     }
     if not io_details and not internal_origin:
         raise TaskTableError(

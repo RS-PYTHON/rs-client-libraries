@@ -527,11 +527,9 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
             # Keep the terminal writer; preceding writers only persist intermediates.
             ancestors = {reference: ancestor_names(producers[reference]) for reference in references}
             references = [
-                reference for reference in references
-                if not any(
-                    producers[reference].name in ancestors[other]
-                    for other in references if other != reference
-                )
+                reference
+                for reference in references
+                if not any(producers[reference].name in ancestors[other] for other in references if other != reference)
             ]
         if len(references) != 1:
             raise ValueError(

@@ -850,7 +850,7 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
                     {
                         **common_chunk_parameters,
                         **(workflow_steps[-1].parameters or {}),
-                    }
+                    },
                 )
             if not workflow_steps[-1].active:
                 # EOPF skips this PU; its I/O must not be resolved or published.

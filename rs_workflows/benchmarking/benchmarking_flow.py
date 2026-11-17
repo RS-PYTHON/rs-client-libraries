@@ -16,9 +16,10 @@
 
 import json
 import os
+from collections.abc import Awaitable
 from datetime import datetime
 from os import path as osp
-from typing import Awaitable, cast
+from typing import cast
 
 from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact

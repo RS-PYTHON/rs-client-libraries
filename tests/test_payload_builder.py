@@ -764,8 +764,13 @@ def test_pipeline_common_parameters_are_copied_and_step_values_override():
     }
     pipeline["steps"] = [
         {"step_id": 1, "unit_name": "u1", "input_products": {}, "output_products": {}},
-        {"step_id": 2, "unit_name": "u1", "input_products": {}, "output_products": {},
-         "parameters": {"enabled": False}},
+        {
+            "step_id": 2,
+            "unit_name": "u1",
+            "input_products": {},
+            "output_products": {},
+            "parameters": {"enabled": False},
+        },
     ]
     units = build_unit_list(tasktable, pipeline="p1", processing_mode=None)
     for unit in units:
