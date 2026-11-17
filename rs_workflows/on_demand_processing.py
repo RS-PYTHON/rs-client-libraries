@@ -266,7 +266,7 @@ async def _stage_input_adfs_alternative(
         task_table,
         specific_input_product,
     )
-    logger.info(f"Selected ADFS collection {collection} for ADFS {input_adfs["name"]}")
+    logger.info(f"Selected ADFS collection {collection} for ADFS {input_adfs['name']}")
 
     aux_status: bool
     aux_items: ItemCollection | None
