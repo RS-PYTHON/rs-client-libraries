@@ -943,8 +943,8 @@ def _sample_unit():
         "name": "unit1.1",
         "module": "module1",
         "input_products": [
-            {"name": "S1CADUS", "origin": "pipeline_input_1", "engine": "s3_cache"},
-            {"name": "S3CADUS", "origin": "external_proc", "engine": "s3_cache"},
+            {"name": "S1CADUS", "origin": "pipeline_input", "engine": "s3_cache"},
+            {"name": "S3CADUS", "origin": "pipeline_input", "engine": "s3_cache"},
         ],
         "input_adfs": [
             {"name": "ADF1"},
@@ -967,6 +967,8 @@ def _mock_dpr_process_in():
     mock = MagicMock()
 
     mock.env = FlowEnvArgs(owner_id="test-owner", logging_level=LoggingLevel.INFO)
+    mock.unit = "unit1"
+    mock.pipeline = None
 
     # input_products: list[dict[product_id, (stac_item_name, collection_id)]]
     # After UI update, input_products = list(InputProduct(name=..., item_id=..., collection_name=...))

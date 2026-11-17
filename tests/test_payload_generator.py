@@ -96,7 +96,7 @@ def test_build_workflow_step_valid(sample_unit):
     assert isinstance(step, WorkflowStep)
     assert step.name == "unit1.1"
     assert step.module == "module1"
-    assert step.inputs == {"S1CADUS": "S1CADUS", "S3CADUS": "external_proc"}
+    assert step.inputs == {"S1CADUS": "S1CADUS", "S3CADUS": "S3CADUS"}
     assert step.adfs == {"ADF1": "ADF1"}
     assert step.outputs == {"*.tif": "output1", "output2": "output2"}
     assert step.processing_unit == "unit1"
@@ -894,7 +894,7 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = None
     mock_storage.get_storage_for_pipeline_section.side_effect = lambda section: {
-        "pipeline_input_1": None,
+        "pipeline_input": None,
         "other": "pipeline_s3",
     }[section]
     mock_storage.get_store_params.return_value = mock_store_params
@@ -902,7 +902,7 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
     inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
 
     assert len(inputs) == 1
-    mock_storage.get_storage_for_pipeline_section.assert_any_call("pipeline_input_1")
+    mock_storage.get_storage_for_pipeline_section.assert_any_call("pipeline_input")
     mock_storage.get_storage_for_pipeline_section.assert_any_call("other")
     # store_name is forced to "s3" regardless of the pipeline resolution (temporary workaround)
     mock_storage.get_store_params.assert_called_with("s3")
