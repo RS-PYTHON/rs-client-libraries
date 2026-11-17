@@ -660,9 +660,7 @@ def test_wait_for_job_with_logger(mocker, dpr_client: DprClient):
     )
 
     mock_stream_logs.assert_called_once()
-    assert mock_stream_logs.call_args[0][0] == (
-        f"{dpr_client.href_service}/dpr/processes/s1_l0/jobs/123/logs"
-    )
+    assert mock_stream_logs.call_args[0][0] == (f"{dpr_client.href_service}/dpr/processes/s1_l0/jobs/123/logs")
 
     mock_super_wait.assert_called_once()
     assert result == ["result_ok"]

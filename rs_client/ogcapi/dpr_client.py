@@ -362,10 +362,7 @@ class DprClient(OgcApiClient):
             )
             # connect to the log stream endpoint and use the logger to display the logs in real time
             if process_id:
-                url = (
-                    f"{self.href_service}/{self.endpoint_prefix}processes/{process_id}"
-                    f"/jobs/{job_identifier}/logs"
-                )
+                url = f"{self.href_service}/{self.endpoint_prefix}processes/{process_id}" f"/jobs/{job_identifier}/logs"
             else:
                 url = f"{self.href_service}/{self.endpoint_prefix}jobs/{job_identifier}/logs"
             self.stream_logs(url, logger)
