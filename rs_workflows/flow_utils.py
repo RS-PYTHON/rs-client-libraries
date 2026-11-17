@@ -308,7 +308,7 @@ class FlowEnv:
         new_calling_span = self.this_span or self.calling_span
         if new_calling_span:
             # Only keep the first n attributes, the other need custom serialization
-            serialized_span = tuple(new_calling_span)[:3]
+            serialized_span = (new_calling_span[0], new_calling_span[1], new_calling_span[2])
         else:
             serialized_span = None
         logging_level = LoggingLevel(self.logging_level) or LoggingLevel.INFO

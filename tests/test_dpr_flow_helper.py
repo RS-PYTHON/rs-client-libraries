@@ -1071,3 +1071,20 @@ def test_olci_bands_are_published_on_zarr_asset(processor):
     published = item.to_dict()
     assert "bands" not in published["properties"]
     assert published["assets"]["product"]["bands"] == bands
+
+
+@pytest.mark.parametrize("created", [None, "", "   ", "2026-11-16T12:00:00Z", "2026-11-16T12:00:00+00:00"])
+def test_empty_creation_time_is_omitted(created):
+    """Keep valid creation timestamps while dropping empty optional metadata."""
+    feature = {
+        "properties": {"datetime": "2020-01-21T05:09:11Z", "created": created},
+        "geometry": None,
+        "bbox": None,
+    }
+    item = create_stac_item(None, feature, "s3://bucket/product", "product", DprProcessor.S3L0)
+    properties = item.to_dict()["properties"]
+    if created is None or not created.strip():
+        assert "created" not in properties
+    else:
+        assert properties["created"] == created
+    assert properties["datetime"] == "2020-01-21T05:09:11Z"

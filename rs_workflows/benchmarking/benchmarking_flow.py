@@ -16,13 +16,17 @@
 
 import json
 import os
+from collections.abc import Awaitable
 from datetime import datetime
 from os import path as osp
+from typing import cast
 
 from prefect import flow, task
 from prefect.artifacts import acreate_markdown_artifact
 from prefect.runtime import flow_run
+from prefect.states import State
 from prefect.variables import Variable
+from prefect_aws.s3 import S3Bucket
 
 from rs_client.ogcapi.dpr_client import DprProcessor
 from rs_common.prefect_utils import get_share_bucket, s3_delete
@@ -72,7 +76,10 @@ async def benchmark_processor_task(
     with flow_env.start_span(__name__, "benchmark-processor"):
 
         # Read the prefect variable value
-        all_scenarii = await Variable.get(f"benchmarking-{processor_name}-settings")
+        all_scenarii = await Variable.aget(f"benchmarking-{processor_name}-settings")
+
+        if not isinstance(all_scenarii, dict):
+            raise ValueError("Benchmark settings must contain an object")
 
         # Read contents for the given scenario and processor version
         selected_scenario = all_scenarii["scenarios"][scenario_name]["processor_versions"][processor_version]
@@ -149,7 +156,7 @@ async def benchmark_processor_task(
                 )
 
         # Get the prefect share bucket
-        share_bucket, _ = await get_share_bucket()
+        share_bucket, _ = await cast(Awaitable[tuple[S3Bucket, str]], get_share_bucket())
         # Build s3_path for each collection and delete its content
         for collection_name in collections_to_empty:
             collection_s3_path = osp.join("s3://", share_bucket.bucket_name, env.owner_id, collection_name)
@@ -179,13 +186,13 @@ async def benchmark_processor_task(
 
         # Run the DPR processing task and measure execution time
         execution_start_time = datetime.now()
-        dpr_processing = await dpr_processing_task(benchmark_dpr_process_in, return_state=True)
+        dpr_processing = cast(State, await dpr_processing_task(benchmark_dpr_process_in, return_state=True))
         execution_end_time = datetime.now()
 
         # Retrieve execution status
         if dpr_processing.is_failed():
             execution_status = "failure"
-            error = await dpr_processing.result(raise_on_failure=False)
+            error = await dpr_processing.aresult(raise_on_failure=False)
             logger.error(f"Error during DPR processing: {error}")
         else:
             execution_status = "success"

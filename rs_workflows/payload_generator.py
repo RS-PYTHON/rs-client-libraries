@@ -18,6 +18,7 @@ import fnmatch
 import os
 from collections import defaultdict
 from copy import deepcopy
+from functools import partial
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from uuid import uuid4
@@ -38,6 +39,7 @@ from rs_workflows.flow_utils import (
 )
 from rs_workflows.payload_template import (
     AdfConfig,
+    ExternalModule,
     GeneralConfiguration,
     InputProduct,
     IOConfig,
@@ -65,15 +67,25 @@ CONFIG_DIR = Path(__file__).parent.parent / "config"
 ZARR_WRITE_ENGINES = {WriteEngine.CPM_ZARR.value, WriteEngine.FAST_ZARR.value}
 
 
-def _build_workflow_inputs(unit: dict) -> dict[str, str]:
+def _build_workflow_inputs(unit: dict, selected_input_names: set[str] | None = None) -> dict[str, str]:
     """Map unit inputs to pipeline inputs or upstream workflow outputs."""
     inputs: dict[str, str] = {}
     for input_product in unit.get("input_products", []):
         if isinstance(input_product, dict) and "origin" in input_product and "name" in input_product:
             if "pipeline_input" in input_product["origin"]:
-                inputs[input_product["name"]] = input_product["name"]
+                if (
+                    selected_input_names is not None
+                    and input_product.get("mandatory") is False
+                    and input_product["name"] not in selected_input_names
+                ):
+                    continue
+                inputs[input_product["regex"] if "regex" in input_product else input_product["name"]] = input_product[
+                    "name"
+                ]
             else:
-                inputs[input_product["name"]] = input_product["origin"]
+                inputs[input_product["regex"] if "regex" in input_product else input_product["name"]] = input_product[
+                    "origin"
+                ]
     return inputs
 
 
@@ -99,7 +111,11 @@ def _build_workflow_outputs(unit: dict, selected_output_names: set[str] | None) 
     return outputs
 
 
-def build_workflow_step(unit, selected_output_names: set[str] | None = None):
+def build_workflow_step(
+    unit,
+    selected_output_names: set[str] | None = None,
+    selected_input_names: set[str] | None = None,
+):
     """
     Constructs a WorkflowStep instance from a unit configuration dictionary.
 
@@ -124,16 +140,16 @@ def build_workflow_step(unit, selected_output_names: set[str] | None = None):
     Raises:
         ValueError: If a required key is missing from the provided unit dictionary.
     """
-    inputs = _build_workflow_inputs(unit)
+    inputs = _build_workflow_inputs(unit, selected_input_names)
     adfs = _build_workflow_adfs(unit)
     outputs = _build_workflow_outputs(unit, selected_output_names)
     try:
         return WorkflowStep(  # type: ignore
             name=unit["name"],
-            active=True,
+            active=unit.get("active", True),
             validate_output=False,
             module=unit["module"],
-            processing_unit=unit["name"].split(".")[0] if "." in unit["name"] else unit["name"],
+            processing_unit=unit.get("processing_unit", unit["name"].split(".")[0]),
             inputs=inputs or None,
             adfs=adfs or None,
             outputs=outputs or None,
@@ -383,6 +399,8 @@ def build_input_products(
         mapping = search_by_name(unit.get("input_products", []), product_name)
         if not mapping:
             raise RuntimeError(f"Couldn't find any input for task table entry '{product_name}'")
+        if mapping.get("origin") not in (None, "pipeline_input"):
+            continue  # Upstream products are passed by CPM, without catalog lookup.
 
         # cf story 871/Set S3 configuration in payload.yaml
         store_name = storage_configuration.get_storage_for_specific_product(product_name)
@@ -632,7 +650,17 @@ def get_io(
     """
     catalog_client = flow_env.rs_client.get_catalog_client()
     owner_id = flow_env.owner_id
-    inputs = build_input_products(unit, dpr_process_in, storage_configuration, catalog_client)
+    unit_process_in = dpr_process_in
+    if dpr_process_in.pipeline:
+        external_inputs = {
+            entry["name"]
+            for entry in unit.get("input_products", [])
+            if entry.get("origin", "pipeline_input") == "pipeline_input"
+        }
+        unit_process_in = dpr_process_in.model_copy(
+            update={"input_products": [p for p in dpr_process_in.input_products if p.name in external_inputs]},
+        )
+    inputs = build_input_products(unit, unit_process_in, storage_configuration, catalog_client)
     outputs = build_output_products(unit, dpr_process_in, storage_configuration, owner_id, bucket_configuration)
 
     return inputs, outputs
@@ -678,11 +706,12 @@ def build_adfs(
                 path = os.path.dirname(path)
             # Inject EarthDataHub API Key in path, as per documentation at
             # https://earthdatahub.destine.eu/collections/copernicus-dem/datasets/GLO-30
+            adf_path: str | SecretStr = path
             if (edh_api_key := os.getenv(EDH_API_KEY_ENV_VAR)) and path.startswith(f"https://{DATA_EDH_DOMAIN}/"):
-                path = SecretStr(
+                adf_path = SecretStr(
                     path.replace(DATA_EDH_DOMAIN, f"edh:{edh_api_key}@api.earthdatahub.destine.eu"),
                 )
-            result.append(AdfConfig(id=adfs_id, path=path, adf_params=store_params))
+            result.append(AdfConfig(id=adfs_id, path=adf_path, adf_params=store_params))
         elif isinstance(store_params, StoreParams):
             # Advanced case where several adfs share the same id (i.e. several files)
             adfs_paths = [p for p, _ in adfs_entries]
@@ -766,6 +795,28 @@ def generate_payload(  # pylint: disable=unused-argument
     )
 
 
+def _legacy_chunk_sort_key(unit: dict, *, owner: str) -> tuple[bool, str]:
+    """Order legacy chunk candidates by owning module and unit name."""
+    return owner not in unit.get("module", ""), unit["name"]
+
+
+def _legacy_s3_chunk_parameters(unit_list: list[dict]) -> dict:
+    """Read defaults from legacy S3 PU definitions, including inactive PUs.
+
+    Prefer the owning PU over per-step overrides, independently of list order.
+    Modern tables declare these defaults once in pipeline.parameters instead.
+    """
+    defaults = {}
+    for key, owner in (("cadu_chunk_size", "cadu_processing"), ("isp_chunk_size", "merge_and_consolidation")):
+        candidates = [unit for unit in unit_list if isinstance((unit.get("parameters") or {}).get(key), dict)]
+        candidates.sort(key=partial(_legacy_chunk_sort_key, owner=owner))
+        if candidates:
+            source = candidates[0]
+            defaults[key] = deepcopy(source["parameters"][key])
+            get_logger().debug("S3 chunk default %s supplied by %s", key, source["name"])
+    return defaults
+
+
 def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
     flow_env: FlowEnv,
     unit_list: list[dict],
@@ -799,9 +850,27 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     workflow_steps = []
     io_config = IOConfig()
     selected_output_names = {product.name for product in dpr_process_in.generated_product_to_collection_identifier}
+    selected_input_names = {product.name for product in dpr_process_in.input_products}
+    common_chunk_parameters = (
+        _legacy_s3_chunk_parameters(unit_list) if dpr_process_in.processor_name == DprProcessor.S3L0 else {}
+    )
+    seen_inputs: set[str] = set()
+    seen_outputs: dict[str, OutputProduct] = {}
     for unit in unit_list:
         try:
-            workflow_steps.append(build_workflow_step(unit, selected_output_names))
+            workflow_steps.append(
+                build_workflow_step(unit, selected_output_names, selected_input_names),
+            )
+            if common_chunk_parameters:
+                workflow_steps[-1].parameters = deepcopy(
+                    {
+                        **common_chunk_parameters,
+                        **(workflow_steps[-1].parameters or {}),
+                    },
+                )
+            if not workflow_steps[-1].active:
+                # EOPF skips this PU; its I/O must not be resolved or published.
+                continue
             input_products, output_products = get_io(
                 unit,
                 dpr_process_in,
@@ -809,10 +878,18 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
                 storage_configuration,
                 bucket_configuration,
             )
-            seen_inputs = {p.id for p in io_config.input_products}
-            io_config.input_products += [p for p in input_products if p.id not in seen_inputs]
-            seen_outputs = {p.id for p in io_config.output_products}
-            io_config.output_products += [p for p in output_products if p.id not in seen_outputs]
+            for product in input_products:
+                if product.id not in seen_inputs:
+                    io_config.input_products.append(product)
+                    seen_inputs.add(product.id)
+            for product in output_products:
+                if product.id in seen_outputs:
+                    # A shared destination can hold intermediate and final outputs.
+                    existing = seen_outputs[product.id]
+                    existing.final_product = bool(existing.final_product or product.final_product)
+                else:
+                    io_config.output_products.append(product)
+                    seen_outputs[product.id] = product
         except KeyError as ke:
             raise ValueError(f"Key {ke} not found in unit list") from ke
 
@@ -842,6 +919,8 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     if adf_l0cfg:
         io_config.adfs.append(AdfConfig(id="adf_l0cfg", path=adf_l0cfg))
         for workflow_step in workflow_steps:
+            if workflow_step.adfs is None:
+                workflow_step.adfs = {}
             workflow_step.adfs["adf_l0cfg"] = "adf_l0cfg"
 
     # Build the full payload using the schema
@@ -876,12 +955,18 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
             temporary__folder=dpr_process_in.temporary_folder,
             temporary__folder_s3_secret=temp_folder_s3_secret,
         ),
-        external_modules=external_modules,
+        external_modules=(
+            [ExternalModule.model_validate(module) for module in external_modules]
+            if external_modules is not None
+            else None
+        ),
         workflow=workflow_steps,
         io=io_config,  # type: ignore
         # The dask context_managers section is built in the dpr_service
         # context_managers=context_managers,
         logging=logging,
+        # S3 workflow constructors read mission configuration before ADFs are opened.
+        config=[adf_l0cfg] if dpr_process_in.processor_name == DprProcessor.S3L0 else None,
         secret=["secrets.json"] if temp_folder_s3_secret else None,
     )
     logger.debug(f"Generated payload: \n {payload}")

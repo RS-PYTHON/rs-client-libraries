@@ -266,3 +266,29 @@ supported by the catalog.
 
 Other policies can be added in the task tables with the same mechanism, as long as they can be expressed as a STAC
 search.
+
+## Sentinel-3 L0 workflow outputs
+
+The `s3_l0_cadu_apid` pipeline runs CADUProcessing + APIDFiltering. Other workflow
+units are inactive. The single external input is `S3ACADUS`. APIDFiltering receives
+three explicit in-memory references: `CADUProcessing.1.olci`,
+`CADUProcessing.1.slstr`, and `CADUProcessing.1.sral`. EOPF 3.0.0rc4 does not expand
+wildcards in those input references. CADU uses `apply_mask: true`.
+
+APIDFiltering writes all its products using the output pattern `.*` to
+`output_folder`. Select an S3 collection for this destination:
+
+```json
+[
+  {"name": "output_folder", "product_type": "*", "collection_name": "TEST_FLOW_OUTPUT_S3_L0"}
+]
+```
+
+The `s3_l0_full` pipeline retains the original S3L0Processor and its individual
+product output mappings. It can still be selected independently.
+
+Declare `cadu_chunk_size` and `isp_chunk_size` once under the pipeline's
+`parameters`. Each step receives an independent copy; step parameters override
+whole parameter groups. For older task tables, the client also inherits chunk
+defaults from the CADU and MergeAndConsolidation definitions, including inactive
+units. Inactive units do not stage ADFs or resolve input/output storage.

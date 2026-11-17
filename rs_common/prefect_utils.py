@@ -227,14 +227,14 @@ async def init_prefect_blocks():
         #
         # Processing storage configuration
 
-        if not await Variable.get(VAR_NAME_STORAGE_CONFIG):  # if this var doesn't already exist
+        if not await Variable.aget(VAR_NAME_STORAGE_CONFIG):  # if this var doesn't already exist
 
             # Read config file content
             async with await anyio.open_file(str(CONFIG_DIR / "storage_configuration.json"), encoding="utf-8") as f:
 
                 # Write Prefect variable
                 content = await f.read()
-                await Variable.set(VAR_NAME_STORAGE_CONFIG, json.loads(content))
+                await Variable.aset(VAR_NAME_STORAGE_CONFIG, json.loads(content))
 
     #
     # Env vars for current user/owner_id
