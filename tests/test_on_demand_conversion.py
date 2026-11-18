@@ -147,7 +147,12 @@ async def test_on_demand_conversion_helpers_cover_mapping_zarr_and_safe_task(tmp
 
     assert result == {"zarr_uri": "s3://bucket/output.zarr"}
     dpr_client_mock.run_conv_safe_zarr.assert_called_once_with(payload, cluster_info)
-    dpr_client_mock.wait_for_job.assert_called_once()
+    dpr_client_mock.wait_for_job.assert_called_once_with(
+        {"job_id": "safe-conversion-job"},
+        mocker.ANY,
+        "SAFE conversion",
+        process_id="conv_safe_zarr",
+    )
 
 
 @pytest.mark.asyncio
