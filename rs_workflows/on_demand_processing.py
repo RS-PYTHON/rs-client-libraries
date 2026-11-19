@@ -63,6 +63,7 @@ from rs_workflows.utils.utils import (
     build_output_lineage,
     get_archived_item_indexes,
     search_by_name,
+    zarr_store_root,
 )
 
 SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
@@ -660,7 +661,7 @@ def build_and_generate_payload(
             if status:
                 asset = next(iter(item.assets.values()))
                 logger.info(f"ADFS '{name}' of type '{adf_type}': {asset.href}")
-                adfs.add((name, adf_type, asset.href))
+                adfs.add((name, adf_type, zarr_store_root(asset.href)))
             else:
                 raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
 

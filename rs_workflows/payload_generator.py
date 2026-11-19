@@ -48,7 +48,7 @@ from rs_workflows.payload_template import (
 )
 from rs_workflows.storage_configuration import StorageConfig
 from rs_workflows.utils.prefect import get_logger
-from rs_workflows.utils.utils import get_common_and_relative_paths, search_by_name
+from rs_workflows.utils.utils import get_common_and_relative_paths, search_by_name, zarr_store_root
 
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
 DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
@@ -170,7 +170,7 @@ def get_first_asset_dir(item: Item) -> str | None:
     href = first_asset.href
 
     if first_asset.media_type == "application/vnd+zarr":
-        return href
+        return zarr_store_root(href)
 
     parsed = urlparse(href)
 
@@ -681,7 +681,7 @@ def build_adfs(
         if len(adfs_entries) == 1:
             # Standard case where each adfs has a different id (i.e. single file)
             path, adfs_type = adfs_entries[0]
-            if adfs_type == "folder":
+            if adfs_type == "folder" and not path.rstrip("/").lower().endswith(".zarr"):
                 path = os.path.dirname(path)
             # Inject EarthDataHub API Key in path, as per documentation at
             # https://earthdatahub.destine.eu/collections/copernicus-dem/datasets/GLO-30

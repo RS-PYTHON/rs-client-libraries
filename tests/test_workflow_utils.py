@@ -231,11 +231,11 @@ async def test_process_asset_returns_nested_extracted_file_href(
 
 
 @pytest.mark.asyncio
-async def test_process_asset_returns_zarr_store_href(
+async def test_process_asset_returns_zarr_metadata_href(
     monkeypatch,
     mock_workflow_utils_logger,
 ):
-    """Test normalized Zarr assets return the store root, not an internal chunk file."""
+    """Test that Zarr normalization publishes root metadata and preserves the store path for readers."""
     product_name = "S00__ADF_GETAS_20000101T000000_21000101T000000_20260612T074319.zarr"
     base_uri = "s3://example-bucket/generic-prefix/TEST_FLOW_AUXIP/"
     download_mock = AsyncMock()
@@ -246,6 +246,7 @@ async def test_process_asset_returns_zarr_store_href(
         zarr_array = Path(extract_to) / "getasse_height"
         zarr_array.mkdir(parents=True, exist_ok=True)
         (zarr_array / "3.17").write_text("chunk")
+        (Path(extract_to) / ".zmetadata").write_text("{}")
 
     extract_zip_mock = MagicMock(side_effect=fake_extract_zip)
 
@@ -268,7 +269,8 @@ async def test_process_asset_returns_zarr_store_href(
         f"{product_name}.zip",
     )
 
-    assert result == f"{base_uri}{product_name}"
+    assert result == f"{base_uri}{product_name}/.zmetadata"
+    assert workflow_utils.zarr_store_root(result) == f"{base_uri}{product_name}"
     upload_mock.assert_awaited_once()
     delete_mock.assert_called_once()
 
