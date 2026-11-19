@@ -554,6 +554,13 @@ def build_output_products(
         autoclean = None
 
         if kind == "obs":
+            if store_params and store_params.storage_options:
+                store_params.storage_options.max_concurrency = 1
+                store_params.storage_options.config_kwargs = {
+                    "connect_timeout": 30,
+                    "read_timeout": 120,
+                    "retries": {"mode": "standard", "total_max_attempts": 5},
+                }
             bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
             output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
         elif kind in ("shared_disk", "local_disk"):
