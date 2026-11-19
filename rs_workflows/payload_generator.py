@@ -65,13 +65,20 @@ CONFIG_DIR = Path(__file__).parent.parent / "config"
 ZARR_WRITE_ENGINES = {WriteEngine.CPM_ZARR.value, WriteEngine.FAST_ZARR.value}
 
 
-def _build_workflow_inputs(unit: dict) -> dict[str, str]:
+def _build_workflow_inputs(unit: dict, available_input_names: set[str] | None) -> dict[str, str]:
     """Map unit inputs to pipeline inputs or upstream workflow outputs."""
     inputs: dict[str, str] = {}
     for input_product in unit.get("input_products", []):
         if isinstance(input_product, dict) and "origin" in input_product and "name" in input_product:
             if "pipeline_input" in input_product["origin"]:
-                inputs[input_product["name"]] = input_product["name"]
+                name = input_product["name"]
+                if (
+                    available_input_names is not None
+                    and name not in available_input_names
+                    and input_product.get("mandatory") is False
+                ):
+                    continue
+                inputs[name] = name
             else:
                 inputs[input_product["name"]] = input_product["origin"]
     return inputs
@@ -99,7 +106,12 @@ def _build_workflow_outputs(unit: dict, selected_output_names: set[str] | None) 
     return outputs
 
 
-def build_workflow_step(unit, selected_output_names: set[str] | None = None):
+def build_workflow_step(
+    unit,
+    selected_output_names: set[str] | None = None,
+    *,
+    available_input_names: set[str] | None = None,
+):
     """
     Constructs a WorkflowStep instance from a unit configuration dictionary.
 
@@ -117,6 +129,7 @@ def build_workflow_step(unit, selected_output_names: set[str] | None = None):
                 - "output_products" (list[dict], optional): List of output product mappings.
         selected_output_names (set[str] | None): Output names selected by collection mappings.
             If provided, only these outputs are included in the step.
+        available_input_names: Pipeline inputs supplied in the request. When provided, absent optional pipeline inputs are omitted.
 
     Returns:
         WorkflowStep: A fully initialized workflow step object.
@@ -124,7 +137,7 @@ def build_workflow_step(unit, selected_output_names: set[str] | None = None):
     Raises:
         ValueError: If a required key is missing from the provided unit dictionary.
     """
-    inputs = _build_workflow_inputs(unit)
+    inputs = _build_workflow_inputs(unit, available_input_names)
     adfs = _build_workflow_adfs(unit)
     outputs = _build_workflow_outputs(unit, selected_output_names)
     try:
@@ -799,9 +812,16 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     workflow_steps = []
     io_config = IOConfig()
     selected_output_names = {product.name for product in dpr_process_in.generated_product_to_collection_identifier}
+    available_input_names = {product.name for product in dpr_process_in.input_products}
     for unit in unit_list:
         try:
-            workflow_steps.append(build_workflow_step(unit, selected_output_names))
+            workflow_steps.append(
+                build_workflow_step(
+                    unit,
+                    selected_output_names,
+                    available_input_names=available_input_names,
+                ),
+            )
             input_products, output_products = get_io(
                 unit,
                 dpr_process_in,
