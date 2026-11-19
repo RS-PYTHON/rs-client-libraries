@@ -239,6 +239,7 @@ async def call_dpr_flow(
     Returns:
         The STAC items of the generated products.
     """
+    logger = get_logger()
     s3_payload: str = await generate_payload_path(env.owner_id)
     pipeline = pipeline or settings.pipeline
 
@@ -264,8 +265,10 @@ async def call_dpr_flow(
         **external_variables,
     )
 
-    print(a_process.model_dump_json(indent=2))
+    logger.info("🛈 Starting DPR processing for %s", settings.processor.name)
+    logger.info("🛈 DPR process input:\n%s", a_process.model_dump_json(indent=2))
     published_items = await dpr_processing_task(a_process)
+    logger.info("🛈 DPR processing generated %d product(s)", len(published_items))
     emit_product_generated_events(env.owner_id, published_items, workflow)
     return published_items
 
