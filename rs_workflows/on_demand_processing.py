@@ -124,6 +124,7 @@ def render_aux_cql2(
     alternative: dict[str, Any],
     task_table: dict[str, Any],
     specific_input_product: tuple[str | None, Item | None] = (None, None),
+    input_adfs_name: str | None = None,
 ) -> tuple[dict, dict[str, Any]]:
     """
     Render the STAC/CQL2 request of one ADFS alternative from the task table queries.
@@ -158,8 +159,12 @@ def render_aux_cql2(
         )
     ]
     if invalid_parameters:
+        invalid_values = ", ".join(
+            f"property '{parameter}' with value {parameters.get(parameter)!r}" for parameter in invalid_parameters
+        )
+        adf_context = f" for ADF input '{input_adfs_name}'" if input_adfs_name else ""
         raise ValueError(
-            f"Query '{name}' requires valid values for query parameters: {', '.join(invalid_parameters)}.",
+            f"Invalid filter{adf_context} using query '{name}': {invalid_values}.",
         )
 
     return build_cql2_json(query, parameters), parameters
@@ -186,7 +191,7 @@ async def _build_aux_request(
     """
     logger = get_logger()
     timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
-    aux_cql2, parameters = render_aux_cql2(alternative, task_table, specific_input_product)
+    aux_cql2, parameters = render_aux_cql2(alternative, task_table, specific_input_product, input_adfs["name"])
 
     md = "# AUX CQL2 filter \n\n```json\n" + json.dumps(aux_cql2, indent=2) + "\n```"
     artifact_key_name: str = "aux-cql2-filter"
@@ -642,7 +647,7 @@ def build_and_generate_payload(
             for specific_input_product_stac_item in product_stac_items:
                 specific_input_product = (specific_input_name, specific_input_product_stac_item)
                 for alternative in input_adfs.get("alternatives", []):
-                    render_aux_cql2(alternative, task_table, specific_input_product)
+                    render_aux_cql2(alternative, task_table, specific_input_product, input_adfs["name"])
                 adfs_tasks_to_submit.append((input_adfs, specific_input_product))
 
     tasks = []

@@ -711,8 +711,8 @@ def test_render_aux_cql2_rejects_null_query_parameters(parameter, value):
     parameters[parameter] = value
     alternative = {"query": {"name": "LatestValCover", "parameters": parameters}}
 
-    with pytest.raises(ValueError, match=f"requires valid values for query parameters: {parameter}"):
-        on_demand_processing.render_aux_cql2(alternative, task_table)
+    with pytest.raises(ValueError, match=f"property '{parameter}' with value"):
+        on_demand_processing.render_aux_cql2(alternative, task_table, input_adfs_name="FPO")
 
 
 def test_render_aux_cql2_rejects_undefined_query_parameter():
@@ -728,8 +728,8 @@ def test_render_aux_cql2_rejects_undefined_query_parameter():
     }
     alternative = {"query": {"name": "LatestValCover", "parameters": {"product_type": "AUX"}}}
 
-    with pytest.raises(ValueError, match="requires valid values for query parameters: start_datetime"):
-        on_demand_processing.render_aux_cql2(alternative, task_table)
+    with pytest.raises(ValueError, match="property 'start_datetime' with value None"):
+        on_demand_processing.render_aux_cql2(alternative, task_table, input_adfs_name="FPO")
 
 
 def test_build_and_generate_payload_skips_reference_db(mocker):
@@ -783,7 +783,10 @@ def test_build_and_generate_payload_validates_adfs_before_submitting_tasks(mocke
         ],
     }
 
-    with pytest.raises(ValueError, match="requires valid values for query parameters: satellite"):
+    with pytest.raises(
+        ValueError,
+        match="Invalid filter for ADF input 'FPO' using query 'LatestValCover': property 'satellite' with value 'None'",
+    ):
         on_demand_processing.build_and_generate_payload(
             MagicMock(),
             MagicMock(),
