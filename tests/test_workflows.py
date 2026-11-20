@@ -694,6 +694,44 @@ async def test_process_input_adfs_without_result(mocker, mandatory):
         assert await on_demand_processing.process_input_adfs.fn(input_adfs, MagicMock(), {}) is None
 
 
+@pytest.mark.parametrize("parameter", ["product_type", "satellite", "start_datetime"])
+@pytest.mark.parametrize("value", [None, "None", "Null", "NULL", "undefined", "nil", "NaN", "N/A", "  null  ", ""])
+def test_render_aux_cql2_rejects_null_query_parameters(parameter, value):
+    """Queries reject missing or null values for any required filter parameter."""
+    task_table = {
+        "queries": [
+            {
+                "name": "LatestValCover",
+                "parameters": ["product_type", "satellite", "start_datetime"],
+                "stac": {"filter": {"op": "=", "args": [{"property": "platform"}, "{satellite}"]}},
+            },
+        ],
+    }
+    parameters = {"product_type": "AUX", "satellite": "sentinel-1a", "start_datetime": "2026-01-01T00:00:00Z"}
+    parameters[parameter] = value
+    alternative = {"query": {"name": "LatestValCover", "parameters": parameters}}
+
+    with pytest.raises(ValueError, match=f"property '{parameter}' with value"):
+        on_demand_processing.render_aux_cql2(alternative, task_table, input_adfs_name="FPO")
+
+
+def test_render_aux_cql2_rejects_undefined_query_parameter():
+    """A missing query parameter is rejected instead of leaving an unresolved filter."""
+    task_table = {
+        "queries": [
+            {
+                "name": "LatestValCover",
+                "parameters": ["product_type", "start_datetime"],
+                "stac": {"filter": {"op": "=", "args": [{"property": "platform"}, "{satellite}"]}},
+            },
+        ],
+    }
+    alternative = {"query": {"name": "LatestValCover", "parameters": {"product_type": "AUX"}}}
+
+    with pytest.raises(ValueError, match="property 'start_datetime' with value None"):
+        on_demand_processing.render_aux_cql2(alternative, task_table, input_adfs_name="FPO")
+
+
 def test_build_and_generate_payload_skips_reference_db(mocker):
     """The S1-ARD REFERENCE_DB input ADFS is never staged."""
     mocker.patch.object(on_demand_processing.jsonschema, "validate")
@@ -716,3 +754,45 @@ def test_build_and_generate_payload_skips_reference_db(mocker):
     generate_mock.submit.assert_called_once()
     assert generate_mock.submit.call_args.args[2] == []
     assert not source_items
+
+
+def test_build_and_generate_payload_validates_adfs_before_submitting_tasks(mocker):
+    """Invalid ADFS filters fail before any processing task starts."""
+    mocker.patch.object(on_demand_processing.jsonschema, "validate")
+    mocker.patch.object(on_demand_processing, "replace_external_variables", side_effect=lambda tt, _: tt)
+    input_adfs = {
+        "name": "FPO",
+        "alternatives": [
+            {"query": {"name": "LatestValCover", "parameters": {"product_type": "MPL_ORBPRE", "satellite": "None"}}},
+        ],
+    }
+    mocker.patch.object(on_demand_processing, "build_unit_list", return_value=[{"input_adfs": [input_adfs]}])
+    mocker.patch.object(
+        on_demand_processing,
+        "resolve_specific_input_product_stac_items",
+        return_value=(None, [None]),
+    )
+    process_mock = mocker.patch.object(on_demand_processing, "process_input_adfs")
+    task_table = {
+        "queries": [
+            {
+                "name": "LatestValCover",
+                "parameters": ["product_type", "satellite"],
+                "stac": {"filter": {"op": "=", "args": [{"property": "platform"}, "{satellite}"]}},
+            },
+        ],
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="Invalid filter for ADF input 'FPO' using query 'LatestValCover': property 'satellite' with value 'None'",
+    ):
+        on_demand_processing.build_and_generate_payload(
+            MagicMock(),
+            MagicMock(),
+            task_table,
+            MagicMock(pipeline="pipeline", processing_mode=None),
+            MagicMock(),
+        )
+
+    process_mock.submit.assert_not_called()
