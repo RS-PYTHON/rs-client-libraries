@@ -129,7 +129,8 @@ def build_workflow_step(
                 - "output_products" (list[dict], optional): List of output product mappings.
         selected_output_names (set[str] | None): Output names selected by collection mappings.
             If provided, only these outputs are included in the step.
-        available_input_names: Pipeline inputs supplied in the request. When provided, absent optional pipeline inputs are omitted.
+        available_input_names: Pipeline inputs supplied in the request. When provided, absent
+            optional pipeline inputs are omitted.
 
     Returns:
         WorkflowStep: A fully initialized workflow step object.
