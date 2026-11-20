@@ -119,6 +119,28 @@ def test_build_workflow_step_selected_outputs(sample_unit, selected, expected):
     assert step.outputs == expected
 
 
+@pytest.mark.parametrize("optional_present", [False, True])
+def test_build_workflow_step_optional_pipeline_input(sample_unit, optional_present):
+    """A missing optional input does not create a bad reference in payaload"""
+    sample_unit["input_products"] = [
+        {"name": "S3OLCIL0_1", "origin": "pipeline_input", "mandatory": True},
+        {"name": "S3OLCIL0_3", "origin": "pipeline_input", "mandatory": False},
+    ]
+    available = {"S3OLCIL0_1"}
+    if optional_present:
+        available.add("S3OLCIL0_3")
+    step = build_workflow_step(sample_unit, {"output1"}, available_input_names=available)
+    payload = PayloadSchema(
+        workflow=[step],
+        io=IOConfig(
+            input_products=[InputProduct(id=name, path=f"s3://bucket/{name}", engine="cpm_zarr") for name in available],
+            output_products=[OutputProduct(id="output1", path="s3://bucket/output", engine="cpm_zarr")],
+        ),
+    )
+
+    assert build_output_lineage(payload) == {"output1": available}
+
+
 def test_build_workflow_step_missing_key_raises():
     """
     Test that missing required keys in the unit (e.g., 'name') raise a clear ValueError.
