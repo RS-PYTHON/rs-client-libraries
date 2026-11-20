@@ -624,7 +624,7 @@ def build_and_generate_payload(
         processing_mode=processing_mode,
     )
 
-    tasks = []
+    adfs_tasks_to_submit: list[tuple[dict[str, Any], tuple[str | None, Item | None]]] = []
     for unit in unit_list:
         # For each input_adfs element computed on STEP 1
         for input_adfs in unit["input_adfs"]:
@@ -640,20 +640,27 @@ def build_and_generate_payload(
                 flow_env.rs_client,
             )
             for specific_input_product_stac_item in product_stac_items:
-                if specific_input_product_stac_item:
-                    logger.info(
-                        f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product_stac_item}",
-                    )
-                tasks.append(
-                    process_input_adfs.submit(
-                        input_adfs,
-                        dpr_input,
-                        task_table,
-                        (specific_input_name, specific_input_product_stac_item),
-                        retry_config.staging_retries,
-                        retry_config.staging_retry_delay,
-                    ),
-                )
+                specific_input_product = (specific_input_name, specific_input_product_stac_item)
+                for alternative in input_adfs.get("alternatives", []):
+                    render_aux_cql2(alternative, task_table, specific_input_product)
+                adfs_tasks_to_submit.append((input_adfs, specific_input_product))
+
+    tasks = []
+    for input_adfs, specific_input_product in adfs_tasks_to_submit:
+        if specific_input_product[1]:
+            logger.info(
+                f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product[1]}",
+            )
+        tasks.append(
+            process_input_adfs.submit(
+                input_adfs,
+                dpr_input,
+                task_table,
+                specific_input_product,
+                retry_config.staging_retries,
+                retry_config.staging_retry_delay,
+            ),
+        )
 
     try:
         aux_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [

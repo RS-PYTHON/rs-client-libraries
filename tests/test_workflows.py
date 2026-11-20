@@ -754,3 +754,42 @@ def test_build_and_generate_payload_skips_reference_db(mocker):
     generate_mock.submit.assert_called_once()
     assert generate_mock.submit.call_args.args[2] == []
     assert not source_items
+
+
+def test_build_and_generate_payload_validates_adfs_before_submitting_tasks(mocker):
+    """Invalid ADFS filters fail before any processing task starts."""
+    mocker.patch.object(on_demand_processing.jsonschema, "validate")
+    mocker.patch.object(on_demand_processing, "replace_external_variables", side_effect=lambda tt, _: tt)
+    input_adfs = {
+        "name": "FPO",
+        "alternatives": [
+            {"query": {"name": "LatestValCover", "parameters": {"product_type": "MPL_ORBPRE", "satellite": "None"}}},
+        ],
+    }
+    mocker.patch.object(on_demand_processing, "build_unit_list", return_value=[{"input_adfs": [input_adfs]}])
+    mocker.patch.object(
+        on_demand_processing,
+        "resolve_specific_input_product_stac_items",
+        return_value=(None, [None]),
+    )
+    process_mock = mocker.patch.object(on_demand_processing, "process_input_adfs")
+    task_table = {
+        "queries": [
+            {
+                "name": "LatestValCover",
+                "parameters": ["product_type", "satellite"],
+                "stac": {"filter": {"op": "=", "args": [{"property": "platform"}, "{satellite}"]}},
+            },
+        ],
+    }
+
+    with pytest.raises(ValueError, match="requires valid values for query parameters: satellite"):
+        on_demand_processing.build_and_generate_payload(
+            MagicMock(),
+            MagicMock(),
+            task_table,
+            MagicMock(pipeline="pipeline", processing_mode=None),
+            MagicMock(),
+        )
+
+    process_mock.submit.assert_not_called()
