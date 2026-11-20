@@ -148,6 +148,20 @@ def render_aux_cql2(
         for k, v in deepcopy(alternative["query"]["parameters"]).items()
     }
     query = next(q for q in task_table["queries"] if q["name"] == name)
+    invalid_parameters = [
+        parameter
+        for parameter in query.get("parameters", [])
+        if (value := parameters.get(parameter)) is None
+        or (
+            isinstance(value, str)
+            and value.strip().casefold() in {"", "none", "null", "undefined", "nil", "nan", "n/a"}
+        )
+    ]
+    if invalid_parameters:
+        raise ValueError(
+            f"Query '{name}' requires valid values for query parameters: {', '.join(invalid_parameters)}.",
+        )
+
     return build_cql2_json(query, parameters), parameters
 
 
