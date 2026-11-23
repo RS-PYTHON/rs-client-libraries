@@ -151,13 +151,11 @@ class TestStacBase:
     def test_cadip_auxip_get_queryables_error(self, client, url, request):
         """Test a bad response while requesting queryables."""
         client_instance = request.getfixturevalue(client)
-        with pytest.raises(
-            RuntimeError,
-            match=f"Could not get queryables from {url}",
-        ), responses.RequestsMock() as resp:
+        with responses.RequestsMock() as resp:
             # If /queryables return 404, then rs_client should raise Runtime
             resp.add(responses.GET, url=url, json={}, status=404)
-            client_instance.get_queryables()
+            with pytest.raises(RuntimeError, match=f"Could not get queryables from {url}"):
+                client_instance.get_queryables()
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
@@ -192,13 +190,11 @@ class TestStacBase:
         def timeout_callback(request):
             raise requests.exceptions.Timeout("Request timed out")
 
-        with pytest.raises(
-            RuntimeError,
-            match=f"Could not get the response from the endpoint {url}",
-        ), responses.RequestsMock() as resp:
+        with responses.RequestsMock() as resp:
             # If /queryables result in a timeout, should raise runtimeerror
             resp.add_callback(responses.GET, url, callback=timeout_callback)
-            client_instance.get_queryables()
+            with pytest.raises(RuntimeError, match=f"Could not get the response from the endpoint {url}"):
+                client_instance.get_queryables()
 
     @pytest.mark.unit
     @pytest.mark.parametrize(
