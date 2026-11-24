@@ -350,13 +350,13 @@ def run_adf_script(
         else:
             command = ["stb_convert_products", "-i", str(data_dir), "-o", str(output_dir)]
         env = None  # inherit current environment
-        result = subprocess.run(  # nosec B603                    
-                    ["pip", "show", "sentineltoolbox"],
-                    env=env,
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                )
+        result = subprocess.run(  # nosec B603
+            ["pip", "show", "sentineltoolbox"],
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         log_subprocess_output(result.stdout)
         log_subprocess_output(result.stderr)
     else:
