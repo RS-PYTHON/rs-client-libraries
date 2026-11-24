@@ -240,21 +240,25 @@ search.
 
 The `s3_l0_full` pipeline retains the original S3L0Processor and remains the
 default. `s3_l0_multi` and `s3_l0_multi_shared` define the same ten steps, with
-the optional `GranuleFormatting` step inactive. Both read `S3ACADUS` and
-target the same final S3 destinations. Only `s3_l0_multi_shared` writes snapshots
-of intermediate products. Those writes do not replace the direct links between
-processing units and are not published in the catalog.
+the optional `GranuleFormatting` step inactive. For smoke tests,
+`CheckManoeuvring` is also inactive, so maneuvering quality metadata is not
+added. Both read `S3ACADUS`. `s3_l0_multi` keeps its direct handoffs and does
+not write intermediates. `s3_l0_multi_shared` is an OLCI smoke test: it
+selects the first available OLCI EFR granule, passes it through the active
+units, and targets only `S03OLCL0` in S3, from `MergeAndConsolidation`.
 
 For `s3_l0_multi_shared`, configure `product.default.pipeline` with a
 `pipeline_internal` section pointing to a `shared_disk` storage. Its mount must
-be visible to CPM and Dask. With `autoclean: false`, the snapshots remain under
-`<absolute_path>/<run-id>/<output-id>/`. Do not add them to the collection mappings.
+be visible to CPM and Dask. A task table input of the form
+`pipeline_store.<output-id>.<input-key>` connects the unit's input key to an
+earlier shared output, which CPM reopens by its output ID. With `autoclean: false`,
+the shared products remain under `<absolute_path>/<run-id>/<output-id>/`.
+Do not add them to the collection mappings.
 
-The multi-step payloads require a runtime that supports the sample's wildcard
-upstream references and named L0 unit construction. EOPF 3.0.0rc4 resolves
-upstream references by exact key, and the sample's `CheckManouveringUnit`
-does not accept an identifier argument. Keep `s3_l0_full` selected with that
-runtime; generating a payload does not validate multi-step execution.
+The lazy `s3_l0_multi` variant still requires native support for wildcard
+upstream references and stable L0 unit identifiers. The shared smoke test
+uses only exact references in the active units and does not require the
+wildcard resolver.
 
 Declare `cadu_chunk_size` and `isp_chunk_size` once under the pipeline's
 `parameters`. Each step receives an independent copy; step parameters override

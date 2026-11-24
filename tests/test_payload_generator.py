@@ -29,7 +29,7 @@ from rs_workflows.flow_utils import (
     FlowInputProduct,
 )
 from rs_workflows.on_demand_processing import build_output_lineage
-from rs_workflows.payload_builder import build_unit_list
+from rs_workflows.payload_builder import TaskTableError, build_unit_list
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
     DATA_EDH_DOMAIN,
     EDH_API_KEY_ENV_VAR,
@@ -1653,6 +1653,68 @@ def test_output_lineage_with_in_memory_regex_steps():
         ],
     )
     assert build_output_lineage(payload) == {"final": {"cadus", "orbit"}}
+
+
+def test_pipeline_store_input_uses_shared_writer_id_and_preserves_lineage():
+    """CPM reopens a shared writer's output ID under an exact downstream product key."""
+    tasktable = {
+        "units": [
+            {
+                "name": "First",
+                "module": "pkg.first",
+                "input_products": [{"name": "cadus", "mandatory": True}],
+                "output_products": [{"name": "snapshot", "mandatory": True, "final_product": False}],
+            },
+            {
+                "name": "Last",
+                "module": "pkg.last",
+                "input_products": [{"name": "products", "mandatory": True, "regex": ".*"}],
+                "output_products": [{"name": "final", "mandatory": True}],
+            },
+        ],
+        "io": {
+            "input": [{"name": "cadus", "engine": "cadu"}],
+            "output": [{"name": name, "engine": "cpm_zarr"} for name in ("snapshot", "final")],
+        },
+        "pipelines": [
+            {
+                "name": "shared",
+                "steps": [
+                    {
+                        "unit_name": "First",
+                        "step_id": 1,
+                        "input_products": {"cadus": "pipeline_input"},
+                        "output_products": {"snapshot": "pipeline_internal"},
+                    },
+                    {
+                        "unit_name": "Last",
+                        "step_id": 2,
+                        "input_products": {"products": "pipeline_store.snapshot.olci_efr_g_1_last"},
+                        "output_products": {"final": "pipeline_output"},
+                    },
+                ],
+            },
+        ],
+    }
+
+    workflow = [build_workflow_step(unit, {"final"}) for unit in build_unit_list(tasktable, pipeline="shared")]
+    assert workflow[0].outputs == {"snapshot": "snapshot"}
+    assert workflow[1].inputs == {"olci_efr_g_1_last": "snapshot"}
+    payload = PayloadSchema(
+        workflow=workflow,
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="s3://bucket/input", engine="cadu")],
+            output_products=[
+                OutputProduct(id="snapshot", path="/shared/snapshot", engine="cpm_zarr", final_product=False),
+                OutputProduct(id="final", path="s3://bucket/output", engine="cpm_zarr"),
+            ],
+        ),
+    )
+    assert build_output_lineage(payload) == {"final": {"cadus"}}
+
+    tasktable["pipelines"][0]["steps"][1]["input_products"]["products"] = "pipeline_store.missing.olci"
+    with pytest.raises(TaskTableError, match="exactly one earlier internal output"):
+        build_unit_list(tasktable, pipeline="shared")
 
 
 def test_output_lineage_with_shared_workflow_output_folder():

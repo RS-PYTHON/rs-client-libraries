@@ -130,6 +130,21 @@ def _extract_io_origin_from_pipeline(
     if product_origin in origin_mapping:
         product_origin = origin_mapping[product_origin]
 
+    elif is_input and product_origin.startswith("pipeline_store."):
+        _, _, store_reference = product_origin.partition(".")
+        store_id, _, input_key = store_reference.partition(".")
+        producers = [
+            step
+            for step in pipeline_full["steps"]
+            if step["step_id"] < pipeline_unit["step_id"]
+            and step.get("output_products", {}).get(store_id) in ("pipeline_internal", "pipeline.internal")
+        ]
+        if not input_key or len(producers) != 1:
+            raise TaskTableError(
+                f"Input '{product_origin}' of {unit_name}.{step_id} requires an input key "
+                "and exactly one earlier internal output with that ID.",
+            )
+
     # Case 2: origin is a product from another unit
     elif origin_match := re.fullmatch(unit_origin_pattern, product_origin):
         origin_unit_name, origin_step, origin_product_name = origin_match.groups()
@@ -286,6 +301,8 @@ def _build_single_unit_details(
             origin=input_product_origin,
         )
         if input_entry:
+            if input_product_origin.startswith("pipeline_store."):
+                _, input_entry["origin"], input_entry["regex"] = input_product_origin.split(".", 2)
             input_products.append(input_entry)
 
     # Build input ADFS, only defined by the unit details, does not depend on the mode

@@ -68,7 +68,7 @@ def _build_workflow_inputs(unit: dict, selected_input_names: set[str] | None = N
     inputs: dict[str, str] = {}
     for input_product in unit.get("input_products", []):
         if isinstance(input_product, dict) and "origin" in input_product and "name" in input_product:
-            if "pipeline_input" in input_product["origin"]:
+            if input_product["origin"] == "pipeline_input":
                 if (
                     selected_input_names is not None
                     and input_product.get("mandatory") is False

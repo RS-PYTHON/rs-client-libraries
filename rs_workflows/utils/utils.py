@@ -456,6 +456,11 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
         if reference in input_ids:
             return None
         if reference not in producers:
+            if stored_references := output_references.get(reference):
+                if len(stored_references) != 1:
+                    raise ValueError(f"Workflow store input '{reference}' requires exactly one producer")
+                producers[reference] = producers[stored_references[0]]
+                return producers[reference]
             upstream = next(
                 (
                     step
