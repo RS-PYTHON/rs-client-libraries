@@ -129,6 +129,67 @@ def test_create_stac_item_from_zarr(mocker, tmp_path, zarr_format):
     assert item.assets["data"].href == str(zarr_dir)
 
 
+@pytest.mark.parametrize("zarr_format", [2, 3])
+@pytest.mark.parametrize(
+    "platform, start_datetime",
+    [("3a", "20160216T000000"), ("3b", "20180425T000000")],
+)
+def test_create_stac_item_from_zarr_prefers_stac_discovery(mocker, tmp_path, zarr_format, platform, start_datetime):
+    """Use the converted ADF discovery metadata, not inherited source-dataset metadata."""
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
+    item_id = f"S0{platform.upper()}_ADF_SLCDP_{start_datetime}_20991231T235959_20261124T131743"
+    zarr_dir = tmp_path / "fallback-id.zarr"
+    metadata = {
+        "id": "bayespdf-esacci-avhrrmta-2007-p10y-cloud-v1",
+        "properties": {"description": "source dataset"},
+        "stac_discovery": {
+            "id": item_id,
+            "properties": {
+                "description": "converted ADF",
+                "created": "2026-11-24T13:17:48+00:00",
+                "product:type": "S03_ADF_SLCDP",
+                "platform": "metopa",
+            },
+        },
+    }
+    zarr.open_group(str(zarr_dir), mode="w", zarr_format=zarr_format).attrs.update(metadata)
+
+    item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_SLCDP")
+
+    assert item.id == item_id
+    assert item.properties["description"] == "converted ADF"
+    assert item.properties["created"] == "2026-11-24T13:17:48Z"
+    assert item.properties["product:type"] == "ADF_SLCDP"
+    assert item.properties["platform"] == "metopa"
+    expected_start, expected_end = adf_flow.extract_datetimes_from_item_id(item_id)
+    assert item.properties["start_datetime"] == expected_start
+    assert item.properties["end_datetime"] == expected_end
+    assert item.assets["data"].href == str(zarr_dir)
+    assert item.assets["data"].media_type == "application/vnd+zarr"
+
+
+@pytest.mark.parametrize("zarr_format", [2, 3])
+@pytest.mark.parametrize("root_id", ["root-id", None])
+def test_create_stac_item_from_zarr_discovery_id_fallback(mocker, tmp_path, zarr_format, root_id):
+    """A missing discovery ID falls back to the root ID, then the directory name."""
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
+    zarr_dir = tmp_path / "fallback-id.zarr"
+    metadata = {
+        "id": root_id,
+        "stac_discovery": {
+            "properties": {
+                "start_datetime": "2016-02-16T00:00:00Z",
+                "end_datetime": "2099-12-31T23:59:59Z",
+            },
+        },
+    }
+    zarr.open_group(str(zarr_dir), mode="w", zarr_format=zarr_format).attrs.update(metadata)
+
+    item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_SLCDP")
+
+    assert item.id == (root_id or zarr_dir.stem)
+
+
 def test_create_stac_item_from_json_uses_stac_discovery(mocker, tmp_path):
     """Test STAC item creation from JSON metadata with stac_discovery."""
     mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())

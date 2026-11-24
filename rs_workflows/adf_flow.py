@@ -406,9 +406,10 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
 
     For ZARR directories, metadata is read from the root group attributes
     with the zarr library, whatever the Zarr format.
-    For JSON files, the file itself is the metadata and the item ID is
-    taken from stac_discovery.id when present, otherwise it is derived
-    from the filename (minus the .json extension).
+    For JSON files, the file itself is the metadata.
+    For both formats, prefer stac_discovery for STAC metadata and the item ID.
+    If its ID is missing, use the root metadata ID for ZARR directories,
+    then fall back to the filename without its extension.
     """
     logger = get_logger()
     is_json_product = zarr_path.is_file()
@@ -425,7 +426,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
             raise RuntimeError(f"Could not read Zarr (v2 or v3) group metadata from {zarr_path}: {err}") from err
 
     stac_discovery = metadata.get("stac_discovery") if isinstance(metadata.get("stac_discovery"), dict) else {}
-    stac_metadata = stac_discovery if is_json_product and stac_discovery else metadata
+    stac_metadata = stac_discovery if stac_discovery else metadata
 
     # extract STAC properties from metadata.
     # the scripts put them in 'properties' attribute.
@@ -438,12 +439,11 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     # but the script may set it differently
     stac_props["product:type"] = generated_prod_type
 
-    # For JSON files prefer the STAC discovery item ID, otherwise use the filename
-    # without the .json extension. For ZARR directories fall back to metadata ID.
+    # Prefer the discovery ID over inherited source-dataset IDs in ZARR attributes.
     if is_json_product:
         item_id = stac_discovery.get("id") or zarr_path.stem
     else:
-        item_id = metadata.get("id", zarr_path.stem)
+        item_id = stac_discovery.get("id") or metadata.get("id") or zarr_path.stem
 
     # Safe version of the item_id str, to prevent code injection through logs (needed by SonarQube)
     item_id_logs = str(item_id).replace("\r", "\\r").replace("\n", "\\n")
