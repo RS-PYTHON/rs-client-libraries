@@ -44,6 +44,7 @@ from rs_workflows.flow_utils import (
     FlowInputProduct,
     RetryConfig,
 )
+from rs_workflows.on_demand.sentinel1 import s1_ard_reference_db
 from rs_workflows.payload_builder import (
     build_cql2_json,
     build_unit_list,
@@ -688,15 +689,11 @@ def build_and_generate_payload(
                 raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
 
     # HACK for S1-ARD: the reference pipeline writes the REFERENCE_DB in the folder allocated by the
-    # process-s1-ard-reference flow, that publishes it after the processing, see s1_ard.REFERENCE_DB_PATH.
-    # Imported here because the s1_ard module imports this module.
-    # pylint: disable-next=import-outside-toplevel
-    from rs_workflows.on_demand.sentinel1 import s1_ard
-
-    if ref_db_path := s1_ard.REFERENCE_DB_PATH.get():
+    # process-s1-ard-reference flow, that publishes it after the processing, see the s1_ard_reference_db module
+    if ref_db_path := s1_ard_reference_db.REFERENCE_DB_PATH.get():
         logger.info(f"S1-ARD REFERENCE_DB: {ref_db_path}")
         # The type is not 'folder' on purpose, so that the path is not truncated by build_adfs
-        adfs.add(("REFERENCE_DB", s1_ard.REFERENCE_DB_PRODUCT_TYPE, ref_db_path))
+        adfs.add(("REFERENCE_DB", s1_ard_reference_db.REFERENCE_DB_PRODUCT_TYPE, ref_db_path))
 
     # generate the dpr payload file
     return (
