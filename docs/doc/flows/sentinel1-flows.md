@@ -53,7 +53,20 @@ The flows are:
   task table), see [Task table and payload](tasktable-payload.md#2-find-and-stage-the-auxiliary-files).
 
 The `REFERENCE_DB` is handled specifically: it is never searched nor staged. For the `ARD_REFERENCE_PIPELINE`, the
-flow allocates a new folder `s3://<bucket>/<owner>/s1-ard-reference-db/<uuid>` for it, the bucket being given by the
+`process-s1-ard-reference` flow allocates a new folder `s3://<bucket>/<owner>/s1-ard-reference-db/<uuid>` for it, the
+bucket being given by the
 [bucket configuration](https://github.com/RS-PYTHON/rs-documentation/blob/develop/docs/administration/update-rs-server.md#object-storage-buckets-and-data-lifecycle)
 for the owner, the `s1-ard-reference-db` collection and the `ARD_REFERENCE_DB` product type. Its path is written in
 the logs of the flow.
+
+The `REFERENCE_DB` is not an output product of the task table, but it is the result of the reference pipeline: once
+the processing is finished, the `process-s1-ard-reference` flow publishes it in the `s1-ard-reference-db` catalog
+collection of the owner, as if it was an output product. Its item:
+
+- has the `<uuid>` of its folder as ID, and the `ARD_REFERENCE_DB` product type (`product:type`),
+- has the geometry, dates, platform, instrument mode and orbit (`sat:orbit_state`, `sat:relative_orbit`) of the
+  master SLC, and a `derived_from` link to it,
+- has a `REFERENCE_DB` asset, whose href is the folder of the `REFERENCE_DB`.
+
+The `s1-ard-reference-db` collection must exist: the flow checks it before processing anything. The flow fails if the
+catalog rejects the item, with the path of the generated `REFERENCE_DB` in the error.

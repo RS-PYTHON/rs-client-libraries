@@ -23,7 +23,6 @@ from copy import deepcopy
 from os import path as osp
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
-from uuid import uuid4
 
 import jsonschema
 import yaml
@@ -52,8 +51,6 @@ from rs_workflows.payload_builder import (
     replace_external_variables,
 )
 from rs_workflows.payload_generator import (
-    fetch_csv_from_endpoint,
-    find_s3_output_bucket,
     generate_payload,
     resolve_stac_input_path,
 )
@@ -690,18 +687,16 @@ def build_and_generate_payload(
             else:
                 raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
 
-    # HACK for S1-ARD: the reference pipeline writes the REFERENCE_DB in a new s3 folder
-    if dpr_input.pipeline == "ARD_REFERENCE_PIPELINE":
-        logger.warning(f"ARD HACK FOR PIPELINE {dpr_input.pipeline}")
-        owner_id: str = dpr_input.env.owner_id
-        output_collection = "s1-ard-reference-db"
-        adf_type = "ARD_REFERENCE_DB"
-        bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
-        bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, adf_type)
-        ref_db_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
-        logger.warning(f"ARD REFERENCE_DB: {ref_db_path}")
-        # adf_type is not 'folder' on purpose, so that the path is not truncated by build_adfs
-        adfs.add(("REFERENCE_DB", adf_type, ref_db_path))
+    # HACK for S1-ARD: the reference pipeline writes the REFERENCE_DB in the folder allocated by the
+    # process-s1-ard-reference flow, that publishes it after the processing, see s1_ard.REFERENCE_DB_PATH.
+    # Imported here because the s1_ard module imports this module.
+    # pylint: disable-next=import-outside-toplevel
+    from rs_workflows.on_demand.sentinel1 import s1_ard
+
+    if ref_db_path := s1_ard.REFERENCE_DB_PATH.get():
+        logger.info(f"S1-ARD REFERENCE_DB: {ref_db_path}")
+        # The type is not 'folder' on purpose, so that the path is not truncated by build_adfs
+        adfs.add(("REFERENCE_DB", s1_ard.REFERENCE_DB_PRODUCT_TYPE, ref_db_path))
 
     # generate the dpr payload file
     return (
