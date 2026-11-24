@@ -974,7 +974,10 @@ def test_build_adfs_single_folder(mock_store_params):
     assert len(result) == 1
     assert result[0].id == "adf1"
     assert result[0].path == "/data/myfolder"
-    assert result[0].adf_params.storage_options.config_kwargs == {
+    adf_params = result[0].adf_params
+    assert isinstance(adf_params, StoreParams)
+    assert adf_params.storage_options is not None
+    assert adf_params.storage_options.config_kwargs == {
         "connect_timeout": 30,
         "read_timeout": 120,
         "retries": {"mode": "standard", "total_max_attempts": 5},
