@@ -24,6 +24,10 @@
           "storage": "s3"
         },
         {
+          "section": "pipeline_internal",
+          "storage": "s3l0-intermediates"
+        },
+        {
           "section": "other",
           "storage": "rspython-dev-cs-01"
         }
@@ -71,6 +75,12 @@
       "name": "my_local_disk1",
       "kind" : "local_disk",
       "absolute_path": "/my_local_path/here/"
+    },
+    {
+      "name": "s3l0-intermediates",
+      "kind": "shared_disk",
+      "absolute_path": "/mnt/share/cs-01/s3l0-intermediates",
+      "autoclean": false
     }
   ]
 }

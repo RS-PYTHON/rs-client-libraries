@@ -1556,7 +1556,8 @@ def test_build_output_products_disk_no_disk_config_raises(
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
 
 
-def test_s3_workflow_payload_matches_individual_processing_units():
+@pytest.mark.parametrize("snapshot", [False, True])
+def test_s3_workflow_payload_matches_individual_processing_units(snapshot, mock_dpr_process_in):
     """Generate concrete CADU/APID links without relying on a local task table."""
     names = ["CADUProcessing", "APIDFiltering", "GranuleFormatting"]
     tasktable = {
@@ -1577,7 +1578,9 @@ def test_s3_workflow_payload_matches_individual_processing_units():
         ],
         "io": {
             "input": [{"name": "S3ACADUS", "mandatory": True, "regex": "CADUs"}],
-            "output": [{"name": "output_folder", "mandatory": True, "regex": ".*", "final_product": True}],
+            "output": [
+                {"name": "output_folder", "regex": ".*", "final_product": False, "engine": "cpm_zarr", "type": "folder"},
+            ],
         },
         "pipelines": [
             {
@@ -1592,7 +1595,7 @@ def test_s3_workflow_payload_matches_individual_processing_units():
                             if i == 0
                             else {product: f"CADUProcessing.1.{product}" for product in ("olci", "slstr", "sral")}
                         ),
-                        "output_products": {"output_folder": "pipeline_output"} if i == 1 else {},
+                        "output_products": {"output_folder": "pipeline_internal"} if i == 1 and snapshot else {},
                     }
                     for i, name in enumerate(names)
                 ],
@@ -1600,14 +1603,31 @@ def test_s3_workflow_payload_matches_individual_processing_units():
         ],
     }
     units = build_unit_list(tasktable, pipeline="s3_l0_cadu_apid")
-    steps = [build_workflow_step(unit) for unit in units]
+    steps = [build_workflow_step(unit, selected_output_names=set()) for unit in units]
     assert [step.name for step in steps] == [f"{name}.{i + 1}" for i, name in enumerate(names)]
     assert steps[0].inputs == {"CADUs": "S3ACADUS"}
     assert steps[1].inputs == {product: f"CADUProcessing.1.{product}" for product in ("olci", "slstr", "sral")}
-    assert steps[1].outputs == {".*": "output_folder"}
+    assert steps[1].outputs == ({".*": "output_folder"} if snapshot else None)
     assert steps[2].active is False
     for step in steps:
         assert step.parameters["isp_chunk_size"] == {"S03OLC_IG": 10000}
+
+    storage = MagicMock()
+    storage.get_storage_for_pipeline_section.return_value = "snapshots"
+    storage.get_storage_kind.return_value = "shared_disk"
+    storage.get_disk_storage.return_value = {"path": "/shared/run", "autoclean": False}
+    mock_dpr_process_in.generated_product_to_collection_identifier = []
+    outputs = build_output_products(units[1], mock_dpr_process_in, storage, "test-owner", [])
+    if snapshot:
+        assert [(out.id, out.path, out.final_product, out.autoclean) for out in outputs] == [
+            ("output_folder", "/shared/run/output_folder", False, False),
+        ]
+        storage.get_storage_kind.return_value = "obs"
+        with pytest.raises(RuntimeError, match="requires a pipeline_internal shared_disk storage"):
+            build_output_products(units[1], mock_dpr_process_in, storage, "test-owner", [])
+    else:
+        assert outputs == []
+        storage.get_storage_for_pipeline_section.assert_not_called()
 
 
 def test_output_lineage_with_in_memory_regex_steps():

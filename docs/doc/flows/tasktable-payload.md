@@ -238,23 +238,23 @@ search.
 
 ## Sentinel-3 L0 workflow outputs
 
-The `s3_l0_cadu_apid` pipeline runs CADUProcessing + APIDFiltering. Other workflow
-units are inactive. The single external input is `S3ACADUS`. APIDFiltering receives
-three explicit in-memory references: `CADUProcessing.1.olci`,
-`CADUProcessing.1.slstr`, and `CADUProcessing.1.sral`. EOPF 3.0.0rc4 does not expand
-wildcards in those input references. CADU uses `apply_mask: true`.
+The `s3_l0_full` pipeline retains the original S3L0Processor and remains the
+default. `s3_l0_multi` and `s3_l0_multi_shared` define the same ten steps, with
+the optional `GranuleFormatting` step inactive. Both read `S3ACADUS` and
+target the same final S3 destinations. Only `s3_l0_multi_shared` writes snapshots
+of intermediate products. Those writes do not replace the direct links between
+processing units and are not published in the catalog.
 
-APIDFiltering writes all its products using the output pattern `.*` to
-`output_folder`. Select an S3 collection for this destination:
+For `s3_l0_multi_shared`, configure `product.default.pipeline` with a
+`pipeline_internal` section pointing to a `shared_disk` storage. Its mount must
+be visible to CPM and Dask. With `autoclean: false`, the snapshots remain under
+`<absolute_path>/<run-id>/<output-id>/`. Do not add them to the collection mappings.
 
-```json
-[
-  {"name": "output_folder", "product_type": "*", "collection_name": "TEST_FLOW_OUTPUT_S3_L0"}
-]
-```
-
-The `s3_l0_full` pipeline retains the original S3L0Processor and its individual
-product output mappings. It can still be selected independently.
+The multi-step payloads require a runtime that supports the sample's wildcard
+upstream references and named L0 unit construction. EOPF 3.0.0rc4 resolves
+upstream references by exact key, and the sample's `CheckManouveringUnit`
+does not accept an identifier argument. Keep `s3_l0_full` selected with that
+runtime; generating a payload does not validate multi-step execution.
 
 Declare `cadu_chunk_size` and `isp_chunk_size` once under the pipeline's
 `parameters`. Each step receives an independent copy; step parameters override

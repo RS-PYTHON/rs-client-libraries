@@ -298,22 +298,27 @@ def _build_single_unit_details(
     # Build output products, the origin of the product can be dynamic if the unit is part of a pipeline,
     # but is always the external output in "unit" mode
     output_products: list[dict[str, Any]] = []
-    for output_product in unit_details.get("output_products", {}):
-        if full_pipeline:
-            output_product_origin = _extract_io_origin_from_pipeline(
-                unit_name,
-                output_product.get("name", ""),
-                full_pipeline,
-                is_input=False,
-            )
-        else:
-            output_product_origin = "pipeline_output"
+    outputs_by_name = {product["name"]: product for product in unit_details.get("output_products", [])}
+    if full_pipeline:
+        step = next(
+            step for step in full_pipeline["steps"]
+            if step["unit_name"] == unit_name and step["step_id"] == step_id
+        )
+        output_origins = step["output_products"]
+    else:
+        output_origins = dict.fromkeys(outputs_by_name, "pipeline_output")
 
+    for product_name, output_product in outputs_by_name.items():
+        if product_name not in output_origins:
+            continue
+        output_product_origin = output_origins[product_name]
         output_entry = _build_entry(
             output_product,
             io_index.get("output", {}),
             processing_modes,
-            origin=output_product_origin,
+            origin={"pipeline.output": "pipeline_output", "pipeline.internal": "pipeline_internal"}.get(
+                output_product_origin, output_product_origin,
+            ),
         )
         if output_entry:
             output_products.append(output_entry)

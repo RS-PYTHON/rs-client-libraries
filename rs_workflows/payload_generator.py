@@ -94,12 +94,20 @@ def _build_workflow_adfs(unit: dict) -> dict[str, str]:
     return adfs
 
 
+def _is_snapshot(output: dict) -> bool:
+    return output.get("origin") == "pipeline_internal" and output.get("final_product") is False
+
+
 def _build_workflow_outputs(unit: dict, selected_output_names: set[str] | None) -> dict[str, str]:
     """Map selected unit outputs, preserving task table regexes."""
     outputs: dict[str, str] = {}
     for output_product in unit.get("output_products", []):
         if isinstance(output_product, dict) and "name" in output_product:
-            if selected_output_names is not None and output_product["name"] not in selected_output_names:
+            if (
+                not _is_snapshot(output_product)
+                and selected_output_names is not None
+                and output_product["name"] not in selected_output_names
+            ):
                 continue
             left_part = output_product["regex"] if "regex" in output_product else output_product["name"]
             right_part = output_product["name"]
@@ -526,6 +534,27 @@ def build_output_products(
 
     for mapping in unit.get("output_products", []):
         product_name = mapping["name"]
+        if _is_snapshot(mapping):
+            if os.path.basename(product_name) != product_name or product_name in ("", ".", ".."):
+                raise ValueError(f"Invalid internal output name: {product_name!r}")
+            store_name = storage_configuration.get_storage_for_pipeline_section("pipeline_internal")
+            if not store_name or storage_configuration.get_storage_kind(store_name) != "shared_disk":
+                raise RuntimeError(f"Internal output '{product_name}' requires a pipeline_internal shared_disk storage")
+            disk_config = storage_configuration.get_disk_storage(store_name)
+            if not disk_config or not disk_config.get("path"):
+                raise RuntimeError(f"Shared disk storage '{store_name}' has no path for '{product_name}'")
+            outputs.append(
+                OutputProduct(
+                    id=product_name,
+                    path=os.path.join(disk_config["path"], product_name),
+                    engine=mapping["engine"],
+                    writer_params=StoreParams(**{"mode": "w", **(mapping.get("writer_params") or {})}),
+                    type=mapping.get("type", "file"),
+                    final_product=False,
+                    autoclean=disk_config.get("autoclean", False),
+                ),
+            )
+            continue
 
         logger.info(f"Building output section for name: {product_name}")
         output_product = mapping_lookup.get(product_name)
