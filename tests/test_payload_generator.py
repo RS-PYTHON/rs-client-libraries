@@ -780,6 +780,7 @@ def test_build_input_products_success(sample_unit, mock_store_params, mocker):
     mock_dpr.input_products = [FlowInputProduct(name="S1CADUS", item_id="item_id", collection_name="coll_id")]
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "S3"
+    mock_storage.get_storage_kind.return_value = "obs"
     mock_storage.get_store_params.return_value = mock_store_params
 
     inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
@@ -788,7 +789,15 @@ def test_build_input_products_success(sample_unit, mock_store_params, mocker):
     assert inputs[0].id == "S1CADUS"
     assert inputs[0].engine == "s3_cache"
     assert inputs[0].path == "s3://path/to/item"
-    assert inputs[0].reader_params == mock_store_params
+    reader_params = inputs[0].reader_params
+    assert isinstance(reader_params, StoreParams)
+    assert reader_params.storage_options is not None
+    assert reader_params.storage_options.name == "s3"
+    assert reader_params.storage_options.config_kwargs == {
+        "connect_timeout": 30,
+        "read_timeout": 120,
+        "retries": {"mode": "standard", "total_max_attempts": 5},
+    }
 
 
 def test_build_input_products_success_multiple_inputs_regex(sample_unit, mock_store_params, mocker):
@@ -954,6 +963,7 @@ def test_build_adfs_single_folder(mock_store_params):
     mock_storage_config = MagicMock()
     mock_storage_config.get_store_params.return_value = mock_store_params
     mock_storage_config.default_adfs_storage = "s3"
+    mock_storage_config.get_storage_kind.return_value = "obs"
 
     adfs = [
         ("adf1", "folder", "/data/myfolder/file1.txt"),
@@ -964,6 +974,11 @@ def test_build_adfs_single_folder(mock_store_params):
     assert len(result) == 1
     assert result[0].id == "adf1"
     assert result[0].path == "/data/myfolder"
+    assert result[0].adf_params.storage_options.config_kwargs == {
+        "connect_timeout": 30,
+        "read_timeout": 120,
+        "retries": {"mode": "standard", "total_max_attempts": 5},
+    }
 
 
 def test_build_adfs_single_filename(mock_store_params):
@@ -1128,6 +1143,11 @@ def test_build_output_products_specific_storage(
 
     assert outputs[0].dump()["writer_params"]["mode"] == (writer_mode or "w")
     assert outputs[1].dump()["writer_params"]["mode"] == "w"
+    assert outputs[0].dump()["writer_params"]["storage_options"]["config_kwargs"] == {
+        "connect_timeout": 30,
+        "read_timeout": 120,
+        "retries": {"mode": "standard", "total_max_attempts": 5},
+    }
     assert not hasattr(mock_store_params, "mode")
 
     mock_storage.get_storage_for_specific_product.assert_called_with("output2")  # last call
