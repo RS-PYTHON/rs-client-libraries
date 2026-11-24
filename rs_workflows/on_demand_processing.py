@@ -688,8 +688,8 @@ def build_and_generate_payload(
             else:
                 raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
 
-    # HACK for S1-ARD: the reference pipeline writes the REFERENCE_DB in the folder allocated by the
-    # process-s1-ard-reference flow, that publishes it after the processing, see the s1_ard_reference_db module
+    # HACK for S1-ARD: the REFERENCE_DB folder given by the S1 ARD flows, where the reference pipeline writes it, or
+    # where the other pipelines read it, see the s1_ard_reference_db module
     if ref_db_path := s1_ard_reference_db.REFERENCE_DB_PATH.get():
         logger.info(f"S1-ARD REFERENCE_DB: {ref_db_path}")
         # The type is not 'folder' on purpose, so that the path is not truncated by build_adfs

@@ -24,6 +24,10 @@ but an auxiliary file (ADF) of the pipeline, that the processor fills. It is sti
 - after the processing, the process-s1-ard-reference flow publishes it in the s1-ard-reference-db collection, as if
   it was an output product.
 
+The nominal process-s1-ard flow, when it is not given a reference date, finds the REFERENCE_DB of the track of its
+SLCs in the s1-ard-reference-db collection, and gives its folder to the generic processing flow the same way, with
+the REFERENCE_DB_PATH context variable: the processor reads the master SLC and its reference geometry from it.
+
 This module doesn't import the other modules of the project, so that the generic processing flow can import it
 without importing the s1_ard module, that imports the generic processing flow.
 """
@@ -33,5 +37,5 @@ from contextvars import ContextVar
 REFERENCE_DB_COLLECTION = "s1-ard-reference-db"
 REFERENCE_DB_PRODUCT_TYPE = "ARD_REFERENCE_DB"
 
-# Folder of the REFERENCE_DB, set by the process-s1-ard-reference flow during the processing
+# Folder of the REFERENCE_DB given to the processor, set by the S1 ARD flows during the processing
 REFERENCE_DB_PATH: ContextVar[str | None] = ContextVar("s1ard_reference_db_path", default=None)
