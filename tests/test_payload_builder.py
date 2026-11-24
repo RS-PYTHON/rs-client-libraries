@@ -751,3 +751,67 @@ def test_build_unit_list_io_indexed_by_product_name(selection):
     jsonschema.validate(tasktable, schema)
     assert build_unit_list(tasktable, **selection) == expected
     assert json.dumps(tasktable["io"]) == original_io
+
+
+def test_pipeline_steps_produce_only_their_outputs():
+    """Several steps run the same unit with different parameters: each step only produces the outputs it lists."""
+    tasktable = {
+        "units": [
+            {
+                "name": "Correction",
+                "module": "pkg.correction",
+                "input_products": [{"name": "l0_input", "mandatory": True}],
+                "input_adfs": [],
+                "output_products": [
+                    {"name": "l1a_output", "mandatory": True, "regex": "^out$"},
+                    {"name": "l1b_output", "mandatory": True, "regex": "^out$"},
+                ],
+            },
+        ],
+        "io": {
+            "input": [{"name": "l0_input", "type": "folder", "engine": "cpm_zarr"}],
+            "output": [
+                {"name": "l1a_output", "type": "folder", "engine": "cpm_zarr"},
+                {"name": "l1b_output", "type": "folder", "engine": "cpm_zarr"},
+            ],
+        },
+        "pipelines": [
+            {
+                "name": "l1",
+                "steps": [
+                    {
+                        "unit_name": "Correction",
+                        "step_id": 1,
+                        "parameters": {"level": "A"},
+                        "input_products": {"l0_input": "pipeline_input"},
+                        "output_products": {"l1a_output": "pipeline_output"},
+                    },
+                    {
+                        "unit_name": "Correction",
+                        "step_id": 2,
+                        "parameters": {"level": "B"},
+                        "input_products": {"l0_input": "pipeline_input"},
+                        "output_products": {"l1b_output": "pipeline_output"},
+                    },
+                    {
+                        "unit_name": "Correction",
+                        "step_id": 3,
+                        "parameters": {"level": "B"},
+                        "input_products": {"l0_input": "pipeline_input"},
+                        "output_products": {"out": "pipeline_internal"},
+                    },
+                ],
+            },
+        ],
+    }
+
+    units = build_unit_list(tasktable, pipeline="l1")
+
+    assert [unit["name"] for unit in units] == ["Correction.1", "Correction.2", "Correction.3"]
+    assert [unit["parameters"] for unit in units] == [{"level": "A"}, {"level": "B"}, {"level": "B"}]
+    assert [[output["name"] for output in unit["output_products"]] for unit in units] == [
+        ["l1a_output"],
+        ["l1b_output"],
+        [],
+    ]
+    assert all(output["origin"] == "pipeline_output" for unit in units[:2] for output in unit["output_products"])

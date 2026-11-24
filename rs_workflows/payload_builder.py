@@ -72,6 +72,24 @@ def replace_external_variables(obj, external_variables: dict[str, Any] | None):
     return obj
 
 
+def _find_pipeline_step(unit_name: str, pipeline_full: dict[str, Any], step_id: int = 0) -> dict[str, Any]:
+    """
+    Return the step of the pipeline running the given unit.
+
+    Args:
+        unit_name: name of the unit run by the step
+        pipeline_full: full description of the pipeline, as defined in the tasktable
+        step_id: step_id value in case we have to discriminate between several steps running the same unit
+    """
+    for step in pipeline_full.get("steps", []):
+        if step.get("unit_name") == unit_name:
+            # If the unit name matches but NOT the given step_id, we keep searching
+            if step_id and step.get("step_id") != step_id:
+                continue
+            return step
+    raise TaskTableError(f"Unit '{unit_name}' not found in given pipeline: {pipeline_full}.")
+
+
 def _extract_io_origin_from_pipeline(
     unit_name: str,
     product_name: str,
@@ -103,17 +121,7 @@ def _extract_io_origin_from_pipeline(
     unit_origin_pattern = r"^[^.]+\.[^.]+(\.[^.]+)?$"
 
     # Retrieve the details of the step defining the unit and the step_id given (if any) from the pipeline definition
-    pipeline_unit: dict[str, Any] = {}
-    for step in pipeline_full.get("steps", []):
-        if step.get("unit_name") == unit_name:
-            # If the unit name matches but NOT the given step_id, we keep searching
-            if step_id and step.get("step_id") != step_id:
-                continue
-            pipeline_unit = step
-            break
-
-    if not pipeline_unit:
-        raise TaskTableError(f"Unit '{unit_name}' not found in given pipeline: {pipeline_full}.")
+    pipeline_unit = _find_pipeline_step(unit_name, pipeline_full, step_id)
 
     # What field to look at depending on if the product is input or output
     io_type = "input_products" if is_input else "output_products"
@@ -301,15 +309,23 @@ def _build_single_unit_details(
             input_adfs.append(adfs_entry)
 
     # Build output products, the origin of the product can be dynamic if the unit is part of a pipeline,
-    # but is always the external output in "unit" mode
+    # but is always the external output in "unit" mode.
+    # In "pipeline" mode, a step only produces the unit outputs it lists: several steps can run the same unit
+    # with different parameters, each producing a different output (e.g. a processing unit producing L1A or L1B).
+    step_outputs = (
+        _find_pipeline_step(unit_name, full_pipeline, step_id).get("output_products", {}) if full_pipeline else {}
+    )
     output_products: list[dict[str, Any]] = []
     for output_product in unit_details.get("output_products", {}):
         if full_pipeline:
+            if output_product.get("name") not in step_outputs:
+                continue
             output_product_origin = _extract_io_origin_from_pipeline(
                 unit_name,
                 output_product.get("name", ""),
                 full_pipeline,
                 is_input=False,
+                step_id=step_id,
             )
         else:
             output_product_origin = "pipeline_output"

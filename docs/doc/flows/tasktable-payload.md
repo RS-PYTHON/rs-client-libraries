@@ -151,7 +151,10 @@ flowchart TD
   ordered by `step_id`, with their `module` from the `units` section. The origin of each input is either
   `pipeline_input` (an input product given to the flow) or the output of a previous step
   (`<unit>.<step_id>.<output>`), and the target of each output is `pipeline_output` (a product published in the
-  catalog) or `pipeline_internal` (an intermediate product).
+  catalog) or `pipeline_internal` (an intermediate product). A step only produces the unit outputs it lists, so
+  several steps can run the same unit with different `parameters`, each one producing a different output (e.g. the
+  Sentinel-2 MSI radiometric correction producing L1A or L1B). An intermediate product is named after the output
+  returned by the processing unit, which is not necessarily a unit output (e.g. `{"out": "pipeline_internal"}`).
 - **Unit mode** (for advanced users, `unit` parameter): only the given unit is run, with all its inputs given to
   the flow and all its outputs published.
 
