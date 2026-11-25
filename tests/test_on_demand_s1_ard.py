@@ -449,7 +449,7 @@ def _slc_item() -> Item:
             "product:type": "S01SIWSLC",
             "eopf:datatake_id": "not copied",
         },
-        stac_extensions=["https://stac-extensions.github.io/sar/v1.3.0/schema.json"],
+        stac_extensions=["https://home.rs-python.eu/ownership-stac-extension/v1.1.0/schema.json"],
     )
     item.set_self_href(f"https://rspy.example.com/catalog/collections/owner:s01siwslc/items/{SLC_IW_1}.zarr")
     return item
@@ -463,7 +463,7 @@ def test_build_reference_db_item():
     assert item.geometry == _slc_item().geometry
     assert item.bbox == [0, 0, 1, 1]
     assert item.datetime == datetime(2026, 4, 8, 17, 46, 32, tzinfo=timezone.utc)
-    assert item.stac_extensions == ["https://stac-extensions.github.io/sar/v1.3.0/schema.json"]
+    assert not item.stac_extensions
     properties = item.properties
     assert properties["product:type"] == "ADF_REFDB"
     assert properties["sar:instrument_mode"] == "IW"

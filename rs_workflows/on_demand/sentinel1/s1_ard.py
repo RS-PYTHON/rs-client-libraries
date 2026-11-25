@@ -200,7 +200,7 @@ def _build_reference_db_item(reference_db_path: str, slc_item: Item) -> Item:
         bbox=slc_item.bbox,
         datetime=slc_item.datetime,
         properties=properties,
-        stac_extensions=list(slc_item.stac_extensions),
+        stac_extensions=[],
         assets={
             "REFERENCE_DB": Asset(
                 href=reference_db_path,
