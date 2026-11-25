@@ -239,15 +239,15 @@ search.
 ## Sentinel-3 L0 workflow outputs
 
 The `s3_l0_full` pipeline retains the original S3L0Processor and remains the
-default. `s3_l0_multi` and `s3_l0_multi_shared` define the same ten steps, with
+default. `s3_l0_lazy` and `s3_l0_olci_shared_disk_test` define the same ten steps, with
 the optional `GranuleFormatting` step inactive. For smoke tests,
 `CheckManoeuvring` is also inactive, so maneuvering quality metadata is not
-added. Both read `S3ACADUS`. `s3_l0_multi` keeps its direct handoffs and does
-not write intermediates. `s3_l0_multi_shared` is an OLCI smoke test: it
+added. Both read `S3ACADUS`. `s3_l0_lazy` passes data directly between steps
+without writing intermediates. `s3_l0_olci_shared_disk_test` is an OLCI smoke test: it
 selects the first available OLCI EFR granule, passes it through the active
 units, and targets only `S03OLCL0` in S3, from `MergeAndConsolidation`.
 
-For `s3_l0_multi_shared`, configure `product.default.pipeline` with a
+For `s3_l0_olci_shared_disk_test`, configure `product.default.pipeline` with a
 `pipeline_internal` section pointing to a `shared_disk` storage. Its mount must
 be visible to CPM and Dask. A task table input of the form
 `pipeline_store.<output-id>.<input-key>` connects the unit's input key to an
@@ -255,7 +255,7 @@ earlier shared output, which CPM reopens by its output ID. With `autoclean: fals
 the shared products remain under `<absolute_path>/<run-id>/<output-id>/`.
 Do not add them to the collection mappings.
 
-The lazy `s3_l0_multi` variant still requires native support for wildcard
+The `s3_l0_lazy` pipeline still requires native support for wildcard
 upstream references and stable L0 unit identifiers. The shared smoke test
 uses only exact references in the active units and does not require the
 wildcard resolver.
