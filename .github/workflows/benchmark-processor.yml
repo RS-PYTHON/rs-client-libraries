@@ -30,24 +30,27 @@ on:
         required: true
         type: choice
         options: # same as in rs-client-libraries/rs_client/ogcapi/dpr_client.py:DprProcessor
-          - s1_l0
-          - s3_l0
-          - s1_ard
-          - s3_l1olci
+          - s1l0
+          - s3l0
+          - s3l1olci
+          - s3l2olci
+          - cril0
+          - s1ard
       processor_version:
         description: Processor version
         required: true
         type: choice
         options: # mocked values from rs-demo/notebooks/sprints/sprint38/1099_first_benchmarking_flow/1099_first_benchmarking_flow.json
-          - "1.4.0"
+          - "1.0"
+          - "1.2.0rc1"
           - "1.5.0"
       scenario:
         description: Scenario
         required: true
         type: choice
         options: # mocked values from rs-demo/notebooks/sprints/sprint38/1099_first_benchmarking_flow/1099_first_benchmarking_flow.json
-          - A
-          - B
+          - nominal
+          - restricted
       keycloak_user:
         description: Keycloak username (owner_id)
         required: true
