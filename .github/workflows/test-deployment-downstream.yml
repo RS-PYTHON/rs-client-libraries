@@ -46,7 +46,7 @@ jobs:
           # Try current branch, then develop
           branches: ${{ env.BRANCH_NAME }},develop
       - name: Trigger deployment of ${{ matrix.repo }}
-        uses: benc-uk/workflow-dispatch@ba9b031f598534deb29873396ef7b0acf17aa94a
+        uses: benc-uk/workflow-dispatch@78e99d70d9acaa4e2c98fe781b3cabda5df0228e
         with:
           workflow: test-deployment.yml
           repo: RS-PYTHON/${{ matrix.repo }}
