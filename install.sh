@@ -13,14 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# See https://mil.ad/blog/2024/uv-poetry-install.html
-
-uv tool install pip
-uv tool install poetry
-# install poetry dependencies with uv (faster)
-uv pip install --no-deps -r <(POETRY_WARNINGS_EXPORT=false poetry export --without-hashes -f requirements.txt)
-# install the package itself
-uv pip install -e .
+# Install the package and its locked dependencies (from uv.lock, without the dev and demo dependency groups)
+# into the active virtual environment
+uv sync --active --frozen --no-default-groups
 # install opentelemetry instrumentation libraries
-uv run --active python -m ensurepip --upgrade
-uv run --active opentelemetry-bootstrap -a install
+uv pip install $(uv run --active --no-sync opentelemetry-bootstrap -a requirements)
