@@ -267,6 +267,14 @@ supported by the catalog.
 Other policies can be added in the task tables with the same mechanism, as long as they can be expressed as a STAC
 search.
 
+## Shared temporary paths
+
+When an active step declares `temporary_path`, payload generation replaces its
+value with `<absolute_path>/<run-uuid>` from the `shared_disk` store selected by
+`product.default.pipeline` section `other`. Steps without the parameter are
+unchanged. The directory is unique per run and must be writable and accessible
+at the same path from all processing workers. The processor creates it when needed.
+
 ## Sentinel-3 L0 workflow outputs
 
 The `s3_l0_full` pipeline retains the original S3L0Processor and remains the
@@ -285,6 +293,11 @@ be visible to CPM and Dask. A task table input of the form
 earlier shared output, which CPM reopens by its output ID. With `autoclean: false`,
 the shared products remain under `<absolute_path>/<run-id>/<output-id>/`.
 Do not add them to the collection mappings.
+
+The shared test also writes and reopens the CADU processing outputs before APID
+filtering. Its `APID_INTERMEDIATE` output sets `reopen_params: {chunks: null}`
+so granule processing reads it without Dask chunking and can serialize the GPS
+start time as a scalar in the product metadata.
 
 The `s3_l0_lazy` pipeline still requires native support for wildcard
 upstream references and stable L0 unit identifiers. The shared smoke test

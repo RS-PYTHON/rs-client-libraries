@@ -14,9 +14,12 @@
 
 """Test the payload_generator module"""
 
+import json
 from datetime import datetime
+from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
+from uuid import UUID
 
 import pytest
 from pydantic import SecretStr
@@ -59,6 +62,7 @@ from rs_workflows.payload_template import (
     StoreParams,
     WorkflowStep,
 )
+from rs_workflows.storage_configuration import StorageConfig
 
 
 # build_workflow_step
@@ -1780,7 +1784,14 @@ def test_s3_workflow_payload_matches_individual_processing_units(snapshot, mock_
         "io": {
             "input": [{"name": "S3ACADUS", "mandatory": True, "regex": "CADUs"}],
             "output": [
-                {"name": "output_folder", "regex": ".*", "final_product": False, "engine": "cpm_zarr", "type": "folder"},
+                {
+                    "name": "output_folder",
+                    "regex": ".*",
+                    "final_product": False,
+                    "engine": "cpm_zarr",
+                    "type": "folder",
+                    "reopen_params": {"chunks": None},
+                },
             ],
         },
         "pipelines": [
@@ -1823,6 +1834,7 @@ def test_s3_workflow_payload_matches_individual_processing_units(snapshot, mock_
         assert [(out.id, out.path, out.final_product, out.autoclean) for out in outputs] == [
             ("output_folder", "/shared/run/output_folder", False, False),
         ]
+        assert outputs[0].model_dump(exclude_none=True)["reopen_params"] == {"chunks": None}
         storage.get_storage_kind.return_value = "obs"
         with pytest.raises(RuntimeError, match="requires a pipeline_internal shared_disk storage"):
             build_output_products(units[1], mock_dpr_process_in, storage, "test-owner", [])
@@ -1997,6 +2009,49 @@ def test_build_payload_excludes_io_from_disabled_processing_units(mocker, flow_e
     workflow = payload.workflow or []
     assert workflow[1].active is False
     assert not build_output_lineage(payload)
+
+
+def test_temporary_path_uses_one_shared_disk_directory_per_run(mocker, flow_env, mock_dpr_process_in):
+    """Opted-in active steps share a fresh per-run path without modifying the task table."""
+    mock_dpr_process_in.processor_name = "TEST_PROCESSOR"
+    mocker.patch("rs_workflows.payload_generator.get_io", return_value=([], []))
+    mocker.patch("rs_workflows.payload_generator.build_adfs", return_value=[])
+    config = json.loads((Path(__file__).parent.parent / "config/storage_configuration.json").read_text())
+    parameters = {"temporary_path": "./tmp", "batch_size": 5}
+    units = [
+        {"name": "first", "module": "pkg.unit", "parameters": parameters},
+        {"name": "second", "module": "pkg.unit", "parameters": {"temporary_path": "/local/scratch"}},
+        {"name": "unconfigured", "module": "pkg.unit", "parameters": {"batch_size": 5}},
+        {"name": "inactive", "module": "pkg.unit", "active": False, "parameters": parameters},
+    ]
+    paths = []
+    for _ in range(2):
+        payload = build_payload(flow_env, units, [], mock_dpr_process_in, StorageConfig({}, data=config), [])
+        first, second, unconfigured, inactive = payload.dump()["workflow"]
+        path = Path(first["parameters"]["temporary_path"])
+        assert path.parent == Path("/mnt/share/cs-01")
+        assert UUID(path.name).version == 4
+        assert first["parameters"]["batch_size"] == 5
+        assert second["parameters"]["temporary_path"] == str(path)
+        assert unconfigured["parameters"] == {"batch_size": 5}
+        assert inactive["parameters"] == {"temporary_path": "./tmp", "batch_size": 5}
+        paths.append(path)
+    assert paths[0] != paths[1]
+    assert parameters == {"temporary_path": "./tmp", "batch_size": 5}
+
+
+@pytest.mark.parametrize("storage_kind", [None, "local_disk", "obs"])
+def test_temporary_path_requires_shared_disk(mocker, flow_env, mock_dpr_process_in, storage_kind):
+    """Do not leave an opted-in step pointing to a worker-local or non-disk path."""
+    mock_dpr_process_in.processor_name = "TEST_PROCESSOR"
+    storage = MagicMock(spec=StorageConfig)
+    storage.get_storage_for_pipeline_section.return_value = "scratch" if storage_kind else None
+    storage.get_storage_kind.return_value = storage_kind
+    get_io_mock = mocker.patch("rs_workflows.payload_generator.get_io")
+    unit = {"name": "extract", "module": "pkg.unit", "parameters": {"temporary_path": "./tmp"}}
+    with pytest.raises(RuntimeError, match=r"Step 'extract'.*requires an absolute shared_disk path"):
+        build_payload(flow_env, [unit], [], mock_dpr_process_in, storage, [])
+    get_io_mock.assert_not_called()
 
 
 @pytest.mark.parametrize("reverse_units", [False, True])

@@ -575,6 +575,7 @@ def build_output_products(
                     path=os.path.join(disk_config["path"], product_name),
                     engine=mapping["engine"],
                     writer_params=StoreParams(**{"mode": "w", **(mapping.get("writer_params") or {})}),
+                    reopen_params=mapping.get("reopen_params"),
                     type=mapping.get("type", "file"),
                     final_product=False,
                     autoclean=disk_config.get("autoclean", False),
@@ -660,6 +661,7 @@ def build_output_products(
                 path=output_path,
                 engine=engine,
                 writer_params=store_params,
+                reopen_params=mapping.get("reopen_params"),
                 type=mapping.get("type", "file"),
                 final_product=mapping.get("final_product", True),
                 autoclean=autoclean,
@@ -869,6 +871,24 @@ def _legacy_s3_chunk_parameters(unit_list: list[dict]) -> dict:
     return defaults
 
 
+def _resolve_temporary_path(step: WorkflowStep, storage_configuration: StorageConfig) -> None:
+    """Route an explicit temporary_path to the shared disk directory for this run."""
+    if step.parameters is None or "temporary_path" not in step.parameters:
+        return
+    store_name = storage_configuration.get_storage_for_pipeline_section("other")
+    disk = (
+        storage_configuration.get_disk_storage(store_name)
+        if store_name and storage_configuration.get_storage_kind(store_name) == "shared_disk"
+        else None
+    )
+    if not disk or not os.path.isabs(disk["path"]):
+        raise RuntimeError(
+            f"Step '{step.name}' uses temporary_path and requires an absolute shared_disk path "
+            "in storage configuration section 'product.default.pipeline: other'",
+        )
+    step.parameters = {**step.parameters, "temporary_path": disk["path"]}
+
+
 def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-arguments, too-many-locals
     flow_env: FlowEnv,
     unit_list: list[dict],
@@ -927,6 +947,7 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
             if not workflow_steps[-1].active:
                 # EOPF skips this PU; its I/O must not be resolved or published.
                 continue
+            _resolve_temporary_path(workflow_steps[-1], storage_configuration)
             input_products, output_products = get_io(
                 unit,
                 dpr_process_in,

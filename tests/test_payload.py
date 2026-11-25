@@ -199,6 +199,13 @@ async def test_whole_payload(
         except ValueError:  # not an uuid
             pass
 
+    for step in payload_dict["workflow"]:
+        parameters = step.get("parameters", {})
+        if step["active"] and "temporary_path" in parameters:
+            path = Path(parameters["temporary_path"])
+            assert UUID(path.name).version == 4
+            parameters["temporary_path"] = str(path.parent / "00000000-0000-0000-0000-000000000001")
+
     # Write result
     with open(
         CONFIG_DIR / f"generated-payload-{payload_filename}-{pipeline}.yml",
