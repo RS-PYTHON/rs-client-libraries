@@ -41,7 +41,7 @@ SLC_IW_2 = "S1C_IW_SLC__1SDV_20260327T174632_20260327T174659_006953_00E115_D167"
 ENV_ARGS = FlowEnvArgs(owner_id="owner")
 SETTINGS = processor_settings(processor={"name": "s1_ard", "version": "1.0"}, pipeline="SLC__1_NRB__1")
 REFERENCE_DB_UUID = "477a37db-4648-4639-b571-3ad9dd50e000"
-REFERENCE_DB_PATH = f"s3://my-bucket/owner/s1-ard-reference-db/{REFERENCE_DB_UUID}"
+REFERENCE_DB_PATH = f"s3://my-bucket/owner/s01_adf_refdb/{REFERENCE_DB_UUID}"
 
 
 @pytest.fixture(autouse=True)
@@ -339,7 +339,7 @@ def test_reference_db_filter():
     assert s1_ard._reference_db_filter([_track_item(), _track_item()]) == {
         "op": "and",
         "args": [
-            {"op": "=", "args": [{"property": "product:type"}, "ARD_REFERENCE_DB"]},
+            {"op": "=", "args": [{"property": "product:type"}, "ADF_REFDB"]},
             {"op": "=", "args": [{"property": "sar:instrument_mode"}, "IW"]},
             {"op": "=", "args": [{"property": "sat:relative_orbit"}, 117]},
             {"op": "=", "args": [{"property": "sat:orbit_state"}, "ascending"]},
@@ -386,7 +386,7 @@ async def test_find_reference_db(mocker):
     assert await s1_ard._find_reference_db(flow_env, slc_items, None) == REFERENCE_DB_PATH
 
     kwargs = catalog_client.search.call_args.kwargs
-    assert kwargs["collections"] == ["s1-ard-reference-db"]
+    assert kwargs["collections"] == ["s01_adf_refdb"]
     assert kwargs["stac_filter"] == s1_ard._reference_db_filter(slc_items)
     assert kwargs["intersects"] == {"type": "Point"}
     assert kwargs["sortby"] == [{"field": "created", "direction": "desc"}]
@@ -412,7 +412,7 @@ async def test_find_reference_db_given_as_parameter(mocker):
 
     assert await s1_ard._find_reference_db(flow_env, [_track_item()], REFERENCE_DB_UUID) == REFERENCE_DB_PATH
 
-    resolve.assert_called_once_with(catalog_client, "s1-ard-reference-db", REFERENCE_DB_UUID)
+    resolve.assert_called_once_with(catalog_client, "s01_adf_refdb", REFERENCE_DB_UUID)
     catalog_client.search.assert_not_called()
 
 
@@ -425,8 +425,8 @@ def test_allocate_reference_db_path(mocker, monkeypatch):
     path = s1_ard._allocate_reference_db_path("owner")
 
     fetch.assert_called_once_with("http://osam/internal/configuration")
-    find.assert_called_once_with([["config"]], "owner", "s1-ard-reference-db", "ARD_REFERENCE_DB")
-    prefix = "s3://my-bucket/owner/s1-ard-reference-db/"
+    find.assert_called_once_with([["config"]], "owner", "s01_adf_refdb", "ADF_REFDB")
+    prefix = "s3://my-bucket/owner/s01_adf_refdb/"
     assert path.startswith(prefix)
     UUID(path.removeprefix(prefix))
     assert s1_ard._allocate_reference_db_path("owner") != path
@@ -465,7 +465,7 @@ def test_build_reference_db_item():
     assert item.datetime == datetime(2026, 4, 8, 17, 46, 32, tzinfo=timezone.utc)
     assert item.stac_extensions == ["https://stac-extensions.github.io/sar/v1.3.0/schema.json"]
     properties = item.properties
-    assert properties["product:type"] == "ARD_REFERENCE_DB"
+    assert properties["product:type"] == "ADF_REFDB"
     assert properties["sar:instrument_mode"] == "IW"
     assert properties["sat:relative_orbit"] == 117
     assert properties["platform"] == "sentinel-1c"
@@ -491,10 +491,10 @@ async def test_publish_reference_db(mocker):
     publish.assert_awaited_once()
     mapping, items_metadata = publish.call_args.args[1:]
     assert [(m.name, m.product_type, m.collection_name) for m in mapping] == [
-        (REFERENCE_DB_UUID, "ARD_REFERENCE_DB", "s1-ard-reference-db"),
+        (REFERENCE_DB_UUID, "ADF_REFDB", "s01_adf_refdb"),
     ]
     assert [(m.output_product_id, m.product_type, m.stac_item.id) for m in items_metadata] == [
-        (REFERENCE_DB_UUID, "ARD_REFERENCE_DB", REFERENCE_DB_UUID),
+        (REFERENCE_DB_UUID, "ADF_REFDB", REFERENCE_DB_UUID),
     ]
 
 

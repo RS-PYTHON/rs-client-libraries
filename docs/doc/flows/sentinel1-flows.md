@@ -43,14 +43,14 @@ The processor runs the `SLC__1_*` pipelines in two modes:
   `REFERENCE_DB` generated once by `ARD_REFERENCE_PIPELINE`. This is the mode of the `*_FROM_REFERENCE_DB` pipelines.
   It is only available for the `IW` and `EW` instrument modes: for `SM`, the processor requires a reference date.
 
-The two flows work together through the `s1-ard-reference-db` catalog collection: the reference flow is run once per
+The two flows work together through the `s01_adf_refdb` catalog collection: the reference flow is run once per
 track on a master SLC, then the nominal flow is run on the other SLCs of the track.
 
 ```mermaid
 flowchart TB
     master[("Master SLC<br/>s01siwslc")]
     ref["process-s1-ard-reference<br/>pipeline ARD_REFERENCE_PIPELINE"]
-    refdb[("REFERENCE_DB item<br/>s1-ard-reference-db")]
+    refdb[("REFERENCE_DB item<br/>s01_adf_refdb")]
     slcs[("SLCs of the track<br/>s01siwslc")]
     nominal["process-s1-ard"]
     choice{"reference_date<br/>given?"}
@@ -81,7 +81,7 @@ The flows are:
   env var of the `env-vars-<owner_id>` Prefect secret block of the `env_args.owner_id` user, or of the global
   `env-vars` block. Without it, the processing is not launched.
 - Without `reference_date`, `process-s1-ard` runs the `<pipeline>_FROM_REFERENCE_DB` pipeline with the
-  `REFERENCE_DB` of the `s1-ard-reference-db` collection whose item ID is given by `reference_db`, or by default the
+  `REFERENCE_DB` of the `s01_adf_refdb` collection whose item ID is given by `reference_db`, or by default the
   latest one (`created`) generated from a master SLC of the same track as the SLCs: same `sar:instrument_mode`,
   `sat:relative_orbit` and `sat:orbit_state` (if given), and intersecting the first SLC. All the SLCs must be on the
   same track, with a `sat:relative_orbit`. The flow fails if no `REFERENCE_DB` is found: run
@@ -92,22 +92,22 @@ The flows are:
 
 The `REFERENCE_DB` is handled specifically: it is never searched nor staged by the generic processing flow, the S1 ARD
 flows give its folder to the processor themselves. For the `ARD_REFERENCE_PIPELINE`, the
-`process-s1-ard-reference` flow allocates a new folder `s3://<bucket>/<owner>/s1-ard-reference-db/<uuid>` for it, the
+`process-s1-ard-reference` flow allocates a new folder `s3://<bucket>/<owner>/s01_adf_refdb/<uuid>` for it, the
 bucket being given by the
 [bucket configuration](https://github.com/RS-PYTHON/rs-documentation/blob/develop/docs/administration/update-rs-server.md#object-storage-buckets-and-data-lifecycle)
-for the owner, the `s1-ard-reference-db` collection and the `ARD_REFERENCE_DB` product type. Its path is written in
+for the owner, the `s01_adf_refdb` collection and the `ADF_REFDB` product type. Its path is written in
 the logs of the flow.
 
 The `REFERENCE_DB` is not an output product of the task table, but it is the result of the reference pipeline: once
-the processing is finished, the `process-s1-ard-reference` flow publishes it in the `s1-ard-reference-db` catalog
+the processing is finished, the `process-s1-ard-reference` flow publishes it in the `s01_adf_refdb` catalog
 collection of the owner, as if it was an output product. Its item:
 
-- has the `<uuid>` of its folder as ID, and the `ARD_REFERENCE_DB` product type (`product:type`),
+- has the `<uuid>` of its folder as ID, and the `ADF_REFDB` product type (`product:type`),
 - has the geometry, dates, platform, instrument mode and orbit (`sat:orbit_state`, `sat:relative_orbit`) of the
   master SLC, and a `derived_from` link to it,
 - has a `REFERENCE_DB` asset, whose href is the folder of the `REFERENCE_DB`.
 
-The `s1-ard-reference-db` collection must exist: the flow checks it before processing anything. The flow fails if the
+The `s01_adf_refdb` collection must exist: the flow checks it before processing anything. The flow fails if the
 catalog rejects the item, with the path of the generated `REFERENCE_DB` in the error.
 
 The folder of the `REFERENCE_DB` is given to the generic processing flow (`process-generic`), that builds the payload
@@ -118,12 +118,12 @@ and reset it after.
 ```mermaid
 sequenceDiagram
     participant s1ard as process-s1-ard-reference<br/>or process-s1-ard
-    participant catalog as Catalog<br/>s1-ard-reference-db
+    participant catalog as Catalog<br/>s01_adf_refdb
     participant generic as process-generic
     participant proc as s1_ard processor
 
     alt reference flow
-        s1ard->>s1ard: allocate s3://bucket/owner/s1-ard-reference-db/uuid
+        s1ard->>s1ard: allocate s3://bucket/owner/s01_adf_refdb/uuid
     else nominal flow without reference_date
         s1ard->>catalog: search the REFERENCE_DB of the track
         catalog-->>s1ard: REFERENCE_DB item, folder in its asset

@@ -698,7 +698,7 @@ def build_and_generate_payload(
     if ref_db_path := S1ARD_REFERENCE_DB_PATH.get():
         logger.info(f"S1-ARD REFERENCE_DB: {ref_db_path}")
         # The type is not 'folder' on purpose, so that the path is not truncated by build_adfs
-        adfs.add(("REFERENCE_DB", "ARD_REFERENCE_DB", ref_db_path))
+        adfs.add(("REFERENCE_DB", "ADF_REFDB", ref_db_path))
 
     # generate the dpr payload file
     return (
