@@ -1744,3 +1744,17 @@ def test_build_output_products_disk_no_disk_config_raises(
 
     with pytest.raises(RuntimeError, match="has no storage path configured"):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+def test_workflow_step_accepts_none_parameters():
+    """A processing unit parameter can be None, e.g. zone_ids to process all the zones intersecting the product."""
+    unit = {
+        "name": "TileInitiationProcessingUnit.1",
+        "module": "pkg.tile_initiation",
+        "input_products": [],
+        "input_adfs": [],
+        "output_products": [],
+        "parameters": {"zone_ids": None, "dem_type": "GETAS"},
+    }
+    step = build_workflow_step(unit, None)
+    assert step.parameters == {"zone_ids": None, "dem_type": "GETAS"}

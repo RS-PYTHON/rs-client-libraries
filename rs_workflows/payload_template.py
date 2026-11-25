@@ -249,7 +249,8 @@ class WorkflowStep(BasePayloadModel):
     parameters: None | (
         dict[
             str,
-            (str | int | float | bool | list[int] | list[str] | dict),
+            # None: e.g. the S2 MSI processing units process all the intersecting zones when zone_ids is None
+            (str | int | float | bool | list[int] | list[str] | dict | None),
         ]
     ) = None
 
