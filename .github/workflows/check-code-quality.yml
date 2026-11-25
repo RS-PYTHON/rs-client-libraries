@@ -45,6 +45,6 @@ jobs:
     runs-on: ubuntu-latest
     name: Check tasktables (json schema)
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Validate tasktables
         run: pipx run check-jsonschema --schemafile config/TaskTable.schema.json tests/resources/TaskTable_*.json

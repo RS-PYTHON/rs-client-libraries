@@ -1251,6 +1251,8 @@ async def test_adf_conversion_flow_logic_for_s03_stb(
         (AdfType.S00__ADF_OSFAX, "sentinel-1d", "MPL_ORBSCT", "ADF_OSFAX"),
         (AdfType.S00__ADF_OSFAX, "sentinel-2c", "MPL_ORBSCT", "ADF_OSFAX"),
         (AdfType.S00__ADF_OSFAX, "sentinel-3a", "AX___OSF_AX", "ADF_OSFAX"),
+        (AdfType.S00__ADF_FROAX, "cristal-a", "CRI__ADF_RESO_", "ADF_FROAX"),
+        (AdfType.S00__ADF_FPOAX, "cristal-a", "CRI__ADF_PREO_", "ADF_FPOAX"),
     ],
 )
 @pytest.mark.asyncio
@@ -1536,3 +1538,54 @@ async def test_adf_conversion_honors_collection_name_with_custom_cql2_filter(
     assert staging_mock.call_count == 1
     cql2_filter_used = staging_mock.call_args.kwargs["cql2_filter"]
     assert cql2_filter_used["collections"] == ["adf-olci-baseline-3-23"]
+
+
+def test_create_stac_item_from_zarr_computes_cristal_platform(mocker, tmp_path):
+    """check that the platform 'cristal' is correctly inferred for an item starting with 'cria'."""
+    mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
+    zarr_dir = tmp_path / "test.zarr"
+    zattrs_content = {
+        "id": "CRI_A_ADF_RESO_20261028T043132",
+        "properties": {
+            "product:type": "ADF_FROAX",
+            "start_datetime": "2026-10-28T04:31:32Z",
+            "end_datetime": "2026-10-28T12:00:00Z",
+            # 'platform' should be inferred as 'cristal' based on the ID prefix
+        },
+    }
+    zarr.open_group(str(zarr_dir), mode="w", zarr_format=2).attrs.update(zattrs_content)
+
+    item = adf_flow.create_stac_item_from_zarr.fn(zarr_dir, "ADF_FROAX")
+
+    assert item.properties["platform"] == "cristal"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dir_name", ["S03A_ADF_OLVGP.zarr", "S03A_ADF_OLVGP"])
+async def test_upload_adf_product_uploads_zarr_dir_with_zarr_extension(mocker, tmp_path, dir_name):
+    """A generated ZARR directory is uploaded with the .zarr extension, even when it has none."""
+    upload_dir = mocker.patch.object(adf_flow, "s3_upload_dir", new=AsyncMock())
+    product_path = tmp_path / dir_name
+    product_path.mkdir()
+    item = Item(id="S03A_ADF_OLVGP", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    item.add_asset("data", Asset(href=str(product_path)))
+
+    await adf_flow.upload_adf_product(product_path, item, "s3://bucket/owner/s03_adf_olvgp")
+
+    upload_dir.assert_awaited_once_with(product_path, "s3://bucket/owner/s03_adf_olvgp/S03A_ADF_OLVGP.zarr/")
+    assert item.assets["data"].href == "s3://bucket/owner/s03_adf_olvgp/S03A_ADF_OLVGP.zarr/"
+
+
+@pytest.mark.asyncio
+async def test_upload_adf_product_uploads_json_file(mocker, tmp_path):
+    """A generated JSON file is uploaded with its own name."""
+    upload_file = mocker.patch.object(adf_flow, "s3_upload_file", new=AsyncMock())
+    product_path = tmp_path / "S03A_ADF_OLPCP.json"
+    product_path.write_text("{}")
+    item = Item(id="S03A_ADF_OLPCP", geometry=None, bbox=None, datetime=datetime.now(timezone.utc), properties={})
+    item.add_asset("data", Asset(href=str(product_path)))
+
+    await adf_flow.upload_adf_product(product_path, item, "s3://bucket/owner/s03_adf_olpcp")
+
+    upload_file.assert_awaited_once_with(product_path, "s3://bucket/owner/s03_adf_olpcp/S03A_ADF_OLPCP.json")
+    assert item.assets["data"].href == "s3://bucket/owner/s03_adf_olpcp/S03A_ADF_OLPCP.json"

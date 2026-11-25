@@ -147,7 +147,12 @@ async def test_on_demand_conversion_helpers_cover_mapping_zarr_and_safe_task(tmp
 
     assert result == {"zarr_uri": "s3://bucket/output.zarr"}
     dpr_client_mock.run_conv_safe_zarr.assert_called_once_with(payload, cluster_info)
-    dpr_client_mock.wait_for_job.assert_called_once()
+    dpr_client_mock.wait_for_job.assert_called_once_with(
+        {"job_id": "safe-conversion-job"},
+        mocker.ANY,
+        "SAFE conversion",
+        process_id="conv_safe_zarr",
+    )
 
 
 @pytest.mark.asyncio
@@ -558,3 +563,28 @@ CATALOG_HREFS = ["https://rs-server.test", "http://rs-server-catalog.processing.
 def test_parse_rspy_catalog_item_href(href, expected):
     """Only the item hrefs of our RS-Python catalog are recognized."""
     assert on_demand_conversion_flow.parse_rspy_catalog_item_href(href, CATALOG_HREFS) == expected
+
+
+@pytest.mark.asyncio
+async def test_safe_conversion_task_logs_the_conversion_warning(monkeypatch, mocker):
+    """The warning of the conversion result, e.g. the S1 ARD format of the S1 SLC products, is logged."""
+    dpr_client_mock = MagicMock()
+    warning = "Sentinel-1 SLC layout expected by the S1 ARD 1.2.0 processor ... NOT compatible with CPM 3.0.0"
+    dpr_client_mock.wait_for_job.return_value = {"zarr_uri": "s3://bucket/output.zarr", "warning": warning}
+    flow_env_mock = MagicMock()
+    flow_env_mock.start_span.return_value = nullcontext()
+    flow_env_mock.rs_client.get_dpr_client.return_value = dpr_client_mock
+    monkeypatch.setattr(on_demand_conversion_flow, "FlowEnv", lambda env: flow_env_mock)
+    logger = MagicMock()
+    mocker.patch.object(on_demand_conversion_flow, "get_logger", return_value=logger)
+    cluster_info = on_demand_conversion_flow.ClusterInfo(
+        jupyter_token="",
+        dask_gateway_address="",
+        cluster_label="dask-safe",
+        cluster_instance="",
+    )
+
+    result = await on_demand_conversion_flow.safe_conversion_task.fn(FlowEnvArgs(owner_id="o"), {}, cluster_info)
+
+    assert result["warning"] == warning
+    logger.warning.assert_called_once_with(f"Converted product 's3://bucket/output.zarr': {warning}")

@@ -32,10 +32,11 @@ sessions = rs_client.get_cadip_client().search(collections=["sgs"], limit=10)
 To develop on the library:
 
 ```shell
-poetry install --with dev
-poetry run opentelemetry-bootstrap -a install
-poetry run pre-commit install
-poetry run pytest -m unit
+# Install the library and its dev dependencies in .venv/, from uv.lock (see https://docs.astral.sh/uv/)
+uv sync
+uv pip install $(uv run opentelemetry-bootstrap -a requirements)
+uv run pre-commit install
+uv run pytest -m unit
 ```
 
 ## Documentation

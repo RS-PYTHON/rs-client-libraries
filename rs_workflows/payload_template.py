@@ -142,6 +142,7 @@ class StorageOptions(BasePayloadModel):
     key: SecretStr
     secret: SecretStr
     client_kwargs: dict[str, SecretStr]
+    config_kwargs: dict[str, Any] | None = None
 
 
 class StoreParams(BasePayloadModel):
@@ -199,6 +200,7 @@ class GeneralConfiguration(BasePayloadModel):
     triggering__stage_s3_temporary_prefix: bool | None = None
     triggering__stage_s3_memory_fit_safety_ratio: float | None = None
     triggering__stage_s3_outputs_min_size: int | None = Field(default=None, ge=0)
+    triggering__stage_s3_upload_max_concurrency: int | None = Field(default=None, ge=1)
     triggering__validate_run: bool | None = None
     triggering__dry_run: bool | None = None
     triggering__output_generator_consumption: str | None = None
@@ -211,6 +213,7 @@ class GeneralConfiguration(BasePayloadModel):
     triggering__dask_monitor__cancel: bool | None = None
     triggering__dask_monitor__cancel_state: str | None = None
     zarr__format: int = 3
+    consolidated: bool | None = False
 
 
 class ExternalModule(BasePayloadModel):

@@ -19,11 +19,11 @@
 import json
 import os
 import re
+from contextvars import ContextVar
 from copy import deepcopy
 from os import path as osp
 from typing import Any, cast
 from urllib.parse import urlsplit, urlunsplit
-from uuid import uuid4
 
 import jsonschema
 import yaml
@@ -52,8 +52,6 @@ from rs_workflows.payload_builder import (
     replace_external_variables,
 )
 from rs_workflows.payload_generator import (
-    fetch_csv_from_endpoint,
-    find_s3_output_bucket,
     generate_payload,
     resolve_stac_input_path,
 )
@@ -63,11 +61,17 @@ from rs_workflows.utils.utils import (
     build_output_lineage,
     get_archived_item_indexes,
     search_by_name,
+    zarr_store_root,
 )
 
 SPECIFIC_INPUT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 TASK_TABLE_SCHEMA = osp.realpath(osp.join(osp.dirname(__file__), "../config/TaskTable.schema.json"))
+
+# HACK for S1-ARD: folder of the REFERENCE_DB given to the processor by the S1 ARD flows (s1_ard module), where the
+# reference pipeline writes it, or where the other pipelines read it, see build_and_generate_payload().
+# Declared here and not in the s1_ard module, that imports this module.
+S1ARD_REFERENCE_DB_PATH: ContextVar[str | None] = ContextVar("s1ard_reference_db_path", default=None)
 
 
 def build_dask_dashboard_url_message(cluster_instance: str | None) -> str:
@@ -124,6 +128,7 @@ def render_aux_cql2(
     alternative: dict[str, Any],
     task_table: dict[str, Any],
     specific_input_product: tuple[str | None, Item | None] = (None, None),
+    input_adfs_name: str | None = None,
 ) -> tuple[dict, dict[str, Any]]:
     """
     Render the STAC/CQL2 request of one ADFS alternative from the task table queries.
@@ -148,6 +153,24 @@ def render_aux_cql2(
         for k, v in deepcopy(alternative["query"]["parameters"]).items()
     }
     query = next(q for q in task_table["queries"] if q["name"] == name)
+    invalid_parameters = [
+        parameter
+        for parameter in query.get("parameters", [])
+        if (value := parameters.get(parameter)) is None
+        or (
+            isinstance(value, str)
+            and value.strip().casefold() in {"", "none", "null", "undefined", "nil", "nan", "n/a"}
+        )
+    ]
+    if invalid_parameters:
+        invalid_values = ", ".join(
+            f"property '{parameter}' with value {parameters.get(parameter)!r}" for parameter in invalid_parameters
+        )
+        adf_context = f" for ADF input '{input_adfs_name}'" if input_adfs_name else ""
+        raise ValueError(
+            f"Invalid filter{adf_context} using query '{name}': {invalid_values}.",
+        )
+
     return build_cql2_json(query, parameters), parameters
 
 
@@ -172,7 +195,7 @@ async def _build_aux_request(
     """
     logger = get_logger()
     timeout = alternative["timeout_seconds"]  # pylint: disable = unused-variable
-    aux_cql2, parameters = render_aux_cql2(alternative, task_table, specific_input_product)
+    aux_cql2, parameters = render_aux_cql2(alternative, task_table, specific_input_product, input_adfs["name"])
 
     md = "# AUX CQL2 filter \n\n```json\n" + json.dumps(aux_cql2, indent=2) + "\n```"
     artifact_key_name: str = "aux-cql2-filter"
@@ -613,8 +636,8 @@ def build_and_generate_payload(
         processing_mode=processing_mode,
     )
 
-    tasks = []
-    submitted_adfs: set[str] = set()
+    adfs_tasks_to_submit: list[tuple[dict[str, Any], tuple[str | None, Item | None]]] = []
+    seen_adf_requests: set[str] = set()
     for unit in unit_list:
         if not unit.get("active", True):
             continue
@@ -632,8 +655,6 @@ def build_and_generate_payload(
                 flow_env.rs_client,
             )
             for specific_input_product_stac_item in product_stac_items:
-                # Share the complete staging/normalization task across units with
-                # identical ADFS definitions and input context, within this run.
                 request_key = json.dumps(
                     [
                         input_adfs,
@@ -642,24 +663,31 @@ def build_and_generate_payload(
                     ],
                     sort_keys=True,
                 )
-                if request_key in submitted_adfs:
+                if request_key in seen_adf_requests:
                     logger.info("Reusing ADFS task for '%s' across processing units", input_adfs["name"])
                     continue
-                submitted_adfs.add(request_key)
-                if specific_input_product_stac_item:
-                    logger.info(
-                        f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product_stac_item}",
-                    )
-                tasks.append(
-                    process_input_adfs.submit(
-                        input_adfs,
-                        dpr_input,
-                        task_table,
-                        (specific_input_name, specific_input_product_stac_item),
-                        retry_config.staging_retries,
-                        retry_config.staging_retry_delay,
-                    ),
-                )
+                specific_input_product = (specific_input_name, specific_input_product_stac_item)
+                for alternative in input_adfs.get("alternatives", []):
+                    render_aux_cql2(alternative, task_table, specific_input_product, input_adfs["name"])
+                seen_adf_requests.add(request_key)
+                adfs_tasks_to_submit.append((input_adfs, specific_input_product))
+
+    tasks = []
+    for input_adfs, specific_input_product in adfs_tasks_to_submit:
+        if specific_input_product[1]:
+            logger.info(
+                f"Submitting {input_adfs['name']} ADFS task for input {specific_input_product[1]}",
+            )
+        tasks.append(
+            process_input_adfs.submit(
+                input_adfs,
+                dpr_input,
+                task_table,
+                specific_input_product,
+                retry_config.staging_retries,
+                retry_config.staging_retry_delay,
+            ),
+        )
 
     try:
         aux_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [
@@ -682,22 +710,15 @@ def build_and_generate_payload(
             if status:
                 asset = next(iter(item.assets.values()))
                 logger.info(f"ADFS '{name}' of type '{adf_type}': {asset.href}")
-                adfs.add((name, adf_type, asset.href))
+                adfs.add((name, adf_type, zarr_store_root(asset.href)))
             else:
                 raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
 
-    # HACK for S1-ARD: the reference pipeline writes the REFERENCE_DB in a new s3 folder
-    if dpr_input.pipeline == "ARD_REFERENCE_PIPELINE":
-        logger.warning(f"ARD HACK FOR PIPELINE {dpr_input.pipeline}")
-        owner_id: str = dpr_input.env.owner_id
-        output_collection = "s1-ard-reference-db"
-        adf_type = "ARD_REFERENCE_DB"
-        bucket_configuration = fetch_csv_from_endpoint(os.environ["RSPY_HOST_OSAM"] + "/internal/configuration")
-        bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, adf_type)
-        ref_db_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
-        logger.warning(f"ARD REFERENCE_DB: {ref_db_path}")
-        # adf_type is not 'folder' on purpose, so that the path is not truncated by build_adfs
-        adfs.add(("REFERENCE_DB", adf_type, ref_db_path))
+    # HACK for S1-ARD: the REFERENCE_DB folder given by the S1 ARD flows, see S1ARD_REFERENCE_DB_PATH
+    if ref_db_path := S1ARD_REFERENCE_DB_PATH.get():
+        logger.info(f"S1-ARD REFERENCE_DB: {ref_db_path}")
+        # The type is not 'folder' on purpose, so that the path is not truncated by build_adfs
+        adfs.add(("REFERENCE_DB", "ADF_REFDB", ref_db_path))
 
     # generate the dpr payload file
     return (

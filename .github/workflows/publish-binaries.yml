@@ -74,7 +74,7 @@ jobs:
     outputs:
       version_name: ${{ steps.build-wheel.outputs.version_name }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # so that Dunamai produce the correct version
       - id: build-wheel
@@ -148,7 +148,7 @@ jobs:
 
     steps:
       - if: ${{ matrix.if }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - if: ${{ matrix.if }}
         name: Download .whl dependency
         uses: actions/download-artifact@v8
@@ -216,7 +216,7 @@ jobs:
       pull-requests: write # to report the notebooks in the pull request
     steps:
       - name: Log into Docker registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550
         with:
           registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ github.actor }}
@@ -283,7 +283,7 @@ jobs:
           path: ./dist
           merge-multiple: true
       - name: Publish wheel and sdist packages
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086
         with:
           skip-existing: true
           packages-dir: ./dist
@@ -298,7 +298,7 @@ jobs:
         # Link to the URL of this current github actions run
         env:
           THIS_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-        uses: benc-uk/workflow-dispatch@ba9b031f598534deb29873396ef7b0acf17aa94a
+        uses: benc-uk/workflow-dispatch@78e99d70d9acaa4e2c98fe781b3cabda5df0228e
         with:
           workflow: build-jupyter.yml
           repo: RS-PYTHON/rs-workflow-env

@@ -35,6 +35,7 @@ from rs_common import prefect_utils
 from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
+    WriteEngine,
 )
 from rs_workflows.payload_template import (
     AdfConfig,
@@ -49,7 +50,11 @@ from rs_workflows.payload_template import (
 )
 from rs_workflows.storage_configuration import StorageConfig
 from rs_workflows.utils.prefect import get_logger
-from rs_workflows.utils.utils import get_common_and_relative_paths, search_by_name
+from rs_workflows.utils.utils import (
+    get_common_and_relative_paths,
+    search_by_name,
+    zarr_store_root,
+)
 
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
 DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
@@ -62,22 +67,24 @@ EDH_API_KEY_ENV_VAR = "EDH_API_KEY"
 
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
+# Engines of the output products that the options `write_engine` and `use_obstore` of the flow environment apply to
+ZARR_WRITE_ENGINES = {WriteEngine.CPM_ZARR.value, WriteEngine.FAST_ZARR.value}
 
-def _build_workflow_inputs(unit: dict, selected_input_names: set[str] | None = None) -> dict[str, str]:
+
+def _build_workflow_inputs(unit: dict, available_input_names: set[str] | None) -> dict[str, str]:
     """Map unit inputs to pipeline inputs or upstream workflow outputs."""
     inputs: dict[str, str] = {}
     for input_product in unit.get("input_products", []):
         if isinstance(input_product, dict) and "origin" in input_product and "name" in input_product:
             if input_product["origin"] == "pipeline_input":
+                name = input_product["name"]
                 if (
-                    selected_input_names is not None
+                    available_input_names is not None
+                    and name not in available_input_names
                     and input_product.get("mandatory") is False
-                    and input_product["name"] not in selected_input_names
                 ):
                     continue
-                inputs[input_product["regex"] if "regex" in input_product else input_product["name"]] = input_product[
-                    "name"
-                ]
+                inputs[input_product.get("regex", name)] = name
             else:
                 inputs[input_product["regex"] if "regex" in input_product else input_product["name"]] = input_product[
                     "origin"
@@ -118,7 +125,8 @@ def _build_workflow_outputs(unit: dict, selected_output_names: set[str] | None) 
 def build_workflow_step(
     unit,
     selected_output_names: set[str] | None = None,
-    selected_input_names: set[str] | None = None,
+    *,
+    available_input_names: set[str] | None = None,
 ):
     """
     Constructs a WorkflowStep instance from a unit configuration dictionary.
@@ -137,6 +145,8 @@ def build_workflow_step(
                 - "output_products" (list[dict], optional): List of output product mappings.
         selected_output_names (set[str] | None): Output names selected by collection mappings.
             If provided, only these outputs are included in the step.
+        available_input_names: Pipeline inputs supplied in the request. When provided, absent
+            optional pipeline inputs are omitted.
 
     Returns:
         WorkflowStep: A fully initialized workflow step object.
@@ -144,7 +154,7 @@ def build_workflow_step(
     Raises:
         ValueError: If a required key is missing from the provided unit dictionary.
     """
-    inputs = _build_workflow_inputs(unit, selected_input_names)
+    inputs = _build_workflow_inputs(unit, available_input_names)
     adfs = _build_workflow_adfs(unit)
     outputs = _build_workflow_outputs(unit, selected_output_names)
     try:
@@ -190,7 +200,7 @@ def get_first_asset_dir(item: Item) -> str | None:
     href = first_asset.href
 
     if first_asset.media_type == "application/vnd+zarr":
-        return href
+        return zarr_store_root(href)
 
     parsed = urlparse(href)
 
@@ -365,6 +375,16 @@ def resolve_stac_input_path(catalog_client: CatalogClient, collection: str, stac
     return stac_item, stac_item_path
 
 
+def _set_s3_config_kwargs(store_params: StoreParams | None) -> None:
+    """Set common boto configuration options on S3 storage parameters."""
+    if store_params and store_params.storage_options:
+        store_params.storage_options.config_kwargs = {
+            "connect_timeout": 30,
+            "read_timeout": 120,
+            "retries": {"mode": "standard", "total_max_attempts": 5},
+        }
+
+
 def build_input_products(
     unit,
     dpr_process_in: DprProcessIn,
@@ -424,6 +444,8 @@ def build_input_products(
 
         kind = storage_configuration.get_storage_kind(store_name)
         store_params = deepcopy(storage_configuration.get_store_params(store_name))
+        if kind == "obs":
+            _set_s3_config_kwargs(store_params)
 
         if len(products) == 1:
             # Standard case where each input product has a different name (i.e. single STAC item)
@@ -511,6 +533,9 @@ def build_output_products(
     Each output product is mapped to an appropriate S3 bucket, determined by
     the owner ID, collection, and product type according to the configuration file.
 
+    The options `write_engine` and `use_obstore` of `dpr_process_in.env.process`, when set, override the `engine`
+    and the `use_obstore` writer parameter of the output products that use a zarr writer (`cpm_zarr`, `fast_zarr`).
+
     Args:
         unit (dict): Workflow unit definition containing output product metadata.
         dpr_process_in (DprProcessIn): Input configuration defining generated outputs.
@@ -531,6 +556,7 @@ def build_output_products(
     logger = get_logger()
 
     mapping_lookup = {p.name: p for p in dpr_process_in.generated_product_to_collection_identifier}
+    process_options = dpr_process_in.env.process
 
     for mapping in unit.get("output_products", []):
         product_name = mapping["name"]
@@ -593,6 +619,9 @@ def build_output_products(
         autoclean = None
 
         if kind == "obs":
+            if store_params and store_params.storage_options:
+                store_params.storage_options.max_concurrency = 1
+            _set_s3_config_kwargs(store_params)
             bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
             output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
         elif kind in ("shared_disk", "local_disk"):
@@ -611,6 +640,14 @@ def build_output_products(
 
         # Default to write mode, allowing explicit task table settings to override it.
         extra_fields = {"mode": "w", **(mapping.get("writer_params") or {})}
+
+        # The options of the flow environment override the task table, only for the zarr writers
+        engine = mapping["engine"]
+        if engine in ZARR_WRITE_ENGINES:
+            if process_options.write_engine is not None:
+                engine = process_options.write_engine.value
+            if process_options.use_obstore is not None:
+                extra_fields["use_obstore"] = process_options.use_obstore
         if not store_params:
             store_params = StoreParams(**extra_fields)
         else:
@@ -621,7 +658,7 @@ def build_output_products(
             OutputProduct(
                 id=mapping["name"],
                 path=output_path,
-                engine=mapping["engine"],
+                engine=engine,
                 writer_params=store_params,
                 type=mapping.get("type", "file"),
                 final_product=mapping.get("final_product", True),
@@ -712,10 +749,12 @@ def build_adfs(
     for adfs_id, adfs_entries in grouped_adfs.items():
         adfs_name = storage_configuration.default_adfs_storage
         store_params = deepcopy(storage_configuration.get_store_params(adfs_name))
+        if storage_configuration.get_storage_kind(adfs_name) == "obs":
+            _set_s3_config_kwargs(store_params)
         if len(adfs_entries) == 1:
             # Standard case where each adfs has a different id (i.e. single file)
             path, adfs_type = adfs_entries[0]
-            if adfs_type == "folder":
+            if adfs_type == "folder" and not path.rstrip("/").lower().endswith(".zarr"):
                 path = os.path.dirname(path)
             # Inject EarthDataHub API Key in path, as per documentation at
             # https://earthdatahub.destine.eu/collections/copernicus-dem/datasets/GLO-30
@@ -863,7 +902,7 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     workflow_steps = []
     io_config = IOConfig()
     selected_output_names = {product.name for product in dpr_process_in.generated_product_to_collection_identifier}
-    selected_input_names = {product.name for product in dpr_process_in.input_products}
+    available_input_names = {product.name for product in dpr_process_in.input_products}
     common_chunk_parameters = (
         _legacy_s3_chunk_parameters(unit_list) if dpr_process_in.processor_name == DprProcessor.S3L0 else {}
     )
@@ -872,7 +911,11 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     for unit in unit_list:
         try:
             workflow_steps.append(
-                build_workflow_step(unit, selected_output_names, selected_input_names),
+                build_workflow_step(
+                    unit,
+                    selected_output_names,
+                    available_input_names=available_input_names,
+                ),
             )
             if common_chunk_parameters:
                 workflow_steps[-1].parameters = deepcopy(
@@ -925,18 +968,6 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
         match dpr_process_in.processor_name:
             case DprProcessor.S1L0:
                 adf_l0cfg = "/opt/dask-l0/s1_adf_l0cfg.json"
-                # TODO: this section is temporary, should be removed when the S1 L0 processor doesn't need it anymore
-                # the processor doesn't start without these parameters
-                for workflow_step in workflow_steps:
-                    extra_parameters = {
-                        "streaming_mode": False,
-                        "temporary_path": "./output_params/tmp",
-                        "acquisition_report_output_path": "./output_params/s1",
-                    }
-                    if workflow_step.parameters:
-                        workflow_step.parameters.update(extra_parameters)
-                    else:
-                        workflow_step.parameters = extra_parameters
             case DprProcessor.S3L0:
                 adf_l0cfg = "/opt/dask-l0/s3_adf_l0cfg.json"
 
@@ -971,6 +1002,9 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
             triggering__stage_s3_temporary_prefix=dpr_process_in.triggering__stage_s3_temporary_prefix,
             triggering__stage_s3_outputs_min_size=dpr_process_in.triggering__stage_s3_outputs_min_size,
             triggering__stage_s3_memory_fit_safety_ratio=dpr_process_in.triggering__stage_s3_memory_fit_safety_ratio,
+            triggering__stage_s3_upload_max_concurrency=(
+                dpr_process_in.env.process.triggering__stage_s3_upload_max_concurrency
+            ),
             triggering__use_datatree=True if is_olci_processor else None,
             triggering__use_default_filename=True if is_olci_processor else None,
             dask_utils__timeout=dpr_process_in.dask_task_timeout,
