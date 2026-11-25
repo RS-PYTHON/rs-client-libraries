@@ -50,6 +50,7 @@ class DprProcessor(str, Enum):
     S1ARD = "s1_ard"
     S3L1OLCI = "s3_l1olci"
     S3L2OLCI = "s3_l2olci"
+    CRIL0 = "cri_l0"
 
 
 class DprPipeline(str, Enum):
@@ -64,6 +65,7 @@ class DprPipeline(str, Enum):
     S1ARD_REF = "ARD_REFERENCE_PIPELINE"
     S3L1OLCIFULL = "ol1_eo"
     S3L2OLCIFULL = "ol2_fr"
+    CRIL0FULL = "cri_l0_full"
 
 
 @dataclass
