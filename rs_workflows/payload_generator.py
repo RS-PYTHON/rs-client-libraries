@@ -48,7 +48,11 @@ from rs_workflows.payload_template import (
 )
 from rs_workflows.storage_configuration import StorageConfig
 from rs_workflows.utils.prefect import get_logger
-from rs_workflows.utils.utils import get_common_and_relative_paths, search_by_name
+from rs_workflows.utils.utils import (
+    get_common_and_relative_paths,
+    search_by_name,
+    zarr_store_root,
+)
 
 FILEPATH_ENV_VAR = "BUCKET_CONFIG_FILE_PATH"
 DEFAULT_FILEPATH = "/app/conf/expiration_bucket.csv"
@@ -184,7 +188,7 @@ def get_first_asset_dir(item: Item) -> str | None:
     href = first_asset.href
 
     if first_asset.media_type == "application/vnd+zarr":
-        return href
+        return zarr_store_root(href)
 
     parsed = urlparse(href)
 
@@ -359,6 +363,16 @@ def resolve_stac_input_path(catalog_client: CatalogClient, collection: str, stac
     return stac_item, stac_item_path
 
 
+def _set_s3_config_kwargs(store_params: StoreParams | None) -> None:
+    """Set common boto configuration options on S3 storage parameters."""
+    if store_params and store_params.storage_options:
+        store_params.storage_options.config_kwargs = {
+            "connect_timeout": 30,
+            "read_timeout": 120,
+            "retries": {"mode": "standard", "total_max_attempts": 5},
+        }
+
+
 def build_input_products(
     unit,
     dpr_process_in: DprProcessIn,
@@ -416,6 +430,8 @@ def build_input_products(
 
         kind = storage_configuration.get_storage_kind(store_name)
         store_params = deepcopy(storage_configuration.get_store_params(store_name))
+        if kind == "obs":
+            _set_s3_config_kwargs(store_params)
 
         if len(products) == 1:
             # Standard case where each input product has a different name (i.e. single STAC item)
@@ -568,6 +584,9 @@ def build_output_products(
         autoclean = None
 
         if kind == "obs":
+            if store_params and store_params.storage_options:
+                store_params.storage_options.max_concurrency = 1
+            _set_s3_config_kwargs(store_params)
             bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
             output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
         elif kind in ("shared_disk", "local_disk"):
@@ -685,10 +704,12 @@ def build_adfs(
     for adfs_id, adfs_entries in grouped_adfs.items():
         adfs_name = storage_configuration.default_adfs_storage
         store_params = deepcopy(storage_configuration.get_store_params(adfs_name))
+        if storage_configuration.get_storage_kind(adfs_name) == "obs":
+            _set_s3_config_kwargs(store_params)
         if len(adfs_entries) == 1:
             # Standard case where each adfs has a different id (i.e. single file)
             path, adfs_type = adfs_entries[0]
-            if adfs_type == "folder":
+            if adfs_type == "folder" and not path.rstrip("/").lower().endswith(".zarr"):
                 path = os.path.dirname(path)
             # Inject EarthDataHub API Key in path, as per documentation at
             # https://earthdatahub.destine.eu/collections/copernicus-dem/datasets/GLO-30

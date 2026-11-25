@@ -23,6 +23,7 @@ general_configuration:
   triggering__stage_s3_memory_fit_safety_ratio: 0.25
   triggering__stage_s3_outputs_min_size: 0
   zarr__format: 3
+  consolidated: false
 workflow:
 - name: Calibration.1
   active: true
@@ -101,6 +102,12 @@ io:
         client_kwargs:
           endpoint_url: https://localhost:5000
           region_name: us-east-1
+        config_kwargs:
+          connect_timeout: 30
+          read_timeout: 120
+          retries:
+            mode: standard
+            total_max_attempts: 5
   output_products:
   - id: DEM
     path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
@@ -133,6 +140,13 @@ io:
         client_kwargs:
           endpoint_url: https://localhost:5000
           region_name: us-east-1
+        config_kwargs:
+          connect_timeout: 30
+          read_timeout: 120
+          retries:
+            mode: standard
+            total_max_attempts: 5
+        max_concurrency: 1
       mode: w
     type: file
     apply_eoqc: false
@@ -153,6 +167,12 @@ io:
         client_kwargs:
           endpoint_url: https://localhost:5000
           region_name: us-east-1
+        config_kwargs:
+          connect_timeout: 30
+          read_timeout: 120
+          retries:
+            mode: standard
+            total_max_attempts: 5
   - id: ETAD
     path: s3://mock-bucket
     adf_params:
@@ -162,6 +182,12 @@ io:
         client_kwargs:
           endpoint_url: https://localhost:5000
           region_name: us-east-1
+        config_kwargs:
+          connect_timeout: 30
+          read_timeout: 120
+          retries:
+            mode: standard
+            total_max_attempts: 5
   - id: ORBIT
     path: s3://mock-bucket
     adf_params:
@@ -171,6 +197,12 @@ io:
         client_kwargs:
           endpoint_url: https://localhost:5000
           region_name: us-east-1
+        config_kwargs:
+          connect_timeout: 30
+          read_timeout: 120
+          retries:
+            mode: standard
+            total_max_attempts: 5
   - id: S2_TILES
     path: s3://mock-bucket/DCS_01_S1A_20200105072204051312_ch1_DSDB_00000.raw.bin
     adf_params:
@@ -180,6 +212,12 @@ io:
         client_kwargs:
           endpoint_url: https://localhost:5000
           region_name: us-east-1
+        config_kwargs:
+          connect_timeout: 30
+          read_timeout: 120
+          retries:
+            mode: standard
+            total_max_attempts: 5
 context_managers: []
 dask_config:
   distributed.worker.local_directory: ~/eopf/output

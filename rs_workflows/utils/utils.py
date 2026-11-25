@@ -275,6 +275,17 @@ async def download_and_extract_assets_task(
                     tmp_path.unlink()
 
 
+ZARR_ROOT_METADATA = ("zarr.json", ".zmetadata", ".zgroup", ".zarray")
+
+
+def zarr_store_root(href: str) -> str:
+    """Resolve a Zarr root metadata href to its store root."""
+    parent, _, name = href.rpartition("/")
+    if parent.lower().endswith(".zarr") and name in ZARR_ROOT_METADATA:
+        return parent
+    return href
+
+
 async def process_asset(asset_href: str, asset_name: str, use_extension=False) -> str:
     """
     Process an archived AUXIP asset stored in S3 and replace it with its extracted content.
@@ -295,7 +306,7 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
     - final S3 result: `s3://bucket/path/some_adfs/` containing `file.xml` and the
     extracted content from `content.tar.gz`
 
-    The function returns the new S3 prefix pointing to the extracted content.
+    The function returns an extracted object href when the archive contains files.
     """
     logger = get_logger()
     logger.info(f"Processing asset: {asset_href}")
@@ -358,6 +369,11 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
         prefix = get_upload_prefix(asset_href, asset_name)
         if use_extension:
             prefix = prefix.rstrip("/") + f"{upload_dir.suffix}/"  # .SAFE or .SEN3 for example
+        zarr_metadata = None
+        if prefix.rstrip("/").lower().endswith(".zarr"):
+            zarr_metadata = next((name for name in ZARR_ROOT_METADATA if (upload_dir / name).is_file()), None)
+            if zarr_metadata is None:
+                raise ValueError(f"No root Zarr metadata found in archive '{asset_name}'")
         logger.info(f"Uploading to prefix: {prefix}")
 
         stage_started = time.perf_counter()
@@ -375,10 +391,10 @@ async def process_asset(asset_href: str, asset_name: str, use_extension=False) -
         await asyncio.to_thread(s3_delete, asset_href)
         logger.info("Asset normalization completed in %.2fs", time.perf_counter() - total_started)
 
-        if prefix.rstrip("/").lower().endswith(".zarr"):
-            zarr_href = prefix.rstrip("/")
-            logger.info(f"Returning normalized Zarr store href: {zarr_href}")
-            return zarr_href
+        if zarr_metadata is not None:
+            metadata_href = prefix.rstrip("/") + "/" + zarr_metadata
+            logger.info(f"Returning normalized Zarr metadata href: {metadata_href}")
+            return metadata_href
 
         if not extracted_files:
             logger.info(f"No extracted files found, returning normalized folder prefix: {prefix}")
