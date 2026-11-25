@@ -697,9 +697,9 @@ async def test_adf_conversion_flow_logic(
     assert extract_mock.called
     run_script_mock.assert_called_once()
     assert run_script_mock.call_args.args[0] == adf_flow.ADF_ECMWA_SCRIPT_PATH
-    # S00__ADF_* types use a script (not stb_convert_products), so legacy_product_type is set
+    # Python conversion scripts receive the required types but don't use --map.
     # but the --map flag is not applied to the command
-    assert run_script_mock.call_args.kwargs["legacy_product_type"] == "AX___MA1_AX"
+    assert run_script_mock.call_args.kwargs["legacy_product_types"] == ["AX___MA1_AX"]
     assert run_script_mock.call_args.kwargs["generated_product_type"] == "ADF_ECMWA"
     assert upload_mock.called
     assert publish_mock.called
@@ -1077,7 +1077,22 @@ async def test_adf_conversion_flow_logic_for_getas(
     assert publish_mapping[0].collection_name == "ADF_GETAS_PUBLISH"
 
 
-def test_run_adf_script_stb_convert_products(monkeypatch, mocker, tmp_path):
+@pytest.mark.parametrize(
+    "legacy_product_types, generated_product_type",
+    [
+        (["OL_1_CAL_AX"], "ADF_OLCAL"),
+        (adf_flow.S03_STB_ADF_TYPE_CONFIG[AdfType.S03_ADF_TIRCD].required_types, "ADF_TIRCD"),
+        (adf_flow.S03_STB_ADF_TYPE_CONFIG[AdfType.S03_ADF_VSWCD].required_types, "ADF_VSWCD"),
+        (None, None),
+    ],
+)
+def test_run_adf_script_stb_convert_products(
+    monkeypatch,
+    mocker,
+    tmp_path,
+    legacy_product_types,
+    generated_product_type,
+):
     """Test that run_adf_script dispatches to stb_convert_products when given the sentinel value."""
     mock_logger = MagicMock()
     mocker.patch("rs_workflows.adf_flow.get_logger", return_value=mock_logger)
@@ -1101,8 +1116,8 @@ def test_run_adf_script_stb_convert_products(monkeypatch, mocker, tmp_path):
         input_dir,
         work_dir,
         output_dir,
-        legacy_product_type="OL_1_CAL_AX",
-        generated_product_type="ADF_OLCAL",
+        legacy_product_types=legacy_product_types,
+        generated_product_type=generated_product_type,
     )
 
     assert result == [
@@ -1114,16 +1129,16 @@ def test_run_adf_script_stb_convert_products(monkeypatch, mocker, tmp_path):
     package_info_call, conversion_call = run_mock.call_args_list
     assert package_info_call.args[0] == ["pip", "show", "sentineltoolbox"]
     command = conversion_call.args[0]
-    assert command == [
+    expected_command = [
         "stb_convert_products",
         "-i",
         str(input_dir),
         "-o",
         str(output_dir),
-        "--map",
-        "OL_1_CAL_AX",
-        "ADF_OLCAL",
     ]
+    for legacy_product_type in legacy_product_types or []:
+        expected_command.extend(["--map", legacy_product_type, generated_product_type])
+    assert command == expected_command
     # stb_convert_products mode should not set custom env (env=None)
     for subprocess_call in (package_info_call, conversion_call):
         assert subprocess_call.kwargs == {
@@ -1167,7 +1182,17 @@ async def _run_stb_adf_conversion(monkeypatch, mocker, tmp_path, adf_input, expe
             },
         ),
     )
-    mocks.run_script = MagicMock(return_value=[zarr_path])
+    output_paths = [zarr_path]
+    if adf_input.adf_type in (AdfType.S03_ADF_TIRCD, AdfType.S03_ADF_VSWCD):
+        for satellite in ("3a", "3b"):
+            satellite_path = tmp_path / f"mock-{satellite}-adf.zarr"
+            metadata = json.loads((zarr_path / ".zattrs").read_text())
+            metadata["id"] = f"mock-{satellite}-{adf_input.adf_type}-adf"
+            metadata["properties"]["platform"] = f"sentinel-{satellite}"
+            zarr.open_group(str(satellite_path), mode="w", zarr_format=3).attrs.update(metadata)
+            output_paths.append(satellite_path)
+        output_paths = output_paths[1:]
+    mocks.run_script = MagicMock(return_value=output_paths)
     monkeypatch.setattr(adf_flow, "run_adf_script", mocks.run_script)
 
     monkeypatch.setattr(
@@ -1204,13 +1229,22 @@ def _assert_stb_adf_conversion(mocks, expected_aux_types, expected_generated_typ
     # Verify stb_convert_products was used (script_path == STB_CONVERT_PRODUCTS)
     mocks.run_script.assert_called_once()
     assert mocks.run_script.call_args.args[0] == adf_flow.STB_CONVERT_PRODUCTS
-    mocks.upload.assert_awaited_once()
+    assert mocks.run_script.call_args.kwargs["legacy_product_types"] == expected_aux_types
+    assert mocks.run_script.call_args.kwargs["generated_product_type"] == expected_generated_type
+    assert mocks.upload.await_count == len(mocks.run_script.return_value)
 
     # Verify published metadata
     published_metadata = mocks.publish.call_args[0][2]
     publish_mapping_arg = mocks.publish.call_args[0][1]
-    assert published_metadata[0].product_type == expected_generated_type
-    assert published_metadata[0].stac_item.properties["product:type"] == expected_generated_type
+    assert len(published_metadata) == len(mocks.run_script.return_value)
+    for metadata in published_metadata:
+        assert metadata.product_type == expected_generated_type
+        assert metadata.stac_item.properties["product:type"] == expected_generated_type
+    if expected_generated_type in ("ADF_TIRCD", "ADF_VSWCD"):
+        assert {metadata.stac_item.properties["platform"] for metadata in published_metadata} == {
+            "sentinel-3a",
+            "sentinel-3b",
+        }
     assert publish_mapping_arg[0].collection_name == "ADF_PUBLISH"
 
 

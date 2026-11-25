@@ -313,7 +313,7 @@ def run_adf_script(
     data_dir: Path,
     working_dir: Path,
     output_dir: Path,
-    legacy_product_type: str | None = None,
+    legacy_product_types: list[str] | None = None,
     generated_product_type: str | None = None,
 ) -> list[Path]:
     """
@@ -321,7 +321,8 @@ def run_adf_script(
 
     When *script_path* is a Path, the corresponding Python script is executed
     with the current interpreter.  When it equals :data:`STB_CONVERT_PRODUCTS`,
-    the ``stb_convert_products`` executable is called instead.
+    the ``stb_convert_products`` executable is called instead, mapping each
+    legacy product type to the generated type in a single conversion run.
 
     Returns the list of generated ZARR product directories and JSON files.
     """
@@ -335,20 +336,10 @@ def run_adf_script(
 
     # Build command depending on the conversion tool
     if script_path == STB_CONVERT_PRODUCTS:
-        # STB_CONVERT_PRODUCTS is only used for S03 types, which have exactly one required type
-        if legacy_product_type and generated_product_type:
-            command = [
-                "stb_convert_products",
-                "-i",
-                str(data_dir),
-                "-o",
-                str(output_dir),
-                "--map",
-                legacy_product_type,
-                generated_product_type,
-            ]
-        else:
-            command = ["stb_convert_products", "-i", str(data_dir), "-o", str(output_dir)]
+        command = [STB_CONVERT_PRODUCTS, "-i", str(data_dir), "-o", str(output_dir)]
+        if legacy_product_types and generated_product_type:
+            for legacy_product_type in legacy_product_types:
+                command.extend(["--map", legacy_product_type, generated_product_type])
         env = None  # inherit current environment
         result = subprocess.run(  # nosec B603
             ["pip", "show", "sentineltoolbox"],
@@ -700,17 +691,12 @@ async def adf_conversion(adf_input: AdfProcessIn):
 
             # 3. Call the conversion tool
             try:
-                # STB_CONVERT_PRODUCTS is only used for S03 types, which have exactly one required type.
-                # The other conversion scripts (S00__ADF_* and S01__ADF_CALIB) may have multiple required
-                # types, but they don't use the --map flag, so we only need the first (and only) required
-                # type here.
-                legacy_product_type = required_types[0] if required_types else None
                 zarr_product_paths = run_adf_script(
                     script_path,
                     input_dir,
                     work_dir,
                     output_dir,
-                    legacy_product_type=legacy_product_type,
+                    legacy_product_types=required_types,
                     generated_product_type=generated_prod_type,
                 )
             finally:
