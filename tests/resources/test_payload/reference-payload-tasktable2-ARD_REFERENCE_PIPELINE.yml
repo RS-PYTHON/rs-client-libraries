@@ -156,7 +156,7 @@ io:
             mode: standard
             total_max_attempts: 5
   - id: REFERENCE_DB
-    path: s3:/rs-dev-cluster-catalog/toto/s1-ard-reference-db/00000000-0000-0000-0000-000000000001
+    path: s3:/rs-dev-cluster-catalog/toto/s01_adf_refdb/00000000-0000-0000-0000-000000000001
     adf_params:
       storage_options:
         key: testing
