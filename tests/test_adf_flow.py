@@ -1125,10 +1125,8 @@ def test_run_adf_script_stb_convert_products(
         output_dir / "product_b.zarr",
         output_dir / "product_c.json",
     ]
-    assert run_mock.call_count == 2
-    package_info_call, conversion_call = run_mock.call_args_list
-    assert package_info_call.args[0] == ["pip", "show", "sentineltoolbox"]
-    command = conversion_call.args[0]
+    run_mock.assert_called_once()
+    command = run_mock.call_args.args[0]
     expected_command = [
         "stb_convert_products",
         "-i",
@@ -1140,13 +1138,12 @@ def test_run_adf_script_stb_convert_products(
         expected_command.extend(["--map", legacy_product_type, generated_product_type])
     assert command == expected_command
     # stb_convert_products mode should not set custom env (env=None)
-    for subprocess_call in (package_info_call, conversion_call):
-        assert subprocess_call.kwargs == {
-            "env": None,
-            "check": True,
-            "capture_output": True,
-            "text": True,
-        }
+    assert run_mock.call_args.kwargs == {
+        "env": None,
+        "check": True,
+        "capture_output": True,
+        "text": True,
+    }
 
 
 async def _run_stb_adf_conversion(monkeypatch, mocker, tmp_path, adf_input, expected_generated_type):

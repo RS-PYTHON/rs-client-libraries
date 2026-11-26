@@ -341,15 +341,6 @@ def run_adf_script(
             for legacy_product_type in legacy_product_types:
                 command.extend(["--map", legacy_product_type, generated_product_type])
         env = None  # inherit current environment
-        result = subprocess.run(  # nosec B603
-            ["pip", "show", "sentineltoolbox"],
-            env=env,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        log_subprocess_output(result.stdout)
-        log_subprocess_output(result.stderr)
     else:
         env = os.environ.copy()
         env["ADF_OUTPUT"] = str(output_dir)
