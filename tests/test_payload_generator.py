@@ -1839,7 +1839,7 @@ def test_s3_workflow_payload_matches_individual_processing_units(snapshot, mock_
         with pytest.raises(RuntimeError, match="requires a pipeline_internal shared_disk storage"):
             build_output_products(units[1], mock_dpr_process_in, storage, "test-owner", [])
     else:
-        assert outputs == []
+        assert not outputs
         storage.get_storage_for_pipeline_section.assert_not_called()
 
 

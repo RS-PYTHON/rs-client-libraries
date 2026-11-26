@@ -318,8 +318,7 @@ def _build_single_unit_details(
     outputs_by_name = {product["name"]: product for product in unit_details.get("output_products", [])}
     if full_pipeline:
         step = next(
-            step for step in full_pipeline["steps"]
-            if step["unit_name"] == unit_name and step["step_id"] == step_id
+            step for step in full_pipeline["steps"] if step["unit_name"] == unit_name and step["step_id"] == step_id
         )
         output_origins = step["output_products"]
     else:
@@ -334,7 +333,8 @@ def _build_single_unit_details(
             io_index.get("output", {}),
             processing_modes,
             origin={"pipeline.output": "pipeline_output", "pipeline.internal": "pipeline_internal"}.get(
-                output_product_origin, output_product_origin,
+                output_product_origin,
+                output_product_origin,
             ),
         )
         if output_entry:

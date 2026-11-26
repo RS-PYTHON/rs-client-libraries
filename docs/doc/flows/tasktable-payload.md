@@ -278,8 +278,8 @@ at the same path from all processing workers. The processor creates it when need
 ## Sentinel-3 L0 workflow outputs
 
 The `s3_l0_full` pipeline retains the original S3L0Processor and remains the
-default. `s3_l0_lazy` and `s3_l0_olci_shared_disk_test` define the same ten steps, with
-the optional `GranuleFormatting` step inactive. For smoke tests,
+default. `s3_l0_lazy` and `s3_l0_olci_shared_disk_test` both leave the optional
+`GranuleFormatting` step inactive. For smoke tests,
 `CheckManoeuvring` is also inactive, so maneuvering quality metadata is not
 added. Both read `S3ACADUS`. `s3_l0_lazy` passes data directly between steps
 without writing intermediates. `s3_l0_olci_shared_disk_test` is an OLCI smoke test: it
@@ -298,6 +298,16 @@ The shared test also writes and reopens the CADU processing outputs before APID
 filtering. Its `APID_INTERMEDIATE` output sets `reopen_params: {chunks: null}`
 so granule processing reads it without Dask chunking and can serialize the GPS
 start time as a scalar in the product metadata.
+
+`GRANULE_INTERMEDIATE` also reopens with `chunks: null` so default sorting
+compares NumPy scalars rather than computing individual Dask scalar tasks.
+The shared test skips `CheckISPs` because its missing-packet metadata contains
+NumPy integers that the current CPM writer cannot serialize. `MetadataProcessing`
+reads `SORTING_INTERMEDIATE` directly, so the resulting product does not include
+the packet quality checks from `CheckISPs`.
+
+The final `S03OLCL0` writer also accepts `FORMATTING_0_last`, the output key
+that merge emits for the single OLCI granule reopened from shared disk.
 
 The `s3_l0_lazy` pipeline still requires native support for wildcard
 upstream references and stable L0 unit identifiers. The shared smoke test
