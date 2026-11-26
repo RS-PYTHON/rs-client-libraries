@@ -67,14 +67,29 @@ jobs:
         Reason: ${CALLER_REASON}"
         >> $GITHUB_STEP_SUMMARY
 
+  # The integration tests are skipped only for the Dependabot pull requests that update GitHub Actions or
+  # development dependencies. The other updates can break them with side effects that pytest does not see.
+  need-integration-tests:
+    name: Check if the integration tests are needed
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # to read the Dependabot metadata
+    outputs:
+      needed: ${{ steps.check.outputs.needed }}
+    steps:
+      - id: check
+        uses: RS-PYTHON/actions/.github/actions/need-integration-tests@develop
+
   build-wheel:
     name: Build wheel
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]' # ignore pull requests by github bot
+    needs: need-integration-tests
+    if: needs.need-integration-tests.outputs.needed == 'true'
     outputs:
       version_name: ${{ steps.build-wheel.outputs.version_name }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # so that Dunamai produce the correct version
       - id: build-wheel
@@ -84,7 +99,6 @@ jobs:
 
   set-binary-env:
     name: Set Docker environment
-    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     needs: build-wheel
     outputs:
@@ -113,7 +127,6 @@ jobs:
   publish-docker-images:
     name: "Build and publish Docker images"
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
     needs: set-binary-env
     permissions:
       security-events: write # needed for github/codeql-action/upload-sarif
@@ -148,7 +161,7 @@ jobs:
 
     steps:
       - if: ${{ matrix.if }}
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - if: ${{ matrix.if }}
         name: Download .whl dependency
         uses: actions/download-artifact@v8
@@ -184,7 +197,6 @@ jobs:
   get-pushed-images:
     name: Get pushed Docker image names
     needs: [set-binary-env, publish-docker-images]
-    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     outputs:
       pushed_images: ${{ steps.read.outputs.pushed_images }}
@@ -208,7 +220,6 @@ jobs:
   # Test rs-demo with the new Docker images
   test-demo:
     name: Test rs-demo
-    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     needs: [set-binary-env, publish-docker-images, get-pushed-images]
     permissions:
@@ -216,7 +227,7 @@ jobs:
       pull-requests: write # to report the notebooks in the pull request
     steps:
       - name: Log into Docker registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550
         with:
           registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ github.actor }}
@@ -270,7 +281,7 @@ jobs:
 
   publish-wheels-pypi:
     name: "Publish wheels and sdists to PyPI"
-    if: (github.actor != 'dependabot[bot]') && (github.event_name == 'push') && startsWith(github.ref, 'refs/tags')
+    if: (github.event_name == 'push') && startsWith(github.ref, 'refs/tags')
     runs-on: ubuntu-latest
     needs: [test-demo] # only if the tests succeeded
     permissions:
@@ -283,7 +294,7 @@ jobs:
           path: ./dist
           merge-multiple: true
       - name: Publish wheel and sdist packages
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086
         with:
           skip-existing: true
           packages-dir: ./dist
@@ -298,7 +309,7 @@ jobs:
         # Link to the URL of this current github actions run
         env:
           THIS_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-        uses: benc-uk/workflow-dispatch@ba9b031f598534deb29873396ef7b0acf17aa94a
+        uses: benc-uk/workflow-dispatch@78e99d70d9acaa4e2c98fe781b3cabda5df0228e
         with:
           workflow: build-jupyter.yml
           repo: RS-PYTHON/rs-workflow-env

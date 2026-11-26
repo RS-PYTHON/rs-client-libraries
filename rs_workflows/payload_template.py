@@ -142,6 +142,7 @@ class StorageOptions(BasePayloadModel):
     key: SecretStr
     secret: SecretStr
     client_kwargs: dict[str, SecretStr]
+    config_kwargs: dict[str, Any] | None = None
 
 
 class StoreParams(BasePayloadModel):
@@ -212,6 +213,7 @@ class GeneralConfiguration(BasePayloadModel):
     triggering__dask_monitor__cancel: bool | None = None
     triggering__dask_monitor__cancel_state: str | None = None
     zarr__format: int = 3
+    consolidated: bool | None = False
 
 
 class ExternalModule(BasePayloadModel):
