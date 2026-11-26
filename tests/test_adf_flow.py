@@ -131,10 +131,20 @@ def test_create_stac_item_from_zarr(mocker, tmp_path, zarr_format):
 
 @pytest.mark.parametrize("zarr_format", [2, 3])
 @pytest.mark.parametrize(
-    "platform, start_datetime",
-    [("3a", "20160216T000000"), ("3b", "20180425T000000")],
+    "platform, start_datetime, expected_start",
+    [
+        ("3a", "20160216T000000", "2016-02-16T00:00:00Z"),
+        ("3b", "20180425T000000", "2018-04-25T00:00:00Z"),
+    ],
 )
-def test_create_stac_item_from_zarr_prefers_stac_discovery(mocker, tmp_path, zarr_format, platform, start_datetime):
+def test_create_stac_item_from_zarr_prefers_stac_discovery(
+    mocker,
+    tmp_path,
+    zarr_format,
+    platform,
+    start_datetime,
+    expected_start,
+):
     """Use the converted ADF discovery metadata, not inherited source-dataset metadata."""
     mocker.patch("rs_workflows.adf_flow.get_logger", return_value=MagicMock())
     item_id = f"S0{platform.upper()}_ADF_SLCDP_{start_datetime}_20991231T235959_20261124T131743"
@@ -161,9 +171,8 @@ def test_create_stac_item_from_zarr_prefers_stac_discovery(mocker, tmp_path, zar
     assert item.properties["created"] == "2026-11-24T13:17:48Z"
     assert item.properties["product:type"] == "ADF_SLCDP"
     assert item.properties["platform"] == "metopa"
-    expected_start, expected_end = adf_flow.extract_datetimes_from_item_id(item_id)
     assert item.properties["start_datetime"] == expected_start
-    assert item.properties["end_datetime"] == expected_end
+    assert item.properties["end_datetime"] == "2099-12-31T23:59:59Z"
     assert item.assets["data"].href == str(zarr_dir)
     assert item.assets["data"].media_type == "application/vnd+zarr"
 
