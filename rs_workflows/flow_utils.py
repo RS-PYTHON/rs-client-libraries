@@ -198,7 +198,7 @@ class FlowEnvProcess(BaseModel):
         description="Use obstore or fsspec (if False) for the final upload to the S3-backed zarr store.",
     )
     triggering__stage_s3_upload_max_concurrency: int | None = Field(
-        default=128,
+        default=7,
         ge=1,
         description="Maximum number of concurrent S3 file uploads used by the CPM staging.",
     )
