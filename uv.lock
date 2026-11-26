@@ -3791,7 +3791,7 @@ wheels = [
 
 [[package]]
 name = "pystac"
-version = "1.16.0"
+version = "1.16.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pystac-core" },
@@ -3818,9 +3818,9 @@ dependencies = [
     { name = "pystac-ext-view" },
     { name = "pystac-ext-xarray-assets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9e/04/afc61b1f3001794782059b3b172b2c13edced8ea86137050f92ec54aba90/pystac-1.16.0.tar.gz", hash = "sha256:7cf58fee25d3cf640d79c11f5dc750d8d2552193c4f83c86179efd997a393ea1", size = 7614, upload-time = "2026-11-04T16:14:57.814Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/77/e2ddfe2b5448d0e605a59191b64b29296c8c6f1c54741f4a74cd7186b378/pystac-1.16.1.tar.gz", hash = "sha256:25126c9c7e78f44a3f4b5f61ec0dacf35ae0c2dc320412483701d0501793270b", size = 7614, upload-time = "2026-11-19T15:57:04.805Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3a/3d/d9fbbcdfdbc7de097d07f8243d6c3c33f7e3e4c6b00ac0caa4e54545574c/pystac-1.16.0-py3-none-any.whl", hash = "sha256:064d4ce15d0bde404b2c869ec0684d2d896296f848a6e577fafbb6a6fee90b62", size = 5714, upload-time = "2026-11-04T16:14:56.453Z" },
+    { url = "https://files.pythonhosted.org/packages/36/24/af1dbbe2410a6458f4bb50f8e7c8e1d74992016fb078e7610600d6816e50/pystac-1.16.1-py3-none-any.whl", hash = "sha256:8ff7c1311c9e46b92c25d984e9166c2cb445b304712ab5c5f0615d830c8167fb", size = 5713, upload-time = "2026-11-19T15:57:03.504Z" },
 ]
 
 [[package]]
