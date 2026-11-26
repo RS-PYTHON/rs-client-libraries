@@ -22,7 +22,8 @@ updates:
     schedule:
       interval: "daily"
 
-  # Dependencies of pyproject.toml, locked in uv.lock: one pull request per update
+  # Dependencies of pyproject.toml, locked in uv.lock: one pull request per update,
+  # except for the groups below
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
@@ -32,3 +33,11 @@ updates:
       - dependency-name: "dask-gateway"
       # The prefect version must be the same as the prefect server, see rs-workflow-env
       - dependency-name: "prefect"
+    groups:
+      # boto3 needs the matching botocore, and aiobotocore (pulled by prefect-aws) pins botocore
+      # to a narrow range: they can only be updated together
+      boto:
+        patterns:
+          - "boto3"
+          - "botocore"
+          - "aiobotocore"
