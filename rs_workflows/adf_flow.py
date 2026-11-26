@@ -313,7 +313,7 @@ def run_adf_script(
     data_dir: Path,
     working_dir: Path,
     output_dir: Path,
-    legacy_product_type: str | None = None,
+    legacy_product_types: list[str] | None = None,
     generated_product_type: str | None = None,
 ) -> list[Path]:
     """
@@ -321,7 +321,8 @@ def run_adf_script(
 
     When *script_path* is a Path, the corresponding Python script is executed
     with the current interpreter.  When it equals :data:`STB_CONVERT_PRODUCTS`,
-    the ``stb_convert_products`` executable is called instead.
+    the ``stb_convert_products`` executable is called instead, mapping each
+    legacy product type to the generated type in a single conversion run.
 
     Returns the list of generated ZARR product directories and JSON files.
     """
@@ -335,20 +336,10 @@ def run_adf_script(
 
     # Build command depending on the conversion tool
     if script_path == STB_CONVERT_PRODUCTS:
-        # STB_CONVERT_PRODUCTS is only used for S03 types, which have exactly one required type
-        if legacy_product_type and generated_product_type:
-            command = [
-                "stb_convert_products",
-                "-i",
-                str(data_dir),
-                "-o",
-                str(output_dir),
-                "--map",
-                legacy_product_type,
-                generated_product_type,
-            ]
-        else:
-            command = ["stb_convert_products", "-i", str(data_dir), "-o", str(output_dir)]
+        command = [STB_CONVERT_PRODUCTS, "-i", str(data_dir), "-o", str(output_dir)]
+        if legacy_product_types and generated_product_type:
+            for legacy_product_type in legacy_product_types:
+                command.extend(["--map", legacy_product_type, generated_product_type])
         env = None  # inherit current environment
     else:
         env = os.environ.copy()
@@ -397,9 +388,10 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
 
     For ZARR directories, metadata is read from the root group attributes
     with the zarr library, whatever the Zarr format.
-    For JSON files, the file itself is the metadata and the item ID is
-    taken from stac_discovery.id when present, otherwise it is derived
-    from the filename (minus the .json extension).
+    For JSON files, the file itself is the metadata.
+    For both formats, prefer stac_discovery for STAC metadata and the item ID.
+    If its ID is missing, use the root metadata ID for ZARR directories,
+    then fall back to the filename without its extension.
     """
     logger = get_logger()
     is_json_product = zarr_path.is_file()
@@ -416,7 +408,7 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
             raise RuntimeError(f"Could not read Zarr (v2 or v3) group metadata from {zarr_path}: {err}") from err
 
     stac_discovery = metadata.get("stac_discovery") if isinstance(metadata.get("stac_discovery"), dict) else {}
-    stac_metadata = stac_discovery if is_json_product and stac_discovery else metadata
+    stac_metadata = stac_discovery if stac_discovery else metadata
 
     # extract STAC properties from metadata.
     # the scripts put them in 'properties' attribute.
@@ -429,12 +421,11 @@ def create_stac_item_from_zarr(zarr_path: Path, generated_prod_type: str) -> Ite
     # but the script may set it differently
     stac_props["product:type"] = generated_prod_type
 
-    # For JSON files prefer the STAC discovery item ID, otherwise use the filename
-    # without the .json extension. For ZARR directories fall back to metadata ID.
+    # Prefer the discovery ID over inherited source-dataset IDs in ZARR attributes.
     if is_json_product:
         item_id = stac_discovery.get("id") or zarr_path.stem
     else:
-        item_id = metadata.get("id", zarr_path.stem)
+        item_id = stac_discovery.get("id") or metadata.get("id") or zarr_path.stem
 
     # Safe version of the item_id str, to prevent code injection through logs (needed by SonarQube)
     item_id_logs = str(item_id).replace("\r", "\\r").replace("\n", "\\n")
@@ -691,17 +682,12 @@ async def adf_conversion(adf_input: AdfProcessIn):
 
             # 3. Call the conversion tool
             try:
-                # STB_CONVERT_PRODUCTS is only used for S03 types, which have exactly one required type.
-                # The other conversion scripts (S00__ADF_* and S01__ADF_CALIB) may have multiple required
-                # types, but they don't use the --map flag, so we only need the first (and only) required
-                # type here.
-                legacy_product_type = required_types[0] if required_types else None
                 zarr_product_paths = run_adf_script(
                     script_path,
                     input_dir,
                     work_dir,
                     output_dir,
-                    legacy_product_type=legacy_product_type,
+                    legacy_product_types=required_types,
                     generated_product_type=generated_prod_type,
                 )
             finally:
