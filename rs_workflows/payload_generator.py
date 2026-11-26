@@ -84,7 +84,8 @@ def _build_workflow_inputs(unit: dict, available_input_names: set[str] | None) -
                     and input_product.get("mandatory") is False
                 ):
                     continue
-                inputs[input_product.get("regex", name)] = name
+                regex = input_product.get("regex", name)
+                inputs[regex if regex is not None else name] = name
             else:
                 inputs[input_product["regex"] if "regex" in input_product else input_product["name"]] = input_product[
                     "origin"

@@ -1870,7 +1870,7 @@ def test_output_lineage_with_in_memory_regex_steps():
 
 def test_pipeline_store_input_uses_shared_writer_id_and_preserves_lineage():
     """CPM reopens a shared writer's output ID under an exact downstream product key."""
-    tasktable = {
+    tasktable: dict[str, Any] = {
         "units": [
             {
                 "name": "First",
@@ -2018,7 +2018,7 @@ def test_temporary_path_uses_one_shared_disk_directory_per_run(mocker, flow_env,
     mocker.patch("rs_workflows.payload_generator.build_adfs", return_value=[])
     config = json.loads((Path(__file__).parent.parent / "config/storage_configuration.json").read_text())
     parameters = {"temporary_path": "./tmp", "batch_size": 5}
-    units = [
+    units: list[dict] = [
         {"name": "first", "module": "pkg.unit", "parameters": parameters},
         {"name": "second", "module": "pkg.unit", "parameters": {"temporary_path": "/local/scratch"}},
         {"name": "unconfigured", "module": "pkg.unit", "parameters": {"batch_size": 5}},
