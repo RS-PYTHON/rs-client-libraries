@@ -194,7 +194,7 @@ class FlowEnvProcess(BaseModel):
         description="Engine used to write the zarr products. If not set, the engine of the task table is used.",
     )
     use_obstore: bool | None = Field(
-        default=true,
+        default=True,
         description="Use obstore or fsspec (if False) for the final upload to the S3-backed zarr store.",
     )
     triggering__stage_s3_upload_max_concurrency: int | None = Field(
