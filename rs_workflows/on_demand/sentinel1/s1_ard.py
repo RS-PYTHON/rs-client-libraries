@@ -88,6 +88,7 @@ FROM_REFERENCE_DB_SUFFIX = "_FROM_REFERENCE_DB"
 REFERENCE_DB_SLC_PROPERTIES = (
     "start_datetime",
     "end_datetime",
+    "mission",
     "platform",
     "constellation",
     "instruments",

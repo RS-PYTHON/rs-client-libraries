@@ -442,6 +442,7 @@ def _slc_item() -> Item:
         properties={
             "start_datetime": "2026-04-08T17:46:32Z",
             "end_datetime": "2026-04-08T17:46:59Z",
+            "mission": "copernicus",
             "platform": "sentinel-1c",
             "constellation": "sentinel-1",
             "sar:instrument_mode": "IW",
@@ -465,6 +466,7 @@ def test_build_reference_db_item():
     assert item.datetime == datetime(2026, 4, 8, 17, 46, 32, tzinfo=timezone.utc)
     assert not item.stac_extensions
     properties = item.properties
+    assert properties["mission"] == "copernicus"
     assert properties["product:type"] == "ADF_REFDB"
     assert properties["sar:instrument_mode"] == "IW"
     assert properties["sat:relative_orbit"] == 117
