@@ -63,9 +63,12 @@ class StorageConfig:  # pylint: disable=too-many-instance-attributes
         else:
             # Read data from the prefect variable
             var_name = "processing-storage-configuration"
-            self.data = Variable.get(var_name)
-            if self.data is None:
+            variable_data = Variable.get(var_name)
+            if variable_data is None:
                 raise RuntimeError(f"Prefect variable {var_name!r} is missing")
+            if not isinstance(variable_data, dict):
+                raise ValueError(f"Prefect variable {var_name!r} must contain an object")
+            self.data = variable_data
 
         # Validate contents against json schema
         with open(STORAGE_CONFIG_SCHEMA, encoding="utf-8") as opened:

@@ -273,6 +273,7 @@ class OutputProduct(BasePayloadModel):
     path: str
     engine: str
     writer_params: StoreParams | None = None
+    reopen_params: dict[str, Any] | None = None
     type: str | None = Field(default="file")
     apply_eoqc: bool | None = Field(default=False)
     autoclean: bool | None = Field(default=False, exclude=True)

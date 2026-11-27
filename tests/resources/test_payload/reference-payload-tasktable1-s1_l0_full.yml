@@ -46,7 +46,7 @@ workflow:
     fro: fro
   parameters:
     streaming_mode: false
-    temporary_path: ./tmp
+    temporary_path: /my_share_directory/here/00000000-0000-0000-0000-000000000001
     isp_extraction_batch_size: 5
     acquisition_report_output_path: ./acq_report
     test_external_variable: S1A

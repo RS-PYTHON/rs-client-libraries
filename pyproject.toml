@@ -161,7 +161,7 @@ exclude = ["rs_workflows/adf_conversion/"]
 [tool.flake8]
 max-line-length = 120
 # vendored third-party code, see [tool.black] above
-exclude = ["rs_workflows/adf_conversion/"]
+extend-exclude = ["rs_workflows/adf_conversion/", ".poetry/"]
 # per-file-ignores = [
 #     '__init__.py:F401',
 # ]

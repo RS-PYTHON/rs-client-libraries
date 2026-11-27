@@ -119,7 +119,7 @@ async def load_processor_settings(processing_id: ProcessingId, flow_env: FlowEnv
     """
     variable_name = f"{processing_id.value}-default-setting"
     get_logger().info(f"Read Prefect variable {variable_name!r}")
-    raw_settings = await Variable.get(variable_name)  # type: ignore[misc]
+    raw_settings = await Variable.aget(variable_name)  # type: ignore[misc]
     if raw_settings is None:
         raise RuntimeError(f"❌ Prefect variable {variable_name!r} is missing")
 
@@ -172,11 +172,13 @@ async def generate_payload_path(owner_id: str) -> str:
     """
     if KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT:
         try:
-            prefect_variable_result = await Variable.get(PREFECT_VAR_NAME)
+            prefect_variable_result = await Variable.aget(PREFECT_VAR_NAME)
         except Exception as exc:
             raise RuntimeError(
                 f"Unable to load Prefect variable {PREFECT_VAR_NAME!r}",
             ) from exc
+        if not isinstance(prefect_variable_result, dict):
+            raise RuntimeError(f"Prefect variable {PREFECT_VAR_NAME!r} must contain an object")
         storage_configuration = prefect_variable_result.get("storage_configuration")
         shared_disk_path = None
         for entry in storage_configuration or []:

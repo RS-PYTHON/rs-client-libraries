@@ -259,7 +259,7 @@ async def test_process_s1ard_uses_the_input_collections_of_the_settings(mocker):
         _items("IW"),
         processor_settings(input_collections=["my-iw-slc"]),
     )
-    await s1_ard.process_s1ard.fn([SLC_IW_1], date(2026, 4, 1), "", ENV_ARGS)
+    await s1_ard.process_s1ard.fn([SLC_IW_1], date(2026, 4, 1), ENV_ARGS)
 
     assert get_items.call_args.args[2] == ["my-iw-slc"]
     assert {p.collection_name for p in dpr_mock.call_args.kwargs["input_products"]} == {"my-iw-slc"}

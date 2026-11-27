@@ -266,3 +266,56 @@ supported by the catalog.
 
 Other policies can be added in the task tables with the same mechanism, as long as they can be expressed as a STAC
 search.
+
+## Shared temporary paths
+
+When an active step declares `temporary_path`, payload generation replaces its
+value with `<absolute_path>/<run-uuid>` from the `shared_disk` store selected by
+`product.default.pipeline` section `other`. Steps without the parameter are
+unchanged. The directory is unique per run and must be writable and accessible
+at the same path from all processing workers. The processor creates it when needed.
+
+## Sentinel-3 L0 workflow outputs
+
+The `s3_l0_full` pipeline retains the original S3L0Processor and remains the
+default. `s3_l0_lazy` and `s3_l0_olci_shared_disk_test` both leave the optional
+`GranuleFormatting` step inactive. For smoke tests,
+`CheckManoeuvring` is also inactive, so maneuvering quality metadata is not
+added. Both read `S3ACADUS`. `s3_l0_lazy` passes data directly between steps
+without writing intermediates. `s3_l0_olci_shared_disk_test` is an OLCI smoke test: it
+selects the first available OLCI EFR granule, passes it through the active
+units, and targets only `S03OLCL0` in S3, from `MergeAndConsolidation`.
+
+For `s3_l0_olci_shared_disk_test`, configure `product.default.pipeline` with a
+`pipeline_internal` section pointing to a `shared_disk` storage. Its mount must
+be visible to CPM and Dask. A task table input of the form
+`pipeline_store.<output-id>.<input-key>` connects the unit's input key to an
+earlier shared output, which CPM reopens by its output ID. With `autoclean: false`,
+the shared products remain under `<absolute_path>/<run-id>/<output-id>/`.
+Do not add them to the collection mappings.
+
+The shared test also writes and reopens the CADU processing outputs before APID
+filtering. Its `APID_INTERMEDIATE` output sets `reopen_params: {chunks: null}`
+so granule processing reads it without Dask chunking and can serialize the GPS
+start time as a scalar in the product metadata.
+
+`GRANULE_INTERMEDIATE` also reopens with `chunks: null` so default sorting
+compares NumPy scalars rather than computing individual Dask scalar tasks.
+The shared test skips `CheckISPs` because its missing-packet metadata contains
+NumPy integers that the current CPM writer cannot serialize. `MetadataProcessing`
+reads `SORTING_INTERMEDIATE` directly, so the resulting product does not include
+the packet quality checks from `CheckISPs`.
+
+The final `S03OLCL0` writer also accepts `FORMATTING_0_last`, the output key
+that merge emits for the single OLCI granule reopened from shared disk.
+
+The `s3_l0_lazy` pipeline still requires native support for wildcard
+upstream references and stable L0 unit identifiers. The shared smoke test
+uses only exact references in the active units and does not require the
+wildcard resolver.
+
+Declare `cadu_chunk_size` and `isp_chunk_size` once under the pipeline's
+`parameters`. Each step receives an independent copy; step parameters override
+whole parameter groups. For older task tables, the client also inherits chunk
+defaults from the CADU and MergeAndConsolidation definitions, including inactive
+units. Inactive units do not stage ADFs or resolve input/output storage.

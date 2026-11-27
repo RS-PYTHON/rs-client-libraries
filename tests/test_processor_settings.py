@@ -59,7 +59,7 @@ def _patch_settings(mocker, settings=None, running_clusters=("dask-processing", 
     """Mock the Prefect variable of the settings and the Dask clusters."""
     variable_get = mocker.patch.object(
         dpr.Variable,
-        "get",
+        "aget",
         new=AsyncMock(return_value=PROCESSOR_SETTINGS if settings is None else settings),
     )
     is_cluster_running = mocker.patch.object(
@@ -132,7 +132,7 @@ async def test_load_processor_settings_checks_the_output_collections(mocker):
 async def test_load_processor_settings_fails_without_variable(mocker):
     """Without the Prefect variable of the processing, the settings cannot be read."""
     _, is_cluster_running = _patch_settings(mocker)
-    mocker.patch.object(dpr.Variable, "get", new=AsyncMock(return_value=None))
+    mocker.patch.object(dpr.Variable, "aget", new=AsyncMock(return_value=None))
 
     with pytest.raises(RuntimeError, match="'s3l1olci-default-setting' is missing"):
         await dpr.load_processor_settings(ProcessingId.S3_OLCI_L1, FLOW_ENV)

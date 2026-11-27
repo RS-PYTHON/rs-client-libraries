@@ -449,7 +449,7 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
     if payload.io is None:
         raise ValueError("Payload io configuration is missing")
 
-    workflow = payload.workflow or []
+    workflow = [step for step in (payload.workflow or []) if step.active]
     input_ids = {input_product.id for input_product in payload.io.input_products}
     adf_ids = {adf.id for adf in payload.io.adfs}
 
@@ -464,6 +464,30 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
                 raise ValueError(f"Duplicate workflow output reference '{output_reference}'")
             producers[output_reference] = step
             output_references.setdefault(output_id, []).append(output_reference)
+
+    steps_by_name_length = sorted(workflow, key=lambda step: len(step.name), reverse=True)
+
+    def find_producer(reference: str) -> WorkflowStep | None:
+        """Resolve persisted destinations and explicit in-memory PU references."""
+        if reference in input_ids:
+            return None
+        if reference not in producers:
+            if stored_references := output_references.get(reference):
+                if len(stored_references) != 1:
+                    raise ValueError(f"Workflow store input '{reference}' requires exactly one producer")
+                producers[reference] = producers[stored_references[0]]
+                return producers[reference]
+            upstream = next(
+                (
+                    step
+                    for step in steps_by_name_length
+                    if reference.startswith(f"{step.name}.") and len(reference) > len(step.name) + 1
+                ),
+                None,
+            )
+            if upstream is not None:
+                producers[reference] = upstream
+        return producers.get(reference)
 
     resolved: dict[str, set[str]] = {}
     resolving: set[str] = set()
@@ -480,10 +504,10 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
         sources = set()
 
         for input_reference in (step.inputs or {}).values():
-            if input_reference in producers:
-                sources.update(resolve_sources(input_reference))
-            elif input_reference in input_ids:
+            if input_reference in input_ids:
                 sources.add(input_reference)
+            elif find_producer(input_reference) is not None:
+                sources.update(resolve_sources(input_reference))
             else:
                 raise ValueError(
                     f"Workflow input '{input_reference}' from step '{step.name}' "
@@ -500,12 +524,34 @@ def build_output_lineage(payload: PayloadSchema) -> dict[str, set[str]]:
         resolved[output_reference] = sources
         return sources
 
+    def ancestor_names(step: WorkflowStep, visiting: set[str] | None = None) -> set[str]:
+        """Identify upstream writers when several steps share an output folder."""
+        visiting = set() if visiting is None else visiting
+        if step.name in visiting:
+            raise ValueError(f"Cyclic workflow dependency detected at '{step.name}'")
+        visiting = visiting | {step.name}
+        ancestors: set[str] = set()
+        for reference in (step.inputs or {}).values():
+            upstream = find_producer(reference)
+            if upstream is not None:
+                ancestors.add(upstream.name)
+                ancestors.update(ancestor_names(upstream, visiting))
+        return ancestors
+
     lineage: dict[str, set[str]] = {}
     for output_product in payload.io.output_products:
         if not output_product.final_product:
             continue
 
         references = output_references.get(output_product.id, [])
+        if len(references) > 1:
+            # Keep the terminal writer; preceding writers only persist intermediates.
+            ancestors = {reference: ancestor_names(producers[reference]) for reference in references}
+            references = [
+                reference
+                for reference in references
+                if not any(producers[reference].name in ancestors[other] for other in references if other != reference)
+            ]
         if len(references) != 1:
             raise ValueError(
                 f"Final output '{output_product.id}' must have exactly one workflow producer, found {references}",

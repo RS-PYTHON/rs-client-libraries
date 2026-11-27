@@ -184,6 +184,7 @@
                     "enum": [
                         "pipeline_input",
                         "pipeline_output",
+                        "pipeline_internal",
                         "other"
                     ]
                 },

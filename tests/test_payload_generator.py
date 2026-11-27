@@ -14,8 +14,12 @@
 
 """Test the payload_generator module"""
 
+import json
 from datetime import datetime
+from pathlib import Path
+from typing import Any, cast
 from unittest.mock import MagicMock
+from uuid import UUID
 
 import pytest
 from pydantic import SecretStr
@@ -31,12 +35,14 @@ from rs_workflows.flow_utils import (
     WriteEngine,
 )
 from rs_workflows.on_demand_processing import build_output_lineage
+from rs_workflows.payload_builder import TaskTableError, build_unit_list
 from rs_workflows.payload_generator import (  # load_store_params_from_config,
     DATA_EDH_DOMAIN,
     EDH_API_KEY_ENV_VAR,
     build_adfs,
     build_input_products,
     build_output_products,
+    build_payload,
     build_workflow_step,
     fetch_csv_from_endpoint,
     find_s3_output_bucket,
@@ -56,6 +62,7 @@ from rs_workflows.payload_template import (
     StoreParams,
     WorkflowStep,
 )
+from rs_workflows.storage_configuration import StorageConfig
 
 
 # build_workflow_step
@@ -96,7 +103,7 @@ def test_build_workflow_step_valid(sample_unit):
     assert isinstance(step, WorkflowStep)
     assert step.name == "unit1.1"
     assert step.module == "module1"
-    assert step.inputs == {"S1CADUS": "S1CADUS", "S3CADUS": "external_proc"}
+    assert step.inputs == {"S1CADUS": "S1CADUS", "S3CADUS": "S3CADUS"}
     assert step.adfs == {"ADF1": "ADF1"}
     assert step.outputs == {"*.tif": "output1", "output2": "output2"}
     assert step.processing_unit == "unit1"
@@ -325,6 +332,7 @@ def test_generate_payload_success(
     assert isinstance(payload, PayloadSchema)
     assert isinstance(payload.io, IOConfig)
     assert isinstance(payload.general_configuration, GeneralConfiguration)
+    assert payload.general_configuration is not None
     general_configuration = payload.general_configuration.dump()
     assert general_configuration["logging__level"] == general_configuration["logging__progress_level"]
     assert {key: general_configuration[key] for key in staging_keys} == expected_staging
@@ -332,6 +340,7 @@ def test_generate_payload_success(
     assert general_configuration["triggering__use_basic_logging"] is True
     assert len(payload.workflow or []) == 1
     assert payload.io.adfs[0].id == "ADF1"
+    assert payload.io is not None
     assert all(adf.id != "adf_l0cfg" for adf in payload.io.adfs)
     assert payload.logging is None
     assert payload.config is None
@@ -347,12 +356,14 @@ def test_generate_payload_success(
         adfs=[("ADF1", "file", "s3://bucket/adf1")],
         dpr_process_in=mock_dpr_process_in,
     )
+    assert payload.io is not None
     assert payload.logging == expected_logging
     assert any(
         adf.id == "adf_l0cfg" and adf.path == f"/opt/dask-l0/{processor_name.value[:2]}_adf_l0cfg.json"
         for adf in payload.io.adfs
     )
-    assert payload.config is None
+    expected_config = ["/opt/dask-l0/s3_adf_l0cfg.json"] if processor_name == DprProcessor.S3L0 else None
+    assert payload.config == expected_config
 
 
 @pytest.mark.parametrize("olci_processor", [DprProcessor.S3L1OLCI, DprProcessor.S3L2OLCI])
@@ -391,6 +402,7 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
         adfs=[],
         dpr_process_in=mock_dpr_process_in,
     )
+    assert payload.general_configuration is not None
     general_configuration = payload.general_configuration.dump()
     assert "triggering__use_datatree" not in general_configuration
     assert "triggering__use_default_filename" not in general_configuration
@@ -402,7 +414,9 @@ def test_generate_payload_sets_datatree_and_default_filename_only_for_olci(
         adfs=[],
         dpr_process_in=mock_dpr_process_in,
     )
+    assert payload.general_configuration is not None
     general_configuration = payload.general_configuration.dump()
+    assert payload.io is not None
     assert all(adf.id != "adf_l0cfg" for adf in payload.io.adfs)
     assert general_configuration["triggering__use_datatree"] is True
     assert general_configuration["triggering__use_default_filename"] is True
@@ -508,6 +522,7 @@ def test_generate_payload_deduplicates_io(mocker, sample_unit, mock_dpr_process_
     assert payload.io is not None
     assert len(payload.io.input_products) == 1
     assert payload.io.input_products[0].id == "slcs"
+    assert payload.io is not None
     assert len(payload.io.output_products) == 1
     assert payload.io.output_products[0].id == "out1"
 
@@ -953,7 +968,7 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = None
     mock_storage.get_storage_for_pipeline_section.side_effect = lambda section: {
-        "pipeline_input_1": None,
+        "pipeline_input": None,
         "other": "pipeline_s3",
     }[section]
     mock_storage.get_store_params.return_value = mock_store_params
@@ -961,7 +976,7 @@ def test_build_input_products_fallback_storage_pipeline(sample_unit, mock_store_
     inputs = build_input_products(sample_unit, mock_dpr, mock_storage, MagicMock())
 
     assert len(inputs) == 1
-    mock_storage.get_storage_for_pipeline_section.assert_any_call("pipeline_input_1")
+    mock_storage.get_storage_for_pipeline_section.assert_any_call("pipeline_input")
     mock_storage.get_storage_for_pipeline_section.assert_any_call("other")
     # store_name is forced to "s3" regardless of the pipeline resolution (temporary workaround)
     mock_storage.get_store_params.assert_called_with("s3")
@@ -1760,3 +1775,375 @@ def test_build_output_products_disk_no_disk_config_raises(
 
     with pytest.raises(RuntimeError, match="has no storage path configured"):
         build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+
+@pytest.mark.parametrize("snapshot", [False, True])
+def test_s3_workflow_payload_matches_individual_processing_units(snapshot, mock_dpr_process_in):
+    """Generate concrete CADU/APID links without relying on a local task table."""
+    names = ["CADUProcessing", "APIDFiltering", "GranuleFormatting"]
+    tasktable = {
+        "units": [
+            {
+                "name": name,
+                "module": f"l0.{name}",
+                "processing_unit": f"{name}Unit",
+                "active": name != "GranuleFormatting",
+                "input_adfs": [],
+                "input_products": [
+                    {"name": product, "mandatory": True}
+                    for product in (["S3ACADUS"] if i == 0 else ["olci", "slstr", "sral"])
+                ],
+                "output_products": [{"name": "output_folder", "mandatory": True}] if i == 1 else [],
+            }
+            for i, name in enumerate(names)
+        ],
+        "io": {
+            "input": [{"name": "S3ACADUS", "mandatory": True, "regex": "CADUs"}],
+            "output": [
+                {
+                    "name": "output_folder",
+                    "regex": ".*",
+                    "final_product": False,
+                    "engine": "cpm_zarr",
+                    "type": "folder",
+                    "reopen_params": {"chunks": None},
+                },
+            ],
+        },
+        "pipelines": [
+            {
+                "name": "s3_l0_cadu_apid",
+                "parameters": {"cadu_chunk_size": {"olci": 10000}, "isp_chunk_size": {"S03OLC_IG": 10000}},
+                "steps": [
+                    {
+                        "step_id": i + 1,
+                        "unit_name": name,
+                        "input_products": (
+                            {"S3ACADUS": "pipeline_input"}
+                            if i == 0
+                            else {product: f"CADUProcessing.1.{product}" for product in ("olci", "slstr", "sral")}
+                        ),
+                        "output_products": {"output_folder": "pipeline_internal"} if i == 1 and snapshot else {},
+                    }
+                    for i, name in enumerate(names)
+                ],
+            },
+        ],
+    }
+    units = build_unit_list(tasktable, pipeline="s3_l0_cadu_apid")
+    steps = [build_workflow_step(unit, selected_output_names=set()) for unit in units]
+    assert [step.name for step in steps] == [f"{name}.{i + 1}" for i, name in enumerate(names)]
+    assert steps[0].inputs == {"CADUs": "S3ACADUS"}
+    assert steps[1].inputs == {product: f"CADUProcessing.1.{product}" for product in ("olci", "slstr", "sral")}
+    assert steps[1].outputs == ({".*": "output_folder"} if snapshot else None)
+    assert steps[2].active is False
+    for step in steps:
+        assert step.parameters["isp_chunk_size"] == {"S03OLC_IG": 10000}
+
+    storage = MagicMock()
+    storage.get_storage_for_pipeline_section.return_value = "snapshots"
+    storage.get_storage_kind.return_value = "shared_disk"
+    storage.get_disk_storage.return_value = {"path": "/shared/run", "autoclean": False}
+    mock_dpr_process_in.generated_product_to_collection_identifier = []
+    outputs = build_output_products(units[1], mock_dpr_process_in, storage, "test-owner", [])
+    if snapshot:
+        assert [(out.id, out.path, out.final_product, out.autoclean) for out in outputs] == [
+            ("output_folder", "/shared/run/output_folder", False, False),
+        ]
+        assert outputs[0].model_dump(exclude_none=True)["reopen_params"] == {"chunks": None}
+        storage.get_storage_kind.return_value = "obs"
+        with pytest.raises(RuntimeError, match="requires a pipeline_internal shared_disk storage"):
+            build_output_products(units[1], mock_dpr_process_in, storage, "test-owner", [])
+    else:
+        assert not outputs
+        storage.get_storage_for_pipeline_section.assert_not_called()
+
+
+def test_output_lineage_with_in_memory_regex_steps():
+    """A final output inherits session and auxiliary inputs through unwritten steps."""
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="s3://bucket/input", engine="cadu")],
+            output_products=[OutputProduct(id="final", path="s3://bucket/output", engine="cpm_zarr")],
+            adfs=[AdfConfig(id="orbit", path="s3://bucket/orbit")],
+        ),
+        workflow=[
+            WorkflowStep(name="CADUProcessing.1", inputs={"CADUs": "cadus"}),
+            WorkflowStep(
+                name="MetadataProcessing.2",
+                inputs={".*": "CADUProcessing.1..*"},
+                adfs={"osf": "orbit"},
+            ),
+            WorkflowStep(
+                name="MergeAndConsolidation.3",
+                inputs={".*": "MetadataProcessing.2..*"},
+                outputs={"^S03.*": "final"},
+            ),
+        ],
+    )
+    assert build_output_lineage(payload) == {"final": {"cadus", "orbit"}}
+
+
+def test_pipeline_store_input_uses_shared_writer_id_and_preserves_lineage():
+    """CPM reopens a shared writer's output ID under an exact downstream product key."""
+    tasktable: dict[str, Any] = {
+        "units": [
+            {
+                "name": "First",
+                "module": "pkg.first",
+                "input_products": [{"name": "cadus", "mandatory": True}],
+                "output_products": [{"name": "snapshot", "mandatory": True, "final_product": False}],
+            },
+            {
+                "name": "Last",
+                "module": "pkg.last",
+                "input_products": [{"name": "products", "mandatory": True, "regex": ".*"}],
+                "output_products": [{"name": "final", "mandatory": True}],
+            },
+        ],
+        "io": {
+            "input": [{"name": "cadus", "engine": "cadu"}],
+            "output": [{"name": name, "engine": "cpm_zarr"} for name in ("snapshot", "final")],
+        },
+        "pipelines": [
+            {
+                "name": "shared",
+                "steps": [
+                    {
+                        "unit_name": "First",
+                        "step_id": 1,
+                        "input_products": {"cadus": "pipeline_input"},
+                        "output_products": {"snapshot": "pipeline_internal"},
+                    },
+                    {
+                        "unit_name": "Last",
+                        "step_id": 2,
+                        "input_products": {"products": "pipeline_store.snapshot.olci_efr_g_1_last"},
+                        "output_products": {"final": "pipeline_output"},
+                    },
+                ],
+            },
+        ],
+    }
+
+    workflow = [build_workflow_step(unit, {"final"}) for unit in build_unit_list(tasktable, pipeline="shared")]
+    assert workflow[0].outputs == {"snapshot": "snapshot"}
+    assert workflow[1].inputs == {"olci_efr_g_1_last": "snapshot"}
+    payload = PayloadSchema(
+        workflow=workflow,
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="s3://bucket/input", engine="cadu")],
+            output_products=[
+                OutputProduct(id="snapshot", path="/shared/snapshot", engine="cpm_zarr", final_product=False),
+                OutputProduct(id="final", path="s3://bucket/output", engine="cpm_zarr"),
+            ],
+        ),
+    )
+    assert build_output_lineage(payload) == {"final": {"cadus"}}
+
+    tasktable["pipelines"][0]["steps"][1]["input_products"]["products"] = "pipeline_store.missing.olci"
+    with pytest.raises(TaskTableError, match="exactly one earlier internal output"):
+        build_unit_list(tasktable, pipeline="shared")
+
+
+def test_output_lineage_with_shared_workflow_output_folder():
+    """Only the terminal writer determines final lineage for a shared folder."""
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="cadus", path="/input", engine="cadu")],
+            output_products=[OutputProduct(id="output_folder", path="/output", engine="cpm_zarr")],
+            adfs=[AdfConfig(id="orbit", path="/orbit")],
+        ),
+        workflow=[
+            WorkflowStep(name="CADUProcessing", inputs={"CADUs": "cadus"}),
+            WorkflowStep(name="APIDFiltering", inputs={".*": "CADUProcessing.*"}, outputs={".*": "output_folder"}),
+            WorkflowStep(name="Inactive", active=False, inputs={".*": "missing.*"}, outputs={".*": "output_folder"}),
+            WorkflowStep(
+                name="MergeAndConsolidation",
+                inputs={".*": "APIDFiltering.*"},
+                adfs={"osf": "orbit"},
+                outputs={"^(?!cache).*": "output_folder"},
+            ),
+        ],
+    )
+    assert build_output_lineage(payload) == {"output_folder": {"cadus", "orbit"}}
+    assert payload.workflow is not None
+    payload.workflow.append(WorkflowStep(name="Unrelated", inputs={"CADUs": "cadus"}, outputs={".*": "output_folder"}))
+    with pytest.raises(ValueError, match="exactly one workflow producer"):
+        build_output_lineage(payload)
+
+
+def test_shared_folder_becomes_final_when_terminal_step_writes_it(mocker, flow_env, mock_dpr_process_in):
+    """Intermediate output metadata must not prevent publication of the final folder."""
+    mock_dpr_process_in.processor_name = "TEST_PROCESSOR"
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="output_folder", product_type="*", collection_name="output"),
+    ]
+    mocker.patch("rs_workflows.payload_generator.build_adfs", return_value=[])
+    mocker.patch(
+        "rs_workflows.payload_generator.get_io",
+        side_effect=[
+            ([], [OutputProduct(id="output_folder", path="/output", engine="cpm_zarr", final_product=False)]),
+            ([], [OutputProduct(id="output_folder", path="/output", engine="cpm_zarr", final_product=True)]),
+        ],
+    )
+    payload = build_payload(
+        flow_env,
+        [{"name": "first", "module": "pkg.unit"}, {"name": "last", "module": "pkg.unit"}],
+        [],
+        mock_dpr_process_in,
+        MagicMock(),
+        [],
+    )
+    assert payload.io is not None
+    assert len(payload.io.output_products) == 1
+    assert payload.io.output_products[0].final_product is True
+
+
+def test_build_payload_excludes_io_from_disabled_processing_units(mocker, flow_env, mock_dpr_process_in):
+    """Disabled final processors must not create phantom final outputs for lineage."""
+    mock_dpr_process_in.processor_name = "TEST_PROCESSOR"
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(name="S03DORDOP", product_type="S03DORDOP"),
+    ]
+    mocker.patch("rs_workflows.payload_generator.build_adfs", return_value=[])
+    get_io_mock = mocker.patch("rs_workflows.payload_generator.get_io", return_value=([], []))
+    active = {"name": "CADUProcessing", "module": "l0.cadu_processing.cadu_processing_unit"}
+    inactive = {
+        "name": "MergeAndConsolidation",
+        "module": "l0.s3.merge_and_consolidation_unit",
+        "active": False,
+        "output_products": [{"name": "S03DORDOP", "mandatory": True}],
+    }
+    payload = build_payload(flow_env, [active, inactive], [], mock_dpr_process_in, MagicMock(), [])
+    get_io_mock.assert_called_once()
+    assert get_io_mock.call_args.args[0] is active
+    assert payload.io is not None
+    assert payload.workflow is not None
+    assert payload.io.output_products == []
+    assert len(payload.workflow) == 2
+    workflow = payload.workflow or []
+    assert workflow[1].active is False
+    assert not build_output_lineage(payload)
+
+
+def test_temporary_path_uses_one_shared_disk_directory_per_run(mocker, flow_env, mock_dpr_process_in):
+    """Opted-in active steps share a fresh per-run path without modifying the task table."""
+    mock_dpr_process_in.processor_name = "TEST_PROCESSOR"
+    mocker.patch("rs_workflows.payload_generator.get_io", return_value=([], []))
+    mocker.patch("rs_workflows.payload_generator.build_adfs", return_value=[])
+    config = json.loads((Path(__file__).parent.parent / "config/storage_configuration.json").read_text())
+    parameters = {"temporary_path": "./tmp", "batch_size": 5}
+    units: list[dict] = [
+        {"name": "first", "module": "pkg.unit", "parameters": parameters},
+        {"name": "second", "module": "pkg.unit", "parameters": {"temporary_path": "/local/scratch"}},
+        {"name": "unconfigured", "module": "pkg.unit", "parameters": {"batch_size": 5}},
+        {"name": "inactive", "module": "pkg.unit", "active": False, "parameters": parameters},
+    ]
+    paths = []
+    for _ in range(2):
+        payload = build_payload(flow_env, units, [], mock_dpr_process_in, StorageConfig({}, data=config), [])
+        first, second, unconfigured, inactive = payload.dump()["workflow"]
+        path = Path(first["parameters"]["temporary_path"])
+        assert path.parent == Path("/mnt/share/cs-01")
+        assert UUID(path.name).version == 4
+        assert first["parameters"]["batch_size"] == 5
+        assert second["parameters"]["temporary_path"] == str(path)
+        assert unconfigured["parameters"] == {"batch_size": 5}
+        assert inactive["parameters"] == {"temporary_path": "./tmp", "batch_size": 5}
+        paths.append(path)
+    assert paths[0] != paths[1]
+    assert parameters == {"temporary_path": "./tmp", "batch_size": 5}
+
+
+@pytest.mark.parametrize("storage_kind", [None, "local_disk", "obs"])
+def test_temporary_path_requires_shared_disk(mocker, flow_env, mock_dpr_process_in, storage_kind):
+    """Do not leave an opted-in step pointing to a worker-local or non-disk path."""
+    mock_dpr_process_in.processor_name = "TEST_PROCESSOR"
+    storage = MagicMock(spec=StorageConfig)
+    storage.get_storage_for_pipeline_section.return_value = "scratch" if storage_kind else None
+    storage.get_storage_kind.return_value = storage_kind
+    get_io_mock = mocker.patch("rs_workflows.payload_generator.get_io")
+    unit = {"name": "extract", "module": "pkg.unit", "parameters": {"temporary_path": "./tmp"}}
+    with pytest.raises(RuntimeError, match=r"Step 'extract'.*requires an absolute shared_disk path"):
+        build_payload(flow_env, [unit], [], mock_dpr_process_in, storage, [])
+    get_io_mock.assert_not_called()
+
+
+@pytest.mark.parametrize("reverse_units", [False, True])
+@pytest.mark.parametrize("explicit_override", [False, True])
+def test_legacy_s3_chunk_parameters_are_shared_even_from_disabled_units(
+    mocker,
+    flow_env,
+    mock_dpr_process_in,
+    explicit_override,
+    reverse_units,
+):
+    """Old task tables may carry ISP chunks only on a disabled merge PU."""
+    mock_dpr_process_in.processor_name = DprProcessor.S3L0
+    mock_dpr_process_in.generated_product_to_collection_identifier = []
+    get_io_mock = mocker.patch("rs_workflows.payload_generator.get_io", return_value=([], []))
+    mocker.patch("rs_workflows.payload_generator.build_adfs", return_value=[])
+    units: list[dict[str, Any]] = [
+        {
+            "name": "CADUProcessing.1",
+            "module": "l0.cadu_processing.cadu_processing_unit",
+            "parameters": {"cadu_chunk_size": {"olci": 10000}, "mission": "S3"},
+        },
+        {"name": "APIDFiltering.2", "module": "l0.s3.apid_filtering_unit"},
+        {"name": "SpecificSorting.5", "module": "l0.s3.specific_sorting_unit"},
+        {
+            "name": "MergeAndConsolidation.10",
+            "module": "l0.s3.merge_and_consolidation_unit",
+            "active": False,
+            "parameters": {"isp_chunk_size": {"S03OLC_IG": 10000}},
+        },
+    ]
+    if explicit_override:
+        # The modern table has already supplied common defaults to the first PU.
+        units[0]["parameters"]["isp_chunk_size"] = {"S03OLC_IG": 10000}
+        units[1]["parameters"] = {"isp_chunk_size": {"S03OLC_IG": 20000}}
+    original_cadu = units[0]
+    if reverse_units:
+        units.reverse()
+    payload = build_payload(flow_env, units, [], mock_dpr_process_in, MagicMock(), [])
+    assert get_io_mock.call_count == 3
+    assert payload.workflow is not None
+    workflow = payload.workflow or []
+    by_name = {step.name: step for step in workflow}
+    parameters = {name: cast(dict[str, Any], step.parameters) for name, step in by_name.items()}
+    for name in ("CADUProcessing.1", "SpecificSorting.5", "MergeAndConsolidation.10"):
+        assert parameters[name]["cadu_chunk_size"] == {"olci": 10000}
+        assert parameters[name]["isp_chunk_size"] == {"S03OLC_IG": 10000}
+    assert parameters["CADUProcessing.1"]["mission"] == "S3"
+    expected_apid_chunk = 20000 if explicit_override else 10000
+    assert parameters["APIDFiltering.2"]["isp_chunk_size"] == {"S03OLC_IG": expected_apid_chunk}
+    parameters["CADUProcessing.1"]["cadu_chunk_size"]["olci"] = 1
+    assert parameters["SpecificSorting.5"]["cadu_chunk_size"]["olci"] == 10000
+    assert original_cadu["parameters"]["cadu_chunk_size"]["olci"] == 10000
+
+
+@pytest.mark.parametrize("source_name", ["CADUProcessing", "CADUProcessing.1"])
+def test_lineage_with_explicit_unwritten_cadu_outputs(source_name):
+    """APID filtering may consume CADU's memory outputs without writing CADU products."""
+    payload = PayloadSchema(
+        io=IOConfig(
+            input_products=[InputProduct(id="S3ACADUS", path="s3://bucket/session", engine="cadu")],
+            output_products=[OutputProduct(id="output_folder", path="s3://bucket/out", engine="cpm_zarr")],
+            adfs=[AdfConfig(id="osf", path="/orbit")],
+        ),
+        workflow=[
+            WorkflowStep(name=source_name, inputs={"CADUs": "S3ACADUS"}, adfs={"osf": "osf"}),
+            WorkflowStep(
+                name="APIDFiltering.2",
+                inputs={name: f"{source_name}.{name}" for name in ("olci", "slstr", "sral")},
+                outputs={".*": "output_folder"},
+            ),
+        ],
+    )
+    assert build_output_lineage(payload) == {"output_folder": {"S3ACADUS", "osf"}}
+    assert payload.workflow is not None
+    workflow = payload.workflow or []
+    workflow[1].inputs = {"olci": "MissingUnit.olci"}
+    with pytest.raises(ValueError, match="does not reference a payload input or a workflow output"):
+        build_output_lineage(payload)

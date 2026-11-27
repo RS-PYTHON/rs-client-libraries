@@ -168,14 +168,14 @@ async def test_whole_payload(
         task_table = json.load(opened)
 
     @flow(name="process-generic")
-    async def from_a_flow():
+    async def from_a_flow() -> tuple:
         """Build and generate the payload file from a prefect flow"""
         payload_task, source_items = on_demand_processing.build_and_generate_payload(
             logger,
             flow_env=FlowEnv(dpr_input.env),
             task_table=task_table,
             dpr_input=dpr_input,
-            retry_config=RetryConfig(staging_retries=0),
+            retry_config=RetryConfig(staging_retries=0, staging_retry_delay=0),
         )
         return payload_task.result(), source_items
 
@@ -198,6 +198,13 @@ async def test_whole_payload(
             product["path"] = str(Path(path).parent / "00000000-0000-0000-0000-000000000001")
         except ValueError:  # not an uuid
             pass
+
+    for step in payload_dict["workflow"]:
+        parameters = step.get("parameters", {})
+        if step["active"] and "temporary_path" in parameters:
+            path = Path(parameters["temporary_path"])
+            assert UUID(path.name).version == 4
+            parameters["temporary_path"] = str(path.parent / "00000000-0000-0000-0000-000000000001")
 
     # Write result
     with open(

@@ -723,8 +723,8 @@ async def test_generate_payload_path_shared_disk_success(monkeypatch, mocker):
     # Enable the shared disk path branch
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
-    # Mock Prefect Variable.get to return a valid storage configuration
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
+    # Mock Prefect Variable.aget to return a valid storage configuration
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "aget", new_callable=AsyncMock)
     mock_variable_get.return_value = {
         "storage_configuration": [
             {"kind": "other", "name": "test", "absolute_path": "/mnt/test"},
@@ -748,8 +748,8 @@ async def test_generate_payload_path_shared_disk_variable_error(monkeypatch, moc
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
-    # Mock Variable.get to raise an exception
-    mocker.patch.object(dpr_module.Variable, "get", side_effect=Exception("Variable not found"))
+    # Mock Variable.aget to raise an exception
+    mocker.patch.object(dpr_module.Variable, "aget", side_effect=Exception("Variable not found"))
 
     owner_id = "test_user"
 
@@ -762,8 +762,8 @@ async def test_generate_payload_path_shared_disk_no_valid_config(monkeypatch, mo
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
-    # Mock Variable.get to return config without valid shared_disk entries
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
+    # Mock Variable.aget to return config without valid shared_disk entries
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "aget", new_callable=AsyncMock)
     mock_variable_get.return_value = {
         "storage_configuration": [
             {"kind": "shared_disk", "name": "", "absolute_path": "/mnt/shared"},  # missing name
@@ -786,7 +786,7 @@ async def test_generate_payload_path_shared_disk_empty_config(monkeypatch, mocke
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "aget", new_callable=AsyncMock)
     mock_variable_get.return_value = {"storage_configuration": []}
 
     owner_id = "test_user"
@@ -803,7 +803,7 @@ async def test_generate_payload_path_shared_disk_missing_storage_configuration_k
 
     monkeypatch.setattr(dpr_module, "KUBERENETES_COMMON_NAMESPACE_FOR_DASK_AND_PREFECT", True)
 
-    mock_variable_get = mocker.patch.object(dpr_module.Variable, "get", new_callable=AsyncMock)
+    mock_variable_get = mocker.patch.object(dpr_module.Variable, "aget", new_callable=AsyncMock)
     mock_variable_get.return_value = {}  # missing storage_configuration key
 
     owner_id = "test_user"

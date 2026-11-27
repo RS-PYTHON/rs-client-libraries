@@ -22,7 +22,7 @@ import re
 from contextvars import ContextVar
 from copy import deepcopy
 from os import path as osp
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit, urlunsplit
 
 import jsonschema
@@ -289,16 +289,19 @@ async def _stage_input_adfs_alternative(
         task_table,
         specific_input_product,
     )
-    logger.info(f"Selected ADFS collection {collection} for ADFS {input_adfs["name"]}")
+    logger.info(f"Selected ADFS collection {collection} for ADFS {input_adfs['name']}")
 
     aux_status: bool
     aux_items: ItemCollection | None
     # Special case for Copernicus DEM available at Earthdatahub
     if input_adfs["name"] == "DEM":
-        aux_items = earthdatahub_flow.earthdatahub_search_task.submit(
-            dpr_input.env,
-            aux_cql2,
-        ).result()
+        aux_items = cast(
+            ItemCollection | None,
+            earthdatahub_flow.earthdatahub_search_task.submit(
+                dpr_input.env,
+                aux_cql2,
+            ).result(),
+        )
         aux_status = True
     else:
         aux_status, aux_items = (
@@ -596,7 +599,7 @@ async def dpr_processing(
         # Wait for last task to end.
         # NOTE: use .result() and not .wait() to unwrap and propagate exceptions, if any.
         published_items = published.result()  # type: ignore[unused-coroutine]
-        return published_items
+        return cast(list[dict[str, Any]], published_items)
 
 
 def build_and_generate_payload(
@@ -634,7 +637,10 @@ def build_and_generate_payload(
     )
 
     adfs_tasks_to_submit: list[tuple[dict[str, Any], tuple[str | None, Item | None]]] = []
+    seen_adf_requests: set[str] = set()
     for unit in unit_list:
+        if not unit.get("active", True):
+            continue
         # For each input_adfs element computed on STEP 1
         for input_adfs in unit["input_adfs"]:
             # HACK for S1-ARD: REFERENCE_DB is not staged, see below
@@ -649,9 +655,21 @@ def build_and_generate_payload(
                 flow_env.rs_client,
             )
             for specific_input_product_stac_item in product_stac_items:
+                request_key = json.dumps(
+                    [
+                        input_adfs,
+                        specific_input_name,
+                        specific_input_product_stac_item.to_dict() if specific_input_product_stac_item else None,
+                    ],
+                    sort_keys=True,
+                )
+                if request_key in seen_adf_requests:
+                    logger.info("Reusing ADFS task for '%s' across processing units", input_adfs["name"])
+                    continue
                 specific_input_product = (specific_input_name, specific_input_product_stac_item)
                 for alternative in input_adfs.get("alternatives", []):
                     render_aux_cql2(alternative, task_table, specific_input_product, input_adfs["name"])
+                seen_adf_requests.add(request_key)
                 adfs_tasks_to_submit.append((input_adfs, specific_input_product))
 
     tasks = []
@@ -673,7 +691,9 @@ def build_and_generate_payload(
 
     try:
         aux_items: list[tuple[str, str, tuple[bool, ItemCollection]]] = [
-            result for t in tasks if (result := t.result()) is not None
+            result
+            for t in tasks
+            if (result := cast(tuple[str, str, tuple[bool, ItemCollection]] | None, t.result())) is not None
         ]
     except (RuntimeError, KeyError) as err:
         raise err
