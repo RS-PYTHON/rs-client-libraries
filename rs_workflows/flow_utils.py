@@ -16,6 +16,7 @@
 
 import logging
 import os
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -392,6 +393,37 @@ class FlowGeneratedProduct(BaseModel):
     def items(self):
         """Helper method to return the model fields as items, useful for logging."""
         return self.model_dump().items()
+
+
+# Sentinel-1 product types of the EOPF naming rules, e.g. S01SIWCSL: MMMSSSPPP with the mission (S01), the sensor and
+# sensor mode (SSS: S for SAR and the instrument mode), and the product (PPP), see
+# https://cpm.pages.eopf.copernicus.eu/eopf-cpm/main/PSFD/3-product-types-naming-rules.html
+S1_PRODUCT_TYPE_PATTERN = re.compile(r"S01S(?P<instrument_mode>IW|EW|SM|WV)[A-Z0-9_]{3}")
+
+
+def get_instrument_mode(product_type: str) -> str | None:
+    """Return the instrument mode of a Sentinel-1 SAR product type, e.g. IW for S01SIWCSL, else None."""
+    match = S1_PRODUCT_TYPE_PATTERN.fullmatch(product_type)
+    return match["instrument_mode"] if match else None
+
+
+def select_generated_products(
+    generated_products: list[FlowGeneratedProduct],
+    instrument_mode: str | InstrumentMode | None,
+) -> list[FlowGeneratedProduct]:
+    """
+    Return the generated products of a processing of the given instrument mode: without the products whose product
+    type is of another instrument mode, e.g. S01SEWCSL and S01SSMCSL for the IW mode. So the products of an output of
+    the task table are written and published in the collection of their instrument mode.
+
+    Args:
+        generated_products: generated_product_to_collection_identifier of the processing.
+        instrument_mode: instrument mode of the processing. If None, all the generated products are returned.
+    """
+    if not instrument_mode:
+        return generated_products
+    mode = InstrumentMode(instrument_mode).value
+    return [product for product in generated_products if get_instrument_mode(product.product_type) in (None, mode)]
 
 
 class AuxiliaryProductMapping(BaseModel):

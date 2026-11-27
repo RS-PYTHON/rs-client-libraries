@@ -61,7 +61,20 @@ the flow parameters can be read by everyone in the Prefect UI: it is read from t
   sensitive,
 - `product_type` can be `*`: all the product types are mapped to the same collection, which is then mandatory,
 - the list can contain more elements than the outputs of the task table, so the same mapping can be used for
-  several pipelines.
+  several pipelines,
+- when the processing has an `instrument_mode` (`IW`, `EW` or `SM`), the mappings whose product type is of another
+  instrument mode are ignored. The instrument mode of a Sentinel-1 product type is given by its sensor mode, see the
+  [EOPF product type naming rules](https://cpm.pages.eopf.copernicus.eu/eopf-cpm/main/PSFD/3-product-types-naming-rules.html):
+  `IW` for `S01SIWCSL`. So the same mappings write and publish the products of an output of the task table in the
+  collection of their instrument mode, for example for the Sentinel-1 ARD products of the `cslcs` output:
+
+  ```json
+  [
+    {"name": "cslcs", "product_type": "S01SIWCSL", "collection_name": "s01siwcsl"},
+    {"name": "cslcs", "product_type": "S01SEWCSL", "collection_name": "s01sewcsl"},
+    {"name": "cslcs", "product_type": "S01SSMCSL", "collection_name": "s01ssmcsl"}
+  ]
+  ```
 
 The flows don't create the catalog collections: all the collections of the list must have been created by an RS
 operator or administrator. `process-generic` checks that they exist at its very beginning, before staging the ADFs
