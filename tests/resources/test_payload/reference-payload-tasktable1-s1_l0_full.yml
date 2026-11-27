@@ -22,6 +22,7 @@ general_configuration:
   triggering__stage_s3_temporary_prefix: false
   triggering__stage_s3_memory_fit_safety_ratio: 0.25
   triggering__stage_s3_outputs_min_size: 0
+  triggering__stage_s3_upload_max_concurrency: 7
   zarr__format: 3
   consolidated: false
 external_modules:
@@ -95,6 +96,7 @@ io:
             total_max_attempts: 5
         max_concurrency: 1
       mode: w
+      use_obstore: true
     type: folder
     apply_eoqc: false
   - id: S01GPSRAW
@@ -115,6 +117,7 @@ io:
             total_max_attempts: 5
         max_concurrency: 1
       mode: w
+      use_obstore: true
     type: folder
     apply_eoqc: false
   - id: S01HKMRAW
@@ -135,6 +138,7 @@ io:
             total_max_attempts: 5
         max_concurrency: 1
       mode: w
+      use_obstore: true
     type: folder
     apply_eoqc: false
   - id: S01SARRAW
@@ -163,6 +167,7 @@ io:
         clevel: 3
         shuffle: 2
         blocksize: 0
+      use_obstore: true
     type: folder
     apply_eoqc: false
   adfs:
