@@ -66,6 +66,7 @@ from rs_workflows.payload_template import (
     WorkflowStep,
 )
 from rs_workflows.storage_configuration import StorageConfig
+from rs_workflows.utils.utils import adf_product_root
 
 
 # build_workflow_step
@@ -1022,6 +1023,37 @@ def test_build_adfs_single_folder(mock_store_params):
         "read_timeout": 120,
         "retries": {"mode": "standard", "total_max_attempts": 5},
     }
+
+
+@pytest.mark.parametrize(
+    "href, item_id, expected",
+    [
+        # S1 ETAD: the asset is the NetCDF file nested in the product
+        (
+            "s3://bucket/s1-l1-iw-etad/S1D_IW_ETA__AXDV_X_3356/measurement/S1D_IW_ETA__AXDV_X.nc",
+            "S1D_IW_ETA__AXDV_X_3356",
+            "s3://bucket/s1-l1-iw-etad/S1D_IW_ETA__AXDV_X_3356",
+        ),
+        # Orbit file staged in a folder named after the item: same result as the parent folder
+        (
+            "s3://bucket/s1-aux_poeorb/S1D_OPER_AUX_POEORB_X.EOF/S1D_OPER_AUX_POEORB_X.EOF",
+            "S1D_OPER_AUX_POEORB_X.EOF",
+            "s3://bucket/s1-aux_poeorb/S1D_OPER_AUX_POEORB_X.EOF",
+        ),
+        # No folder named after the item: keep the parent folder
+        ("/data/myfolder/file1.txt", "other_id", "/data/myfolder"),
+    ],
+)
+def test_build_adfs_folder_product_root(mock_store_params, href, item_id, expected):
+    """ADFS of type 'folder' must point to the product root, not to the parent folder of a nested asset"""
+    mock_storage_config = MagicMock()
+    mock_storage_config.get_store_params.return_value = mock_store_params
+    mock_storage_config.default_adfs_storage = "s3"
+    mock_storage_config.get_storage_kind.return_value = "obs"
+
+    result = build_adfs(mock_storage_config, [("adf1", "folder", adf_product_root(href, item_id))])
+
+    assert [adf.path for adf in result] == [expected]
 
 
 def test_build_adfs_single_filename(mock_store_params):
