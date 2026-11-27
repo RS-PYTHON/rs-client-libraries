@@ -181,9 +181,10 @@ class FlowEnvProcess(BaseModel):
         write_engine: Engine used to write the zarr products. Written in the `engine` of the zarr output products of
             the payload. None to keep the engine of the task table.
         use_obstore: Use obstore or fsspec (if False) for the final upload to the S3-backed zarr store. Written in
-            the `writer_params` of the zarr output products of the payload. None to keep the CPM default.
+            the `writer_params` of the zarr output products of the payload. True by default, None to keep the CPM
+            default.
         triggering__stage_s3_upload_max_concurrency: Maximum concurrency of the S3 uploads when staging. Written in
-            the `general_configuration` of the payload. None to keep the CPM default.
+            the `general_configuration` of the payload. 7 by default, None to keep the CPM default.
         force_systematic: Run the processing as a systematic one, so that the automations start the next processing
             of the chain from the events of the generated products.
         verbose: not used yet.
@@ -194,11 +195,11 @@ class FlowEnvProcess(BaseModel):
         description="Engine used to write the zarr products. If not set, the engine of the task table is used.",
     )
     use_obstore: bool | None = Field(
-        default=None,
+        default=True,
         description="Use obstore or fsspec (if False) for the final upload to the S3-backed zarr store.",
     )
     triggering__stage_s3_upload_max_concurrency: int | None = Field(
-        default=None,
+        default=7,
         ge=1,
         description="Maximum number of concurrent S3 file uploads used by the CPM staging.",
     )

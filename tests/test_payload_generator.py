@@ -1218,6 +1218,7 @@ def test_build_output_products_write_engine(
         kind,
         [task_table_engine] * 2,
         write_engine=write_engine,
+        use_obstore=None,
     )
     assert [o.engine for o in outputs] == [write_engine.value] * 2
     assert [o.dump()["engine"] for o in outputs] == [write_engine.value] * 2
@@ -1282,14 +1283,29 @@ def test_build_output_products_process_options_ignored_by_other_writers(
 
 
 @pytest.mark.parametrize("kind", ["obs", "shared_disk"])
-def test_build_output_products_process_options_not_set(sample_unit, mock_dpr_process_in, mocker, kind):
-    """Without process options, the engine of the task table is kept and use_obstore is not in the payload."""
+def test_build_output_products_process_options_defaults(sample_unit, mock_dpr_process_in, mocker, kind):
+    """With the default process options, the engine of the task table is kept and use_obstore is enabled."""
     outputs = _output_products_with_process_options(
         sample_unit,
         mock_dpr_process_in,
         mocker,
         kind,
         ["cpm_zarr", "fast_zarr"],
+    )
+    assert [o.engine for o in outputs] == ["cpm_zarr", "fast_zarr"]
+    assert all(o.dump()["writer_params"]["use_obstore"] is True for o in outputs)
+
+
+@pytest.mark.parametrize("kind", ["obs", "shared_disk"])
+def test_build_output_products_process_options_not_set(sample_unit, mock_dpr_process_in, mocker, kind):
+    """Without use_obstore, the engine of the task table is kept and use_obstore is not in the payload."""
+    outputs = _output_products_with_process_options(
+        sample_unit,
+        mock_dpr_process_in,
+        mocker,
+        kind,
+        ["cpm_zarr", "fast_zarr"],
+        use_obstore=None,
     )
     assert [o.engine for o in outputs] == ["cpm_zarr", "fast_zarr"]
     assert all("use_obstore" not in o.dump()["writer_params"] for o in outputs)

@@ -55,10 +55,11 @@ def test_flow_env_process_defaults_and_nesting():
     assert FlowEnvArgs(owner_id="owner").process == FlowEnvProcess()
     assert FlowEnvProcess().force_systematic is False
     assert FlowEnvProcess().verbose is False
-    # The options of the payload are not set by default, so that the task table and the CPM defaults are used
+    # The write engine is not set by default, so that the engine of the task table is used
     assert FlowEnvProcess().write_engine is None
-    assert FlowEnvProcess().use_obstore is None
-    assert FlowEnvProcess().triggering__stage_s3_upload_max_concurrency is None
+    # The S3 upload options have default values that override the CPM defaults
+    assert FlowEnvProcess().use_obstore is True
+    assert FlowEnvProcess().triggering__stage_s3_upload_max_concurrency == 7
     args = FlowEnvArgs.model_validate(
         {
             "owner_id": "owner",
