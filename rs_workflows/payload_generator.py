@@ -36,6 +36,7 @@ from rs_workflows.flow_utils import (
     DprProcessIn,
     FlowEnv,
     WriteEngine,
+    select_generated_products,
 )
 from rs_workflows.payload_template import (
     AdfConfig,
@@ -556,7 +557,13 @@ def build_output_products(
     outputs = []
     logger = get_logger()
 
-    mapping_lookup = {p.name: p for p in dpr_process_in.generated_product_to_collection_identifier}
+    mapping_lookup = {
+        p.name: p
+        for p in select_generated_products(
+            dpr_process_in.generated_product_to_collection_identifier,
+            dpr_process_in.instrument_mode,
+        )
+    }
     process_options = dpr_process_in.env.process
 
     for mapping in unit.get("output_products", []):
@@ -615,6 +622,11 @@ def build_output_products(
         if not store_name:
             raise RuntimeError(f"Couldn't find any storage configuration for output product '{product_name}'")
 
+        # The options of the flow environment override the task table, only for the zarr writers
+        engine = mapping["engine"]
+        if engine in ZARR_WRITE_ENGINES and process_options.write_engine is not None:
+            engine = process_options.write_engine.value
+
         # Determine the output path based on the storage kind
         kind = storage_configuration.get_storage_kind(store_name)
         store_params = deepcopy(storage_configuration.get_store_params(store_name))
@@ -625,7 +637,9 @@ def build_output_products(
                 store_params.storage_options.max_concurrency = 1
             _set_s3_config_kwargs(store_params)
             bucket_name = find_s3_output_bucket(bucket_configuration, owner_id, output_collection, product_type)
-            output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, str(uuid4()))
+            # EOPF checks that a file output can be written by its engine from its extension
+            extension = ".zarr" if engine in ZARR_WRITE_ENGINES and mapping.get("type", "file") == "file" else ""
+            output_path = os.path.join("s3://", bucket_name, owner_id, output_collection, f"{uuid4()}{extension}")
         elif kind in ("shared_disk", "local_disk"):
             disk_config = storage_configuration.get_disk_storage(store_name)
             if disk_config and disk_config.get("path"):
@@ -642,14 +656,8 @@ def build_output_products(
 
         # Default to write mode, allowing explicit task table settings to override it.
         extra_fields = {"mode": "w", **(mapping.get("writer_params") or {})}
-
-        # The options of the flow environment override the task table, only for the zarr writers
-        engine = mapping["engine"]
-        if engine in ZARR_WRITE_ENGINES:
-            if process_options.write_engine is not None:
-                engine = process_options.write_engine.value
-            if process_options.use_obstore is not None:
-                extra_fields["use_obstore"] = process_options.use_obstore
+        if engine in ZARR_WRITE_ENGINES and process_options.use_obstore is not None:
+            extra_fields["use_obstore"] = process_options.use_obstore
         if not store_params:
             store_params = StoreParams(**extra_fields)
         else:
@@ -922,7 +930,13 @@ def build_payload(  # pylint: disable=too-many-arguments, too-many-positional-ar
     logger.info("Building workflow and I/O sections")
     workflow_steps = []
     io_config = IOConfig()
-    selected_output_names = {product.name for product in dpr_process_in.generated_product_to_collection_identifier}
+    selected_output_names = {
+        product.name
+        for product in select_generated_products(
+            dpr_process_in.generated_product_to_collection_identifier,
+            dpr_process_in.instrument_mode,
+        )
+    }
     available_input_names = {product.name for product in dpr_process_in.input_products}
     common_chunk_parameters = (
         _legacy_s3_chunk_parameters(unit_list) if dpr_process_in.processor_name == DprProcessor.S3L0 else {}

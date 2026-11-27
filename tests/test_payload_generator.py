@@ -32,7 +32,10 @@ from rs_workflows.flow_utils import (
     FlowEnvProcess,
     FlowGeneratedProduct,
     FlowInputProduct,
+    InstrumentMode,
     WriteEngine,
+    get_instrument_mode,
+    select_generated_products,
 )
 from rs_workflows.on_demand_processing import build_output_lineage
 from rs_workflows.payload_builder import TaskTableError, build_unit_list
@@ -1201,6 +1204,7 @@ def _output_products_with_process_options(sample_unit, mock_dpr_process_in, mock
     mock_dpr_process_in.generated_product_to_collection_identifier = [
         FlowGeneratedProduct(name="output1", product_type="out_type", collection_name="OUT_COLL"),
         FlowGeneratedProduct(name="output2", product_type="out_type2", collection_name="OUT_COLL"),
+        FlowGeneratedProduct(name="output3", product_type="out_type3", collection_name="OUT_COLL"),
     ]
     mock_storage = MagicMock()
     mock_storage.get_storage_for_specific_product.return_value = "store"
@@ -1295,6 +1299,96 @@ def test_build_output_products_process_options_ignored_by_other_writers(
     assert [o.engine for o in outputs] == ["s3_cache", "fast_zarr"]
     assert "use_obstore" not in outputs[0].dump()["writer_params"]
     assert outputs[1].dump()["writer_params"]["use_obstore"] is True
+
+
+@pytest.mark.parametrize("write_engine", [None, WriteEngine.FAST_ZARR])
+def test_build_output_products_zarr_extension(sample_unit, mock_dpr_process_in, mocker, write_engine):
+    """
+    The S3 paths of the zarr file outputs end with .zarr, as EOPF checks that a file output can be written by its
+    engine from its extension. The zarr folder outputs and the outputs of the other writers have no extension.
+    """
+    mocker.patch("rs_workflows.payload_generator.uuid4", return_value="00000000-0000-0000-0000-000000000000")
+    sample_unit["output_products"].append({"name": "output3", "engine": "cpm_zarr", "type": "folder"})
+    outputs = _output_products_with_process_options(
+        sample_unit,
+        mock_dpr_process_in,
+        mocker,
+        "obs",
+        ["s3_cache", "cpm_zarr", "cpm_zarr"],
+        write_engine=write_engine,
+    )
+    prefix = "s3://out-bucket/test-owner/OUT_COLL/00000000-0000-0000-0000-000000000000"
+    assert [o.path for o in outputs] == [prefix, f"{prefix}.zarr", prefix]
+
+
+@pytest.mark.parametrize(
+    "product_type,expected",
+    [
+        ("S01SIWCSL", "IW"),
+        ("S01SEWGSL", "EW"),
+        ("S01SSMNRB", "SM"),
+        ("S01SWVSLC", "WV"),
+        ("S03OLCEFR", None),
+        ("S01SIMREF", None),
+        ("S01SIWCSLX", None),
+        ("*", None),
+    ],
+)
+def test_get_instrument_mode(product_type, expected):
+    """The instrument mode of a Sentinel-1 SAR product type is given by its sensor mode (characters 5 and 6)."""
+    assert get_instrument_mode(product_type) == expected
+
+
+@pytest.mark.parametrize("instrument_mode", [None, "IW", InstrumentMode.EW, "SM"])
+def test_select_generated_products(instrument_mode):
+    """The products whose product type is of another instrument mode than the processed one are not selected."""
+    others = [
+        FlowGeneratedProduct(name="all", product_type="*", collection_name="all_collection"),
+        FlowGeneratedProduct(name="S03OLCEFR", product_type="S03OLCEFR"),
+    ]
+    by_mode = {
+        mode: FlowGeneratedProduct(
+            name="cslcs",
+            product_type=f"S01S{mode}CSL",
+            collection_name=f"s01s{mode.lower()}csl",
+        )
+        for mode in ("IW", "EW", "SM")
+    }
+    products = [*by_mode.values(), *others]
+    selected = select_generated_products(products, instrument_mode)
+    if instrument_mode:
+        assert selected == [by_mode[InstrumentMode(instrument_mode).value], *others]
+    else:
+        assert selected == products
+
+
+@pytest.mark.parametrize("instrument_mode", ["IW", "EW", "SM"])
+def test_build_output_products_of_the_instrument_mode(sample_unit, mock_dpr_process_in, mocker, instrument_mode):
+    """An output is written in the collection of the mapping for the instrument mode of the processing."""
+    mocker.patch("rs_workflows.payload_generator.uuid4", return_value="00000000-0000-0000-0000-000000000000")
+    sample_unit["output_products"] = [{"name": "cslcs", "engine": "cpm_zarr", "type": "file"}]
+    mock_dpr_process_in.instrument_mode = instrument_mode
+    mock_dpr_process_in.generated_product_to_collection_identifier = [
+        FlowGeneratedProduct(
+            name="cslcs",
+            product_type=f"S01S{mode}CSL",
+            collection_name=f"s01s{mode.lower()}csl",
+        )
+        for mode in ("IW", "EW", "SM")
+    ]
+    mock_storage = MagicMock()
+    mock_storage.get_storage_for_specific_product.return_value = "store"
+    mock_storage.get_storage_kind.return_value = "obs"
+    mock_storage.get_store_params.return_value = StoreParams(s3_secret_alias="s3")
+    find_bucket = mocker.patch("rs_workflows.payload_generator.find_s3_output_bucket", return_value="out-bucket")
+
+    outputs = build_output_products(sample_unit, mock_dpr_process_in, mock_storage, "test-owner", [])
+
+    collection = f"s01s{instrument_mode.lower()}csl"
+    assert [o.path for o in outputs] == [
+        f"s3://out-bucket/test-owner/{collection}/00000000-0000-0000-0000-000000000000.zarr",
+    ]
+    find_bucket.assert_called_once_with([], "test-owner", collection, f"S01S{instrument_mode}CSL")
 
 
 @pytest.mark.parametrize("kind", ["obs", "shared_disk"])

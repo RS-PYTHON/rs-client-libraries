@@ -969,6 +969,7 @@ def _mock_dpr_process_in():
     mock.env = FlowEnvArgs(owner_id="test-owner", logging_level=LoggingLevel.INFO)
     mock.unit = "unit1"
     mock.pipeline = None
+    mock.instrument_mode = None
 
     # input_products: list[dict[product_id, (stac_item_name, collection_id)]]
     # After UI update, input_products = list(InputProduct(name=..., item_id=..., collection_name=...))

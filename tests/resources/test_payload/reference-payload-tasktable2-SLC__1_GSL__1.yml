@@ -115,7 +115,7 @@ io:
     type: file
     apply_eoqc: false
   - id: gslcs
-    path: s3:/rs-dev-cluster-catalog/toto/s01siwglc/00000000-0000-0000-0000-000000000001
+    path: s3:/rs-dev-cluster-catalog/toto/s01siwglc/00000000-0000-0000-0000-000000000001.zarr
     engine: cpm_zarr
     writer_params:
       storage_options:

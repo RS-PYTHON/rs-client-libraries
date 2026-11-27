@@ -190,12 +190,12 @@ async def test_whole_payload(
         on_demand_processing.S1ARD_REFERENCE_DB_PATH.reset(token)
     payload_dict = payload.dump(reveal_secrets=True)
 
-    # Remove random uuids from output paths
+    # Remove random uuids from output paths, keeping their extension, e.g. .zarr
     for product in payload_dict["io"]["output_products"] + payload_dict["io"]["adfs"]:
         path = product["path"]
         try:
             UUID(Path(path).stem)
-            product["path"] = str(Path(path).parent / "00000000-0000-0000-0000-000000000001")
+            product["path"] = str(Path(path).parent / f"00000000-0000-0000-0000-000000000001{Path(path).suffix}")
         except ValueError:  # not an uuid
             pass
 

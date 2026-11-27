@@ -44,6 +44,7 @@ from rs_workflows.flow_utils import (
     FlowEnv,
     FlowInputProduct,
     RetryConfig,
+    select_generated_products,
 )
 from rs_workflows.payload_builder import (
     build_cql2_json,
@@ -592,7 +593,10 @@ async def dpr_processing(
         # Publish processed items to the catalog
         published = catalog_flow.publish.submit(
             flow_env.serialize(),
-            dpr_input.generated_product_to_collection_identifier,
+            select_generated_products(
+                dpr_input.generated_product_to_collection_identifier,
+                dpr_input.instrument_mode,
+            ),
             processed_items,
         )
 
