@@ -286,6 +286,24 @@ def zarr_store_root(href: str) -> str:
     return href
 
 
+def adf_product_root(href: str, item_id: str) -> str:
+    """
+    Resolve an asset href to the root folder of its ADF product, i.e. the folder named after the STAC item.
+
+    A folder ADF asset may point to a file nested deep inside the product, e.g. the NetCDF file of an
+    S1 ETAD product: `s3://bucket/collection/<item_id>/measurement/<file>.nc`. The processors expect the
+    product root (`s3://bucket/collection/<item_id>`), which contains `measurement/` and `annotation/`.
+
+    Returns:
+        The product root with a trailing `/`, so that build_adfs() knows it is already a folder,
+        or the unchanged href if it is not under a folder named after the item.
+    """
+    marker = f"/{item_id}/"
+    if (index := href.find(marker)) >= 0:
+        return href[: index + len(marker)]
+    return href
+
+
 async def process_asset(asset_href: str, asset_name: str, use_extension=False) -> str:
     """
     Process an archived AUXIP asset stored in S3 and replace it with its extracted content.

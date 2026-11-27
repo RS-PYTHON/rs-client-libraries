@@ -766,7 +766,8 @@ def build_adfs(
             # Standard case where each adfs has a different id (i.e. single file)
             path, adfs_type = adfs_entries[0]
             if adfs_type == "folder" and not path.rstrip("/").lower().endswith(".zarr"):
-                path = os.path.dirname(path)
+                # A trailing "/" means the path is already the folder (see adf_product_root), else take its parent
+                path = path.rstrip("/") if path.endswith("/") else os.path.dirname(path)
             # Inject EarthDataHub API Key in path, as per documentation at
             # https://earthdatahub.destine.eu/collections/copernicus-dem/datasets/GLO-30
             adf_path: str | SecretStr = path
@@ -777,7 +778,7 @@ def build_adfs(
             result.append(AdfConfig(id=adfs_id, path=adf_path, adf_params=store_params))
         elif isinstance(store_params, StoreParams):
             # Advanced case where several adfs share the same id (i.e. several files)
-            adfs_paths = [p for p, _ in adfs_entries]
+            adfs_paths = [p.rstrip("/") for p, _ in adfs_entries]
             store_params.multiplicity = str(len(adfs_paths))
             # Compute longest common prefix
             common_folder, relative_parts = get_common_and_relative_paths(adfs_paths)

@@ -59,6 +59,7 @@ from rs_workflows.payload_generator import (
 from rs_workflows.payload_template import PayloadSchema
 from rs_workflows.utils.prefect import get_logger
 from rs_workflows.utils.utils import (
+    adf_product_root,
     build_output_lineage,
     get_archived_item_indexes,
     search_by_name,
@@ -714,7 +715,10 @@ def build_and_generate_payload(
             if status:
                 asset = next(iter(item.assets.values()))
                 logger.info(f"ADFS '{name}' of type '{adf_type}': {asset.href}")
-                adfs.add((name, adf_type, zarr_store_root(asset.href)))
+                path = zarr_store_root(asset.href)
+                if adf_type == "folder":
+                    path = adf_product_root(path, item.id)
+                adfs.add((name, adf_type, path))
             else:
                 raise ValueError(f"The adf input files {next(iter(item.assets.values()))} was not correctly staged")
 
